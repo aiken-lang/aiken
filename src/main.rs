@@ -1,3 +1,7 @@
+use neptune::cli::Cli;
+
 fn main() {
-    println!("Hello, world!");
+    let args = Cli::default();
+
+    println!("loading {}", args.input.display());
 }
