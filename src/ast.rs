@@ -1,8 +1,10 @@
+#[derive(Debug)]
 pub struct Program<'a> {
     pub version: String,
-    pub term: &'a Term<'a>,
+    pub term: Term<'a>,
 }
 
+#[derive(Debug)]
 pub enum Term<'a> {
     // tag: 0
     Var(String),
@@ -28,6 +30,7 @@ pub enum Term<'a> {
     // Builtin
 }
 
+#[derive(Debug)]
 pub enum Constant {
     // TODO: figure out the right size for this
     // tag: 0

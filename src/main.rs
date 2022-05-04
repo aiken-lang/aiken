@@ -1,7 +1,14 @@
 use neptune::cli::Cli;
+use neptune::parser;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Cli::default();
 
-    println!("loading {}", args.input.display());
+    let code = std::fs::read_to_string(&args.input)?;
+
+    let program = parser::program(&code)?;
+
+    println!("{:#?}", program);
+
+    Ok(())
 }
