@@ -1,10 +1,10 @@
 use combine::{
-    between,
+    between, many1,
     parser::char::{digit, spaces, string},
-    sep_by, token, ParseError, Parser, Stream,
+    token, ParseError, Parser, Stream,
 };
 
-use crate::ast::{Program, Term};
+use crate::ast::{Constant, Program, Term};
 
 pub fn program(src: &str) -> anyhow::Result<Program> {
     let mut parser = program_();
@@ -16,7 +16,7 @@ pub fn program(src: &str) -> anyhow::Result<Program> {
     }
 }
 
-pub fn program_<'a, Input>() -> impl Parser<Input, Output = Program<'a>>
+pub fn program_<Input>() -> impl Parser<Input, Output = Program>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -33,15 +33,81 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    sep_by(digit(), token('.'))
+    (
+        many1(digit()),
+        token('.'),
+        many1(digit()),
+        token('.'),
+        many1(digit()),
+    )
+        .map(
+            |(major, _, minor, _, patch): (String, char, String, char, String)| {
+                format!("{}.{}.{}", major, minor, patch)
+            },
+        )
 }
 
-pub fn term<'a, Input>() -> impl Parser<Input, Output = Term<'a>>
+pub fn term<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("var").map(|x| Term::Var(x.to_string()))
+    between(token('('), token(')'), constant()).skip(spaces())
+}
+
+pub fn delay<Input>() -> impl Parser<Input, Output = Term>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("delay")
+        .skip(spaces())
+        .with(term())
+        .map(|term| Term::Delay(Box::new(term)))
+}
+
+pub fn constant<Input>() -> impl Parser<Input, Output = Term>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("con")
+        .skip(spaces())
+        .with(constant_integer().or(unit()).or(constant_bool()))
+        .map(Term::Constant)
+}
+
+pub fn constant_integer<Input>() -> impl Parser<Input, Output = Constant>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("integer")
+        .skip(spaces())
+        .with(many1(digit()))
+        .map(|d: String| Constant::Integer(d.parse::<i64>().unwrap()))
+}
+
+pub fn constant_bool<Input>() -> impl Parser<Input, Output = Constant>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("bool")
+        .skip(spaces())
+        .with(string("True").or(string("False")))
+        .map(|b| Constant::Bool(b == "True"))
+}
+
+pub fn unit<Input>() -> impl Parser<Input, Output = Constant>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("unit")
+        .skip(spaces())
+        .with(string("()"))
+        .map(|_| Constant::Unit)
 }
 
 #[cfg(test)]

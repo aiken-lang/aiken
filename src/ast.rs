@@ -1,36 +1,36 @@
 #[derive(Debug)]
-pub struct Program<'a> {
+pub struct Program {
     pub version: String,
-    pub term: Term<'a>,
+    pub term: Term,
 }
 
-#[derive(Debug)]
-pub enum Term<'a> {
+#[derive(Debug, Clone)]
+pub enum Term {
     // tag: 0
     Var(String),
     // tag: 1
-    Delay(&'a Term<'a>),
+    Delay(Box<Term>),
     // tag: 2
     Lambda {
         parameter_name: String,
-        body: &'a Term<'a>,
+        body: Box<Term>,
     },
     // tag: 3
     Apply {
-        function: &'a Term<'a>,
-        argument: &'a Term<'a>,
+        function: Box<Term>,
+        argument: Box<Term>,
     },
     // tag: 4
     Constant(Constant),
     // tag: 5
-    Force(&'a Term<'a>),
+    Force(Box<Term>),
     // tag: 6
-    Error(&'a Term<'a>),
+    Error(Box<Term>),
     // tag: 7
     // Builtin
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Constant {
     // TODO: figure out the right size for this
     // tag: 0
