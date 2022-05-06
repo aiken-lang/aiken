@@ -1,14 +1,14 @@
 use combine::{
-    between, many1,
-    parser::char::{digit, spaces, string},
-    token, ParseError, Parser, Stream,
+    attempt, between, choice, many1,
+    parser::char::{alpha_num, digit, hex_digit, space, spaces, string},
+    skip_many1, token, EasyParser, ParseError, Parser, Stream,
 };
 
 use crate::ast::{Constant, Program, Term};
 
 pub fn program(src: &str) -> anyhow::Result<Program> {
     let mut parser = program_();
-    let result = parser.parse(src);
+    let result = parser.easy_parse(src);
 
     match result {
         Ok((program, _)) => Ok(program),
@@ -52,7 +52,12 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    between(token('('), token(')'), constant().or(delay())).skip(spaces())
+    between(
+        token('('),
+        token(')'),
+        choice((attempt(constant()), attempt(delay()), attempt(force()))),
+    )
+    .skip(spaces())
 }
 
 parser! {
@@ -69,9 +74,20 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     string("delay")
-        .skip(spaces())
+        .with(skip_many1(space()))
         .with(term_())
         .map(|term| Term::Delay(Box::new(term)))
+}
+
+pub fn force<Input>() -> impl Parser<Input, Output = Term>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("force")
+        .with(skip_many1(space()))
+        .with(term_())
+        .map(|term| Term::Force(Box::new(term)))
 }
 
 pub fn constant<Input>() -> impl Parser<Input, Output = Term>
@@ -80,8 +96,14 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     string("con")
-        .skip(spaces())
-        .with(constant_integer().or(unit()).or(constant_bool()))
+        .with(skip_many1(space()))
+        .with(choice((
+            attempt(constant_integer()),
+            attempt(constant_bytestring()),
+            attempt(constant_string()),
+            attempt(constant_unit()),
+            attempt(constant_bool()),
+        )))
         .map(Term::Constant)
 }
 
@@ -91,9 +113,43 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     string("integer")
-        .skip(spaces())
+        .with(skip_many1(space()))
         .with(many1(digit()))
         .map(|d: String| Constant::Integer(d.parse::<i64>().unwrap()))
+}
+
+pub fn constant_bytestring<Input>() -> impl Parser<Input, Output = Constant>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("bytestring")
+        .with(skip_many1(space()))
+        .with(token('#'))
+        .with(many1(hex_digit()))
+        .map(|b: String| Constant::ByteString(hex::decode(b).unwrap()))
+}
+
+pub fn constant_string<Input>() -> impl Parser<Input, Output = Constant>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("string")
+        .with(skip_many1(space()))
+        .with(between(token('"'), token('"'), many1(alpha_num())))
+        .map(Constant::String)
+}
+
+pub fn constant_unit<Input>() -> impl Parser<Input, Output = Constant>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("unit")
+        .with(skip_many1(space()))
+        .with(string("()"))
+        .map(|_| Constant::Unit)
 }
 
 pub fn constant_bool<Input>() -> impl Parser<Input, Output = Constant>
@@ -102,20 +158,9 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     string("bool")
-        .skip(spaces())
+        .with(skip_many1(space()))
         .with(string("True").or(string("False")))
         .map(|b| Constant::Bool(b == "True"))
-}
-
-pub fn unit<Input>() -> impl Parser<Input, Output = Constant>
-where
-    Input: Stream<Token = char>,
-    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
-{
-    string("unit")
-        .skip(spaces())
-        .with(string("()"))
-        .map(|_| Constant::Unit)
 }
 
 #[cfg(test)]
