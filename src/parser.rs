@@ -1,14 +1,17 @@
 use combine::{
     attempt, between, choice, many1,
     parser::char::{alpha_num, digit, hex_digit, space, spaces, string},
-    skip_many1, token, EasyParser, ParseError, Parser, Stream,
+    skip_many1,
+    stream::position,
+    token, EasyParser, ParseError, Parser, Stream,
 };
 
 use crate::ast::{Constant, Program, Term};
 
 pub fn program(src: &str) -> anyhow::Result<Program> {
     let mut parser = program_();
-    let result = parser.easy_parse(src);
+
+    let result = parser.easy_parse(position::Stream::new(src));
 
     match result {
         Ok((program, _)) => Ok(program),
@@ -16,19 +19,20 @@ pub fn program(src: &str) -> anyhow::Result<Program> {
     }
 }
 
-pub fn program_<Input>() -> impl Parser<Input, Output = Program>
+fn program_<Input>() -> impl Parser<Input, Output = Program>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    let prog = string("program")
-        .with(spaces())
-        .with((version(), spaces(), term()).map(|(version, _, term)| Program { version, term }));
+    let prog = string("program").with(spaces()).with(
+        (version(), skip_many1(space()), term().skip(spaces()))
+            .map(|(version, _, term)| Program { version, term }),
+    );
 
     between(token('('), token(')'), prog).skip(spaces())
 }
 
-pub fn version<Input>() -> impl Parser<Input, Output = String>
+fn version<Input>() -> impl Parser<Input, Output = String>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -47,25 +51,18 @@ where
         )
 }
 
-pub fn term<Input>() -> impl Parser<Input, Output = Term>
+fn term<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     choice((
-        attempt(between(token('['), token(']'), apply())),
-        attempt(between(
-            token('('),
-            token(')'),
-            choice((
-                attempt(delay()),
-                attempt(lambda()),
-                attempt(constant()),
-                attempt(force()),
-            )),
-        )),
+        attempt(delay()),
+        attempt(lambda()),
+        attempt(apply()),
+        attempt(constant()),
+        attempt(force()),
     ))
-    .skip(spaces())
 }
 
 parser! {
@@ -76,72 +73,91 @@ parser! {
     }
 }
 
-pub fn delay<Input>() -> impl Parser<Input, Output = Term>
+fn delay<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("delay")
-        .with(skip_many1(space()))
-        .with(term_())
-        .map(|term| Term::Delay(Box::new(term)))
+    between(
+        token('('),
+        token(')'),
+        string("delay")
+            .with(skip_many1(space()))
+            .with(term_())
+            .map(|term| Term::Delay(Box::new(term))),
+    )
 }
 
-pub fn force<Input>() -> impl Parser<Input, Output = Term>
+fn force<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("force")
-        .with(skip_many1(space()))
-        .with(term_())
-        .map(|term| Term::Force(Box::new(term)))
+    between(
+        token('('),
+        token(')'),
+        string("force")
+            .with(skip_many1(space()))
+            .with(term_())
+            .map(|term| Term::Force(Box::new(term))),
+    )
 }
 
-pub fn lambda<Input>() -> impl Parser<Input, Output = Term>
+fn lambda<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("lam")
-        .with(skip_many1(space()))
-        .with((many1(alpha_num()), skip_many1(space()), term_()))
-        .map(|(parameter_name, _, term)| Term::Lambda {
-            parameter_name,
-            body: Box::new(term),
-        })
+    between(
+        token('('),
+        token(')'),
+        string("lam")
+            .with(skip_many1(space()))
+            .with((many1(alpha_num()), skip_many1(space()), term_()))
+            .map(|(parameter_name, _, term)| Term::Lambda {
+                parameter_name,
+                body: Box::new(term),
+            }),
+    )
 }
 
-pub fn apply<Input>() -> impl Parser<Input, Output = Term>
+fn apply<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    println!("daid");
-    (term_(), skip_many1(space()), term_()).map(|(function, _, argument)| Term::Apply {
-        function: Box::new(function),
-        argument: Box::new(argument),
-    })
+    between(
+        token('['),
+        token(']'),
+        (term_().skip(skip_many1(space())), term_()).map(|(function, argument)| Term::Apply {
+            function: Box::new(function),
+            argument: Box::new(argument),
+        }),
+    )
 }
 
-pub fn constant<Input>() -> impl Parser<Input, Output = Term>
+fn constant<Input>() -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("con")
-        .with(skip_many1(space()))
-        .with(choice((
-            attempt(constant_integer()),
-            attempt(constant_bytestring()),
-            attempt(constant_string()),
-            attempt(constant_unit()),
-            attempt(constant_bool()),
-        )))
-        .map(Term::Constant)
+    between(
+        token('('),
+        token(')'),
+        string("con")
+            .with(skip_many1(space()))
+            .with(choice((
+                attempt(constant_integer()),
+                attempt(constant_bytestring()),
+                attempt(constant_string()),
+                attempt(constant_unit()),
+                attempt(constant_bool()),
+            )))
+            .map(Term::Constant),
+    )
 }
 
-pub fn constant_integer<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_integer<Input>() -> impl Parser<Input, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -152,7 +168,7 @@ where
         .map(|d: String| Constant::Integer(d.parse::<i64>().unwrap()))
 }
 
-pub fn constant_bytestring<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_bytestring<Input>() -> impl Parser<Input, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -164,7 +180,7 @@ where
         .map(|b: String| Constant::ByteString(hex::decode(b).unwrap()))
 }
 
-pub fn constant_string<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_string<Input>() -> impl Parser<Input, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -175,7 +191,7 @@ where
         .map(Constant::String)
 }
 
-pub fn constant_unit<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_unit<Input>() -> impl Parser<Input, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -186,7 +202,7 @@ where
         .map(|_| Constant::Unit)
 }
 
-pub fn constant_bool<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_bool<Input>() -> impl Parser<Input, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
