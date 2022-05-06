@@ -52,7 +52,15 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    between(token('('), token(')'), constant()).skip(spaces())
+    between(token('('), token(')'), constant().or(delay())).skip(spaces())
+}
+
+parser! {
+    fn term_[I]()(I) -> Term
+    where [I: Stream<Token = char>]
+    {
+        term()
+    }
 }
 
 pub fn delay<Input>() -> impl Parser<Input, Output = Term>
@@ -62,7 +70,7 @@ where
 {
     string("delay")
         .skip(spaces())
-        .with(term())
+        .with(term_())
         .map(|term| Term::Delay(Box::new(term)))
 }
 
