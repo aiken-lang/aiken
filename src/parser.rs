@@ -52,11 +52,19 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    between(
-        token('('),
-        token(')'),
-        choice((attempt(constant()), attempt(delay()), attempt(force()))),
-    )
+    choice((
+        attempt(between(token('['), token(']'), apply())),
+        attempt(between(
+            token('('),
+            token(')'),
+            choice((
+                attempt(delay()),
+                attempt(lambda()),
+                attempt(constant()),
+                attempt(force()),
+            )),
+        )),
+    ))
     .skip(spaces())
 }
 
@@ -88,6 +96,32 @@ where
         .with(skip_many1(space()))
         .with(term_())
         .map(|term| Term::Force(Box::new(term)))
+}
+
+pub fn lambda<Input>() -> impl Parser<Input, Output = Term>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    string("lam")
+        .with(skip_many1(space()))
+        .with((many1(alpha_num()), skip_many1(space()), term_()))
+        .map(|(parameter_name, _, term)| Term::Lambda {
+            parameter_name,
+            body: Box::new(term),
+        })
+}
+
+pub fn apply<Input>() -> impl Parser<Input, Output = Term>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    println!("daid");
+    (term_(), skip_many1(space()), term_()).map(|(function, _, argument)| Term::Apply {
+        function: Box::new(function),
+        argument: Box::new(argument),
+    })
 }
 
 pub fn constant<Input>() -> impl Parser<Input, Output = Term>
