@@ -24,7 +24,7 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    let prog = string("program").with(spaces()).with(
+    let prog = string("program").with(skip_many1(space())).with(
         (version(), skip_many1(space()), term().skip(spaces()))
             .map(|(version, _, term)| Program { version, term }),
     );
