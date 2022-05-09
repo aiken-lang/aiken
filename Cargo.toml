@@ -10,3 +10,5 @@ anyhow = "1.0.57"
 clap = { version = "3.1.14", features = ["derive"] }
 combine = "4.6.4"
 hex = "0.4.3"
+strum = "0.24.0"
+strum_macros = "0.24.0"
