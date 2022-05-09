@@ -64,6 +64,8 @@ where
         attempt(apply()),
         attempt(constant()),
         attempt(force()),
+        attempt(error()),
+        attempt(builtin()),
     ))
 }
 
@@ -143,12 +145,16 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("builtin")
-        .with(skip_many1(space()))
-        .with(many1(alpha_num()))
-        .map(|builtin_name: String| {
-            Term::Builtin(DefaultFunction::from_str(&builtin_name).unwrap())
-        })
+    between(
+        token('('),
+        token(')'),
+        string("builtin")
+            .with(skip_many1(space()))
+            .with(many1(alpha_num()))
+            .map(|builtin_name: String| {
+                Term::Builtin(DefaultFunction::from_str(&builtin_name).unwrap())
+            }),
+    )
 }
 
 pub fn error<Input>() -> impl Parser<Input, Output = Term>
@@ -156,10 +162,14 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    string("error")
-        .with(skip_many1(space()))
-        .with(term_())
-        .map(|term| Term::Error(Box::new(term)))
+    between(
+        token('('),
+        token(')'),
+        string("error")
+            .with(skip_many1(space()))
+            .with(term_())
+            .map(|term| Term::Error(Box::new(term))),
+    )
 }
 
 pub fn constant<Input>() -> impl Parser<Input, Output = Term>
