@@ -8,7 +8,10 @@ use combine::{
     token, EasyParser, ParseError, Parser, Stream,
 };
 
-use crate::ast::{Constant, DefaultFunction, Program, Term};
+use crate::{
+    ast::{Constant, Program, Term},
+    builtins::DefaultFunction,
+};
 
 pub fn program(src: &str) -> anyhow::Result<Program> {
     let mut parser = program_();
@@ -167,8 +170,7 @@ where
         token(')'),
         string("error")
             .with(skip_many1(space()))
-            .with(term_())
-            .map(|term| Term::Error(Box::new(term))),
+            .map(|_| Term::Error),
     )
 }
 
