@@ -49,6 +49,7 @@ pub enum Constant {
     Bool(bool),
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, EnumString)]
 pub enum DefaultFunction {
     // Integer functions
