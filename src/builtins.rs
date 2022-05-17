@@ -25,6 +25,7 @@ pub enum DefaultFunction {
     LessThanByteString,
     LessThanEqualsByteString,
     // Cryptography and hash functions
+    #[strum(serialize = "sha2_256")]
     Sha2_256,
     Sha3_256,
     Blake2b_256,
