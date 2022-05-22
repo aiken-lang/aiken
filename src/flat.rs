@@ -10,11 +10,23 @@ impl Encode for bool {
     }
 }
 
-struct Filler;
+enum Filler {
+    FillerStart(Box<Filler>),
+    FillerEnd,
+}
+
+impl Filler {
+    pub fn len(&self) -> usize {
+        match self {
+            Filler::FillerStart(f) => f.len() + 1,
+            Filler::FillerEnd => 1,
+        }
+    }
+}
 
 impl Encode for Filler {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        e.zm_filler();
+        e.filler();
 
         Ok(())
     }
@@ -104,29 +116,33 @@ impl Encoder {
         self.used_bits = 0;
     }
 
-    fn zm_filler(&mut self) {
+    fn filler(&mut self) {
         self.current_byte |= 1;
         self.next_word();
     }
 }
 
+pub fn encode<T>(value: T) -> Result<Vec<u8>, String>
+where
+    T: Encode,
+{
+    let mut e = Encoder::new();
+
+    e.encode((value, Filler::FillerEnd))?;
+
+    Ok(e.buffer)
+}
+
 #[cfg(test)]
 mod test {
     #[test]
-    fn encode_true() {
-        let mut e = super::Encoder::new();
+    fn encode_bool() {
+        let bytes = super::encode(true).unwrap();
 
-        e.encode((true, super::Filler)).unwrap();
+        assert_eq!(bytes, vec![0b10000001]);
 
-        assert_eq!(e.buffer, vec![0b10000001]);
-    }
+        let bytes = super::encode(false).unwrap();
 
-    #[test]
-    fn encode_false() {
-        let mut e = super::Encoder::new();
-
-        e.encode((false, super::Filler)).unwrap();
-
-        assert_eq!(e.buffer, vec![0b00000001]);
+        assert_eq!(bytes, vec![0b00000001]);
     }
 }
