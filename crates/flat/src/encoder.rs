@@ -1,49 +1,4 @@
-pub trait Encode {
-    fn encode(&self, e: &mut Encoder) -> Result<(), String>;
-}
-
-impl Encode for bool {
-    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        e.bool(*self);
-
-        Ok(())
-    }
-}
-
-enum Filler {
-    FillerStart(Box<Filler>),
-    FillerEnd,
-}
-
-impl Filler {
-    pub fn len(&self) -> usize {
-        match self {
-            Filler::FillerStart(f) => f.len() + 1,
-            Filler::FillerEnd => 1,
-        }
-    }
-}
-
-impl Encode for Filler {
-    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        e.filler();
-
-        Ok(())
-    }
-}
-
-impl<T, K> Encode for (T, K)
-where
-    T: Encode,
-    K: Encode,
-{
-    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        self.0.encode(e)?;
-        self.1.encode(e)?;
-
-        Ok(())
-    }
-}
+use crate::encode::Encode;
 
 pub struct Encoder {
     pub buffer: Vec<u8>,
@@ -116,33 +71,8 @@ impl Encoder {
         self.used_bits = 0;
     }
 
-    fn filler(&mut self) {
+    pub(crate) fn filler(&mut self) {
         self.current_byte |= 1;
         self.next_word();
-    }
-}
-
-pub fn encode<T>(value: T) -> Result<Vec<u8>, String>
-where
-    T: Encode,
-{
-    let mut e = Encoder::new();
-
-    e.encode((value, Filler::FillerEnd))?;
-
-    Ok(e.buffer)
-}
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn encode_bool() {
-        let bytes = super::encode(true).unwrap();
-
-        assert_eq!(bytes, vec![0b10000001]);
-
-        let bytes = super::encode(false).unwrap();
-
-        assert_eq!(bytes, vec![0b00000001]);
     }
 }

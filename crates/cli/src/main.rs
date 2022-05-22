@@ -1,5 +1,6 @@
-use neptune::cli::Cli;
-use neptune::parser;
+use uplc::parser;
+
+use neptune::Cli;
 
 fn main() -> anyhow::Result<()> {
     let args = Cli::default();
