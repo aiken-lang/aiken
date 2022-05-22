@@ -12,6 +12,14 @@ impl Encode for bool {
     }
 }
 
+impl Encode for u8 {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.u8(*self)?;
+
+        Ok(())
+    }
+}
+
 impl<T, K> Encode for (T, K)
 where
     T: Encode,

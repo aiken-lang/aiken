@@ -30,7 +30,14 @@ impl Encoder {
     }
 
     pub fn u8(&mut self, x: u8) -> Result<&mut Self, String> {
-        todo!()
+        if self.used_bits == 0 {
+            self.current_byte = x;
+            self.next_word();
+        } else {
+            todo!()
+        }
+
+        Ok(self)
     }
 
     /// Encode a `bool` value.
