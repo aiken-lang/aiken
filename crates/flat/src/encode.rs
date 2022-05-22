@@ -20,6 +20,46 @@ impl Encode for u8 {
     }
 }
 
+impl Encode for char {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.char(*self)?;
+
+        Ok(())
+    }
+}
+
+impl Encode for &str {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.string(*self)?;
+
+        Ok(())
+    }
+}
+
+impl Encode for String {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.string(self)?;
+
+        Ok(())
+    }
+}
+
+impl Encode for Vec<u8> {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.bytes(self)?;
+
+        Ok(())
+    }
+}
+
+impl Encode for &[u8] {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.bytes(self)?;
+
+        Ok(())
+    }
+}
+
 impl<T, K> Encode for (T, K)
 where
     T: Encode,
