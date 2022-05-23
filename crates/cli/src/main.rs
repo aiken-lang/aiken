@@ -11,5 +11,9 @@ fn main() -> anyhow::Result<()> {
 
     println!("{:#?}", program);
 
+    println!("{:?}", program.flat()?);
+
+    println!("{}", program.flat_hex()?);
+
     Ok(())
 }

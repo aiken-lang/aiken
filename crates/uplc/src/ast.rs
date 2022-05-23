@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use flat::en::{Encode, Encoder};
 
 use crate::builtins::DefaultFunction;
@@ -5,10 +6,26 @@ use crate::builtins::DefaultFunction;
 const TERM_TAG_WIDTH: u32 = 4;
 const CONST_TAG_WIDTH: u32 = 4;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub version: String,
     pub term: Term,
+}
+
+impl Program {
+    pub fn flat(&self) -> anyhow::Result<Vec<u8>> {
+        let bytes = flat::encode(self.clone()).map_err(|err| anyhow!("{}", err))?;
+
+        Ok(bytes)
+    }
+
+    pub fn flat_hex(&self) -> anyhow::Result<String> {
+        let bytes = self.flat()?;
+
+        let hex = hex::encode(&bytes);
+
+        Ok(hex)
+    }
 }
 
 #[derive(Debug, Clone)]
