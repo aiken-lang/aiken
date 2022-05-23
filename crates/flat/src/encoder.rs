@@ -137,10 +137,14 @@ impl Encoder {
         }
     }
 
-    pub fn encode_list_with<T: Encode>(&mut self, list: Vec<T>) -> Result<(), String> {
+    pub fn encode_list_with(
+        &mut self,
+        encoder_func: for<'r> fn(u8, &'r mut Encoder) -> Result<(), String>,
+        list: Vec<u8>,
+    ) -> Result<(), String> {
         for item in list {
             self.one();
-            self.encode(item)?;
+            encoder_func(item, self)?;
         }
         self.zero();
         Ok(())

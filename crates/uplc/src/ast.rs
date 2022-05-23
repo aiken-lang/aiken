@@ -3,6 +3,7 @@ use flat::en::{Encode, Encoder};
 use crate::builtins::DefaultFunction;
 
 const TERM_TAG_WIDTH: u32 = 4;
+const CONST_TAG_WIDTH: u32 = 4;
 
 #[derive(Debug)]
 pub struct Program {
@@ -70,7 +71,11 @@ pub enum Constant {
 }
 
 pub fn encode_constant(tag: u8, e: &mut Encoder) -> Result<(), String> {
-    e.encode_list_with([tag].to_vec())
+    e.encode_list_with(encode_constant_tag, [tag].to_vec())
+}
+
+pub fn encode_constant_tag(tag: u8, e: &mut Encoder) -> Result<(), String> {
+    safe_encode_bits(CONST_TAG_WIDTH, tag, e)
 }
 
 impl Encode for Program {
