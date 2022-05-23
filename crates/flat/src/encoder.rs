@@ -43,10 +43,12 @@ impl Encoder {
     /// Encode a `bool` value.
     pub fn bool(&mut self, x: bool) -> &mut Self {
         if x {
-            self.one()
+            self.one();
         } else {
-            self.zero()
+            self.zero();
         }
+
+        self
     }
 
     pub fn bytes(&mut self, arr: &[u8]) -> Result<&mut Self, String> {
@@ -73,17 +75,15 @@ impl Encoder {
         Ok(self)
     }
 
-    fn zero(&mut self) -> &mut Self {
+    fn zero(&mut self) {
         if self.used_bits == 7 {
             self.next_word();
         } else {
             self.used_bits += 1;
         }
-
-        self
     }
 
-    fn one(&mut self) -> &mut Self {
+    fn one(&mut self) {
         if self.used_bits == 7 {
             self.current_byte |= 1;
             self.next_word();
@@ -91,8 +91,6 @@ impl Encoder {
             self.current_byte |= 128 >> self.used_bits;
             self.used_bits += 1;
         }
-
-        self
     }
 
     fn byte_unaligned(&mut self, x: u8) {
@@ -139,23 +137,54 @@ impl Encoder {
         }
     }
 
-    fn bits(&mut self, num_bits: i64, val: u8) {
-        self.used_bits += num_bits;
-        let unused_bits = 8 - self.used_bits;
-        match unused_bits {
-            x if x > 0 => {
-                self.current_byte |= val << x;
+    pub fn encode_list_with<T: Encode>(&mut self, list: Vec<T>) -> Result<(), String> {
+        for item in list {
+            self.one();
+            self.encode(item)?;
+        }
+        self.zero();
+        Ok(())
+    }
+
+    pub fn bits(&mut self, num_bits: i64, val: u8) {
+        match (num_bits, val) {
+            (1, 0) => self.zero(),
+            (1, 1) => self.one(),
+            (2, 0) => {
+                self.zero();
+                self.zero();
             }
-            x if x == 0 => {
-                self.current_byte |= val;
-                self.next_word();
+            (2, 1) => {
+                self.zero();
+                self.one();
             }
-            x => {
-                let used = -x;
-                self.current_byte |= val >> used;
-                self.next_word();
-                self.current_byte = val << (8 - used);
-                self.used_bits = used;
+            (2, 2) => {
+                self.one();
+                self.zero();
+            }
+            (2, 3) => {
+                self.one();
+                self.one();
+            }
+            (_, _) => {
+                self.used_bits += num_bits;
+                let unused_bits = 8 - self.used_bits;
+                match unused_bits {
+                    x if x > 0 => {
+                        self.current_byte |= val << x;
+                    }
+                    x if x == 0 => {
+                        self.current_byte |= val;
+                        self.next_word();
+                    }
+                    x => {
+                        let used = -x;
+                        self.current_byte |= val >> used;
+                        self.next_word();
+                        self.current_byte = val << (8 - used);
+                        self.used_bits = used;
+                    }
+                }
             }
         }
     }
