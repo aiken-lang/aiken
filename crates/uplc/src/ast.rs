@@ -69,6 +69,10 @@ pub enum Constant {
     Bool(bool),
 }
 
+pub fn encode_constant(tag: u8, e: &mut Encoder) -> Result<(), String> {
+    e.encode_list_with([tag].to_vec())
+}
+
 impl Encode for Program {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         self.version.encode(e)?;
@@ -80,13 +84,49 @@ impl Encode for Program {
 
 impl Encode for Term {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        // still need annotation but here we have the term tags
         match self {
+            Term::Var(name) => {
+                encode_term_tag(0, e)?;
+                name.encode(e)?;
+            }
+            Term::Delay(term) => {
+                encode_term_tag(1, e)?;
+                term.encode(e)?;
+            }
+            Term::Lambda {
+                parameter_name,
+                body,
+            } => {
+                encode_term_tag(2, e)?;
+                // need to create encoding for Binder
+                todo!();
+                body.encode(e)?;
+            }
+            Term::Apply { function, argument } => {
+                encode_term_tag(3, e)?;
+                function.encode(e)?;
+                argument.encode(e)?;
+            }
+
             Term::Constant(constant) => {
                 encode_term_tag(4, e)?;
                 constant.encode(e)?;
             }
-            rest => {
-                todo!("Implement: {:?}", rest)
+
+            Term::Force(term) => {
+                encode_term_tag(5, e)?;
+                term.encode(e)?;
+            }
+
+            Term::Error => {
+                encode_term_tag(6, e)?;
+                todo!()
+            }
+            Term::Builtin(b) => {
+                encode_term_tag(7, e)?;
+                // implement encode for builtins
+                todo!()
             }
         }
 
@@ -98,11 +138,24 @@ impl Encode for &Constant {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         match self {
             Constant::Integer(_) => todo!(),
-            Constant::ByteString(bytes) => bytes.encode(e)?,
-            Constant::String(s) => s.encode(e)?,
-            Constant::Char(c) => c.encode(e)?,
-            Constant::Unit => todo!(),
-            Constant::Bool(b) => b.encode(e)?,
+            Constant::ByteString(bytes) => {
+                encode_constant(1, e)?;
+                bytes.encode(e)?;
+            }
+            Constant::String(s) => {
+                encode_constant(2, e)?;
+                s.encode(e)?;
+            }
+            // there is no char constant tag
+            Constant::Char(c) => {
+                c.encode(e)?;
+                todo!()
+            }
+            Constant::Unit => encode_constant(3, e)?,
+            Constant::Bool(b) => {
+                encode_constant(4, e)?;
+                b.encode(e)?;
+            }
         }
 
         Ok(())

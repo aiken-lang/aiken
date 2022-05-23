@@ -60,6 +60,13 @@ impl Encode for &[u8] {
     }
 }
 
+impl<T: Encode> Encode for Box<T> {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        self.as_ref().encode(e)?;
+        Ok(())
+    }
+}
+
 impl<T, K> Encode for (T, K)
 where
     T: Encode,
