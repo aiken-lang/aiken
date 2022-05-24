@@ -51,7 +51,13 @@ impl Encoder {
         self
     }
 
-    pub fn bytes(&mut self, arr: &[u8]) -> Result<&mut Self, String> {
+    pub fn bytes(&mut self, x: &[u8]) -> Result<&mut Self, String> {
+        // use filler to write current buffer so bits used gets reset
+        self.filler();
+        self.byte_array(x)
+    }
+
+    pub fn byte_array(&mut self, arr: &[u8]) -> Result<&mut Self, String> {
         if self.used_bits != 0 {
             return Err("Buffer is not byte aligned".to_string());
         }
@@ -59,8 +65,13 @@ impl Encoder {
         Ok(self)
     }
 
+    pub fn integer(&mut self, i: isize) -> Result<&mut Self, String> {
+        self.word(i);
+        Ok(self)
+    }
+
     pub fn char(&mut self, c: char) -> Result<&mut Self, String> {
-        self.word(c as u32);
+        self.word(c as isize);
         Ok(self)
     }
 
@@ -121,7 +132,7 @@ impl Encoder {
         self.write_blk(arr, src_ptr);
     }
 
-    fn word(&mut self, c: u32) {
+    fn word(&mut self, c: isize) {
         loop {
             let mut w = (c & 127) as u8;
             let c = c >> 7;

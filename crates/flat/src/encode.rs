@@ -20,6 +20,14 @@ impl Encode for u8 {
     }
 }
 
+impl Encode for isize {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.integer(*self)?;
+
+        Ok(())
+    }
+}
+
 impl Encode for char {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         e.char(*self)?;

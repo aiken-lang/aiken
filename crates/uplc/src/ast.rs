@@ -74,7 +74,7 @@ pub fn safe_encode_bits(num_bits: u32, byte: u8, e: &mut Encoder) -> Result<(), 
 pub enum Constant {
     // TODO: figure out the right size for this
     // tag: 0
-    Integer(i64),
+    Integer(isize),
     // tag: 1
     ByteString(Vec<u8>),
     // tag: 2
@@ -159,7 +159,10 @@ impl Encode for Term {
 impl Encode for &Constant {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         match self {
-            Constant::Integer(_) => todo!(),
+            Constant::Integer(i) => {
+                encode_constant(0, e)?;
+                i.encode(e)?;
+            }
             Constant::ByteString(bytes) => {
                 encode_constant(1, e)?;
                 bytes.encode(e)?;
