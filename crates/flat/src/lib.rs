@@ -1,7 +1,7 @@
 mod encode;
 mod encoder;
 mod filler;
-mod zigzag;
+pub mod zigzag;
 
 pub mod en {
     pub use super::encode::*;
