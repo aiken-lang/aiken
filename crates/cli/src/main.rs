@@ -11,7 +11,13 @@ fn main() -> anyhow::Result<()> {
 
     println!("{:#?}", program);
 
-    println!("{:?}", program.flat()?);
+    let flat_bytes = program.flat()?;
+
+    for byte in flat_bytes {
+        print!("{:08b} ", byte);
+    }
+
+    println!();
 
     println!("{}", program.flat_hex()?);
 

@@ -1,4 +1,4 @@
-use crate::encode::Encode;
+use crate::{encode::Encode, zigzag};
 
 pub struct Encoder {
     pub buffer: Vec<u8>,
@@ -66,12 +66,13 @@ impl Encoder {
     }
 
     pub fn integer(&mut self, i: isize) -> Result<&mut Self, String> {
+        let i = zigzag::to_usize(i);
         self.word(i);
         Ok(self)
     }
 
     pub fn char(&mut self, c: char) -> Result<&mut Self, String> {
-        self.word(c as isize);
+        self.word(c as usize);
         Ok(self)
     }
 
@@ -132,7 +133,7 @@ impl Encoder {
         self.write_blk(arr, src_ptr);
     }
 
-    fn word(&mut self, c: isize) {
+    pub fn word(&mut self, c: usize) {
         loop {
             let mut w = (c & 127) as u8;
             let c = c >> 7;

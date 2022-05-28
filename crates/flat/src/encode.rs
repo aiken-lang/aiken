@@ -28,6 +28,14 @@ impl Encode for isize {
     }
 }
 
+impl Encode for usize {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        e.word(*self);
+
+        Ok(())
+    }
+}
+
 impl Encode for char {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         e.char(*self)?;

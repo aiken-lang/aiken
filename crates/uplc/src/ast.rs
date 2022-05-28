@@ -8,7 +8,7 @@ const CONST_TAG_WIDTH: u32 = 4;
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub version: String,
+    pub version: (usize, usize, usize),
     pub term: Term,
 }
 
@@ -97,7 +97,12 @@ pub fn encode_constant_tag(tag: u8, e: &mut Encoder) -> Result<(), String> {
 
 impl Encode for Program {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        self.version.encode(e)?;
+        let (major, minor, patch) = self.version;
+
+        major.encode(e)?;
+        minor.encode(e)?;
+        patch.encode(e)?;
+
         self.term.encode(e)?;
 
         Ok(())
@@ -123,7 +128,6 @@ impl Encode for Term {
                 encode_term_tag(2, e)?;
                 // need to create encoding for Binder
                 todo!();
-                body.encode(e)?;
             }
             Term::Apply { function, argument } => {
                 encode_term_tag(3, e)?;
@@ -169,12 +173,17 @@ impl Encode for &Constant {
             }
             Constant::String(s) => {
                 encode_constant(2, e)?;
-                s.encode(e)?;
+                s.as_bytes().encode(e)?;
             }
             // there is no char constant tag
             Constant::Char(c) => {
                 c.encode(e)?;
-                todo!()
+
+                let mut b = [0; 4];
+
+                let s = c.encode_utf8(&mut b);
+
+                s.as_bytes().encode(e)?;
             }
             Constant::Unit => encode_constant(3, e)?,
             Constant::Bool(b) => {
@@ -184,5 +193,25 @@ impl Encode for &Constant {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Constant, Program, Term};
+
+    #[test]
+    fn flat_encode_integer() {
+        let program = Program {
+            version: (11, 22, 33),
+            term: Term::Constant(Constant::Integer(11)),
+        };
+
+        let bytes = program.flat().unwrap();
+
+        assert_eq!(
+            bytes,
+            vec![0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001]
+        )
     }
 }

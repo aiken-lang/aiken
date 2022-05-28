@@ -16,7 +16,7 @@ use crate::{
 pub fn program(src: &str) -> anyhow::Result<Program> {
     let mut parser = program_();
 
-    let result = parser.easy_parse(position::Stream::new(src));
+    let result = parser.easy_parse(position::Stream::new(src.trim()));
 
     match result {
         Ok((program, _)) => Ok(program),
@@ -37,7 +37,7 @@ where
     between(token('('), token(')'), prog).skip(spaces())
 }
 
-fn version<Input>() -> impl Parser<Input, Output = String>
+fn version<Input>() -> impl Parser<Input, Output = (usize, usize, usize)>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -51,7 +51,11 @@ where
     )
         .map(
             |(major, _, minor, _, patch): (String, char, String, char, String)| {
-                format!("{}.{}.{}", major, minor, patch)
+                (
+                    major.parse::<usize>().unwrap(),
+                    minor.parse::<usize>().unwrap(),
+                    patch.parse::<usize>().unwrap(),
+                )
             },
         )
 }
@@ -203,7 +207,7 @@ where
     string("integer")
         .with(skip_many1(space()))
         .with(many1(digit()))
-        .map(|d: String| Constant::Integer(d.parse::<i64>().unwrap()))
+        .map(|d: String| Constant::Integer(d.parse::<isize>().unwrap()))
 }
 
 fn constant_bytestring<Input>() -> impl Parser<Input, Output = Constant>
@@ -253,18 +257,19 @@ where
 
 #[cfg(test)]
 mod test {
-    use combine::Parser;
-
-    const CODE: &str = include_str!("../example/plutus-core");
-
     #[test]
     fn parse_program() {
-        let result = super::program_().parse(CODE);
+        let code = r#"
+        (program 11.22.33
+            (con integer 11)
+        )
+        "#;
+        let result = super::program(code);
 
         assert!(result.is_ok());
 
-        let program = result.unwrap().0;
+        let program = result.unwrap();
 
-        assert_eq!(program.version, "1.0.0");
+        assert_eq!(program.version, (11, 22, 33));
     }
 }
