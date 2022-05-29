@@ -83,19 +83,6 @@ impl<T: Encode> Encode for Box<T> {
     }
 }
 
-impl<T, K> Encode for (T, K)
-where
-    T: Encode,
-    K: Encode,
-{
-    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        self.0.encode(e)?;
-        self.1.encode(e)?;
-
-        Ok(())
-    }
-}
-
 impl Encode for Filler {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         e.filler();

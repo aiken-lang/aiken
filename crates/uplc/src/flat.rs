@@ -1,6 +1,10 @@
 use anyhow::anyhow;
 
-use flat::en::{Encode, Encoder};
+use flat::{
+    de::{Decode, Decoder},
+    en::{Encode, Encoder},
+    Flat,
+};
 
 use crate::{
     ast::{Constant, Program, Term},
@@ -11,15 +15,17 @@ const BUILTIN_TAG_WIDTH: u32 = 7;
 const CONST_TAG_WIDTH: u32 = 4;
 const TERM_TAG_WIDTH: u32 = 4;
 
-impl Program {
-    pub fn flat(&self) -> anyhow::Result<Vec<u8>> {
-        let bytes = flat::encode(self.clone()).map_err(|err| anyhow!("{}", err))?;
+impl<'b> Flat<'b> for Program {}
 
-        Ok(bytes)
+impl Program {
+    // convenient so that people don't need to depend on the flat crate
+    // directly to call programs flat function
+    pub fn to_flat(&self) -> anyhow::Result<Vec<u8>> {
+        self.flat().map_err(|err| anyhow!("{}", err))
     }
 
     pub fn flat_hex(&self) -> anyhow::Result<String> {
-        let bytes = self.flat()?;
+        let bytes = self.flat().map_err(|err| anyhow!("{}", err))?;
 
         let hex = hex::encode(&bytes);
 
@@ -38,6 +44,12 @@ impl Encode for Program {
         self.term.encode(e)?;
 
         Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for Program {
+    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+        todo!()
     }
 }
 
@@ -92,6 +104,12 @@ impl Encode for Term {
     }
 }
 
+impl<'b> Decode<'b> for Term {
+    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+        todo!()
+    }
+}
+
 impl Encode for &Constant {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         match self {
@@ -128,11 +146,23 @@ impl Encode for &Constant {
     }
 }
 
+impl<'b> Decode<'b> for Constant {
+    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+        todo!()
+    }
+}
+
 impl Encode for DefaultFunction {
     fn encode(&self, e: &mut flat::en::Encoder) -> Result<(), String> {
         e.bits(BUILTIN_TAG_WIDTH as i64, self.clone() as u8);
 
         Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for DefaultFunction {
+    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+        todo!()
     }
 }
 
@@ -171,7 +201,7 @@ mod test {
             term: Term::Constant(Constant::Integer(11)),
         };
 
-        let bytes = program.flat().unwrap();
+        let bytes = program.to_flat().unwrap();
 
         assert_eq!(
             bytes,

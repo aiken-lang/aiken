@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("{:#?}", program);
 
-    let flat_bytes = program.flat()?;
+    let flat_bytes = program.to_flat()?;
 
     for byte in flat_bytes {
         print!("{:08b} ", byte);
