@@ -267,7 +267,7 @@ mod test {
             term: Term::Constant(Constant::Integer(11)),
         };
 
-        let actual_program: Program = Program::unflat(flat_encoded.as_slice()).unwrap();
+        let actual_program: Program = Program::unflat(&flat_encoded).unwrap();
 
         assert_eq!(actual_program, expected_program)
     }
