@@ -48,7 +48,7 @@ impl Encode for Program {
 }
 
 impl<'b> Decode<'b> for Program {
-    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+    fn decode(_d: &mut Decoder) -> Result<Self, String> {
         todo!()
     }
 }
@@ -91,7 +91,6 @@ impl Encode for Term {
 
             Term::Error => {
                 encode_term_tag(6, e)?;
-                todo!()
             }
             Term::Builtin(builtin) => {
                 encode_term_tag(7, e)?;
@@ -105,7 +104,7 @@ impl Encode for Term {
 }
 
 impl<'b> Decode<'b> for Term {
-    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+    fn decode(_d: &mut Decoder) -> Result<Self, String> {
         todo!()
     }
 }
@@ -147,7 +146,7 @@ impl Encode for &Constant {
 }
 
 impl<'b> Decode<'b> for Constant {
-    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+    fn decode(_d: &mut Decoder) -> Result<Self, String> {
         todo!()
     }
 }
@@ -161,7 +160,7 @@ impl Encode for DefaultFunction {
 }
 
 impl<'b> Decode<'b> for DefaultFunction {
-    fn decode(_d: &mut Decoder<'b>) -> Result<Self, String> {
+    fn decode(_d: &mut Decoder) -> Result<Self, String> {
         todo!()
     }
 }

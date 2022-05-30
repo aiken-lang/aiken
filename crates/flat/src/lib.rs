@@ -37,7 +37,7 @@ where
     Ok(e.buffer)
 }
 
-pub fn decode<'b, T>(bytes: &'b [u8]) -> Result<T, String>
+pub fn decode<'b, T>(bytes: &[u8]) -> Result<T, String>
 where
     T: de::Decode<'b>,
 {
