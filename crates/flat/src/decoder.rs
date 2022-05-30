@@ -1,21 +1,21 @@
 use crate::decode::Decode;
 
-pub struct Decoder {
-    buffer: Vec<u8>,
+pub struct Decoder<'b> {
+    buffer: &'b [u8],
     used_bits: i64,
     pos: usize,
 }
 
-impl Decoder {
-    pub fn new(bytes: &[u8]) -> Decoder {
+impl<'b> Decoder<'b> {
+    pub fn new(bytes: &'b [u8]) -> Decoder {
         Decoder {
-            buffer: bytes.to_vec(),
+            buffer: bytes,
             pos: 0,
             used_bits: 0,
         }
     }
 
-    pub fn decode<'b, T: Decode<'b>>(&mut self) -> Result<T, String> {
+    pub fn decode<T: Decode<'b>>(&mut self) -> Result<T, String> {
         T::decode(self)
     }
 
