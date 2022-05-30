@@ -34,7 +34,6 @@ pub enum Term {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
-    // TODO: figure out the right size for this
     // tag: 0
     Integer(isize),
     // tag: 1

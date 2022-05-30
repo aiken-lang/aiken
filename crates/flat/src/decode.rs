@@ -7,6 +7,7 @@ pub trait Decode<'b>: Sized {
 impl Decode<'_> for Filler {
     fn decode(d: &mut Decoder) -> Result<Filler, String> {
         d.filler()?;
+
         Ok(Filler::FillerEnd)
     }
 }
