@@ -43,7 +43,11 @@ where
 {
     let mut d = de::Decoder::new(bytes);
 
-    d.decode()
+    let value = d.decode()?;
+
+    d.decode::<filler::Filler>()?;
+
+    Ok(value)
 }
 
 #[cfg(test)]
