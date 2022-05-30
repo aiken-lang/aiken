@@ -48,8 +48,10 @@ impl Encode for Program {
 }
 
 impl<'b> Decode<'b> for Program {
-    fn decode(_d: &mut Decoder) -> Result<Self, String> {
-        todo!()
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        let version = (usize::decode(d)?, usize::decode(d)?, usize::decode(d)?);
+        let term = Term::decode(d)?;
+        Ok(Program { version, term })
     }
 }
 
@@ -104,8 +106,22 @@ impl Encode for Term {
 }
 
 impl<'b> Decode<'b> for Term {
-    fn decode(_d: &mut Decoder) -> Result<Self, String> {
-        todo!()
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        match decode_term_tag(d)? {
+            0 => Ok(Term::Var(String::decode(d)?)),
+            1 => Ok(Term::Delay(Box::new(Term::decode(d)?))),
+            2 => todo!(),
+            3 => Ok(Term::Apply {
+                function: Box::new(Term::decode(d)?),
+                argument: Box::new(Term::decode(d)?),
+            }),
+            // Need size limit for Constant
+            4 => Ok(Term::Constant(Constant::decode(d)?)),
+            5 => Ok(Term::Force(Box::new(Term::decode(d)?))),
+            6 => Ok(Term::Error),
+            7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
+            x => Err(format!("Unknown term constructor tag: {}", x)),
+        }
     }
 }
 
@@ -146,8 +162,17 @@ impl Encode for &Constant {
 }
 
 impl<'b> Decode<'b> for Constant {
-    fn decode(_d: &mut Decoder) -> Result<Self, String> {
-        todo!()
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        match decode_constant(d)? {
+            0 => Ok(Constant::Integer(isize::decode(d)?)),
+            1 => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
+            2 => Ok(Constant::String(
+                String::from_utf8(Vec::<u8>::decode(d)?).unwrap(),
+            )),
+            3 => Ok(Constant::Unit),
+            4 => Ok(Constant::Bool(bool::decode(d)?)),
+            x => Err(format!("Unknown constant constructor tag: {}", x)),
+        }
     }
 }
 
@@ -160,13 +185,18 @@ impl Encode for DefaultFunction {
 }
 
 impl<'b> Decode<'b> for DefaultFunction {
-    fn decode(_d: &mut Decoder) -> Result<Self, String> {
-        todo!()
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        let builtin_tag = d.bits8(BUILTIN_TAG_WIDTH as usize)?;
+        builtin_tag.try_into()
     }
 }
 
 fn encode_term_tag(tag: u8, e: &mut Encoder) -> Result<(), String> {
     safe_encode_bits(TERM_TAG_WIDTH, tag, e)
+}
+
+fn decode_term_tag(d: &mut Decoder) -> Result<u8, String> {
+    d.bits8(TERM_TAG_WIDTH as usize)
 }
 
 fn safe_encode_bits(num_bits: u32, byte: u8, e: &mut Encoder) -> Result<(), String> {
@@ -185,8 +215,24 @@ pub fn encode_constant(tag: u8, e: &mut Encoder) -> Result<(), String> {
     e.encode_list_with(encode_constant_tag, [tag].to_vec())
 }
 
+pub fn decode_constant(d: &mut Decoder) -> Result<u8, String> {
+    let u8_list = d.decode_list_with(decode_constant_tag)?;
+    if u8_list.len() > 1 {
+        Err(
+            "Improper encoding on constant tag. Should be list of one item encoded in 4 bits"
+                .to_string(),
+        )
+    } else {
+        Ok(u8_list[0])
+    }
+}
+
 pub fn encode_constant_tag(tag: u8, e: &mut Encoder) -> Result<(), String> {
     safe_encode_bits(CONST_TAG_WIDTH, tag, e)
+}
+
+pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, String> {
+    d.bits8(CONST_TAG_WIDTH as usize)
 }
 
 #[cfg(test)]

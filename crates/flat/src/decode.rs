@@ -17,6 +17,24 @@ impl Decode<'_> for Vec<u8> {
     }
 }
 
+impl Decode<'_> for u8 {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        d.u8()
+    }
+}
+
+impl Decode<'_> for isize {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        d.integer()
+    }
+}
+
+impl Decode<'_> for usize {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        d.word()
+    }
+}
+
 impl Decode<'_> for char {
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         d.char()
@@ -31,7 +49,6 @@ impl Decode<'_> for String {
 
 impl Decode<'_> for bool {
     fn decode(d: &mut Decoder) -> Result<bool, String> {
-        let b = d.bool();
-        Ok(b)
+        d.bool()
     }
 }

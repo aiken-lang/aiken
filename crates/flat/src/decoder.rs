@@ -1,4 +1,4 @@
-use crate::decode::Decode;
+use crate::{decode::Decode, zigzag};
 
 pub struct Decoder<'b> {
     buffer: &'b [u8],
@@ -19,11 +19,19 @@ impl<'b> Decoder<'b> {
         T::decode(self)
     }
 
-    pub fn bool(&mut self) -> bool {
+    pub fn integer(&mut self) -> Result<isize, String> {
+        Ok(zigzag::to_isize(self.word()?))
+    }
+
+    pub fn bool(&mut self) -> Result<bool, String> {
         let current_byte = self.buffer[self.pos];
         let b = 0 != (current_byte & (128 >> self.used_bits));
         self.increment_buffer_by_bit();
-        b
+        Ok(b)
+    }
+
+    pub fn u8(&mut self) -> Result<u8, String> {
+        self.bits8(8)
     }
 
     pub fn bytes(&mut self) -> Result<Vec<u8>, String> {
@@ -48,7 +56,7 @@ impl<'b> Decoder<'b> {
         Ok(())
     }
 
-    fn word(&mut self) -> Result<usize, String> {
+    pub fn word(&mut self) -> Result<usize, String> {
         let mut leading_bit = 1;
         let mut final_word: usize = 0;
         let mut shl: usize = 0;
@@ -61,6 +69,17 @@ impl<'b> Decoder<'b> {
             leading_bit = word8 & 128;
         }
         Ok(final_word)
+    }
+
+    pub fn decode_list_with<T: Decode<'b>>(
+        &mut self,
+        decoder_func: for<'r> fn(&'r mut Decoder) -> Result<T, String>,
+    ) -> Result<Vec<T>, String> {
+        let mut vec_array: Vec<T> = Vec::new();
+        while self.bit()? {
+            vec_array.push(decoder_func(self)?)
+        }
+        Ok(vec_array)
     }
 
     fn zero(&mut self) -> Result<bool, String> {
@@ -102,7 +121,7 @@ impl<'b> Decoder<'b> {
                 "Decoder.bits8: incorrect value of num_bits - must be less than 9".to_string(),
             );
         }
-        self.ensure_bytes(num_bits)?;
+        self.ensure_bits(num_bits)?;
         let unused_bits = 8 - self.used_bits as usize;
         let leading_zeroes = 8 - num_bits;
         let r = (self.buffer[self.pos] << self.used_bits as usize) >> leading_zeroes;
@@ -112,15 +131,27 @@ impl<'b> Decoder<'b> {
         } else {
             r
         };
-        self.drop_bits(8);
+        self.drop_bits(num_bits);
         Ok(x)
     }
 
     fn ensure_bytes(&mut self, required_bytes: usize) -> Result<(), String> {
-        if required_bytes > self.buffer.len() - self.pos {
+        if required_bytes as isize > self.buffer.len() as isize - self.pos as isize {
             return Err(format!(
                 "DecoderState: Not enough data available: {:#?} - required bytes {}",
                 self.buffer, required_bytes
+            ));
+        }
+        Ok(())
+    }
+
+    fn ensure_bits(&mut self, required_bits: usize) -> Result<(), String> {
+        if required_bits as isize
+            > (self.buffer.len() as isize - self.pos as isize) * 8 - self.used_bits as isize
+        {
+            return Err(format!(
+                "DecoderState: Not enough data available: {:#?} - required bits {}",
+                self.buffer, required_bits
             ));
         }
         Ok(())
