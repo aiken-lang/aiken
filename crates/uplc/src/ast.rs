@@ -1,12 +1,12 @@
 use crate::builtins::DefaultFunction;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub version: (usize, usize, usize),
     pub term: Term,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Term {
     // tag: 0
     Var(String),
@@ -32,7 +32,7 @@ pub enum Term {
     Builtin(DefaultFunction),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     // TODO: figure out the right size for this
     // tag: 0

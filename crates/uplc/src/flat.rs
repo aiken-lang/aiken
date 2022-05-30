@@ -237,6 +237,8 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, String> {
 
 #[cfg(test)]
 mod test {
+    use flat::Flat;
+
     use super::{Constant, Program, Term};
 
     #[test]
@@ -252,5 +254,20 @@ mod test {
             bytes,
             vec![0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001]
         )
+    }
+
+    #[test]
+    fn flat_decode_integer() {
+        let flat_encoded = vec![
+            0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001,
+        ];
+        let expected_program = Program {
+            version: (11, 22, 33),
+            term: Term::Constant(Constant::Integer(11)),
+        };
+
+        let actual_program: Program = Program::unflat(flat_encoded.as_slice()).unwrap();
+
+        assert_eq!(actual_program, expected_program)
     }
 }

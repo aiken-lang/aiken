@@ -2,7 +2,7 @@ use strum_macros::EnumString;
 
 #[repr(u8)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, EnumString)]
+#[derive(Debug, Clone, EnumString, PartialEq)]
 #[strum(serialize_all = "camelCase")]
 pub enum DefaultFunction {
     // Integer functions
