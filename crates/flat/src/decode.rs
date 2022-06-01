@@ -44,7 +44,7 @@ impl Decode<'_> for char {
 
 impl Decode<'_> for String {
     fn decode(d: &mut Decoder) -> Result<Self, String> {
-        d.string()
+        d.utf8()
     }
 }
 

@@ -9,12 +9,12 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term {
     // tag: 0
-    Var(String),
+    Var(Name),
     // tag: 1
     Delay(Box<Term>),
     // tag: 2
     Lambda {
-        parameter_name: String,
+        parameter_name: Name,
         body: Box<Term>,
     },
     // tag: 3
@@ -46,4 +46,10 @@ pub enum Constant {
     Unit,
     // tag: 5
     Bool(bool),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Name {
+    pub text: String,
+    pub unique: isize,
 }

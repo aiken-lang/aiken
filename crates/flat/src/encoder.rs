@@ -75,7 +75,7 @@ impl Encoder {
         self.word(c as usize);
         Ok(self)
     }
-
+    // TODO: Do we need this?
     pub fn string(&mut self, s: &str) -> Result<&mut Self, String> {
         for i in s.chars() {
             self.one();
@@ -85,6 +85,10 @@ impl Encoder {
         self.zero();
 
         Ok(self)
+    }
+
+    pub fn utf8(&mut self, s: &str) -> Result<&mut Self, String> {
+        self.bytes(s.as_bytes())
     }
 
     fn zero(&mut self) {

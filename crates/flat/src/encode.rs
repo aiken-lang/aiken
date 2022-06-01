@@ -46,7 +46,7 @@ impl Encode for char {
 
 impl Encode for &str {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        e.string(*self)?;
+        e.utf8(self)?;
 
         Ok(())
     }
@@ -54,7 +54,7 @@ impl Encode for &str {
 
 impl Encode for String {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        e.string(self)?;
+        e.utf8(self)?;
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use flat::{
 };
 
 use crate::{
-    ast::{Constant, Program, Term},
+    ast::{Constant, Name, Program, Term},
     builtins::DefaultFunction,
 };
 
@@ -57,7 +57,6 @@ impl<'b> Decode<'b> for Program {
 
 impl Encode for Term {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
-        // still need annotation but here we have the term tags
         match self {
             Term::Var(name) => {
                 encode_term_tag(0, e)?;
@@ -68,12 +67,12 @@ impl Encode for Term {
                 term.encode(e)?;
             }
             Term::Lambda {
-                parameter_name: _,
-                body: _,
+                parameter_name,
+                body,
             } => {
                 encode_term_tag(2, e)?;
-                // need to create encoding for Binder
-                todo!();
+                parameter_name.encode(e)?;
+                body.encode(e)?;
             }
             Term::Apply { function, argument } => {
                 encode_term_tag(3, e)?;
@@ -108,9 +107,12 @@ impl Encode for Term {
 impl<'b> Decode<'b> for Term {
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         match decode_term_tag(d)? {
-            0 => Ok(Term::Var(String::decode(d)?)),
+            0 => Ok(Term::Var(Name::decode(d)?)),
             1 => Ok(Term::Delay(Box::new(Term::decode(d)?))),
-            2 => todo!(),
+            2 => Ok(Term::Lambda {
+                parameter_name: Name::decode(d)?,
+                body: Box::new(Term::decode(d)?),
+            }),
             3 => Ok(Term::Apply {
                 function: Box::new(Term::decode(d)?),
                 argument: Box::new(Term::decode(d)?),
@@ -138,7 +140,7 @@ impl Encode for &Constant {
             }
             Constant::String(s) => {
                 encode_constant(2, e)?;
-                s.as_bytes().encode(e)?;
+                s.encode(e)?;
             }
             // there is no char constant tag
             Constant::Char(c) => {
@@ -166,13 +168,29 @@ impl<'b> Decode<'b> for Constant {
         match decode_constant(d)? {
             0 => Ok(Constant::Integer(isize::decode(d)?)),
             1 => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
-            2 => Ok(Constant::String(
-                String::from_utf8(Vec::<u8>::decode(d)?).unwrap(),
-            )),
+            2 => Ok(Constant::String(String::decode(d)?)),
             3 => Ok(Constant::Unit),
             4 => Ok(Constant::Bool(bool::decode(d)?)),
             x => Err(format!("Unknown constant constructor tag: {}", x)),
         }
+    }
+}
+
+impl Encode for Name {
+    fn encode(&self, e: &mut flat::en::Encoder) -> Result<(), String> {
+        self.text.encode(e)?;
+        self.unique.encode(e)?;
+
+        Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for Name {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        Ok(Name {
+            text: String::decode(d)?,
+            unique: isize::decode(d)?,
+        })
     }
 }
 

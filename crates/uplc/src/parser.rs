@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use combine::{
     attempt, between, choice, many1,
@@ -9,12 +9,38 @@ use combine::{
 };
 
 use crate::{
-    ast::{Constant, Program, Term},
+    ast::{Constant, Name, Program, Term},
     builtins::DefaultFunction,
 };
 
+struct ParserState {
+    identifiers: HashMap<String, isize>,
+    current_unique: isize,
+}
+
+impl ParserState {
+    fn new() -> Self {
+        ParserState {
+            identifiers: HashMap::new(),
+            current_unique: 0,
+        }
+    }
+
+    fn intern(&mut self, text: String) -> isize {
+        if let Some(u) = self.identifiers.get(&text) {
+            *u
+        } else {
+            let unique = self.current_unique;
+            self.identifiers.insert(text, unique);
+            self.current_unique += 1;
+            unique
+        }
+    }
+}
+
 pub fn program(src: &str) -> anyhow::Result<Program> {
-    let mut parser = program_();
+    let mut state = ParserState::new();
+    let mut parser = program_(&mut state);
 
     let result = parser.easy_parse(position::Stream::new(src.trim()));
 
@@ -24,13 +50,13 @@ pub fn program(src: &str) -> anyhow::Result<Program> {
     }
 }
 
-fn program_<Input>() -> impl Parser<Input, Output = Program>
+fn program_<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Program>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     let prog = string("program").with(skip_many1(space())).with(
-        (version(), skip_many1(space()), term().skip(spaces()))
+        (version(), skip_many1(space()), term(state).skip(spaces()))
             .map(|(version, _, term)| Program { version, term }),
     );
 
@@ -60,31 +86,31 @@ where
         )
 }
 
-fn term<Input>() -> impl Parser<Input, Output = Term>
+fn term<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     choice((
-        attempt(delay()),
-        attempt(lambda()),
-        attempt(apply()),
+        attempt(delay(state)),
+        attempt(lambda(state)),
+        attempt(apply(state)),
         attempt(constant()),
-        attempt(force()),
+        attempt(force(state)),
         attempt(error()),
         attempt(builtin()),
     ))
 }
 
 parser! {
-    fn term_[I]()(I) -> Term
+    fn term_[I](state: &mut ParserState)(I) -> Term
     where [I: Stream<Token = char>]
     {
-        term()
+        term(state)
     }
 }
 
-fn delay<Input>() -> impl Parser<Input, Output = Term>
+fn delay<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -94,12 +120,12 @@ where
         token(')'),
         string("delay")
             .with(skip_many1(space()))
-            .with(term_())
+            .with(term_(state))
             .map(|term| Term::Delay(Box::new(term))),
     )
 }
 
-fn force<Input>() -> impl Parser<Input, Output = Term>
+fn force<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -109,12 +135,12 @@ where
         token(')'),
         string("force")
             .with(skip_many1(space()))
-            .with(term_())
+            .with(term_(state))
             .map(|term| Term::Force(Box::new(term))),
     )
 }
 
-fn lambda<Input>() -> impl Parser<Input, Output = Term>
+fn lambda<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -124,15 +150,18 @@ where
         token(')'),
         string("lam")
             .with(skip_many1(space()))
-            .with((many1(alpha_num()), skip_many1(space()), term_()))
+            .with((many1(alpha_num()), skip_many1(space()), term_(state)))
             .map(|(parameter_name, _, term)| Term::Lambda {
-                parameter_name,
+                parameter_name: Name {
+                    text: parameter_name,
+                    unique: state.intern(parameter_name),
+                },
                 body: Box::new(term),
             }),
     )
 }
 
-fn apply<Input>() -> impl Parser<Input, Output = Term>
+fn apply<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -140,9 +169,11 @@ where
     between(
         token('['),
         token(']'),
-        (term_().skip(skip_many1(space())), term_()).map(|(function, argument)| Term::Apply {
-            function: Box::new(function),
-            argument: Box::new(argument),
+        (term_(state).skip(skip_many1(space())), term_(state)).map(|(function, argument)| {
+            Term::Apply {
+                function: Box::new(function),
+                argument: Box::new(argument),
+            }
         }),
     )
 }

@@ -51,6 +51,11 @@ impl<'b> Decoder<'b> {
         Ok(s)
     }
 
+    pub fn utf8(&mut self) -> Result<String, String> {
+        // TODO: Better Error Handling
+        Ok(String::from_utf8(Vec::<u8>::decode(self)?).unwrap())
+    }
+
     pub fn filler(&mut self) -> Result<(), String> {
         while self.zero()? {}
         Ok(())
