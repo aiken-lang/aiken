@@ -144,8 +144,6 @@ impl Encode for &Constant {
             }
             // there is no char constant tag
             Constant::Char(c) => {
-                c.encode(e)?;
-
                 let mut b = [0; 4];
 
                 let s = c.encode_utf8(&mut b);

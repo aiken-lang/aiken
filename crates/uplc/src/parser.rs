@@ -2,10 +2,13 @@ use std::{collections::HashMap, str::FromStr};
 
 use combine::{
     attempt, between, choice, many1,
-    parser::char::{alpha_num, digit, hex_digit, space, spaces, string},
+    parser::{
+        char::{alpha_num, digit, hex_digit, space, spaces, string},
+        combinator::no_partial,
+    },
     skip_many1,
-    stream::position,
-    token, EasyParser, ParseError, Parser, Stream,
+    stream::{position, state},
+    token, ParseError, Parser, Stream,
 };
 
 use crate::{
@@ -18,6 +21,8 @@ struct ParserState {
     current_unique: isize,
 }
 
+type StateStream<Input> = state::Stream<Input, ParserState>;
+
 impl ParserState {
     fn new() -> Self {
         ParserState {
@@ -26,12 +31,12 @@ impl ParserState {
         }
     }
 
-    fn intern(&mut self, text: String) -> isize {
-        if let Some(u) = self.identifiers.get(&text) {
+    fn intern(&mut self, text: &str) -> isize {
+        if let Some(u) = self.identifiers.get(text) {
             *u
         } else {
             let unique = self.current_unique;
-            self.identifiers.insert(text, unique);
+            self.identifiers.insert(text.to_string(), unique);
             self.current_unique += 1;
             unique
         }
@@ -39,10 +44,12 @@ impl ParserState {
 }
 
 pub fn program(src: &str) -> anyhow::Result<Program> {
-    let mut state = ParserState::new();
-    let mut parser = program_(&mut state);
+    let mut parser = program_();
 
-    let result = parser.easy_parse(position::Stream::new(src.trim()));
+    let result = parser.parse(state::Stream {
+        stream: position::Stream::new(src.trim()),
+        state: ParserState::new(),
+    });
 
     match result {
         Ok((program, _)) => Ok(program),
@@ -50,20 +57,20 @@ pub fn program(src: &str) -> anyhow::Result<Program> {
     }
 }
 
-fn program_<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Program>
+fn program_<Input>() -> impl Parser<StateStream<Input>, Output = Program>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     let prog = string("program").with(skip_many1(space())).with(
-        (version(), skip_many1(space()), term(state).skip(spaces()))
+        (version(), skip_many1(space()), term().skip(spaces()))
             .map(|(version, _, term)| Program { version, term }),
     );
 
     between(token('('), token(')'), prog).skip(spaces())
 }
 
-fn version<Input>() -> impl Parser<Input, Output = (usize, usize, usize)>
+fn version<Input>() -> impl Parser<StateStream<Input>, Output = (usize, usize, usize)>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -86,31 +93,23 @@ where
         )
 }
 
-fn term<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
+fn term<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    choice((
-        attempt(delay(state)),
-        attempt(lambda(state)),
-        attempt(apply(state)),
+    opaque!(no_partial(choice((
+        attempt(delay()),
+        attempt(lambda()),
+        attempt(apply()),
         attempt(constant()),
-        attempt(force(state)),
+        attempt(force()),
         attempt(error()),
         attempt(builtin()),
-    ))
+    ))))
 }
 
-parser! {
-    fn term_[I](state: &mut ParserState)(I) -> Term
-    where [I: Stream<Token = char>]
-    {
-        term(state)
-    }
-}
-
-fn delay<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
+fn delay<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -120,12 +119,12 @@ where
         token(')'),
         string("delay")
             .with(skip_many1(space()))
-            .with(term_(state))
+            .with(term())
             .map(|term| Term::Delay(Box::new(term))),
     )
 }
 
-fn force<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
+fn force<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -135,12 +134,12 @@ where
         token(')'),
         string("force")
             .with(skip_many1(space()))
-            .with(term_(state))
+            .with(term())
             .map(|term| Term::Force(Box::new(term))),
     )
 }
 
-fn lambda<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
+fn lambda<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -150,18 +149,20 @@ where
         token(')'),
         string("lam")
             .with(skip_many1(space()))
-            .with((many1(alpha_num()), skip_many1(space()), term_(state)))
-            .map(|(parameter_name, _, term)| Term::Lambda {
-                parameter_name: Name {
-                    text: parameter_name,
-                    unique: state.intern(parameter_name),
+            .with((many1(alpha_num()), skip_many1(space()), term()))
+            .map_input(
+                |(parameter_name, _, term): (String, _, Term), input| Term::Lambda {
+                    parameter_name: Name {
+                        unique: input.state.intern(&parameter_name),
+                        text: parameter_name,
+                    },
+                    body: Box::new(term),
                 },
-                body: Box::new(term),
-            }),
+            ),
     )
 }
 
-fn apply<Input>(state: &mut ParserState) -> impl Parser<Input, Output = Term>
+fn apply<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -169,16 +170,14 @@ where
     between(
         token('['),
         token(']'),
-        (term_(state).skip(skip_many1(space())), term_(state)).map(|(function, argument)| {
-            Term::Apply {
-                function: Box::new(function),
-                argument: Box::new(argument),
-            }
+        (term().skip(skip_many1(space())), term()).map(|(function, argument)| Term::Apply {
+            function: Box::new(function),
+            argument: Box::new(argument),
         }),
     )
 }
 
-pub fn builtin<Input>() -> impl Parser<Input, Output = Term>
+fn builtin<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -195,7 +194,7 @@ where
     )
 }
 
-pub fn error<Input>() -> impl Parser<Input, Output = Term>
+fn error<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -209,7 +208,7 @@ where
     )
 }
 
-pub fn constant<Input>() -> impl Parser<Input, Output = Term>
+fn constant<Input>() -> impl Parser<StateStream<Input>, Output = Term>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -230,7 +229,7 @@ where
     )
 }
 
-fn constant_integer<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_integer<Input>() -> impl Parser<StateStream<Input>, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -241,7 +240,7 @@ where
         .map(|d: String| Constant::Integer(d.parse::<isize>().unwrap()))
 }
 
-fn constant_bytestring<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_bytestring<Input>() -> impl Parser<StateStream<Input>, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -253,7 +252,7 @@ where
         .map(|b: String| Constant::ByteString(hex::decode(b).unwrap()))
 }
 
-fn constant_string<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_string<Input>() -> impl Parser<StateStream<Input>, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -264,7 +263,7 @@ where
         .map(Constant::String)
 }
 
-fn constant_unit<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_unit<Input>() -> impl Parser<StateStream<Input>, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -275,7 +274,7 @@ where
         .map(|_| Constant::Unit)
 }
 
-fn constant_bool<Input>() -> impl Parser<Input, Output = Constant>
+fn constant_bool<Input>() -> impl Parser<StateStream<Input>, Output = Constant>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
