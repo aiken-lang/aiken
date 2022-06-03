@@ -7,7 +7,7 @@ use flat::{
 };
 
 use crate::{
-    ast::{Constant, Name, Program, Term},
+    ast::{Constant, Name, Program, Term, Unique},
     builtins::DefaultFunction,
 };
 
@@ -183,6 +183,20 @@ impl<'b> Decode<'b> for Constant {
     }
 }
 
+impl Encode for Unique {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        isize::from(*self).encode(e)?;
+
+        Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for Unique {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        Ok(isize::decode(d)?.into())
+    }
+}
+
 impl Encode for Name {
     fn encode(&self, e: &mut flat::en::Encoder) -> Result<(), String> {
         self.text.encode(e)?;
@@ -196,7 +210,7 @@ impl<'b> Decode<'b> for Name {
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         Ok(Name {
             text: String::decode(d)?,
-            unique: isize::decode(d)?,
+            unique: Unique::decode(d)?,
         })
     }
 }

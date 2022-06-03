@@ -1,9 +1,20 @@
-use crate::builtins::DefaultFunction;
+use crate::{builtins::DefaultFunction, debruijn::Converter};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program<T> {
     pub version: (usize, usize, usize),
     pub term: Term<T>,
+}
+
+impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
+    type Error = String;
+
+    fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
+        Ok(Program::<NamedDeBruijn> {
+            version: value.version,
+            term: value.term.try_into()?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +43,22 @@ pub enum Term<T> {
     Builtin(DefaultFunction),
 }
 
+impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
+    type Error = String;
+
+    fn try_from(
+        value: Term<Name>,
+    ) -> Result<Self, <Term<NamedDeBruijn> as TryFrom<Term<Name>>>::Error> {
+        let mut converter = Converter::new();
+
+        let term = converter
+            .name_to_named_debruijn(value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(term)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     // tag: 0
@@ -51,14 +78,66 @@ pub enum Constant {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Name {
     pub text: String,
-    pub unique: isize,
+    pub unique: Unique,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy, Eq, Hash)]
+pub struct Unique(isize);
+
+impl Unique {
+    pub fn new(unique: isize) -> Self {
+        Unique(unique)
+    }
+
+    pub fn increment(&mut self) {
+        self.0 += 1;
+    }
+}
+
+impl From<isize> for Unique {
+    fn from(i: isize) -> Self {
+        Unique(i)
+    }
+}
+
+impl From<Unique> for isize {
+    fn from(d: Unique) -> Self {
+        d.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamedDeBruijn {
     pub text: String,
-    pub index: isize,
+    pub index: DeBruijn,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct DeBruijn(isize);
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct DeBruijn(u64);
+
+impl From<u64> for DeBruijn {
+    fn from(i: u64) -> Self {
+        DeBruijn(i)
+    }
+}
+
+impl From<DeBruijn> for u64 {
+    fn from(d: DeBruijn) -> Self {
+        d.0
+    }
+}
+
+impl From<NamedDeBruijn> for DeBruijn {
+    fn from(n: NamedDeBruijn) -> Self {
+        n.index
+    }
+}
+
+impl From<DeBruijn> for NamedDeBruijn {
+    fn from(index: DeBruijn) -> Self {
+        NamedDeBruijn {
+            text: String::from("i"),
+            index,
+        }
+    }
+}

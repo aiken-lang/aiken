@@ -12,13 +12,13 @@ use combine::{
 };
 
 use crate::{
-    ast::{Constant, Name, Program, Term},
+    ast::{Constant, Name, Program, Term, Unique},
     builtins::DefaultFunction,
 };
 
 struct ParserState {
-    identifiers: HashMap<String, isize>,
-    current_unique: isize,
+    identifiers: HashMap<String, Unique>,
+    current: Unique,
 }
 
 type StateStream<Input> = state::Stream<Input, ParserState>;
@@ -27,17 +27,20 @@ impl ParserState {
     fn new() -> Self {
         ParserState {
             identifiers: HashMap::new(),
-            current_unique: 0,
+            current: Unique::new(0),
         }
     }
 
-    fn intern(&mut self, text: &str) -> isize {
+    fn intern(&mut self, text: &str) -> Unique {
         if let Some(u) = self.identifiers.get(text) {
             *u
         } else {
-            let unique = self.current_unique;
+            let unique = self.current;
+
             self.identifiers.insert(text.to_string(), unique);
-            self.current_unique += 1;
+
+            self.current.increment();
+
             unique
         }
     }
