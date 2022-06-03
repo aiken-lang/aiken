@@ -1,31 +1,31 @@
 use crate::builtins::DefaultFunction;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program {
+pub struct Program<T> {
     pub version: (usize, usize, usize),
-    pub term: Term,
+    pub term: Term<T>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Term {
+pub enum Term<T> {
     // tag: 0
-    Var(Name),
+    Var(T),
     // tag: 1
-    Delay(Box<Term>),
+    Delay(Box<Term<T>>),
     // tag: 2
     Lambda {
-        parameter_name: Name,
-        body: Box<Term>,
+        parameter_name: T,
+        body: Box<Term<T>>,
     },
     // tag: 3
     Apply {
-        function: Box<Term>,
-        argument: Box<Term>,
+        function: Box<Term<T>>,
+        argument: Box<Term<T>>,
     },
     // tag: 4
     Constant(Constant),
     // tag: 5
-    Force(Box<Term>),
+    Force(Box<Term<T>>),
     // tag: 6
     Error,
     // tag: 7
@@ -53,3 +53,12 @@ pub struct Name {
     pub text: String,
     pub unique: isize,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NamedDeBruijn {
+    pub text: String,
+    pub index: isize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeBruijn(isize);

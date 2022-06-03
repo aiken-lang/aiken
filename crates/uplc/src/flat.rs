@@ -15,9 +15,12 @@ const BUILTIN_TAG_WIDTH: u32 = 7;
 const CONST_TAG_WIDTH: u32 = 4;
 const TERM_TAG_WIDTH: u32 = 4;
 
-impl<'b> Flat<'b> for Program {}
+impl<'b, T> Flat<'b> for Program<T> where T: Encode + Decode<'b> {}
 
-impl Program {
+impl<'b, T> Program<T>
+where
+    T: Encode + Decode<'b>,
+{
     // convenient so that people don't need to depend on the flat crate
     // directly to call programs flat function
     pub fn to_flat(&self) -> anyhow::Result<Vec<u8>> {
@@ -33,7 +36,7 @@ impl Program {
     }
 }
 
-impl Encode for Program {
+impl<T: Encode> Encode for Program<T> {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         let (major, minor, patch) = self.version;
 
@@ -47,7 +50,10 @@ impl Encode for Program {
     }
 }
 
-impl<'b> Decode<'b> for Program {
+impl<'b, T> Decode<'b> for Program<T>
+where
+    T: Decode<'b>,
+{
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         let version = (usize::decode(d)?, usize::decode(d)?, usize::decode(d)?);
         let term = Term::decode(d)?;
@@ -55,7 +61,7 @@ impl<'b> Decode<'b> for Program {
     }
 }
 
-impl Encode for Term {
+impl<T: Encode> Encode for Term<T> {
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         match self {
             Term::Var(name) => {
@@ -104,13 +110,16 @@ impl Encode for Term {
     }
 }
 
-impl<'b> Decode<'b> for Term {
+impl<'b, T> Decode<'b> for Term<T>
+where
+    T: Decode<'b>,
+{
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         match decode_term_tag(d)? {
-            0 => Ok(Term::Var(Name::decode(d)?)),
+            0 => Ok(Term::Var(T::decode(d)?)),
             1 => Ok(Term::Delay(Box::new(Term::decode(d)?))),
             2 => Ok(Term::Lambda {
-                parameter_name: Name::decode(d)?,
+                parameter_name: T::decode(d)?,
                 body: Box::new(Term::decode(d)?),
             }),
             3 => Ok(Term::Apply {
@@ -255,11 +264,13 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, String> {
 mod test {
     use flat::Flat;
 
+    use crate::ast::Name;
+
     use super::{Constant, Program, Term};
 
     #[test]
     fn flat_encode_integer() {
-        let program = Program {
+        let program = Program::<Name> {
             version: (11, 22, 33),
             term: Term::Constant(Constant::Integer(11)),
         };
@@ -283,7 +294,7 @@ mod test {
             term: Term::Constant(Constant::Integer(11)),
         };
 
-        let actual_program: Program = Program::unflat(&flat_encoded).unwrap();
+        let actual_program: Program<Name> = Program::unflat(&flat_encoded).unwrap();
 
         assert_eq!(actual_program, expected_program)
     }

@@ -43,7 +43,7 @@ impl ParserState {
     }
 }
 
-pub fn program(src: &str) -> anyhow::Result<Program> {
+pub fn program(src: &str) -> anyhow::Result<Program<Name>> {
     let mut parser = program_();
 
     let result = parser.parse(state::Stream {
@@ -57,7 +57,7 @@ pub fn program(src: &str) -> anyhow::Result<Program> {
     }
 }
 
-fn program_<Input>() -> impl Parser<StateStream<Input>, Output = Program>
+fn program_<Input>() -> impl Parser<StateStream<Input>, Output = Program<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -93,7 +93,7 @@ where
         )
 }
 
-fn term<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn term<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -109,7 +109,7 @@ where
     ))))
 }
 
-fn delay<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn delay<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -124,7 +124,7 @@ where
     )
 }
 
-fn force<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn force<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -139,7 +139,7 @@ where
     )
 }
 
-fn lambda<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn lambda<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -151,7 +151,7 @@ where
             .with(skip_many1(space()))
             .with((many1(alpha_num()), skip_many1(space()), term()))
             .map_input(
-                |(parameter_name, _, term): (String, _, Term), input| Term::Lambda {
+                |(parameter_name, _, term): (String, _, Term<Name>), input| Term::Lambda {
                     parameter_name: Name {
                         unique: input.state.intern(&parameter_name),
                         text: parameter_name,
@@ -162,7 +162,7 @@ where
     )
 }
 
-fn apply<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn apply<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -177,7 +177,7 @@ where
     )
 }
 
-fn builtin<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn builtin<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -194,7 +194,7 @@ where
     )
 }
 
-fn error<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn error<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
@@ -208,7 +208,7 @@ where
     )
 }
 
-fn constant<Input>() -> impl Parser<StateStream<Input>, Output = Term>
+fn constant<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
 where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
