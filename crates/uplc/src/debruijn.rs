@@ -3,18 +3,18 @@ use std::collections::HashMap;
 use crate::ast::{DeBruijn, Name, NamedDeBruijn, Term, Unique};
 
 #[derive(Debug, Copy, Clone)]
-struct Level(u64);
+struct Level(usize);
 
 pub(crate) struct Converter {
     current_level: Level,
-    levels: HashMap<Unique, Level>,
+    levels: Vec<HashMap<Unique, Level>>,
 }
 
 impl Converter {
     pub(crate) fn new() -> Self {
         Converter {
             current_level: Level(0),
-            levels: HashMap::new(),
+            levels: vec![HashMap::new()],
         }
     }
 
@@ -41,11 +41,15 @@ impl Converter {
                     index,
                 };
 
-                self.with_scope();
+                self.start_scope();
+
+                let body = self.name_to_named_debruijn(*body)?;
+
+                self.end_scope();
 
                 Term::Lambda {
                     parameter_name: name,
-                    body: Box::new(self.name_to_named_debruijn(*body)?),
+                    body: Box::new(body),
                 }
             }
             Term::Apply { function, argument } => Term::Apply {
@@ -69,20 +73,32 @@ impl Converter {
     }
 
     fn get_index(&mut self, unique: Unique) -> anyhow::Result<DeBruijn> {
-        if let Some(found_level) = self.levels.get(&unique) {
-            let index = self.current_level.0 - found_level.0;
+        for scope in self.levels.iter().rev() {
+            if let Some(found_level) = scope.get(&unique) {
+                let index = self.current_level.0 - found_level.0;
 
-            Ok(index.into())
-        } else {
-            anyhow::bail!("Free unique: {}", isize::from(unique));
+                return Ok(index.into());
+            }
         }
+
+        anyhow::bail!("Free unique: {}", isize::from(unique))
     }
 
     fn declare_unique(&mut self, unique: Unique) {
-        self.levels.insert(unique, self.current_level);
+        let scope = &mut self.levels[self.current_level.0];
+
+        scope.insert(unique, self.current_level);
     }
 
-    fn with_scope(&mut self) {
+    fn start_scope(&mut self) {
         self.current_level = Level(self.current_level.0 + 1);
+
+        self.levels.push(HashMap::new());
+    }
+
+    fn end_scope(&mut self) {
+        self.current_level = Level(self.current_level.0 - 1);
+
+        self.levels.pop();
     }
 }

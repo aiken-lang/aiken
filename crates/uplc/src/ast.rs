@@ -86,15 +86,15 @@ pub struct NamedDeBruijn {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct DeBruijn(u64);
+pub struct DeBruijn(usize);
 
-impl From<u64> for DeBruijn {
-    fn from(i: u64) -> Self {
+impl From<usize> for DeBruijn {
+    fn from(i: usize) -> Self {
         DeBruijn(i)
     }
 }
 
-impl From<DeBruijn> for u64 {
+impl From<DeBruijn> for usize {
     fn from(d: DeBruijn) -> Self {
         d.0
     }
