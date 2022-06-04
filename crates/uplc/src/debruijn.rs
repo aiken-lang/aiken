@@ -1,9 +1,17 @@
 use std::collections::HashMap;
 
+use thiserror::Error;
+
 use crate::ast::{DeBruijn, Name, NamedDeBruijn, Term, Unique};
 
 #[derive(Debug, Copy, Clone)]
 struct Level(usize);
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Free Unique: `{0}`")]
+    FreeUnique(Unique),
+}
 
 pub struct Converter {
     current_level: Level,
@@ -21,7 +29,7 @@ impl Converter {
     pub fn name_to_named_debruijn(
         &mut self,
         term: Term<Name>,
-    ) -> anyhow::Result<Term<NamedDeBruijn>> {
+    ) -> Result<Term<NamedDeBruijn>, Error> {
         let converted_term = match term {
             Term::Var(Name { text, unique }) => Term::Var(NamedDeBruijn {
                 text,
@@ -65,7 +73,7 @@ impl Converter {
         Ok(converted_term)
     }
 
-    pub fn name_to_debruijn(&mut self, term: Term<Name>) -> anyhow::Result<Term<DeBruijn>> {
+    pub fn name_to_debruijn(&mut self, term: Term<Name>) -> Result<Term<DeBruijn>, Error> {
         let converted_term = match term {
             Term::Var(Name { unique, .. }) => Term::Var(self.get_index(unique)?),
             Term::Delay(term) => Term::Delay(Box::new(self.name_to_debruijn(*term)?)),
@@ -104,7 +112,7 @@ impl Converter {
     pub fn named_debruijn_to_name(
         &mut self,
         _term: Term<NamedDeBruijn>,
-    ) -> anyhow::Result<Term<Name>> {
+    ) -> Result<Term<Name>, Error> {
         todo!()
     }
 
@@ -130,7 +138,7 @@ impl Converter {
         }
     }
 
-    pub fn debruijn_to_name(&mut self, _term: Term<DeBruijn>) -> anyhow::Result<Term<Name>> {
+    pub fn debruijn_to_name(&mut self, _term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
         todo!()
     }
 
@@ -156,7 +164,7 @@ impl Converter {
         }
     }
 
-    fn get_index(&mut self, unique: Unique) -> anyhow::Result<DeBruijn> {
+    fn get_index(&mut self, unique: Unique) -> Result<DeBruijn, Error> {
         for scope in self.levels.iter().rev() {
             if let Some(found_level) = scope.get(&unique) {
                 let index = self.current_level.0 - found_level.0;
@@ -165,7 +173,7 @@ impl Converter {
             }
         }
 
-        anyhow::bail!("Free unique: {}", isize::from(unique))
+        Err(Error::FreeUnique(unique))
     }
 
     fn declare_unique(&mut self, unique: Unique) {

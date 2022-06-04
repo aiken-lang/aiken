@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
 
     println!();
 
-    let program_nd: Program<NamedDeBruijn> = program.try_into().unwrap();
+    let program_nd: Program<NamedDeBruijn> = program.try_into()?;
 
     println!("\nNamed De Bruijn:");
     println!("{:#?}", program_nd);

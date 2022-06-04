@@ -1,4 +1,9 @@
-use crate::{builtins::DefaultFunction, debruijn::Converter};
+use std::fmt::Display;
+
+use crate::{
+    builtins::DefaultFunction,
+    debruijn::{self, Converter},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program<T> {
@@ -79,6 +84,12 @@ impl From<Unique> for isize {
     }
 }
 
+impl Display for Unique {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamedDeBruijn {
     pub text: String,
@@ -122,7 +133,7 @@ impl From<DeBruijn> for NamedDeBruijn {
 }
 
 impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
-    type Error = String;
+    type Error = debruijn::Error;
 
     fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
         Ok(Program::<NamedDeBruijn> {
@@ -133,23 +144,19 @@ impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
 }
 
 impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
-    type Error = String;
+    type Error = debruijn::Error;
 
-    fn try_from(
-        value: Term<Name>,
-    ) -> Result<Self, <Term<NamedDeBruijn> as TryFrom<Term<Name>>>::Error> {
+    fn try_from(value: Term<Name>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter
-            .name_to_named_debruijn(value)
-            .map_err(|err| err.to_string())?;
+        let term = converter.name_to_named_debruijn(value)?;
 
         Ok(term)
     }
 }
 
 impl TryFrom<Program<Name>> for Program<DeBruijn> {
-    type Error = String;
+    type Error = debruijn::Error;
 
     fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
         Ok(Program::<DeBruijn> {
@@ -160,21 +167,19 @@ impl TryFrom<Program<Name>> for Program<DeBruijn> {
 }
 
 impl TryFrom<Term<Name>> for Term<DeBruijn> {
-    type Error = String;
+    type Error = debruijn::Error;
 
-    fn try_from(value: Term<Name>) -> Result<Self, <Term<DeBruijn> as TryFrom<Term<Name>>>::Error> {
+    fn try_from(value: Term<Name>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter
-            .name_to_debruijn(value)
-            .map_err(|err| err.to_string())?;
+        let term = converter.name_to_debruijn(value)?;
 
         Ok(term)
     }
 }
 
 impl TryFrom<Program<NamedDeBruijn>> for Program<Name> {
-    type Error = String;
+    type Error = debruijn::Error;
 
     fn try_from(value: Program<NamedDeBruijn>) -> Result<Self, Self::Error> {
         Ok(Program::<Name> {
@@ -185,16 +190,12 @@ impl TryFrom<Program<NamedDeBruijn>> for Program<Name> {
 }
 
 impl TryFrom<Term<NamedDeBruijn>> for Term<Name> {
-    type Error = String;
+    type Error = debruijn::Error;
 
-    fn try_from(
-        value: Term<NamedDeBruijn>,
-    ) -> Result<Self, <Term<Name> as TryFrom<Term<NamedDeBruijn>>>::Error> {
+    fn try_from(value: Term<NamedDeBruijn>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter
-            .named_debruijn_to_name(value)
-            .map_err(|err| err.to_string())?;
+        let term = converter.named_debruijn_to_name(value)?;
 
         Ok(term)
     }
@@ -218,7 +219,7 @@ impl From<Term<NamedDeBruijn>> for Term<DeBruijn> {
 }
 
 impl TryFrom<Program<DeBruijn>> for Program<Name> {
-    type Error = String;
+    type Error = debruijn::Error;
 
     fn try_from(value: Program<DeBruijn>) -> Result<Self, Self::Error> {
         Ok(Program::<Name> {
@@ -229,16 +230,12 @@ impl TryFrom<Program<DeBruijn>> for Program<Name> {
 }
 
 impl TryFrom<Term<DeBruijn>> for Term<Name> {
-    type Error = String;
+    type Error = debruijn::Error;
 
-    fn try_from(
-        value: Term<DeBruijn>,
-    ) -> Result<Self, <Term<Name> as TryFrom<Term<DeBruijn>>>::Error> {
+    fn try_from(value: Term<DeBruijn>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter
-            .debruijn_to_name(value)
-            .map_err(|err| err.to_string())?;
+        let term = converter.debruijn_to_name(value)?;
 
         Ok(term)
     }

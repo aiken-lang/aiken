@@ -12,3 +12,4 @@ flat = { path = "../flat" }
 hex = "0.4.3"
 strum = "0.24.0"
 strum_macros = "0.24.0"
+thiserror = "1.0.31"
