@@ -1,5 +1,5 @@
 use uplc::{
-    ast::{NamedDeBruijn, Program},
+    ast::{DeBruijn, NamedDeBruijn, Program},
     parser,
 };
 
@@ -12,11 +12,12 @@ fn main() -> anyhow::Result<()> {
 
     let program = parser::program(&code)?;
 
+    println!("\nName:");
     println!("{:#?}", program);
 
     let flat_bytes = program.to_flat()?;
 
-    print!("flat bits: ");
+    print!("\nflat bits:\n");
 
     for byte in flat_bytes {
         print!("{:08b} ", byte);
@@ -24,9 +25,35 @@ fn main() -> anyhow::Result<()> {
 
     println!();
 
-    let program: Program<NamedDeBruijn> = program.try_into().unwrap();
+    let program_nd: Program<NamedDeBruijn> = program.try_into().unwrap();
 
-    println!("{:#?}", program);
+    println!("\nNamed De Bruijn:");
+    println!("{:#?}", program_nd);
+
+    let flat_bytes = program_nd.to_flat()?;
+
+    print!("\nflat bits:\n");
+
+    for byte in flat_bytes {
+        print!("{:08b} ", byte);
+    }
+
+    println!();
+
+    let program_d: Program<DeBruijn> = program_nd.into();
+
+    println!("\nDe Bruijn:");
+    println!("{:#?}", program_d);
+
+    let flat_bytes = program_d.to_flat()?;
+
+    print!("\nflat bits:\n");
+
+    for byte in flat_bytes {
+        print!("{:08b} ", byte);
+    }
+
+    println!();
 
     Ok(())
 }

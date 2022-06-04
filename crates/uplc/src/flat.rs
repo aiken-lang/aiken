@@ -7,7 +7,7 @@ use flat::{
 };
 
 use crate::{
-    ast::{Constant, Name, Program, Term, Unique},
+    ast::{Constant, DeBruijn, Name, NamedDeBruijn, Program, Term, Unique},
     builtins::DefaultFunction,
 };
 
@@ -15,11 +15,16 @@ const BUILTIN_TAG_WIDTH: u32 = 7;
 const CONST_TAG_WIDTH: u32 = 4;
 const TERM_TAG_WIDTH: u32 = 4;
 
-impl<'b, T> Flat<'b> for Program<T> where T: Encode + Decode<'b> {}
+pub trait Binder<'b>: Encode + Decode<'b> {
+    fn binder_encode(&self, e: &mut Encoder) -> Result<(), String>;
+    fn binder_decode(d: &mut Decoder) -> Result<Self, String>;
+}
+
+impl<'b, T> Flat<'b> for Program<T> where T: Binder<'b> {}
 
 impl<'b, T> Program<T>
 where
-    T: Encode + Decode<'b>,
+    T: Binder<'b>,
 {
     // convenient so that people don't need to depend on the flat crate
     // directly to call programs flat function
@@ -36,7 +41,10 @@ where
     }
 }
 
-impl<T: Encode> Encode for Program<T> {
+impl<'b, T> Encode for Program<T>
+where
+    T: Binder<'b>,
+{
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         let (major, minor, patch) = self.version;
 
@@ -52,7 +60,7 @@ impl<T: Encode> Encode for Program<T> {
 
 impl<'b, T> Decode<'b> for Program<T>
 where
-    T: Decode<'b>,
+    T: Binder<'b>,
 {
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         let version = (usize::decode(d)?, usize::decode(d)?, usize::decode(d)?);
@@ -61,7 +69,10 @@ where
     }
 }
 
-impl<T: Encode> Encode for Term<T> {
+impl<'b, T> Encode for Term<T>
+where
+    T: Binder<'b>,
+{
     fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         match self {
             Term::Var(name) => {
@@ -77,7 +88,7 @@ impl<T: Encode> Encode for Term<T> {
                 body,
             } => {
                 encode_term_tag(2, e)?;
-                parameter_name.encode(e)?;
+                parameter_name.binder_encode(e)?;
                 body.encode(e)?;
             }
             Term::Apply { function, argument } => {
@@ -112,14 +123,14 @@ impl<T: Encode> Encode for Term<T> {
 
 impl<'b, T> Decode<'b> for Term<T>
 where
-    T: Decode<'b>,
+    T: Binder<'b>,
 {
     fn decode(d: &mut Decoder) -> Result<Self, String> {
         match decode_term_tag(d)? {
             0 => Ok(Term::Var(T::decode(d)?)),
             1 => Ok(Term::Delay(Box::new(Term::decode(d)?))),
             2 => Ok(Term::Lambda {
-                parameter_name: T::decode(d)?,
+                parameter_name: T::binder_decode(d)?,
                 body: Box::new(Term::decode(d)?),
             }),
             3 => Ok(Term::Apply {
@@ -198,7 +209,7 @@ impl<'b> Decode<'b> for Unique {
 }
 
 impl Encode for Name {
-    fn encode(&self, e: &mut flat::en::Encoder) -> Result<(), String> {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         self.text.encode(e)?;
         self.unique.encode(e)?;
 
@@ -215,8 +226,77 @@ impl<'b> Decode<'b> for Name {
     }
 }
 
+impl<'b> Binder<'b> for Name {
+    fn binder_encode(&self, e: &mut Encoder) -> Result<(), String> {
+        self.encode(e)?;
+
+        Ok(())
+    }
+
+    fn binder_decode(d: &mut Decoder) -> Result<Self, String> {
+        Name::decode(d)
+    }
+}
+
+impl Encode for NamedDeBruijn {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        self.text.encode(e)?;
+        self.index.encode(e)?;
+
+        Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for NamedDeBruijn {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        Ok(NamedDeBruijn {
+            text: String::decode(d)?,
+            index: DeBruijn::decode(d)?,
+        })
+    }
+}
+
+impl<'b> Binder<'b> for NamedDeBruijn {
+    fn binder_encode(&self, e: &mut Encoder) -> Result<(), String> {
+        self.text.encode(e)?;
+
+        Ok(())
+    }
+
+    fn binder_decode(d: &mut Decoder) -> Result<Self, String> {
+        Ok(NamedDeBruijn {
+            text: String::decode(d)?,
+            index: DeBruijn::new(0),
+        })
+    }
+}
+
+impl Encode for DeBruijn {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
+        usize::from(*self).encode(e)?;
+
+        Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for DeBruijn {
+    fn decode(d: &mut Decoder) -> Result<Self, String> {
+        Ok(usize::decode(d)?.into())
+    }
+}
+
+impl<'b> Binder<'b> for DeBruijn {
+    fn binder_encode(&self, _: &mut Encoder) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn binder_decode(_d: &mut Decoder) -> Result<Self, String> {
+        Ok(DeBruijn::new(0))
+    }
+}
+
 impl Encode for DefaultFunction {
-    fn encode(&self, e: &mut flat::en::Encoder) -> Result<(), String> {
+    fn encode(&self, e: &mut Encoder) -> Result<(), String> {
         e.bits(BUILTIN_TAG_WIDTH as i64, self.clone() as u8);
 
         Ok(())

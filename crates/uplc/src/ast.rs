@@ -88,6 +88,12 @@ pub struct NamedDeBruijn {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct DeBruijn(usize);
 
+impl DeBruijn {
+    pub fn new(index: usize) -> Self {
+        DeBruijn(index)
+    }
+}
+
 impl From<usize> for DeBruijn {
     fn from(i: usize) -> Self {
         DeBruijn(i)
@@ -126,17 +132,6 @@ impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
     }
 }
 
-impl TryFrom<Program<NamedDeBruijn>> for Program<Name> {
-    type Error = String;
-
-    fn try_from(value: Program<NamedDeBruijn>) -> Result<Self, Self::Error> {
-        Ok(Program::<Name> {
-            version: value.version,
-            term: value.term.try_into()?,
-        })
-    }
-}
-
 impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
     type Error = String;
 
@@ -153,6 +148,42 @@ impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
     }
 }
 
+impl TryFrom<Program<Name>> for Program<DeBruijn> {
+    type Error = String;
+
+    fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
+        Ok(Program::<DeBruijn> {
+            version: value.version,
+            term: value.term.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Term<Name>> for Term<DeBruijn> {
+    type Error = String;
+
+    fn try_from(value: Term<Name>) -> Result<Self, <Term<DeBruijn> as TryFrom<Term<Name>>>::Error> {
+        let mut converter = Converter::new();
+
+        let term = converter
+            .name_to_debruijn(value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(term)
+    }
+}
+
+impl TryFrom<Program<NamedDeBruijn>> for Program<Name> {
+    type Error = String;
+
+    fn try_from(value: Program<NamedDeBruijn>) -> Result<Self, Self::Error> {
+        Ok(Program::<Name> {
+            version: value.version,
+            term: value.term.try_into()?,
+        })
+    }
+}
+
 impl TryFrom<Term<NamedDeBruijn>> for Term<Name> {
     type Error = String;
 
@@ -166,5 +197,66 @@ impl TryFrom<Term<NamedDeBruijn>> for Term<Name> {
             .map_err(|err| err.to_string())?;
 
         Ok(term)
+    }
+}
+
+impl From<Program<NamedDeBruijn>> for Program<DeBruijn> {
+    fn from(value: Program<NamedDeBruijn>) -> Self {
+        Program::<DeBruijn> {
+            version: value.version,
+            term: value.term.into(),
+        }
+    }
+}
+
+impl From<Term<NamedDeBruijn>> for Term<DeBruijn> {
+    fn from(value: Term<NamedDeBruijn>) -> Self {
+        let mut converter = Converter::new();
+
+        converter.named_debruijn_to_debruijn(value)
+    }
+}
+
+impl TryFrom<Program<DeBruijn>> for Program<Name> {
+    type Error = String;
+
+    fn try_from(value: Program<DeBruijn>) -> Result<Self, Self::Error> {
+        Ok(Program::<Name> {
+            version: value.version,
+            term: value.term.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Term<DeBruijn>> for Term<Name> {
+    type Error = String;
+
+    fn try_from(
+        value: Term<DeBruijn>,
+    ) -> Result<Self, <Term<Name> as TryFrom<Term<DeBruijn>>>::Error> {
+        let mut converter = Converter::new();
+
+        let term = converter
+            .debruijn_to_name(value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(term)
+    }
+}
+
+impl From<Program<DeBruijn>> for Program<NamedDeBruijn> {
+    fn from(value: Program<DeBruijn>) -> Self {
+        Program::<NamedDeBruijn> {
+            version: value.version,
+            term: value.term.into(),
+        }
+    }
+}
+
+impl From<Term<DeBruijn>> for Term<NamedDeBruijn> {
+    fn from(value: Term<DeBruijn>) -> Self {
+        let mut converter = Converter::new();
+
+        converter.debruijn_to_named_debruijn(value)
     }
 }
