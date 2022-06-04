@@ -301,7 +301,7 @@ impl<'b> Binder<'b> for DeBruijn {
 
 impl Encode for DefaultFunction {
     fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
-        e.bits(BUILTIN_TAG_WIDTH as i64, self.clone() as u8);
+        e.bits(BUILTIN_TAG_WIDTH as i64, *self as u8);
 
         Ok(())
     }
