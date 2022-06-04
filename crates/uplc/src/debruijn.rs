@@ -9,7 +9,7 @@ struct Level(usize);
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Free Unique: `{0}`")]
+    #[error("Free Unique `{0}`")]
     FreeUnique(Unique),
 }
 

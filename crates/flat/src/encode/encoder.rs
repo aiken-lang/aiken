@@ -1,5 +1,7 @@
 use crate::{encode::Encode, zigzag};
 
+use super::Error;
+
 pub struct Encoder {
     pub buffer: Vec<u8>,
     // Int
@@ -24,12 +26,13 @@ impl Encoder {
     }
 
     /// Encode any type that implements [`Encode`].
-    pub fn encode<T: Encode>(&mut self, x: T) -> Result<&mut Self, String> {
+    pub fn encode<T: Encode>(&mut self, x: T) -> Result<&mut Self, Error> {
         x.encode(self)?;
+
         Ok(self)
     }
 
-    pub fn u8(&mut self, x: u8) -> Result<&mut Self, String> {
+    pub fn u8(&mut self, x: u8) -> Result<&mut Self, Error> {
         if self.used_bits == 0 {
             self.current_byte = x;
             self.next_word();
@@ -51,93 +54,54 @@ impl Encoder {
         self
     }
 
-    pub fn bytes(&mut self, x: &[u8]) -> Result<&mut Self, String> {
+    pub fn bytes(&mut self, x: &[u8]) -> Result<&mut Self, Error> {
         // use filler to write current buffer so bits used gets reset
         self.filler();
+
         self.byte_array(x)
     }
 
-    pub fn byte_array(&mut self, arr: &[u8]) -> Result<&mut Self, String> {
+    pub fn byte_array(&mut self, arr: &[u8]) -> Result<&mut Self, Error> {
         if self.used_bits != 0 {
-            return Err("Buffer is not byte aligned".to_string());
+            return Err(Error::BufferNotByteAligned);
         }
+
         self.write_blk(arr, &mut 0);
+
         Ok(self)
     }
 
-    pub fn integer(&mut self, i: isize) -> Result<&mut Self, String> {
+    pub fn integer(&mut self, i: isize) -> &mut Self {
         let i = zigzag::to_usize(i);
+
         self.word(i);
-        Ok(self)
+
+        self
     }
 
-    pub fn char(&mut self, c: char) -> Result<&mut Self, String> {
+    pub fn char(&mut self, c: char) -> &mut Self {
         self.word(c as usize);
-        Ok(self)
+
+        self
     }
+
     // TODO: Do we need this?
-    pub fn string(&mut self, s: &str) -> Result<&mut Self, String> {
+    pub fn string(&mut self, s: &str) -> &mut Self {
         for i in s.chars() {
             self.one();
-            self.char(i)?;
+            self.char(i);
         }
 
         self.zero();
 
-        Ok(self)
+        self
     }
 
-    pub fn utf8(&mut self, s: &str) -> Result<&mut Self, String> {
+    pub fn utf8(&mut self, s: &str) -> Result<&mut Self, Error> {
         self.bytes(s.as_bytes())
     }
 
-    fn zero(&mut self) {
-        if self.used_bits == 7 {
-            self.next_word();
-        } else {
-            self.used_bits += 1;
-        }
-    }
-
-    fn one(&mut self) {
-        if self.used_bits == 7 {
-            self.current_byte |= 1;
-            self.next_word();
-        } else {
-            self.current_byte |= 128 >> self.used_bits;
-            self.used_bits += 1;
-        }
-    }
-
-    fn byte_unaligned(&mut self, x: u8) {
-        let x_shift = self.current_byte | (x >> self.used_bits);
-        self.buffer.push(x_shift);
-
-        self.current_byte = x << (8 - self.used_bits);
-    }
-
-    fn next_word(&mut self) {
-        self.buffer.push(self.current_byte);
-
-        self.current_byte = 0;
-        self.used_bits = 0;
-    }
-
-    fn write_blk(&mut self, arr: &[u8], src_ptr: &mut usize) {
-        let src_len = arr.len() - *src_ptr;
-        let blk_len = src_len.min(255);
-        self.buffer.push(blk_len as u8);
-        if blk_len == 0 {
-            return;
-        }
-
-        self.buffer.extend(&arr[*src_ptr..blk_len]);
-
-        *src_ptr += blk_len;
-        self.write_blk(arr, src_ptr);
-    }
-
-    pub fn word(&mut self, c: usize) {
+    pub fn word(&mut self, c: usize) -> &mut Self {
         loop {
             let mut w = (c & 127) as u8;
             let c = c >> 7;
@@ -151,22 +115,26 @@ impl Encoder {
                 break;
             }
         }
+
+        self
     }
 
     pub fn encode_list_with(
         &mut self,
-        encoder_func: for<'r> fn(u8, &'r mut Encoder) -> Result<(), String>,
         list: Vec<u8>,
-    ) -> Result<(), String> {
+        encoder_func: for<'r> fn(u8, &'r mut Encoder) -> Result<(), Error>,
+    ) -> Result<&mut Self, Error> {
         for item in list {
             self.one();
             encoder_func(item, self)?;
         }
+
         self.zero();
-        Ok(())
+
+        Ok(self)
     }
 
-    pub fn bits(&mut self, num_bits: i64, val: u8) {
+    pub fn bits(&mut self, num_bits: i64, val: u8) -> &mut Self {
         match (num_bits, val) {
             (1, 0) => self.zero(),
             (1, 1) => self.one(),
@@ -207,10 +175,63 @@ impl Encoder {
                 }
             }
         }
+
+        self
     }
 
-    pub(crate) fn filler(&mut self) {
+    pub(crate) fn filler(&mut self) -> &mut Self {
         self.current_byte |= 1;
         self.next_word();
+
+        self
+    }
+
+    fn zero(&mut self) {
+        if self.used_bits == 7 {
+            self.next_word();
+        } else {
+            self.used_bits += 1;
+        }
+    }
+
+    fn one(&mut self) {
+        if self.used_bits == 7 {
+            self.current_byte |= 1;
+            self.next_word();
+        } else {
+            self.current_byte |= 128 >> self.used_bits;
+            self.used_bits += 1;
+        }
+    }
+
+    fn byte_unaligned(&mut self, x: u8) {
+        let x_shift = self.current_byte | (x >> self.used_bits);
+        self.buffer.push(x_shift);
+
+        self.current_byte = x << (8 - self.used_bits);
+    }
+
+    fn next_word(&mut self) {
+        self.buffer.push(self.current_byte);
+
+        self.current_byte = 0;
+        self.used_bits = 0;
+    }
+
+    fn write_blk(&mut self, arr: &[u8], src_ptr: &mut usize) {
+        let src_len = arr.len() - *src_ptr;
+        let blk_len = src_len.min(255);
+
+        self.buffer.push(blk_len as u8);
+
+        if blk_len == 0 {
+            return;
+        }
+
+        self.buffer.extend(&arr[*src_ptr..blk_len]);
+
+        *src_ptr += blk_len;
+
+        self.write_blk(arr, src_ptr);
     }
 }

@@ -1,3 +1,4 @@
+use flat::de;
 use strum_macros::EnumString;
 
 #[repr(u8)]
@@ -80,6 +81,8 @@ pub enum DefaultFunction {
 }
 
 impl TryFrom<u8> for DefaultFunction {
+    type Error = de::Error;
+
     fn try_from(v: u8) -> Result<Self, Self::Error> {
         match v {
             v if v == DefaultFunction::AddInteger as u8 => Ok(DefaultFunction::AddInteger),
@@ -184,9 +187,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::MkPairData as u8 => Ok(DefaultFunction::MkPairData),
             v if v == DefaultFunction::MkNilData as u8 => Ok(DefaultFunction::MkNilData),
             v if v == DefaultFunction::MkNilPairData as u8 => Ok(DefaultFunction::MkNilPairData),
-            _ => Err("Default Function not found".to_string()),
+            _ => Err(de::Error::Message("Default Function not found".to_string())),
         }
     }
-
-    type Error = String;
 }

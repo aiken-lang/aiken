@@ -1,5 +1,7 @@
 use crate::{decode::Decode, zigzag};
 
+use super::Error;
+
 pub struct Decoder<'b> {
     buffer: &'b [u8],
     used_bits: i64,
@@ -15,35 +17,38 @@ impl<'b> Decoder<'b> {
         }
     }
 
-    pub fn decode<T: Decode<'b>>(&mut self) -> Result<T, String> {
+    /// Encode any type that implements [`Decode`].
+    pub fn decode<T: Decode<'b>>(&mut self) -> Result<T, Error> {
         T::decode(self)
     }
 
-    pub fn integer(&mut self) -> Result<isize, String> {
+    pub fn integer(&mut self) -> Result<isize, Error> {
         Ok(zigzag::to_isize(self.word()?))
     }
 
-    pub fn bool(&mut self) -> Result<bool, String> {
+    pub fn bool(&mut self) -> Result<bool, Error> {
         let current_byte = self.buffer[self.pos];
         let b = 0 != (current_byte & (128 >> self.used_bits));
         self.increment_buffer_by_bit();
         Ok(b)
     }
 
-    pub fn u8(&mut self) -> Result<u8, String> {
+    pub fn u8(&mut self) -> Result<u8, Error> {
         self.bits8(8)
     }
 
-    pub fn bytes(&mut self) -> Result<Vec<u8>, String> {
+    pub fn bytes(&mut self) -> Result<Vec<u8>, Error> {
         self.filler()?;
         self.byte_array()
     }
 
-    pub fn char(&mut self) -> Result<char, String> {
-        Ok(char::from_u32(self.word()? as u32).unwrap())
+    pub fn char(&mut self) -> Result<char, Error> {
+        let character = self.word()? as u32;
+
+        char::from_u32(character).ok_or(Error::DecodeChar(character))
     }
 
-    pub fn string(&mut self) -> Result<String, String> {
+    pub fn string(&mut self) -> Result<String, Error> {
         let mut s = String::new();
         while self.bit()? {
             s += &self.char()?.to_string();
@@ -51,17 +56,17 @@ impl<'b> Decoder<'b> {
         Ok(s)
     }
 
-    pub fn utf8(&mut self) -> Result<String, String> {
+    pub fn utf8(&mut self) -> Result<String, Error> {
         // TODO: Better Error Handling
-        Ok(String::from_utf8(Vec::<u8>::decode(self)?).unwrap())
+        String::from_utf8(Vec::<u8>::decode(self)?).map_err(Error::from)
     }
 
-    pub fn filler(&mut self) -> Result<(), String> {
+    pub fn filler(&mut self) -> Result<(), Error> {
         while self.zero()? {}
         Ok(())
     }
 
-    pub fn word(&mut self) -> Result<usize, String> {
+    pub fn word(&mut self) -> Result<usize, Error> {
         let mut leading_bit = 1;
         let mut final_word: usize = 0;
         let mut shl: usize = 0;
@@ -78,8 +83,8 @@ impl<'b> Decoder<'b> {
 
     pub fn decode_list_with<T: Decode<'b>>(
         &mut self,
-        decoder_func: for<'r> fn(&'r mut Decoder) -> Result<T, String>,
-    ) -> Result<Vec<T>, String> {
+        decoder_func: for<'r> fn(&'r mut Decoder) -> Result<T, Error>,
+    ) -> Result<Vec<T>, Error> {
         let mut vec_array: Vec<T> = Vec::new();
         while self.bit()? {
             vec_array.push(decoder_func(self)?)
@@ -87,46 +92,60 @@ impl<'b> Decoder<'b> {
         Ok(vec_array)
     }
 
-    fn zero(&mut self) -> Result<bool, String> {
+    fn zero(&mut self) -> Result<bool, Error> {
         let current_bit = self.bit()?;
+
         Ok(!current_bit)
     }
 
-    fn bit(&mut self) -> Result<bool, String> {
+    fn bit(&mut self) -> Result<bool, Error> {
         if self.pos >= self.buffer.len() {
-            return Err("DecoderState: Reached end of buffer".to_string());
+            return Err(Error::EndOfBuffer);
         }
+
         let b = self.buffer[self.pos] & (128 >> self.used_bits) > 0;
+
         self.increment_buffer_by_bit();
+
         Ok(b)
     }
 
-    fn byte_array(&mut self) -> Result<Vec<u8>, String> {
+    fn byte_array(&mut self) -> Result<Vec<u8>, Error> {
         if self.used_bits != 0 {
-            return Err("DecoderState.byteArray: Buffer is not byte aligned".to_string());
+            return Err(Error::BufferNotByteAligned);
         }
+
         self.ensure_bytes(1)?;
+
         let mut blk_len = self.buffer[self.pos];
+
         self.pos += 1;
+
         let mut blk_array: Vec<u8> = Vec::new();
+
         while blk_len != 0 {
             self.ensure_bytes(blk_len as usize + 1)?;
+
             let decoded_array = &self.buffer[self.pos..self.pos + blk_len as usize];
+
             blk_array.extend(decoded_array);
+
             self.pos += blk_len as usize;
+
             blk_len = self.buffer[self.pos];
         }
+
         Ok(blk_array)
     }
 
     // can decode up to a max of 8 bits
-    pub fn bits8(&mut self, num_bits: usize) -> Result<u8, String> {
+    pub fn bits8(&mut self, num_bits: usize) -> Result<u8, Error> {
         if num_bits > 8 {
-            return Err(
-                "Decoder.bits8: incorrect value of num_bits - must be less than 9".to_string(),
-            );
+            return Err(Error::IncorrectNumBits);
         }
+
         self.ensure_bits(num_bits)?;
+
         let unused_bits = 8 - self.used_bits as usize;
         let leading_zeroes = 8 - num_bits;
         let r = (self.buffer[self.pos] << self.used_bits as usize) >> leading_zeroes;
@@ -136,30 +155,28 @@ impl<'b> Decoder<'b> {
         } else {
             r
         };
+
         self.drop_bits(num_bits);
+
         Ok(x)
     }
 
-    fn ensure_bytes(&mut self, required_bytes: usize) -> Result<(), String> {
+    fn ensure_bytes(&mut self, required_bytes: usize) -> Result<(), Error> {
         if required_bytes as isize > self.buffer.len() as isize - self.pos as isize {
-            return Err(format!(
-                "DecoderState: Not enough data available: {:#?} - required bytes {}",
-                self.buffer, required_bytes
-            ));
+            Err(Error::NotEnoughBytes(required_bytes))
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
-    fn ensure_bits(&mut self, required_bits: usize) -> Result<(), String> {
+    fn ensure_bits(&mut self, required_bits: usize) -> Result<(), Error> {
         if required_bits as isize
             > (self.buffer.len() as isize - self.pos as isize) * 8 - self.used_bits as isize
         {
-            return Err(format!(
-                "DecoderState: Not enough data available: {:#?} - required bits {}",
-                self.buffer, required_bits
-            ));
+            Err(Error::NotEnoughBits(required_bits))
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn drop_bits(&mut self, num_bits: usize) {

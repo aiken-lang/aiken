@@ -1,7 +1,9 @@
 use std::{collections::HashMap, str::FromStr};
 
 use combine::{
-    attempt, between, choice, many1,
+    attempt, between, choice,
+    error::StringStreamError,
+    many1,
     parser::{
         char::{alpha_num, digit, hex_digit, space, spaces, string},
         combinator::no_partial,
@@ -46,18 +48,15 @@ impl ParserState {
     }
 }
 
-pub fn program(src: &str) -> anyhow::Result<Program<Name>> {
+pub fn program(src: &str) -> Result<Program<Name>, StringStreamError> {
     let mut parser = program_();
 
-    let result = parser.parse(state::Stream {
+    let (program, _) = parser.parse(state::Stream {
         stream: position::Stream::new(src.trim()),
         state: ParserState::new(),
-    });
+    })?;
 
-    match result {
-        Ok((program, _)) => Ok(program),
-        Err(err) => Err(anyhow::anyhow!("{}", err)),
-    }
+    Ok(program)
 }
 
 fn program_<Input>() -> impl Parser<StateStream<Input>, Output = Program<Name>>

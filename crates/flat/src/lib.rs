@@ -1,31 +1,27 @@
 mod decode;
-mod decoder;
 mod encode;
-mod encoder;
-mod filler;
+pub mod filler;
 pub mod zigzag;
 
 pub mod en {
     pub use super::encode::*;
-    pub use super::encoder::*;
 }
 
 pub mod de {
     pub use super::decode::*;
-    pub use super::decoder::*;
 }
 
 pub trait Flat<'b>: en::Encode + de::Decode<'b> {
-    fn flat(&self) -> Result<Vec<u8>, String> {
+    fn flat(&self) -> Result<Vec<u8>, en::Error> {
         encode(self)
     }
 
-    fn unflat(bytes: &'b [u8]) -> Result<Self, String> {
+    fn unflat(bytes: &'b [u8]) -> Result<Self, de::Error> {
         decode(bytes)
     }
 }
 
-pub fn encode<T>(value: &T) -> Result<Vec<u8>, String>
+pub fn encode<T>(value: &T) -> Result<Vec<u8>, en::Error>
 where
     T: en::Encode,
 {
@@ -37,7 +33,7 @@ where
     Ok(e.buffer)
 }
 
-pub fn decode<'b, T>(bytes: &'b [u8]) -> Result<T, String>
+pub fn decode<'b, T>(bytes: &'b [u8]) -> Result<T, de::Error>
 where
     T: de::Decode<'b>,
 {
