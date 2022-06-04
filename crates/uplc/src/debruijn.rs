@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::{DeBruijn, Name, NamedDeBruijn, Term, Unique};
 
+#[derive(Debug, Copy, Clone)]
 struct Level(u64);
 
 pub(crate) struct Converter {
@@ -31,7 +32,21 @@ impl Converter {
                 parameter_name,
                 body,
             } => {
-                todo!()
+                self.declare_unique(parameter_name.unique);
+
+                let index = self.get_index(parameter_name.unique)?;
+
+                let name = NamedDeBruijn {
+                    text: parameter_name.text,
+                    index,
+                };
+
+                self.with_scope();
+
+                Term::Lambda {
+                    parameter_name: name,
+                    body: Box::new(self.name_to_named_debruijn(*body)?),
+                }
             }
             Term::Apply { function, argument } => Term::Apply {
                 function: Box::new(self.name_to_named_debruijn(*function)?),
@@ -46,7 +61,10 @@ impl Converter {
         Ok(converted_term)
     }
 
-    pub(crate) fn named_debruijn_to_name(&mut self, term: Term<NamedDeBruijn>) -> Term<Name> {
+    pub(crate) fn named_debruijn_to_name(
+        &mut self,
+        _term: Term<NamedDeBruijn>,
+    ) -> anyhow::Result<Term<Name>> {
         todo!()
     }
 
@@ -58,5 +76,13 @@ impl Converter {
         } else {
             anyhow::bail!("Free unique: {}", isize::from(unique));
         }
+    }
+
+    fn declare_unique(&mut self, unique: Unique) {
+        self.levels.insert(unique, self.current_level);
+    }
+
+    fn with_scope(&mut self) {
+        self.current_level = Level(self.current_level.0 + 1);
     }
 }

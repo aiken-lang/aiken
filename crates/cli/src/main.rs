@@ -1,4 +1,7 @@
-use uplc::parser;
+use uplc::{
+    ast::{NamedDeBruijn, Program},
+    parser,
+};
 
 use neptune::Cli;
 
@@ -13,13 +16,17 @@ fn main() -> anyhow::Result<()> {
 
     let flat_bytes = program.to_flat()?;
 
+    print!("flat bits: ");
+
     for byte in flat_bytes {
         print!("{:08b} ", byte);
     }
 
     println!();
 
-    println!("{}", program.flat_hex()?);
+    let program: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+    println!("{:#?}", program);
 
     Ok(())
 }

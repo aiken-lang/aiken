@@ -6,17 +6,6 @@ pub struct Program<T> {
     pub term: Term<T>,
 }
 
-impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
-    type Error = String;
-
-    fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
-        Ok(Program::<NamedDeBruijn> {
-            version: value.version,
-            term: value.term.try_into()?,
-        })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term<T> {
     // tag: 0
@@ -41,22 +30,6 @@ pub enum Term<T> {
     Error,
     // tag: 7
     Builtin(DefaultFunction),
-}
-
-impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
-    type Error = String;
-
-    fn try_from(
-        value: Term<Name>,
-    ) -> Result<Self, <Term<NamedDeBruijn> as TryFrom<Term<Name>>>::Error> {
-        let mut converter = Converter::new();
-
-        let term = converter
-            .name_to_named_debruijn(value)
-            .map_err(|err| err.to_string())?;
-
-        Ok(term)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,5 +112,59 @@ impl From<DeBruijn> for NamedDeBruijn {
             text: String::from("i"),
             index,
         }
+    }
+}
+
+impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
+    type Error = String;
+
+    fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
+        Ok(Program::<NamedDeBruijn> {
+            version: value.version,
+            term: value.term.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Program<NamedDeBruijn>> for Program<Name> {
+    type Error = String;
+
+    fn try_from(value: Program<NamedDeBruijn>) -> Result<Self, Self::Error> {
+        Ok(Program::<Name> {
+            version: value.version,
+            term: value.term.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
+    type Error = String;
+
+    fn try_from(
+        value: Term<Name>,
+    ) -> Result<Self, <Term<NamedDeBruijn> as TryFrom<Term<Name>>>::Error> {
+        let mut converter = Converter::new();
+
+        let term = converter
+            .name_to_named_debruijn(value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(term)
+    }
+}
+
+impl TryFrom<Term<NamedDeBruijn>> for Term<Name> {
+    type Error = String;
+
+    fn try_from(
+        value: Term<NamedDeBruijn>,
+    ) -> Result<Self, <Term<Name> as TryFrom<Term<NamedDeBruijn>>>::Error> {
+        let mut converter = Converter::new();
+
+        let term = converter
+            .named_debruijn_to_name(value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(term)
     }
 }

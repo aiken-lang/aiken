@@ -102,6 +102,7 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     opaque!(no_partial(choice((
+        attempt(var()),
         attempt(delay()),
         attempt(lambda()),
         attempt(apply()),
@@ -110,6 +111,21 @@ where
         attempt(error()),
         attempt(builtin()),
     ))))
+}
+
+fn var<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    (many1(alpha_num()), spaces()).map_input(
+        |(text, _): (String, _), input: &mut StateStream<Input>| {
+            Term::Var(Name {
+                unique: input.state.intern(&text),
+                text,
+            })
+        },
+    )
 }
 
 fn delay<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
@@ -147,21 +163,21 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
+    let name = many1(alpha_num()).map_input(|text: String, input: &mut StateStream<Input>| Name {
+        unique: input.state.intern(&text),
+        text,
+    });
+
     between(
         token('('),
         token(')'),
         string("lam")
             .with(skip_many1(space()))
-            .with((many1(alpha_num()), skip_many1(space()), term()))
-            .map_input(
-                |(parameter_name, _, term): (String, _, Term<Name>), input| Term::Lambda {
-                    parameter_name: Name {
-                        unique: input.state.intern(&parameter_name),
-                        text: parameter_name,
-                    },
-                    body: Box::new(term),
-                },
-            ),
+            .with((name, skip_many1(space()), term()))
+            .map(|(parameter_name, _, term)| Term::Lambda {
+                parameter_name,
+                body: Box::new(term),
+            }),
     )
 }
 
