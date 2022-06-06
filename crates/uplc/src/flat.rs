@@ -5,7 +5,7 @@ use flat::{
 };
 
 use crate::{
-    ast::{Constant, DeBruijn, Name, NamedDeBruijn, Program, Term, Unique},
+    ast::{Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Unique},
     builtins::DefaultFunction,
 };
 
@@ -296,6 +296,36 @@ impl<'b> Binder<'b> for DeBruijn {
 
     fn binder_decode(_d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(DeBruijn::new(0))
+    }
+}
+
+impl Encode for FakeNamedDeBruijn {
+    fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
+        let index: DeBruijn = self.clone().into();
+
+        index.encode(e)?;
+
+        Ok(())
+    }
+}
+
+impl<'b> Decode<'b> for FakeNamedDeBruijn {
+    fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
+        let index = DeBruijn::decode(d)?;
+
+        Ok(index.into())
+    }
+}
+
+impl<'b> Binder<'b> for FakeNamedDeBruijn {
+    fn binder_encode(&self, _: &mut Encoder) -> Result<(), en::Error> {
+        Ok(())
+    }
+
+    fn binder_decode(_d: &mut Decoder) -> Result<Self, de::Error> {
+        let index = DeBruijn::new(0);
+
+        Ok(index.into())
     }
 }
 

@@ -96,6 +96,33 @@ pub struct NamedDeBruijn {
     pub index: DeBruijn,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FakeNamedDeBruijn(NamedDeBruijn);
+
+impl From<DeBruijn> for FakeNamedDeBruijn {
+    fn from(d: DeBruijn) -> Self {
+        FakeNamedDeBruijn(d.into())
+    }
+}
+
+impl From<FakeNamedDeBruijn> for DeBruijn {
+    fn from(d: FakeNamedDeBruijn) -> Self {
+        d.0.into()
+    }
+}
+
+impl From<FakeNamedDeBruijn> for NamedDeBruijn {
+    fn from(d: FakeNamedDeBruijn) -> Self {
+        d.0
+    }
+}
+
+impl From<NamedDeBruijn> for FakeNamedDeBruijn {
+    fn from(d: NamedDeBruijn) -> Self {
+        FakeNamedDeBruijn(d)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct DeBruijn(usize);
 
@@ -218,6 +245,23 @@ impl From<Term<NamedDeBruijn>> for Term<DeBruijn> {
     }
 }
 
+impl From<Program<NamedDeBruijn>> for Program<FakeNamedDeBruijn> {
+    fn from(value: Program<NamedDeBruijn>) -> Self {
+        Program::<FakeNamedDeBruijn> {
+            version: value.version,
+            term: value.term.into(),
+        }
+    }
+}
+
+impl From<Term<NamedDeBruijn>> for Term<FakeNamedDeBruijn> {
+    fn from(value: Term<NamedDeBruijn>) -> Self {
+        let mut converter = Converter::new();
+
+        converter.named_debruijn_to_fake_named_debruijn(value)
+    }
+}
+
 impl TryFrom<Program<DeBruijn>> for Program<Name> {
     type Error = debruijn::Error;
 
@@ -255,5 +299,22 @@ impl From<Term<DeBruijn>> for Term<NamedDeBruijn> {
         let mut converter = Converter::new();
 
         converter.debruijn_to_named_debruijn(value)
+    }
+}
+
+impl From<Program<FakeNamedDeBruijn>> for Program<NamedDeBruijn> {
+    fn from(value: Program<FakeNamedDeBruijn>) -> Self {
+        Program::<NamedDeBruijn> {
+            version: value.version,
+            term: value.term.into(),
+        }
+    }
+}
+
+impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
+    fn from(value: Term<FakeNamedDeBruijn>) -> Self {
+        let mut converter = Converter::new();
+
+        converter.fake_named_debruijn_to_named_debruijn(value)
     }
 }
