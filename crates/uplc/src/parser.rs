@@ -3,9 +3,9 @@ use std::{collections::HashMap, str::FromStr};
 use combine::{
     attempt, between, choice,
     error::StringStreamError,
-    many1,
+    look_ahead, many1,
     parser::{
-        char::{alpha_num, digit, hex_digit, space, spaces, string},
+        char::{alpha_num, digit, hex_digit, letter, space, spaces, string},
         combinator::no_partial,
     },
     skip_many1,
@@ -117,14 +117,7 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    (many1(alpha_num()), spaces()).map_input(
-        |(text, _): (String, _), input: &mut StateStream<Input>| {
-            Term::Var(Name {
-                unique: input.state.intern(&text),
-                text,
-            })
-        },
-    )
+    name().map(Term::Var)
 }
 
 fn delay<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
@@ -136,7 +129,7 @@ where
         token('('),
         token(')'),
         string("delay")
-            .with(skip_many1(space()))
+            .skip(skip_many1(space()))
             .with(term())
             .map(|term| Term::Delay(Box::new(term))),
     )
@@ -151,7 +144,7 @@ where
         token('('),
         token(')'),
         string("force")
-            .with(skip_many1(space()))
+            .skip(skip_many1(space()))
             .with(term())
             .map(|term| Term::Force(Box::new(term))),
     )
@@ -162,17 +155,12 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    let name = many1(alpha_num()).map_input(|text: String, input: &mut StateStream<Input>| Name {
-        unique: input.state.intern(&text),
-        text,
-    });
-
     between(
         token('('),
         token(')'),
         string("lam")
             .with(skip_many1(space()))
-            .with((name, skip_many1(space()), term()))
+            .with((name(), skip_many1(space()), term()))
             .map(|(parameter_name, _, term)| Term::Lambda {
                 parameter_name,
                 body: Box::new(term),
@@ -301,6 +289,23 @@ where
         .with(skip_many1(space()))
         .with(string("True").or(string("False")))
         .map(|b| Constant::Bool(b == "True"))
+}
+
+fn name<Input>() -> impl Parser<StateStream<Input>, Output = Name>
+where
+    Input: Stream<Token = char>,
+    Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
+{
+    look_ahead(letter())
+        .with(many1(alpha_num().or(token('_').or(token('\'')))))
+        .map_input(|text: String, input: &mut StateStream<Input>| {
+            println!("{:?}", text);
+
+            Name {
+                unique: input.state.intern(&text),
+                text,
+            }
+        })
 }
 
 #[cfg(test)]
