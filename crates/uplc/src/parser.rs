@@ -131,10 +131,8 @@ where
     between(
         token('('),
         token(')'),
-        string("delay")
-            .skip(skip_many1(space()))
-            .with(term())
-            .map(|term| Term::Delay(Box::new(term))),
+        (spaces(), string("delay"), skip_many1(space()), term())
+            .map(|(_, _, _, term)| Term::Delay(Box::new(term))),
     )
 }
 
@@ -146,10 +144,8 @@ where
     between(
         token('('),
         token(')'),
-        string("force")
-            .skip(skip_many1(space()))
-            .with(term())
-            .map(|term| Term::Force(Box::new(term))),
+        (spaces(), string("force"), skip_many1(space()), term())
+            .map(|(_, _, _, term)| Term::Force(Box::new(term))),
     )
 }
 
@@ -161,10 +157,15 @@ where
     between(
         token('('),
         token(')'),
-        string("lam")
-            .with(skip_many1(space()))
-            .with((name(), skip_many1(space()), term()))
-            .map(|(parameter_name, _, term)| Term::Lambda {
+        (
+            spaces(),
+            string("lam"),
+            skip_many1(space()),
+            name(),
+            skip_many1(space()),
+            term(),
+        )
+            .map(|(_, _, _, parameter_name, _, term)| Term::Lambda {
                 parameter_name,
                 body: Box::new(term),
             }),
@@ -179,7 +180,7 @@ where
     between(
         token('['),
         token(']'),
-        (term().skip(skip_many1(space())), term()).map(|(function, argument)| Term::Apply {
+        (spaces(), term(), spaces(), term()).map(|(_, function, _, argument)| Term::Apply {
             function: Box::new(function),
             argument: Box::new(argument),
         }),
@@ -192,7 +193,7 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     between(
-        token('('),
+        token('(').skip(spaces()),
         token(')'),
         string("builtin")
             .with(skip_many1(space()))
@@ -209,7 +210,7 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     between(
-        token('('),
+        token('(').skip(spaces()),
         token(')'),
         string("error")
             .with(skip_many1(space()))
@@ -223,18 +224,22 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     between(
-        token('('),
+        token('(').skip(spaces()),
         token(')'),
-        string("con")
-            .with(skip_many1(space()))
-            .with(choice((
+        (
+            spaces(),
+            string("con"),
+            skip_many1(space()),
+            choice((
                 attempt(constant_integer()),
                 attempt(constant_bytestring()),
                 attempt(constant_string()),
                 attempt(constant_unit()),
                 attempt(constant_bool()),
-            )))
-            .map(Term::Constant),
+            )),
+            spaces(),
+        )
+            .map(|(_, _, _, con, _)| Term::Constant(con)),
     )
 }
 
@@ -301,13 +306,9 @@ where
 {
     look_ahead(letter())
         .with(many1(alpha_num().or(token('_').or(token('\'')))))
-        .map_input(|text: String, input: &mut StateStream<Input>| {
-            println!("{:?}", text);
-
-            Name {
-                unique: input.state.intern(&text),
-                text,
-            }
+        .map_input(|text: String, input: &mut StateStream<Input>| Name {
+            unique: input.state.intern(&text),
+            text,
         })
 }
 
