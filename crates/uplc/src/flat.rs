@@ -37,6 +37,10 @@ where
 
         Ok(hex)
     }
+
+    pub fn from_flat(bytes: &'b [u8]) -> Result<Self, de::Error> {
+        Self::unflat(bytes)
+    }
 }
 
 impl<'b, T> Encode for Program<T>

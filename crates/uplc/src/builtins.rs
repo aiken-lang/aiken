@@ -187,7 +187,10 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::MkPairData as u8 => Ok(DefaultFunction::MkPairData),
             v if v == DefaultFunction::MkNilData as u8 => Ok(DefaultFunction::MkNilData),
             v if v == DefaultFunction::MkNilPairData as u8 => Ok(DefaultFunction::MkNilPairData),
-            _ => Err(de::Error::Message("Default Function not found".to_string())),
+            _ => Err(de::Error::Message(format!(
+                "Default Function not found - {}",
+                v
+            ))),
         }
     }
 }

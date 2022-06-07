@@ -65,7 +65,7 @@ where
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     let prog = string("program").with(skip_many1(space())).with(
-        (version(), skip_many1(space()), term().skip(spaces()))
+        (version(), skip_many1(space()), term())
             .map(|(version, _, term)| Program { version, term }),
     );
 
@@ -100,16 +100,19 @@ where
     Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
-    opaque!(no_partial(choice((
-        attempt(var()),
-        attempt(delay()),
-        attempt(lambda()),
-        attempt(apply()),
-        attempt(constant()),
-        attempt(force()),
-        attempt(error()),
-        attempt(builtin()),
-    ))))
+    opaque!(no_partial(
+        choice((
+            attempt(var()),
+            attempt(delay()),
+            attempt(lambda()),
+            attempt(apply()),
+            attempt(constant()),
+            attempt(force()),
+            attempt(error()),
+            attempt(builtin()),
+        ))
+        .skip(spaces())
+    ))
 }
 
 fn var<Input>() -> impl Parser<StateStream<Input>, Output = Term<Name>>
