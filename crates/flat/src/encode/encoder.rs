@@ -102,16 +102,17 @@ impl Encoder {
     }
 
     pub fn word(&mut self, c: usize) -> &mut Self {
+        let mut d = c;
         loop {
-            let mut w = (c & 127) as u8;
-            let c = c >> 7;
+            let mut w = (d & 127) as u8;
+            d >>= 7;
 
-            if c != 0 {
+            if d != 0 {
                 w |= 128;
             }
             self.bits(8, w);
 
-            if c == 0 {
+            if d == 0 {
                 break;
             }
         }

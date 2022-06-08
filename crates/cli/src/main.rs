@@ -36,7 +36,9 @@ fn main() -> anyhow::Result<()> {
 
                 let program = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
 
-                println!("{:#?}", program);
+                let encoded_flat = program.to_flat()?;
+                println!("{}", encoded_flat.len());
+                assert!(bytes == encoded_flat)
             }
         },
     }

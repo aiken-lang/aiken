@@ -2,10 +2,11 @@ use crate::{decode::Decode, zigzag};
 
 use super::Error;
 
+#[derive(Debug)]
 pub struct Decoder<'b> {
-    buffer: &'b [u8],
-    used_bits: i64,
-    pos: usize,
+    pub buffer: &'b [u8],
+    pub used_bits: i64,
+    pub pos: usize,
 }
 
 impl<'b> Decoder<'b> {
@@ -71,7 +72,7 @@ impl<'b> Decoder<'b> {
         let mut final_word: usize = 0;
         let mut shl: usize = 0;
         // continue looping if lead bit is 1 otherwise exit
-        while leading_bit == 1 {
+        while leading_bit > 0 {
             let word8 = self.bits8(8)?;
             let word7 = word8 & 127;
             final_word |= (word7 as usize) << shl;
@@ -134,6 +135,7 @@ impl<'b> Decoder<'b> {
 
             blk_len = self.buffer[self.pos];
         }
+        self.pos += 1;
 
         Ok(blk_array)
     }

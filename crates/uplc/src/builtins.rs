@@ -32,52 +32,52 @@ pub enum DefaultFunction {
     Sha3_256 = 19,
     Blake2b_256 = 20,
     VerifySignature = 21,
-    VerifyEcdsaSecp256k1Signature = 22,
-    VerifySchnorrSecp256k1Signature = 23,
+    VerifyEcdsaSecp256k1Signature = 52,
+    VerifySchnorrSecp256k1Signature = 53,
     // String functions
-    AppendString = 24,
-    EqualsString = 25,
-    EncodeUtf8 = 26,
-    DecodeUtf8 = 27,
+    AppendString = 22,
+    EqualsString = 23,
+    EncodeUtf8 = 24,
+    DecodeUtf8 = 25,
     // Bool function
-    IfThenElse = 28,
+    IfThenElse = 26,
     // Unit function
-    ChooseUnit = 29,
+    ChooseUnit = 27,
     // Tracing function
-    Trace = 30,
+    Trace = 28,
     // Pairs functions
-    FstPair = 31,
-    SndPair = 32,
+    FstPair = 29,
+    SndPair = 30,
     // List functions
-    ChooseList = 33,
-    MkCons = 34,
-    HeadList = 35,
-    TailList = 36,
-    NullList = 37,
+    ChooseList = 31,
+    MkCons = 32,
+    HeadList = 33,
+    TailList = 34,
+    NullList = 35,
     // Data functions
     // It is convenient to have a "choosing" function for a data type that has more than two
     // constructors to get pattern matching over it and we may end up having multiple such data
     // types, hence we include the name of the data type as a suffix.
-    ChooseData = 38,
-    ConstrData = 39,
-    MapData = 40,
-    ListData = 41,
-    IData = 42,
-    BData = 43,
-    UnConstrData = 44,
-    UnMapData = 45,
-    UnListData = 46,
-    UnIData = 47,
-    UnBData = 48,
-    EqualsData = 49,
-    SerialiseData = 50,
+    ChooseData = 36,
+    ConstrData = 37,
+    MapData = 38,
+    ListData = 39,
+    IData = 40,
+    BData = 41,
+    UnConstrData = 42,
+    UnMapData = 43,
+    UnListData = 44,
+    UnIData = 45,
+    UnBData = 46,
+    EqualsData = 47,
+    SerialiseData = 51,
     // Misc constructors
     // Constructors that we need for constructing e.g. Data. Polymorphic builtin
     // constructors are often problematic (See note [Representable built-in
     // functions over polymorphic built-in types])
-    MkPairData = 51,
-    MkNilData = 52,
-    MkNilPairData = 53,
+    MkPairData = 48,
+    MkNilData = 49,
+    MkNilPairData = 50,
 }
 
 impl TryFrom<u8> for DefaultFunction {

@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use flat::{
     de::{self, Decode, Decoder},
     en::{self, Encode, Encoder},
@@ -18,11 +20,11 @@ pub trait Binder<'b>: Encode + Decode<'b> {
     fn binder_decode(d: &mut Decoder) -> Result<Self, de::Error>;
 }
 
-impl<'b, T> Flat<'b> for Program<T> where T: Binder<'b> {}
+impl<'b, T> Flat<'b> for Program<T> where T: Binder<'b> + Debug {}
 
 impl<'b, T> Program<T>
 where
-    T: Binder<'b>,
+    T: Binder<'b> + Debug,
 {
     // convenient so that people don't need to depend on the flat crate
     // directly to call programs flat function
@@ -45,7 +47,7 @@ where
 
 impl<'b, T> Encode for Program<T>
 where
-    T: Binder<'b>,
+    T: Binder<'b> + Debug,
 {
     fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         let (major, minor, patch) = self.version;
@@ -73,7 +75,7 @@ where
 
 impl<'b, T> Encode for Term<T>
 where
-    T: Binder<'b>,
+    T: Binder<'b> + Debug,
 {
     fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         match self {
