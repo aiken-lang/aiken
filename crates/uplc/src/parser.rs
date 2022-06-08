@@ -102,14 +102,14 @@ where
 {
     opaque!(no_partial(
         choice((
+            attempt(constant()),
+            attempt(builtin()),
             attempt(var()),
-            attempt(delay()),
             attempt(lambda()),
             attempt(apply()),
-            attempt(constant()),
+            attempt(delay()),
             attempt(force()),
             attempt(error()),
-            attempt(builtin()),
         ))
         .skip(spaces())
     ))
