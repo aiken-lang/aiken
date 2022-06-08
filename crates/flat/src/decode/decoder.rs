@@ -134,8 +134,9 @@ impl<'b> Decoder<'b> {
             self.pos += blk_len as usize;
 
             blk_len = self.buffer[self.pos];
+
+            self.pos += 1
         }
-        self.pos += 1;
 
         Ok(blk_array)
     }
