@@ -71,19 +71,21 @@ fn version() -> impl Parser<char, (usize, usize, usize), Error = Simple<char>> {
 
 fn term() -> impl Parser<char, Term<Name>, Error = Simple<char>> {
     recursive(|term| {
+        let atom = || var().or(term.clone());
+
         let delay = keyword("delay")
-            .ignore_then(term.clone().padded())
+            .ignore_then(atom().padded())
             .delimited_by(just('(').padded(), just(')').padded())
             .map(|t| dbg!(Term::Delay(Box::new(t))));
 
         let force = keyword("force")
-            .ignore_then(term.clone().padded())
+            .ignore_then(atom().padded())
             .delimited_by(just('(').padded(), just(')').padded())
             .map(|t| dbg!(Term::Force(Box::new(t))));
 
         let lambda = keyword("lam")
             .ignore_then(name().padded())
-            .then(term.clone())
+            .then(atom())
             .delimited_by(just('(').padded(), just(')').padded())
             .map(|(parameter_name, t)| {
                 dbg!(Term::Lambda {
@@ -92,17 +94,16 @@ fn term() -> impl Parser<char, Term<Name>, Error = Simple<char>> {
                 })
             });
 
-        let apply = recursive(|a| {
-            var()
-                .or(term.clone())
-                .padded()
-                .then(a)
-                .map(|(function, argument)| Term::Apply {
+        let apply = atom()
+            .padded()
+            .then(atom())
+            .delimited_by(just('[').padded(), just(']').padded())
+            .map(|(function, argument)| {
+                dbg!(Term::Apply {
                     function: Box::new(function),
                     argument: Box::new(argument),
                 })
-        })
-        .delimited_by(just('[').padded(), just(']').padded());
+            });
 
         constant()
             .or(builtin())
