@@ -93,26 +93,16 @@ fn term() -> impl Parser<char, Term<Name>, Error = Simple<char>> {
             });
 
         let apply = recursive(|a| {
-            let lambda = keyword("lam")
-                .ignore_then(name().padded())
-                .then(term.clone())
-                .delimited_by(just('(').padded(), just(')').padded())
-                .map(|(parameter_name, t)| Term::Lambda {
-                    parameter_name,
-                    body: Box::new(t),
-                });
-
             var()
-                .or(lambda)
-                .or(a.delimited_by(just('[').padded(), just(']').padded()))
+                .or(term.clone())
                 .padded()
-                .then(term)
-                .delimited_by(just('[').padded(), just(']').padded())
+                .then(a)
                 .map(|(function, argument)| Term::Apply {
                     function: Box::new(function),
                     argument: Box::new(argument),
                 })
-        });
+        })
+        .delimited_by(just('[').padded(), just(']').padded());
 
         constant()
             .or(builtin())
