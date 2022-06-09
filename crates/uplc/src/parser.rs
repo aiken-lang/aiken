@@ -74,31 +74,45 @@ fn term() -> impl Parser<char, Term<Name>, Error = Simple<char>> {
         let delay = keyword("delay")
             .ignore_then(term.clone().padded())
             .delimited_by(just('(').padded(), just(')').padded())
-            .map(|t| Term::Delay(Box::new(t)));
+            .map(|t| dbg!(Term::Delay(Box::new(t))));
 
         let force = keyword("force")
             .ignore_then(term.clone().padded())
             .delimited_by(just('(').padded(), just(')').padded())
-            .map(|t| Term::Force(Box::new(t)));
+            .map(|t| dbg!(Term::Force(Box::new(t))));
 
         let lambda = keyword("lam")
             .ignore_then(name().padded())
             .then(term.clone())
             .delimited_by(just('(').padded(), just(')').padded())
-            .map(|(parameter_name, t)| Term::Lambda {
-                parameter_name,
-                body: Box::new(t),
+            .map(|(parameter_name, t)| {
+                dbg!(Term::Lambda {
+                    parameter_name,
+                    body: Box::new(t),
+                })
             });
 
-        let apply = term
-            .clone()
-            .padded()
-            .then(term)
-            .delimited_by(just('[').padded(), just(']').padded())
-            .map(|(function, argument)| Term::Apply {
-                function: Box::new(function),
-                argument: Box::new(argument),
-            });
+        let apply = recursive(|a| {
+            let lambda = keyword("lam")
+                .ignore_then(name().padded())
+                .then(term.clone())
+                .delimited_by(just('(').padded(), just(')').padded())
+                .map(|(parameter_name, t)| Term::Lambda {
+                    parameter_name,
+                    body: Box::new(t),
+                });
+
+            var()
+                .or(lambda)
+                .or(a.delimited_by(just('[').padded(), just(']').padded()))
+                .padded()
+                .then(term)
+                .delimited_by(just('[').padded(), just(']').padded())
+                .map(|(function, argument)| Term::Apply {
+                    function: Box::new(function),
+                    argument: Box::new(argument),
+                })
+        });
 
         constant()
             .or(builtin())
