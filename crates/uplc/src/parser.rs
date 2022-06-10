@@ -18,7 +18,7 @@ peg::parser! {
 
         rule version() -> (usize, usize, usize)
           = major:number() "." minor:number() "." patch:number()  {
-            (major, minor, patch)
+            (major as usize, minor as usize, patch as usize)
           }
 
         rule term() -> Term<Name>
@@ -77,7 +77,7 @@ peg::parser! {
           = "integer" _+ i:number() { Constant::Integer(i as isize) }
 
         rule constant_bytestring() -> Constant
-          = "bytestring" _+ "#" i:ident() { Constant::ByteString(hex::decode(i).unwrap()) }
+          = "bytestring" _+ "#" i:ident()* { Constant::ByteString(hex::decode(String::from_iter(i)).unwrap()) }
 
         rule constant_string() -> Constant
           = "string" _+ "\"" s:[^ '"']* "\"" { Constant::String(String::from_iter(s)) }
@@ -88,8 +88,8 @@ peg::parser! {
         rule constant_unit() -> Constant
           = "unit" _+ "()" { Constant::Unit }
 
-        rule number() -> usize
-          = n:$(['0'..='9']+) {? n.parse().or(Err("usize")) }
+        rule number() -> isize
+          = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
         rule name() -> Name
           = text:ident() { Name { text, unique: 0.into() } }
