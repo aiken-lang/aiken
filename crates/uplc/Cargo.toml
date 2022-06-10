@@ -9,6 +9,7 @@ edition = "2021"
 chumsky = "0.8.0"
 flat = { path = "../flat" }
 hex = "0.4.3"
+peg = "0.8.0"
 strum = "0.24.0"
 strum_macros = "0.24.0"
 thiserror = "1.0.31"

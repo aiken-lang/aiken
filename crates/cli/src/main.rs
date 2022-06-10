@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
             UplcCommand::Flat { input } => {
                 let code = std::fs::read_to_string(&input)?;
 
-                let program = parser::program(&code).unwrap();
+                let program = parser::program(&code)?;
 
                 let program = Program::<DeBruijn>::try_from(program)?;
 

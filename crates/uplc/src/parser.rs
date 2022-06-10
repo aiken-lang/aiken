@@ -11,6 +11,95 @@ use crate::{
     builtins::DefaultFunction,
 };
 
+peg::parser! {
+    grammar parser() for str {
+        pub rule program() -> Program<Name>
+          = "(" _* "program" _+ v:version() _+ t:term() _* ")" { Program {version: v, term: t} }
+
+        rule version() -> (usize, usize, usize)
+          = major:number() "." minor:number() "." patch:number()  {
+            (major, minor, patch)
+          }
+
+        rule term() -> Term<Name>
+          = constant()
+          / builtin()
+          / var()
+          / lambda()
+          / apply()
+          / delay()
+          / force()
+          / error()
+
+        rule constant() -> Term<Name>
+          = "(" _* "con" _+ con:(
+            constant_integer()
+            / constant_bytestring()
+            / constant_string()
+            / constant_unit()
+            / constant_bool()
+            ) _* ")" {
+            Term::Constant(con)
+          }
+
+        rule builtin() -> Term<Name>
+          = "(" b:ident() ")" { Term::Builtin(DefaultFunction::from_str(&b).unwrap()) }
+
+        rule var() -> Term<Name>
+          = n:name() { Term::Var(n) }
+
+        rule lambda() -> Term<Name>
+          = "(" _* "lam" _+ parameter_name:name() _+ t:term() _* ")" {
+            Term::Lambda { parameter_name, body: Box::new(t) }
+          }
+
+        #[cache_left_rec]
+        rule apply() -> Term<Name>
+          = "[" _* initial:term() _+ terms:(t:term() _* { t })+ "]" {
+            terms
+                .into_iter()
+                .fold(initial, |lhs, rhs| Term::Apply {
+                    function: Box::new(lhs),
+                    argument: Box::new(rhs)
+                })
+          }
+
+        rule delay() -> Term<Name>
+          = "(" _* "delay" _+ t:term() _* ")" { Term::Delay(Box::new(t)) }
+
+        rule force() -> Term<Name>
+          = "(" _* "force" _+ t:term() _* ")" { Term::Force(Box::new(t)) }
+
+        rule error() -> Term<Name>
+          = "(" _* "error" _* ")" { Term::Error }
+
+        rule constant_integer() -> Constant
+          = "integer" _+ i:number() { Constant::Integer(i as isize) }
+
+        rule constant_bytestring() -> Constant
+          = "bytestring" _+ "#" i:ident() { Constant::ByteString(hex::decode(i).unwrap()) }
+
+        rule constant_string() -> Constant
+          = "string" _+ "\"" s:[^ '"']* "\"" { Constant::String(String::from_iter(s)) }
+
+        rule constant_bool() -> Constant
+          = "bool" _+ b:$("True" / "False") { Constant::Bool(b == "True") }
+
+        rule constant_unit() -> Constant
+          = "unit" _+ "()" { Constant::Unit }
+
+        rule number() -> usize
+          = n:$(['0'..='9']+) {? n.parse().or(Err("usize")) }
+
+        rule name() -> Name
+          = text:ident() { Name { text, unique: 0.into() } }
+
+        rule ident() -> String = i:['a'..='z' | 'A'..='Z' | '0'..='9' | '_']+ { String::from_iter(i) }
+
+        rule _ = [' ' | '\n']
+    }
+}
+
 struct ParserState {
     identifiers: HashMap<String, Unique>,
     current: Unique,
@@ -39,10 +128,8 @@ impl ParserState {
     }
 }
 
-pub fn program(src: &str) -> Result<Program<Name>, Vec<Simple<char>>> {
-    let parser = program_();
-
-    parser.parse(src)
+pub fn program(src: &str) -> Result<Program<Name>, peg::error::ParseError<peg::str::LineCol>> {
+    parser::program(src)
 }
 
 fn program_() -> impl Parser<char, Program<Name>, Error = Simple<char>> {
@@ -71,21 +158,19 @@ fn version() -> impl Parser<char, (usize, usize, usize), Error = Simple<char>> {
 
 fn term() -> impl Parser<char, Term<Name>, Error = Simple<char>> {
     recursive(|term| {
-        let atom = || var().or(term.clone());
-
         let delay = keyword("delay")
-            .ignore_then(atom().padded())
+            .ignore_then(term.clone().padded())
             .delimited_by(just('(').padded(), just(')').padded())
             .map(|t| dbg!(Term::Delay(Box::new(t))));
 
         let force = keyword("force")
-            .ignore_then(atom().padded())
+            .ignore_then(term.clone().padded())
             .delimited_by(just('(').padded(), just(')').padded())
             .map(|t| dbg!(Term::Force(Box::new(t))));
 
         let lambda = keyword("lam")
             .ignore_then(name().padded())
-            .then(atom())
+            .then(term.clone())
             .delimited_by(just('(').padded(), just(')').padded())
             .map(|(parameter_name, t)| {
                 dbg!(Term::Lambda {
@@ -94,15 +179,14 @@ fn term() -> impl Parser<char, Term<Name>, Error = Simple<char>> {
                 })
             });
 
-        let apply = atom()
+        let apply = term
+            .clone()
             .padded()
-            .then(atom())
+            .then(term.clone().padded().repeated())
             .delimited_by(just('[').padded(), just(']').padded())
-            .map(|(function, argument)| {
-                dbg!(Term::Apply {
-                    function: Box::new(function),
-                    argument: Box::new(argument),
-                })
+            .foldl(|lhs, rhs| Term::Apply {
+                function: Box::new(lhs),
+                argument: Box::new(rhs),
             });
 
         constant()
