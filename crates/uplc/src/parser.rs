@@ -43,7 +43,7 @@ peg::parser! {
           }
 
         rule builtin() -> Term<Name>
-          = "(" b:ident() ")" { Term::Builtin(DefaultFunction::from_str(&b).unwrap()) }
+          = "(" _* "builtin" _+ b:ident() _* ")" { Term::Builtin(DefaultFunction::from_str(&b).unwrap()) }
 
         rule var() -> Term<Name>
           = n:name() { Term::Var(n) }
