@@ -1,22 +1,23 @@
-# Neptune
+# AIKEN
 
-Experiments with Plutus Core
+A cardano smart contract language and toolchain
 
 ## Roadmap
 
 These are generic milestones and the listed ordering
-is not necessariy the implementation order
+is not necessariy the implementation order or full scope.
 
-- [ ] compile plutus core into it's on chain encoding
-- [ ] reverse the on chain encoding into plutus core
+- [x] compile plutus core into it's on chain encoding
+- [x] reverse the on chain encoding into plutus core
+- [ ] Plutus Core interpreter
 - [ ] create a higher level syntax with inspiration from
   - JS
   - ReasonML
   - Elm
   - Roc
   - Rust
+  - Gleam
 - [ ] Language Server
-- [ ] Plutus Core interpreter
 
 ## Resources
 

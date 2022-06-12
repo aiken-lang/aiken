@@ -3,14 +3,14 @@ use uplc::{
     parser,
 };
 
-use neptune::{Cli, UplcCommand};
+use aiken::{Cli, UplcCommand};
 
 fn main() -> anyhow::Result<()> {
     let args = Cli::default();
 
     match args {
         Cli::Uplc(uplc) => match uplc {
-            UplcCommand::Flat { input } => {
+            UplcCommand::Flat { input, print } => {
                 let code = std::fs::read_to_string(&input)?;
 
                 let program = parser::program(&code)?;
@@ -19,26 +19,28 @@ fn main() -> anyhow::Result<()> {
 
                 let bytes = program.to_flat()?;
 
-                for (i, byte) in bytes.iter().enumerate() {
-                    print!("{:08b}", byte);
+                if print {
+                    for (i, byte) in bytes.iter().enumerate() {
+                        print!("{:08b}", byte);
 
-                    if (i + 1) % 4 == 0 {
-                        println!();
-                    } else {
-                        print!(" ");
+                        if (i + 1) % 4 == 0 {
+                            println!();
+                        } else {
+                            print!(" ");
+                        }
                     }
-                }
 
-                println!();
+                    println!();
+                }
             }
-            UplcCommand::Unflat { input } => {
+            UplcCommand::Unflat { input, print } => {
                 let bytes = std::fs::read(&input)?;
 
                 let program = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
 
-                let encoded_flat = program.to_flat()?;
-                println!("{}", encoded_flat.len());
-                assert!(bytes == encoded_flat)
+                if print {
+                    println!("{:#?}", program);
+                }
             }
         },
     }

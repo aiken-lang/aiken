@@ -12,8 +12,16 @@ pub enum Cli {
 
 #[derive(Subcommand)]
 pub enum UplcCommand {
-    Flat { input: PathBuf },
-    Unflat { input: PathBuf },
+    Flat {
+        input: PathBuf,
+        #[clap(short, long)]
+        print: bool,
+    },
+    Unflat {
+        input: PathBuf,
+        #[clap(short, long)]
+        print: bool,
+    },
 }
 
 impl Default for Cli {
