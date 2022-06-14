@@ -1,6 +1,7 @@
 use flat::de;
 use strum_macros::EnumString;
 
+/// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, EnumString, PartialEq, Copy)]

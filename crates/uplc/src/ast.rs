@@ -5,12 +5,20 @@ use crate::{
     debruijn::{self, Converter},
 };
 
+/// This represents a program in Untyped Plutus Core.
+/// A program contains a version tuple and a term.
+/// It is generic because Term requires a generic type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program<T> {
     pub version: (usize, usize, usize),
     pub term: Term<T>,
 }
 
+/// This represents a term in Untyped Plutus Core.
+/// We need a generic type for the different forms that a program may be in.
+/// Specifically, `Var` and `parameter_name` in `Lambda` can be a `Name`,
+/// `NamedDebruijn`, or `DeBruijn`. When encoded to flat for on chain usage
+/// we must encode using the `DeBruijn` form.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term<T> {
     // tag: 0
@@ -37,6 +45,8 @@ pub enum Term<T> {
     Builtin(DefaultFunction),
 }
 
+/// A container for the various constants that are available
+/// in Untyped Plutus Core. Used in the `Constant` variant of `Term`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     // tag: 0
@@ -53,20 +63,27 @@ pub enum Constant {
     Bool(bool),
 }
 
+/// A Name containing it's parsed textual representation
+/// and a unique id from string interning. The Name's text is
+/// interned during parsing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Name {
     pub text: String,
     pub unique: Unique,
 }
 
+/// A unique id used for string interning.
 #[derive(Debug, Clone, PartialEq, Copy, Eq, Hash)]
 pub struct Unique(isize);
 
 impl Unique {
+    /// Create a new unique id.
     pub fn new(unique: isize) -> Self {
         Unique(unique)
     }
 
+    /// Increment the available unique id. This is used during
+    /// string interning to get the next available unique id.
     pub fn increment(&mut self) {
         self.0 += 1;
     }
@@ -90,12 +107,18 @@ impl Display for Unique {
     }
 }
 
+/// Similar to `Name` but for Debruijn indices.
+/// `Name` is replaced by `NamedDebruijn` when converting
+/// program to it's debruijn form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamedDeBruijn {
     pub text: String,
     pub index: DeBruijn,
 }
 
+/// This is useful for decoding a on chain program into debruijn form.
+/// It allows for injecting fake textual names while also using Debruijn for decoding
+/// without having to loop through twice.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FakeNamedDeBruijn(NamedDeBruijn);
 
@@ -123,10 +146,12 @@ impl From<NamedDeBruijn> for FakeNamedDeBruijn {
     }
 }
 
+/// Represents a debruijn index.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct DeBruijn(usize);
 
 impl DeBruijn {
+    /// Create a new debruijn index.
     pub fn new(index: usize) -> Self {
         DeBruijn(index)
     }
@@ -153,12 +178,15 @@ impl From<NamedDeBruijn> for DeBruijn {
 impl From<DeBruijn> for NamedDeBruijn {
     fn from(index: DeBruijn) -> Self {
         NamedDeBruijn {
+            // Inject fake name. We got `i` from the Plutus code base.
             text: String::from("i"),
             index,
         }
     }
 }
 
+/// Convert a Parsed `Program` to a `Program` in `NamedDebruijn` form.
+/// This checks for any Free Uniques in the `Program` and returns an error if found.
 impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
     type Error = debruijn::Error;
 
@@ -170,6 +198,8 @@ impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
     }
 }
 
+/// Convert a Parsed `Term` to a `Term` in `NamedDebruijn` form.
+/// This checks for any Free Uniques in the `Term` and returns an error if found.
 impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
     type Error = debruijn::Error;
 
@@ -182,6 +212,8 @@ impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
     }
 }
 
+/// Convert a Parsed `Program` to a `Program` in `Debruijn` form.
+/// This checks for any Free Uniques in the `Program` and returns an error if found.
 impl TryFrom<Program<Name>> for Program<DeBruijn> {
     type Error = debruijn::Error;
 
@@ -193,6 +225,8 @@ impl TryFrom<Program<Name>> for Program<DeBruijn> {
     }
 }
 
+/// Convert a Parsed `Term` to a `Term` in `Debruijn` form.
+/// This checks for any Free Uniques in the `Program` and returns an error if found.
 impl TryFrom<Term<Name>> for Term<DeBruijn> {
     type Error = debruijn::Error;
 

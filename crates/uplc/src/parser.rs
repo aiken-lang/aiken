@@ -10,11 +10,15 @@ use peg::{error::ParseError, str::LineCol};
 
 mod interner;
 
+/// Parse a `Program` from a str.
 pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {
+    // initialize the string interner to get unique name
     let mut interner = Interner::new();
 
+    // run the generated parser
     let mut program = uplc::program(src)?;
 
+    // assign proper unique ids in place
     interner.program(&mut program);
 
     Ok(program)

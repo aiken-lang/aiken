@@ -1,3 +1,5 @@
+use std::fs;
+
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Program},
     parser,
@@ -10,7 +12,7 @@ fn main() -> anyhow::Result<()> {
 
     match args {
         Cli::Uplc(uplc) => match uplc {
-            UplcCommand::Flat { input, print } => {
+            UplcCommand::Flat { input, print, out } => {
                 let code = std::fs::read_to_string(&input)?;
 
                 let program = parser::program(&code)?;
@@ -31,6 +33,14 @@ fn main() -> anyhow::Result<()> {
                     }
 
                     println!();
+                } else {
+                    let out_name = if let Some(out) = out {
+                        out
+                    } else {
+                        format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
+                    };
+
+                    fs::write(&out_name, &bytes)?;
                 }
             }
             UplcCommand::Unflat { input, print } => {

@@ -1,4 +1,4 @@
-// e2e encoding/decoding tests
+/// e2e encoding/decoding tests
 use crate::{
     ast::{DeBruijn, Program},
     parser,

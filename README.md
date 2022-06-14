@@ -2,8 +2,28 @@
 
 A cardano smart contract language and toolchain
 
+## Install
+
+For now you'll need rust installed, see [rustup](https://rustup.rs).
+
+`cargo install aiken`
+
+## Usage
+
+For now the command line application can only encode/decode Untyped Plutus Core
+to/from it's on chain format. See the roadmap below for a list of planned features and goals.
+
+```sh
+# compile an untyped plutus core program
+aiken uplc flat program.uplc
+```
+
 ## Roadmap
 
+In general, the goal is to port everything we need for plutus to
+Rust. This will be needed if we ever want to build a full node in
+Rust. Since we will have these tools natively in Rust, we plan on
+building a new high level language for writing smart contracts on Cardano.
 These are generic milestones and the listed ordering
 is not necessariy the implementation order or full scope.
 
