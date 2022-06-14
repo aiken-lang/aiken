@@ -1,5 +1,6 @@
 [package]
 name = "uplc"
+description = "Utilities for working with Untyped Plutus Core"
 version = "0.0.1"
 edition = "2021"
 repository = "https://github.com/txpipe/aiken/crates/uplc"

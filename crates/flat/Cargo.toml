@@ -1,8 +1,10 @@
 [package]
 name = "flat"
+description = "Flat codec"
 version = "0.0.1"
 edition = "2021"
 repository = "https://github.com/txpipe/aiken/crates/flat"
+homepage = "https://github.com/txpipe/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
