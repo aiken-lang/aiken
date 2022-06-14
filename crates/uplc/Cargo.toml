@@ -13,7 +13,7 @@ exclude = ["test_data/*"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flat = { path = "../flat" }
+flat = { path = "../flat", version = "0.0.1" }
 hex = "0.4.3"
 peg = "0.8.0"
 strum = "0.24.0"
