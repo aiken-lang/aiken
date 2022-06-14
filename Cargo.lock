@@ -80,7 +80,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "flat"
+name = "flat-rs"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -298,7 +298,7 @@ checksum = "d22af068fba1eb5edcb4aea19d382b2a3deb4c8f9d475c589b6ada9e0fd493ee"
 name = "uplc"
 version = "0.0.1"
 dependencies = [
- "flat",
+ "flat-rs",
  "hex",
  "peg",
  "strum",

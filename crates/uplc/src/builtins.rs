@@ -1,4 +1,4 @@
-use flat::de;
+use flat_rs::de;
 use strum_macros::EnumString;
 
 /// All the possible builtin functions in Untyped Plutus Core.

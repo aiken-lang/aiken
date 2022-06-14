@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use flat::{
+use flat_rs::{
     de::{self, Decode, Decoder},
     en::{self, Encode, Encoder},
     Flat,
@@ -398,7 +398,7 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 
 #[cfg(test)]
 mod test {
-    use flat::Flat;
+    use flat_rs::Flat;
 
     use crate::ast::Name;
 
