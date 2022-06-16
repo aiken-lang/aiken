@@ -160,6 +160,50 @@ impl Converter {
         Ok(converted_term)
     }
 
+    pub fn debruijn_to_name(&mut self, term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
+        let converted_term = match term {
+            Term::Var(index) => Term::Var(Name {
+                text: String::from("i"),
+                unique: self.get_unique(index)?,
+            }),
+            Term::Delay(term) => Term::Delay(Box::new(self.debruijn_to_name(*term)?)),
+            Term::Lambda {
+                parameter_name,
+                body,
+            } => {
+                self.declare_binder();
+
+                let unique = self.get_unique(parameter_name)?;
+
+                let name = Name {
+                    text: String::from("i"),
+                    unique,
+                };
+
+                self.start_scope();
+
+                let body = self.debruijn_to_name(*body)?;
+
+                self.end_scope();
+
+                Term::Lambda {
+                    parameter_name: name,
+                    body: Box::new(body),
+                }
+            }
+            Term::Apply { function, argument } => Term::Apply {
+                function: Box::new(self.debruijn_to_name(*function)?),
+                argument: Box::new(self.debruijn_to_name(*argument)?),
+            },
+            Term::Constant(constant) => Term::Constant(constant),
+            Term::Force(term) => Term::Force(Box::new(self.debruijn_to_name(*term)?)),
+            Term::Error => Term::Error,
+            Term::Builtin(builtin) => Term::Builtin(builtin),
+        };
+
+        Ok(converted_term)
+    }
+
     pub fn named_debruijn_to_debruijn(&mut self, term: Term<NamedDeBruijn>) -> Term<DeBruijn> {
         match term {
             Term::Var(name) => Term::Var(name.into()),
@@ -180,10 +224,6 @@ impl Converter {
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(builtin),
         }
-    }
-
-    pub fn debruijn_to_name(&mut self, _term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
-        todo!()
     }
 
     pub fn debruijn_to_named_debruijn(&mut self, term: Term<DeBruijn>) -> Term<NamedDeBruijn> {
