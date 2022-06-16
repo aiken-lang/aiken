@@ -155,6 +155,10 @@ impl DeBruijn {
     pub fn new(index: usize) -> Self {
         DeBruijn(index)
     }
+
+    pub fn inner(&self) -> usize {
+        self.0
+    }
 }
 
 impl From<usize> for DeBruijn {
@@ -166,6 +170,12 @@ impl From<usize> for DeBruijn {
 impl From<DeBruijn> for usize {
     fn from(d: DeBruijn) -> Self {
         d.0
+    }
+}
+
+impl Display for DeBruijn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
