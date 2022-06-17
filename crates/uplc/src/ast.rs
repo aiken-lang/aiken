@@ -66,10 +66,16 @@ pub enum Constant {
 /// A Name containing it's parsed textual representation
 /// and a unique id from string interning. The Name's text is
 /// interned during parsing.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Name {
     pub text: String,
     pub unique: Unique,
+}
+
+impl PartialEq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        self.unique == other.unique
+    }
 }
 
 /// A unique id used for string interning.
@@ -110,10 +116,16 @@ impl Display for Unique {
 /// Similar to `Name` but for Debruijn indices.
 /// `Name` is replaced by `NamedDebruijn` when converting
 /// program to it's debruijn form.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct NamedDeBruijn {
     pub text: String,
     pub index: DeBruijn,
+}
+
+impl PartialEq for NamedDeBruijn {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
 }
 
 /// This is useful for decoding a on chain program into debruijn form.
