@@ -1,6 +1,6 @@
 /// e2e encoding/decoding tests
 use crate::{
-    ast::{DeBruijn, Program},
+    ast::{DeBruijn, Name, Program},
     parser,
 };
 
@@ -11,7 +11,7 @@ fn integer() {
 
     let parsed_program = parser::program(code).unwrap();
 
-    let debruijn_program: Program<DeBruijn> = parsed_program.try_into().unwrap();
+    let debruijn_program: Program<DeBruijn> = parsed_program.clone().try_into().unwrap();
 
     let decoded_program: Program<DeBruijn> = Program::from_flat(bytes).unwrap();
 
@@ -20,6 +20,10 @@ fn integer() {
     let encoded_program = debruijn_program.to_flat().unwrap();
 
     assert_eq!(encoded_program, bytes);
+
+    let name_program: Program<Name> = decoded_program.try_into().unwrap();
+
+    assert_eq!(parsed_program, name_program);
 }
 
 #[test]
@@ -29,7 +33,7 @@ fn jpg() {
 
     let parsed_program = parser::program(code).unwrap();
 
-    let debruijn_program: Program<DeBruijn> = parsed_program.try_into().unwrap();
+    let debruijn_program: Program<DeBruijn> = parsed_program.clone().try_into().unwrap();
 
     let decoded_program: Program<DeBruijn> = Program::from_flat(bytes).unwrap();
 
@@ -38,4 +42,8 @@ fn jpg() {
     let encoded_program = debruijn_program.to_flat().unwrap();
 
     assert_eq!(encoded_program, bytes);
+
+    let name_program: Program<Name> = decoded_program.try_into().unwrap();
+
+    assert_eq!(parsed_program, name_program);
 }

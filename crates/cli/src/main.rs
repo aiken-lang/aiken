@@ -1,7 +1,7 @@
 use std::fs;
 
 use uplc::{
-    ast::{DeBruijn, FakeNamedDeBruijn, Program},
+    ast::{DeBruijn, Name, Program},
     parser,
 };
 
@@ -46,7 +46,9 @@ fn main() -> anyhow::Result<()> {
             UplcCommand::Unflat { input, print } => {
                 let bytes = std::fs::read(&input)?;
 
-                let program = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
+                let program = Program::<DeBruijn>::from_flat(&bytes)?;
+
+                let program: Program<Name> = program.try_into()?;
 
                 if print {
                     println!("{:#?}", program);

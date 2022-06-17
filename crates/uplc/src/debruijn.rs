@@ -1,28 +1,32 @@
-use std::collections::HashMap;
-
 use thiserror::Error;
 
 use crate::ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Term, Unique};
 
-#[derive(Debug, Copy, Clone)]
+mod bimap;
+
+#[derive(Debug, Clone, PartialEq, Copy, Eq, Hash)]
 struct Level(usize);
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Free Unique `{0}`")]
     FreeUnique(Unique),
+    #[error("Free Index `{0}`")]
+    FreeIndex(DeBruijn),
 }
 
 pub struct Converter {
     current_level: Level,
-    levels: Vec<HashMap<Unique, Level>>,
+    levels: Vec<bimap::BiMap>,
+    current_unique: Unique,
 }
 
 impl Converter {
     pub fn new() -> Self {
         Converter {
             current_level: Level(0),
-            levels: vec![HashMap::new()],
+            levels: vec![bimap::BiMap::new()],
+            current_unique: Unique::new(0),
         }
     }
 
@@ -111,9 +115,93 @@ impl Converter {
 
     pub fn named_debruijn_to_name(
         &mut self,
-        _term: Term<NamedDeBruijn>,
+        term: Term<NamedDeBruijn>,
     ) -> Result<Term<Name>, Error> {
-        todo!()
+        let converted_term = match term {
+            Term::Var(NamedDeBruijn { text, index }) => Term::Var(Name {
+                text,
+                unique: self.get_unique(index)?,
+            }),
+            Term::Delay(term) => Term::Delay(Box::new(self.named_debruijn_to_name(*term)?)),
+            Term::Lambda {
+                parameter_name,
+                body,
+            } => {
+                self.declare_binder();
+
+                let unique = self.get_unique(parameter_name.index)?;
+
+                let name = Name {
+                    text: parameter_name.text,
+                    unique,
+                };
+
+                self.start_scope();
+
+                let body = self.named_debruijn_to_name(*body)?;
+
+                self.end_scope();
+
+                Term::Lambda {
+                    parameter_name: name,
+                    body: Box::new(body),
+                }
+            }
+            Term::Apply { function, argument } => Term::Apply {
+                function: Box::new(self.named_debruijn_to_name(*function)?),
+                argument: Box::new(self.named_debruijn_to_name(*argument)?),
+            },
+            Term::Constant(constant) => Term::Constant(constant),
+            Term::Force(term) => Term::Force(Box::new(self.named_debruijn_to_name(*term)?)),
+            Term::Error => Term::Error,
+            Term::Builtin(builtin) => Term::Builtin(builtin),
+        };
+
+        Ok(converted_term)
+    }
+
+    pub fn debruijn_to_name(&mut self, term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
+        let converted_term = match term {
+            Term::Var(index) => Term::Var(Name {
+                text: String::from("i"),
+                unique: self.get_unique(index)?,
+            }),
+            Term::Delay(term) => Term::Delay(Box::new(self.debruijn_to_name(*term)?)),
+            Term::Lambda {
+                parameter_name,
+                body,
+            } => {
+                self.declare_binder();
+
+                let unique = self.get_unique(parameter_name)?;
+
+                let name = Name {
+                    text: String::from("i"),
+                    unique,
+                };
+
+                self.start_scope();
+
+                let body = self.debruijn_to_name(*body)?;
+
+                self.end_scope();
+
+                Term::Lambda {
+                    parameter_name: name,
+                    body: Box::new(body),
+                }
+            }
+            Term::Apply { function, argument } => Term::Apply {
+                function: Box::new(self.debruijn_to_name(*function)?),
+                argument: Box::new(self.debruijn_to_name(*argument)?),
+            },
+            Term::Constant(constant) => Term::Constant(constant),
+            Term::Force(term) => Term::Force(Box::new(self.debruijn_to_name(*term)?)),
+            Term::Error => Term::Error,
+            Term::Builtin(builtin) => Term::Builtin(builtin),
+        };
+
+        Ok(converted_term)
     }
 
     pub fn named_debruijn_to_debruijn(&mut self, term: Term<NamedDeBruijn>) -> Term<DeBruijn> {
@@ -136,10 +224,6 @@ impl Converter {
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(builtin),
         }
-    }
-
-    pub fn debruijn_to_name(&mut self, _term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
-        todo!()
     }
 
     pub fn debruijn_to_named_debruijn(&mut self, term: Term<DeBruijn>) -> Term<NamedDeBruijn> {
@@ -234,16 +318,36 @@ impl Converter {
         Err(Error::FreeUnique(unique))
     }
 
+    fn get_unique(&mut self, index: DeBruijn) -> Result<Unique, Error> {
+        for scope in self.levels.iter().rev() {
+            let index = Level(self.current_level.0 - index.inner());
+
+            if let Some(unique) = scope.get_right(&index) {
+                return Ok(*unique);
+            }
+        }
+
+        Err(Error::FreeIndex(index))
+    }
+
     fn declare_unique(&mut self, unique: Unique) {
         let scope = &mut self.levels[self.current_level.0];
 
         scope.insert(unique, self.current_level);
     }
 
+    fn declare_binder(&mut self) {
+        let scope = &mut self.levels[self.current_level.0];
+
+        scope.insert(self.current_unique, self.current_level);
+
+        self.current_unique.increment();
+    }
+
     fn start_scope(&mut self) {
         self.current_level = Level(self.current_level.0 + 1);
 
-        self.levels.push(HashMap::new());
+        self.levels.push(bimap::BiMap::new());
     }
 
     fn end_scope(&mut self) {
