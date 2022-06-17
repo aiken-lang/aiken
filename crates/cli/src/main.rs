@@ -5,13 +5,15 @@ use uplc::{
     parser,
 };
 
-use aiken::{Cli, UplcCommand};
+mod args;
+
+use args::{Args, UplcCommand};
 
 fn main() -> anyhow::Result<()> {
-    let args = Cli::default();
+    let args = Args::default();
 
     match args {
-        Cli::Uplc(uplc) => match uplc {
+        Args::Uplc(uplc) => match uplc {
             UplcCommand::Flat { input, print, out } => {
                 let code = std::fs::read_to_string(&input)?;
 
@@ -22,17 +24,19 @@ fn main() -> anyhow::Result<()> {
                 let bytes = program.to_flat()?;
 
                 if print {
+                    let mut output = String::new();
+
                     for (i, byte) in bytes.iter().enumerate() {
-                        print!("{:08b}", byte);
+                        output.push_str(&format!("{:08b}", byte));
 
                         if (i + 1) % 4 == 0 {
-                            println!();
+                            output.push('\n');
                         } else {
-                            print!(" ");
+                            output.push(' ');
                         }
                     }
 
-                    println!();
+                    println!("{}", output);
                 } else {
                     let out_name = if let Some(out) = out {
                         out
@@ -43,15 +47,25 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&out_name, &bytes)?;
                 }
             }
-            UplcCommand::Unflat { input, print } => {
+            UplcCommand::Unflat { input, print, out } => {
                 let bytes = std::fs::read(&input)?;
 
                 let program = Program::<DeBruijn>::from_flat(&bytes)?;
 
                 let program: Program<Name> = program.try_into()?;
 
+                let pretty = program.to_pretty();
+
                 if print {
-                    println!("{:#?}", program);
+                    println!("{}", pretty);
+                } else {
+                    let out_name = if let Some(out) = out {
+                        out
+                    } else {
+                        format!("{}.uplc", input.file_stem().unwrap().to_str().unwrap())
+                    };
+
+                    fs::write(&out_name, pretty)?;
                 }
             }
         },

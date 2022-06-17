@@ -1,11 +1,11 @@
+use std::{fmt::Display, str::FromStr};
+
 use flat_rs::de;
-use strum_macros::EnumString;
 
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, EnumString, PartialEq, Copy)]
-#[strum(serialize_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum DefaultFunction {
     // Integer functions
     AddInteger = 0,
@@ -28,7 +28,6 @@ pub enum DefaultFunction {
     LessThanByteString = 16,
     LessThanEqualsByteString = 17,
     // Cryptography and hash functions
-    #[strum(serialize = "sha2_256")]
     Sha2_256 = 18,
     Sha3_256 = 19,
     Blake2b_256 = 20,
@@ -192,6 +191,135 @@ impl TryFrom<u8> for DefaultFunction {
                 "Default Function not found - {}",
                 v
             ))),
+        }
+    }
+}
+
+impl FromStr for DefaultFunction {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use DefaultFunction::*;
+
+        match s {
+            "addInteger" => Ok(AddInteger),
+            "subtractInteger" => Ok(SubtractInteger),
+            "multiplyInteger" => Ok(MultiplyInteger),
+            "divideInteger" => Ok(DivideInteger),
+            "quotientInteger" => Ok(QuotientInteger),
+            "remainderInteger" => Ok(RemainderInteger),
+            "modInteger" => Ok(ModInteger),
+            "equalsInteger" => Ok(EqualsInteger),
+            "lessThanInteger" => Ok(LessThanInteger),
+            "lessThanEqualsInteger" => Ok(LessThanEqualsInteger),
+            "appendByteString" => Ok(AppendByteString),
+            "consByteString" => Ok(ConsByteString),
+            "sliceByteString" => Ok(SliceByteString),
+            "lengthOfByteString" => Ok(LengthOfByteString),
+            "indexByteString" => Ok(IndexByteString),
+            "equalsByteString" => Ok(EqualsByteString),
+            "lessThanByteString" => Ok(LessThanByteString),
+            "lessThanEqualsByteString" => Ok(LessThanEqualsByteString),
+            "sha2_256" => Ok(Sha2_256),
+            "sha3_256" => Ok(Sha3_256),
+            "blake2b_256" => Ok(Blake2b_256),
+            "verifySignature" => Ok(VerifySignature),
+            "verifyEcdsaSecp256k1Signature" => Ok(VerifyEcdsaSecp256k1Signature),
+            "verifySchnorrSecp256k1Signature" => Ok(VerifySchnorrSecp256k1Signature),
+            "appendString" => Ok(AppendString),
+            "equalsString" => Ok(EqualsString),
+            "encodeUtf8" => Ok(EncodeUtf8),
+            "decodeUtf8" => Ok(DecodeUtf8),
+            "ifThenElse" => Ok(IfThenElse),
+            "chooseUnit" => Ok(ChooseUnit),
+            "trace" => Ok(Trace),
+            "fstPair" => Ok(FstPair),
+            "sndPair" => Ok(SndPair),
+            "chooseList" => Ok(ChooseList),
+            "mkCons" => Ok(MkCons),
+            "headList" => Ok(HeadList),
+            "tailList" => Ok(TailList),
+            "nullList" => Ok(NullList),
+            "chooseData" => Ok(ChooseData),
+            "constrData" => Ok(ConstrData),
+            "mapData" => Ok(MapData),
+            "listData" => Ok(ListData),
+            "iData" => Ok(IData),
+            "bData" => Ok(BData),
+            "unConstrData" => Ok(UnConstrData),
+            "unMapData" => Ok(UnMapData),
+            "unListData" => Ok(UnListData),
+            "unIData" => Ok(UnIData),
+            "unBData" => Ok(UnBData),
+            "equalsData" => Ok(EqualsData),
+            "serialiseData" => Ok(SerialiseData),
+            "mkPairData" => Ok(MkPairData),
+            "mkNilData" => Ok(MkNilData),
+            "mkNilPairData" => Ok(MkNilPairData),
+            rest => Err(format!("Default Function not found - {}", rest)),
+        }
+    }
+}
+
+impl Display for DefaultFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use DefaultFunction::*;
+
+        match self {
+            AddInteger => write!(f, "addInteger"),
+            SubtractInteger => write!(f, "subtractInteger"),
+            MultiplyInteger => write!(f, "multiplyInteger"),
+            DivideInteger => write!(f, "divideInteger"),
+            QuotientInteger => write!(f, "quotientInteger"),
+            RemainderInteger => write!(f, "remainderInteger"),
+            ModInteger => write!(f, "modInteger"),
+            EqualsInteger => write!(f, "equalsInteger"),
+            LessThanInteger => write!(f, "lessThanInteger"),
+            LessThanEqualsInteger => write!(f, "lessThanEqualsInteger"),
+            AppendByteString => write!(f, "appendByteString"),
+            ConsByteString => write!(f, "consByteString"),
+            SliceByteString => write!(f, "sliceByteString"),
+            LengthOfByteString => write!(f, "lengthOfByteString"),
+            IndexByteString => write!(f, "indexByteString"),
+            EqualsByteString => write!(f, "equalsByteString"),
+            LessThanByteString => write!(f, "lessThanByteString"),
+            LessThanEqualsByteString => write!(f, "lessThanEqualsByteString"),
+            Sha2_256 => write!(f, "sha2_256"),
+            Sha3_256 => write!(f, "sha3_256"),
+            Blake2b_256 => write!(f, "blake2b_256"),
+            VerifySignature => write!(f, "verifySignature"),
+            VerifyEcdsaSecp256k1Signature => write!(f, "verifyEcdsaSecp256k1Signature"),
+            VerifySchnorrSecp256k1Signature => write!(f, "verifySchnorrSecp256k1Signature"),
+            AppendString => write!(f, "appendString"),
+            EqualsString => write!(f, "equalsString"),
+            EncodeUtf8 => write!(f, "encodeUtf8"),
+            DecodeUtf8 => write!(f, "decodeUtf8"),
+            IfThenElse => write!(f, "ifThenElse"),
+            ChooseUnit => write!(f, "chooseUnit"),
+            Trace => write!(f, "trace"),
+            FstPair => write!(f, "fstPair"),
+            SndPair => write!(f, "sndPair"),
+            ChooseList => write!(f, "chooseList"),
+            MkCons => write!(f, "mkCons"),
+            HeadList => write!(f, "headList"),
+            TailList => write!(f, "tailList"),
+            NullList => write!(f, "nullList"),
+            ChooseData => write!(f, "chooseData"),
+            ConstrData => write!(f, "constrData"),
+            MapData => write!(f, "mapData"),
+            ListData => write!(f, "listData"),
+            IData => write!(f, "iData"),
+            BData => write!(f, "bData"),
+            UnConstrData => write!(f, "unConstrData"),
+            UnMapData => write!(f, "unMapData"),
+            UnListData => write!(f, "unListData"),
+            UnIData => write!(f, "unIData"),
+            UnBData => write!(f, "unBData"),
+            EqualsData => write!(f, "equalsData"),
+            SerialiseData => write!(f, "serialiseData"),
+            MkPairData => write!(f, "mkPairData"),
+            MkNilData => write!(f, "mkNilData"),
+            MkNilPairData => write!(f, "mkNilPairData"),
         }
     }
 }

@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
-pub enum Cli {
+pub enum Args {
     /// A subcommand for working with Untyped Plutus Core
     #[clap(subcommand)]
     Uplc(UplcCommand),
@@ -28,10 +28,12 @@ pub enum UplcCommand {
         input: PathBuf,
         #[clap(short, long)]
         print: bool,
+        #[clap(short, long)]
+        out: Option<String>,
     },
 }
 
-impl Default for Cli {
+impl Default for Args {
     fn default() -> Self {
         Self::parse()
     }
