@@ -5,9 +5,8 @@ use crate::ast::{Constant, Name, Program, Term};
 impl Program<Name> {
     pub fn to_pretty(&self) -> String {
         let mut w = Vec::new();
-        println!("here");
 
-        self.to_doc().render(100, &mut w).unwrap();
+        self.to_doc().render(80, &mut w).unwrap();
 
         String::from_utf8(w).unwrap()
     }
@@ -36,8 +35,9 @@ impl Term<Name> {
                     RcDoc::text("delay")
                         .append(RcDoc::line())
                         .append(term.to_doc())
-                        .append(RcDoc::line_()),
+                        .nest(2),
                 )
+                .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Term::Lambda {
                 parameter_name,
@@ -51,40 +51,58 @@ impl Term<Name> {
                             parameter_name.text, parameter_name.unique
                         )))
                         .append(RcDoc::line())
-                        .append(body.to_doc()),
+                        .append(body.to_doc())
+                        .nest(2),
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Term::Apply { function, argument } => RcDoc::text("[")
-                .append(RcDoc::line())
-                .append(function.to_doc())
-                .append(RcDoc::line())
-                .append(argument.to_doc())
+                .append(
+                    RcDoc::line()
+                        .append(
+                            function
+                                .to_doc()
+                                .append(RcDoc::line())
+                                .append(argument.to_doc())
+                                .group(),
+                        )
+                        .nest(2),
+                )
                 .append(RcDoc::line())
                 .append(RcDoc::text("]")),
             Term::Constant(constant) => RcDoc::text("(")
-                .append(RcDoc::text("con"))
-                .append(RcDoc::line())
-                .append(constant.to_doc())
+                .append(
+                    RcDoc::text("con")
+                        .append(RcDoc::line())
+                        .append(constant.to_doc())
+                        .nest(2),
+                )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Term::Force(term) => RcDoc::text("(")
-                .append(RcDoc::text("force"))
-                .append(RcDoc::line())
-                .append(term.to_doc())
+                .append(
+                    RcDoc::text("force")
+                        .append(RcDoc::line())
+                        .append(term.to_doc())
+                        .nest(2),
+                )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Term::Error => RcDoc::text("(")
-                .append(RcDoc::text("error"))
+                .append(RcDoc::text("error").nest(2))
+                .append(RcDoc::line())
+                .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Term::Builtin(builtin) => RcDoc::text("(")
-                .append(RcDoc::text("builtin"))
-                .append(RcDoc::line())
-                .append(RcDoc::text(builtin.to_string()))
+                .append(
+                    RcDoc::text("builtin")
+                        .append(RcDoc::line())
+                        .append(RcDoc::text(builtin.to_string()))
+                        .nest(2),
+                )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
         }
-        .nest(2)
         .group()
     }
 }
