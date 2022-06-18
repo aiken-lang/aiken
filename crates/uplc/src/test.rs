@@ -46,4 +46,8 @@ fn jpg() {
     let name_program: Program<Name> = decoded_program.try_into().unwrap();
 
     assert_eq!(parsed_program, name_program);
+
+    let pretty = name_program.to_pretty();
+
+    assert_eq!(pretty, code);
 }
