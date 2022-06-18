@@ -5,6 +5,7 @@ use crate::ast::{Constant, Name, Program, Term};
 impl Program<Name> {
     pub fn to_pretty(&self) -> String {
         let mut w = Vec::new();
+        println!("here");
 
         self.to_doc().render(100, &mut w).unwrap();
 
@@ -17,9 +18,10 @@ impl Program<Name> {
         RcDoc::text("(")
             .append(RcDoc::text("program"))
             .append(RcDoc::line())
-            .append(RcDoc::text(version).nest(2))
+            .append(RcDoc::text(version))
             .append(RcDoc::line())
             .append(self.term.to_doc())
+            .nest(2)
             .append(RcDoc::line_())
             .append(RcDoc::text(")"))
     }
@@ -62,8 +64,9 @@ impl Term<Name> {
                 .append(RcDoc::text("]")),
             Term::Constant(constant) => RcDoc::text("(")
                 .append(RcDoc::text("con"))
-                .append(RcDoc::text(" "))
+                .append(RcDoc::line())
                 .append(constant.to_doc())
+                .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Term::Force(term) => RcDoc::text("(")
                 .append(RcDoc::text("force"))
@@ -82,6 +85,7 @@ impl Term<Name> {
                 .append(RcDoc::text(")")),
         }
         .nest(2)
+        .group()
     }
 }
 
@@ -89,20 +93,23 @@ impl Constant {
     fn to_doc(&self) -> RcDoc<()> {
         match self {
             Constant::Integer(i) => RcDoc::text("integer")
-                .append(RcDoc::space())
+                .append(RcDoc::line())
                 .append(RcDoc::as_string(i)),
             Constant::ByteString(bs) => RcDoc::text("bytestring")
-                .append(RcDoc::space())
+                .append(RcDoc::line())
+                .append(RcDoc::text("#"))
                 .append(RcDoc::text(hex::encode(bs))),
             Constant::String(s) => RcDoc::text("string")
-                .append(RcDoc::space())
-                .append(RcDoc::text(s)),
+                .append(RcDoc::line())
+                .append(RcDoc::text("\""))
+                .append(RcDoc::text(s))
+                .append(RcDoc::text("\"")),
             Constant::Char(c) => unimplemented!("char: {}", c),
             Constant::Unit => RcDoc::text("unit")
-                .append(RcDoc::space())
+                .append(RcDoc::line())
                 .append(RcDoc::text("()")),
             Constant::Bool(b) => RcDoc::text("bool")
-                .append(RcDoc::space())
+                .append(RcDoc::line())
                 .append(RcDoc::text(if *b { "true" } else { "false" })),
         }
     }
