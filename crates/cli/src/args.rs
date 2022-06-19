@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 
 /// Cardano smart contract toolchain
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub enum Args {
     /// A subcommand for working with Untyped Plutus Core
@@ -31,9 +31,8 @@ pub enum UplcCommand {
         #[clap(short, long)]
         out: Option<String>,
     },
-    Fmt {
-        input: PathBuf,
-    },
+    /// Format an Untyped Plutus Core program
+    Fmt { input: PathBuf },
 }
 
 impl Default for Args {
