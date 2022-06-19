@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "aiken"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -316,7 +316,7 @@ checksum = "7e8820f5d777f6224dc4be3632222971ac30164d4a258d595640799554ebfd99"
 
 [[package]]
 name = "uplc"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "flat-rs",
  "hex",
