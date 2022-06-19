@@ -31,6 +31,9 @@ pub enum UplcCommand {
         #[clap(short, long)]
         out: Option<String>,
     },
+    Fmt {
+        input: PathBuf,
+    },
 }
 
 impl Default for Args {

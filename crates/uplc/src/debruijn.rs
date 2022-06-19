@@ -162,10 +162,14 @@ impl Converter {
 
     pub fn debruijn_to_name(&mut self, term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
         let converted_term = match term {
-            Term::Var(index) => Term::Var(Name {
-                text: String::from("i"),
-                unique: self.get_unique(index)?,
-            }),
+            Term::Var(index) => {
+                let unique = self.get_unique(index)?;
+
+                Term::Var(Name {
+                    text: format!("i_{}", unique),
+                    unique,
+                })
+            }
             Term::Delay(term) => Term::Delay(Box::new(self.debruijn_to_name(*term)?)),
             Term::Lambda {
                 parameter_name,
@@ -176,7 +180,7 @@ impl Converter {
                 let unique = self.get_unique(parameter_name)?;
 
                 let name = Name {
-                    text: String::from("i"),
+                    text: format!("i_{}", unique),
                     unique,
                 };
 
