@@ -8,7 +8,21 @@ impl Program<Name> {
 
         self.to_doc().render(80, &mut w).unwrap();
 
-        String::from_utf8(w).unwrap()
+        String::from_utf8(w)
+            .unwrap()
+            .lines()
+            // This is a hack to deal with blank newlines
+            // that end up with a bunch of useless whitespace
+            // because of the nesting
+            .map(|l| {
+                if l.chars().all(|c| c.is_whitespace()) {
+                    "".to_string()
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn to_doc(&self) -> RcDoc<()> {
@@ -29,7 +43,7 @@ impl Program<Name> {
 impl Term<Name> {
     fn to_doc(&self) -> RcDoc<()> {
         match self {
-            Term::Var(name) => RcDoc::text(format!("{}_{}", name.text, name.unique)),
+            Term::Var(name) => RcDoc::text(&name.text),
             Term::Delay(term) => RcDoc::text("(")
                 .append(
                     RcDoc::text("delay")
@@ -46,10 +60,7 @@ impl Term<Name> {
                 .append(
                     RcDoc::text("lam")
                         .append(RcDoc::line())
-                        .append(RcDoc::text(format!(
-                            "{}_{}",
-                            parameter_name.text, parameter_name.unique
-                        )))
+                        .append(RcDoc::text(&parameter_name.text))
                         .append(RcDoc::line())
                         .append(body.to_doc())
                         .nest(2),

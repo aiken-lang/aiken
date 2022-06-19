@@ -47,6 +47,15 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&out_name, &bytes)?;
                 }
             }
+            UplcCommand::Fmt { input } => {
+                let code = std::fs::read_to_string(&input)?;
+
+                let program = parser::program(&code)?;
+
+                let pretty = program.to_pretty();
+
+                fs::write(&input, pretty)?;
+            }
             UplcCommand::Unflat { input, print, out } => {
                 let bytes = std::fs::read(&input)?;
 
