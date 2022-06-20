@@ -77,6 +77,10 @@ fn fibonacci() {
 #[test]
 fn one_way_fibonacci() {
     let bytes = include_bytes!("../test_data/fibonacci/fibonacci.flat");
+    // This code doesn't match the expected `i_unique` naming scheme, so it can't be round-tripped.
+    // We still want to test these "unsanitary" cases because we can't control the naming pattern
+    // the consumer uses. We just can't guarantee that the decoded Flat bytes will match their
+    // names.
     let code = include_str!("../test_data/fibonacci/unsanitary_fibonacci.uplc");
 
     parsed_program_matches_decoded_bytes(bytes, code);
