@@ -65,3 +65,11 @@ fn jpg() {
 
     round_trip_test(bytes, code);
 }
+
+#[test]
+fn fibonacci() {
+    let bytes = include_bytes!("../test_data/fibonacci/fibonacci.flat");
+    let code = include_str!("../test_data/fibonacci/fibonacci.uplc");
+
+    round_trip_test(bytes, code);
+}
