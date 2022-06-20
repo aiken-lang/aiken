@@ -2,7 +2,7 @@
   1.0.0
   [
     (lam
-      i_0
+      i0
       [
         [
           (force
@@ -10,19 +10,13 @@
               (delay
                 (delay
                   (lam
-                    i_1
+                    f
                     [
-                      (force (delay (lam i_2 [ i_2 i_2 ])))
+                      (force (delay (lam s [ s s ])))
                       (lam
-                        i_3
+                        s
                         (lam
-                          i_4
-                          [
-                            [
-                              i_1 [ (force (delay (lam i_5 [ i_5 i_5 ]))) i_3 ]
-                            ]
-                            i_4
-                          ]
+                          x [ [ f [ (force (delay (lam s [ s s ]))) s ] ] x ]
                         )
                       )
                     ]
@@ -32,25 +26,22 @@
             )
           )
           (lam
-            i_6
+            rec
             (lam
-              i_7
+              i
               [
                 [
                   [
                     (force
                       (delay
                         (lam
-                          i_8
+                          b
                           (lam
-                            i_9
+                            x
                             (lam
-                              i_10
+                              y
                               [
-                                [
-                                  [ [ (force (builtin ifThenElse)) i_8 ] i_9 ]
-                                  i_10
-                                ]
+                                [ [ [ (force (builtin ifThenElse)) b ] x ] y ]
                                 (con unit ())
                               ]
                             )
@@ -58,30 +49,27 @@
                         )
                       )
                     )
-                    [ [ (builtin lessThanEqualsInteger) i_7 ] (con integer 1) ]
+                    [ [ (builtin lessThanEqualsInteger) i ] (con integer 1) ]
                   ]
-                  (lam i_11 i_7)
+                  (lam u i)
                 ]
                 (lam
-                  i_12
+                  u
                   [
                     [
                       (builtin addInteger)
                       [
-                        i_6
-                        [ [ (builtin subtractInteger) i_7 ] (con integer 1) ]
+                        rec [ [ (builtin subtractInteger) i ] (con integer 1) ]
                       ]
                     ]
-                    [
-                      i_6 [ [ (builtin subtractInteger) i_7 ] (con integer 2) ]
-                    ]
+                    [ rec [ [ (builtin subtractInteger) i ] (con integer 2) ] ]
                   ]
                 )
               ]
             )
           )
         ]
-        i_0
+        i0
       ]
     )
     (con integer 0)

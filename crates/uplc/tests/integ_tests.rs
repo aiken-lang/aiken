@@ -73,3 +73,11 @@ fn fibonacci() {
 
     round_trip_test(bytes, code);
 }
+
+#[test]
+fn one_way_fibonacci() {
+    let bytes = include_bytes!("../test_data/fibonacci/fibonacci.flat");
+    let code = include_str!("../test_data/fibonacci/unsanitary_fibonacci.uplc");
+
+    parsed_program_matches_decoded_bytes(bytes, code);
+}
