@@ -1,0 +1,10 @@
+[package]
+name = "program_builder"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# 1st party
+uplc = { path = '../uplc', version = "0.0.3" }
