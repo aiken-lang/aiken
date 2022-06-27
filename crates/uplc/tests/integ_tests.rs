@@ -14,7 +14,7 @@ fn round_trip_test(bytes: &[u8], code: &str) {
 fn parsed_program_matches_decoded_bytes(bytes: &[u8], code: &str) {
     let parsed_program = parser::program(code).unwrap();
 
-    let debruijn_program: Program<DeBruijn> = parsed_program.clone().try_into().unwrap();
+    let debruijn_program: Program<DeBruijn> = parsed_program.try_into().unwrap();
 
     let decoded_program: Program<DeBruijn> = Program::from_flat(bytes).unwrap();
 
@@ -24,7 +24,7 @@ fn parsed_program_matches_decoded_bytes(bytes: &[u8], code: &str) {
 fn encoded_program_matches_bytes(bytes: &[u8], code: &str) {
     let parsed_program = parser::program(code).unwrap();
 
-    let debruijn_program: Program<DeBruijn> = parsed_program.clone().try_into().unwrap();
+    let debruijn_program: Program<DeBruijn> = parsed_program.try_into().unwrap();
 
     let encoded_program = debruijn_program.to_flat().unwrap();
 
