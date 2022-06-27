@@ -59,6 +59,8 @@ impl Converter {
 
                 self.end_scope();
 
+                self.remove_unique(parameter_name.unique);
+
                 Term::Lambda {
                     parameter_name: name,
                     body: Box::new(body),
@@ -94,6 +96,8 @@ impl Converter {
                 let body = self.name_to_debruijn(*body)?;
 
                 self.end_scope();
+
+                self.remove_unique(parameter_name.unique);
 
                 Term::Lambda {
                     parameter_name: name,
@@ -338,6 +342,12 @@ impl Converter {
         let scope = &mut self.levels[self.current_level.0];
 
         scope.insert(unique, self.current_level);
+    }
+
+    fn remove_unique(&mut self, unique: Unique) {
+        let scope = &mut self.levels[self.current_level.0];
+
+        scope.remove(unique, self.current_level);
     }
 
     fn declare_binder(&mut self) {
