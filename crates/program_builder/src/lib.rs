@@ -1,5 +1,7 @@
 #![cfg_attr(test, allow(non_snake_case))]
 
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use uplc::ast::{Constant, Name, Program, Term, Unique};
 
 #[cfg(test)]
@@ -10,12 +12,16 @@ pub struct Builder {
     term: Term<Name>,
 }
 
-pub struct Empty {
+pub struct NeedsTerm {
     version: (usize, usize, usize),
+    // TODO: Hide these two behind interface
+    next_unique: Cell<isize>,
+    names: RefCell<HashMap<String, Unique>>,
 }
 
 pub struct LambdaBuilder<T> {
     outer: T,
+    parameter_name: Name,
 }
 
 pub trait WithTerm
@@ -25,30 +31,48 @@ where
     type Next;
 
     fn next(self, term: Term<Name>) -> Self::Next;
+    fn get_name(&self, name_str: &str) -> Name;
 
     fn with_constant_int(self, int: isize) -> Self::Next {
         let term = Term::Constant(Constant::Integer(int));
         self.next(term)
     }
 
-    fn with_lambda(self) -> Self::Next {
-        let text = "i_0".to_string();
-        let unique = Unique::new(0);
-        let parameter_name = Name { text, unique };
-        let term = Term::Lambda {
+    fn with_lambda(self, name_str: &str) -> LambdaBuilder<Self> {
+        let parameter_name = self.get_name(name_str);
+        LambdaBuilder {
+            outer: self,
             parameter_name,
-            body: Box::new(Term::Constant(Constant::Integer(1))),
-        };
-        self.next(term)
+        }
     }
 }
 
-impl WithTerm for Empty {
+impl WithTerm for NeedsTerm {
     type Next = Builder;
     fn next(self, term: Term<Name>) -> Self::Next {
         Builder {
             version: self.version,
             term,
+        }
+    }
+
+    // TODO: Remove mut?
+    fn get_name(&self, name_str: &str) -> Name {
+        let mut names = self.names.borrow_mut();
+        if let Some(unique) = names.get(name_str) {
+            Name {
+                text: name_str.to_string(),
+                unique: *unique,
+            }
+        } else {
+            let next_unique = self.next_unique.get();
+            self.next_unique.set(next_unique + 1);
+            let unique = Unique::new(next_unique);
+            names.insert(name_str.to_string(), unique.clone());
+            Name {
+                text: name_str.to_string(),
+                unique,
+            }
         }
     }
 }
@@ -57,14 +81,24 @@ impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
     type Next = T::Next;
 
     fn next(self, term: Term<Name>) -> Self::Next {
+        let term = Term::Lambda {
+            parameter_name: self.parameter_name,
+            body: Box::new(term),
+        };
         self.outer.next(term)
+    }
+
+    fn get_name(&self, name_str: &str) -> Name {
+        self.outer.get_name(name_str)
     }
 }
 
 impl Builder {
-    pub fn new(maj: usize, min: usize, patch: usize) -> Empty {
-        Empty {
+    pub fn new(maj: usize, min: usize, patch: usize) -> NeedsTerm {
+        NeedsTerm {
             version: (maj, min, patch),
+            next_unique: Cell::new(0),
+            names: RefCell::new(HashMap::new()),
         }
     }
 
