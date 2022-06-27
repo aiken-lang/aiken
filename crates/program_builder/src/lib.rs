@@ -14,6 +14,10 @@ pub struct Empty {
     version: (usize, usize, usize),
 }
 
+pub struct LambdaBuilder<T> {
+    outer: T,
+}
+
 pub trait WithTerm
 where
     Self: Sized,
@@ -46,6 +50,14 @@ impl WithTerm for Empty {
             version: self.version,
             term,
         }
+    }
+}
+
+impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
+    type Next = T::Next;
+
+    fn next(self, term: Term<Name>) -> Self::Next {
+        self.outer.next(term)
     }
 }
 
