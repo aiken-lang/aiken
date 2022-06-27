@@ -1,4 +1,4 @@
-use crate::Builder;
+use crate::{Builder, WithTerm};
 use uplc::parser;
 
 #[test]
@@ -8,10 +8,7 @@ fn build_named__with_const() {
                        (con integer 11)
                      )";
     let expected = parser::program(code).unwrap();
-    let actual = Builder::default()
-        .with_version(11, 22, 33)
-        .with_constant_int(11)
-        .build_named();
+    let actual = Builder::new(11, 22, 33).with_constant_int(11).build_named();
     assert_eq!(expected, actual);
 }
 
@@ -22,10 +19,7 @@ fn build_named__with_different_const() {
                        (con integer 22)
                      )";
     let expected = parser::program(code).unwrap();
-    let actual = Builder::default()
-        .with_version(11, 22, 33)
-        .with_constant_int(22)
-        .build_named();
+    let actual = Builder::new(11, 22, 33).with_constant_int(22).build_named();
     assert_eq!(expected, actual);
 }
 
@@ -36,10 +30,7 @@ fn build_named__with_const_different_version() {
                        (con integer 11)
                      )";
     let expected = parser::program(code).unwrap();
-    let actual = Builder::default()
-        .with_version(44, 55, 66)
-        .with_constant_int(11)
-        .build_named();
+    let actual = Builder::new(44, 55, 66).with_constant_int(11).build_named();
     assert_eq!(expected, actual);
 }
 
@@ -50,9 +41,20 @@ fn build_named__with_lam() {
                        (lam i_0 (con integer 1))
                      )";
     let expected = parser::program(code).unwrap();
-    let actual = Builder::default()
-        .with_version(1, 2, 3)
-        .with_lambda(1)
-        .build_named();
+    let actual = Builder::new(1, 2, 3).with_lambda().build_named();
     assert_eq!(expected, actual);
 }
+
+// #[test]
+// fn build_named__with_nested_lam() {
+//     let code = r"(program
+//                        1.2.3
+//                        (lam i_0 (lam i_1 (con integer 1)))
+//                      )";
+//     let expected = parser::program(code).unwrap();
+//     let actual = Builder::default()
+//         .with_version(1, 2, 3)
+//         .with_lambda(1)
+//         .build_named();
+//     assert_eq!(expected, actual);
+// }
