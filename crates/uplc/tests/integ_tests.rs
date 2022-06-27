@@ -75,7 +75,6 @@ fn fibonacci() {
 }
 
 // TODO: This is failing, see Bug: https://github.com/txpipe/aiken/issues/10
-#[ignore]
 #[test]
 fn one_way_fibonacci() {
     let bytes = include_bytes!("../test_data/fibonacci/fibonacci.flat");
@@ -86,4 +85,5 @@ fn one_way_fibonacci() {
     let code = include_str!("../test_data/fibonacci/unsanitary_fibonacci.uplc");
 
     parsed_program_matches_decoded_bytes(bytes, code);
+    encoded_program_matches_bytes(bytes, code);
 }
