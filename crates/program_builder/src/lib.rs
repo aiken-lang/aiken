@@ -5,62 +5,61 @@ use uplc::ast::{Constant, Name, Program, Term, Unique};
 #[cfg(test)]
 mod tests;
 
-#[derive(Default)]
 pub struct Builder {
     version: (usize, usize, usize),
-    term_builder: TermBuilder,
+    term: Term<Name>,
 }
 
-#[derive(Clone)]
-enum TermBuilder {
-    Null,
-    Constant(Constant),
-    Lambda(Box<TermBuilder>),
+pub struct Empty {
+    version: (usize, usize, usize),
 }
 
-impl TermBuilder {
-    pub fn build_named(&self) -> Term<Name> {
-        match self.clone() {
-            Self::Null => todo!("Make fallible?"),
-            Self::Constant(c) => Term::Constant(c),
-            Self::Lambda(term) => Term::Lambda {
-                parameter_name: Name {
-                    text: "i".to_string(),
-                    unique: Unique::new(0),
-                },
-                body: Box::new(term.build_named()),
-            },
+pub trait WithTerm
+where
+    Self: Sized,
+{
+    type Next;
+
+    fn next(self, term: Term<Name>) -> Self::Next;
+
+    fn with_constant_int(self, int: isize) -> Self::Next {
+        let term = Term::Constant(Constant::Integer(int));
+        self.next(term)
+    }
+
+    fn with_lambda(self) -> Self::Next {
+        let text = "i_0".to_string();
+        let unique = Unique::new(0);
+        let parameter_name = Name { text, unique };
+        let term = Term::Lambda {
+            parameter_name,
+            body: Box::new(Term::Constant(Constant::Integer(1))),
+        };
+        self.next(term)
+    }
+}
+
+impl WithTerm for Empty {
+    type Next = Builder;
+    fn next(self, term: Term<Name>) -> Self::Next {
+        Builder {
+            version: self.version,
+            term,
         }
     }
 }
 
-impl Default for TermBuilder {
-    fn default() -> Self {
-        Self::Null
-    }
-}
-
 impl Builder {
-    pub fn with_version(&mut self, maj: usize, min: usize, patch: usize) -> &mut Self {
-        self.version = (maj, min, patch);
-        self
-    }
-
-    pub fn with_constant_int(&mut self, int: isize) -> &mut Self {
-        self.term_builder = TermBuilder::Constant(Constant::Integer(int));
-        self
-    }
-
-    pub fn with_lambda(&mut self, int: isize) -> &mut Self {
-        let inner = TermBuilder::Constant(Constant::Integer(int));
-        self.term_builder = TermBuilder::Lambda(Box::new(inner));
-        self
+    pub fn new(maj: usize, min: usize, patch: usize) -> Empty {
+        Empty {
+            version: (maj, min, patch),
+        }
     }
 
     pub fn build_named(&self) -> Program<Name> {
         Program {
             version: self.version,
-            term: self.term_builder.build_named(),
+            term: self.term.clone(),
         }
     }
 }
