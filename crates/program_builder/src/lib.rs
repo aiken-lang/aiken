@@ -56,7 +56,6 @@ impl WithTerm for NeedsTerm {
         }
     }
 
-    // TODO: Remove mut?
     fn get_name(&self, name_str: &str) -> Name {
         let mut names = self.names.borrow_mut();
         if let Some(unique) = names.get(name_str) {

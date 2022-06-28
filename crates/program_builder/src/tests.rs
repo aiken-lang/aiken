@@ -60,5 +60,5 @@ fn build_named__with_nested_lam() {
         .with_lambda("i_1")
         .with_constant_int(1)
         .build_named();
-    assert_eq!(expected, actual); // TODO: This should fail
+    assert_eq!(expected, actual);
 }
