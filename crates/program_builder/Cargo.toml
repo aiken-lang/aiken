@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 # 1st party
-uplc = { path = '../uplc', version = "0.0.3" }
+uplc = { path = '../uplc', version = "0.0.5" }
