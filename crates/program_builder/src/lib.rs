@@ -67,7 +67,7 @@ impl WithTerm for NeedsTerm {
             let next_unique = self.next_unique.get();
             self.next_unique.set(next_unique + 1);
             let unique = Unique::new(next_unique);
-            names.insert(name_str.to_string(), unique.clone());
+            names.insert(name_str.to_string(), unique);
             Name {
                 text: name_str.to_string(),
                 unique,
@@ -93,6 +93,7 @@ impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
 }
 
 impl Builder {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(maj: usize, min: usize, patch: usize) -> NeedsTerm {
         NeedsTerm {
             version: (maj, min, patch),
