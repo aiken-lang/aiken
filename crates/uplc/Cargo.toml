@@ -21,4 +21,3 @@ thiserror = "1.0.31"
 
 [features]
 unstable = []
-test = ["unstable"]
