@@ -5,5 +5,5 @@ mod flat;
 pub mod parser;
 mod pretty;
 
-#[cfg(test)]
-mod test;
+#[cfg(any(feature = "unstable", test))]
+pub mod program_builder;

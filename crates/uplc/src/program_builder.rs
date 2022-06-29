@@ -1,8 +1,8 @@
 #![cfg_attr(test, allow(non_snake_case))]
 
+use crate::ast::{Constant, Name, Program, Term, Unique};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use uplc::ast::{Constant, Name, Program, Term, Unique};
 
 #[cfg(test)]
 mod tests;
