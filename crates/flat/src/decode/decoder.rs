@@ -23,10 +23,21 @@ impl<'b> Decoder<'b> {
         T::decode(self)
     }
 
+    /// Decode an integer of any size.
+    /// This is byte alignment agnostic.
+    /// First we decode the next 8 bits of the buffer.
+    /// We take the 7 least significant bits as the 7 least significant bits of the current unsigned integer.
+    /// If the most significant bit of the 8 bits is 1 then we take the next 8 and repeat the process above,
+    /// filling in the next 7 least significant bits of the unsigned integer and so on.
+    /// If the most significant bit was instead 0 we stop decoding any more bits.
+    /// Finally we use zigzag to convert the unsigned integer back to a signed integer.
     pub fn integer(&mut self) -> Result<isize, Error> {
         Ok(zigzag::to_isize(self.word()?))
     }
 
+    /// Decode a single bit of the buffer to get a bool
+    /// We mask out a single bit of the buffer based on used bits
+    /// and check if it is 0 for false or 1 for true
     pub fn bool(&mut self) -> Result<bool, Error> {
         let current_byte = self.buffer[self.pos];
         let b = 0 != (current_byte & (128 >> self.used_bits));
@@ -34,21 +45,39 @@ impl<'b> Decoder<'b> {
         Ok(b)
     }
 
+    /// Decode a byte from the buffer.
+    /// This byte alignment agnostic.
+    /// We use the next 8 bits in the buffer and return the resulting byte.
     pub fn u8(&mut self) -> Result<u8, Error> {
         self.bits8(8)
     }
 
+    /// Decode a byte array.
+    /// Decodes a filler to byte align the buffer,
+    /// then decodes the next byte to get the array length up to a max of 255.
+    /// We decode bytes equal to the array length to form the byte array.
+    /// If the following byte for array length is not 0 we decode it and repeat above to continue decoding the byte array.
+    /// We stop once we hit a byte array length of 0.
+    /// If array length is 0 for first byte array length the we return a empty array.
     pub fn bytes(&mut self) -> Result<Vec<u8>, Error> {
         self.filler()?;
         self.byte_array()
     }
 
+    /// Decode a 32 bit char.
+    /// This is byte alignment agnostic.
+    /// First we decode the next 8 bits of the buffer.
+    /// We take the 7 least significant bits as the 7 least significant bits of the current unsigned integer.
+    /// If the most significant bit of the 8 bits is 1 then we take the next 8 and repeat the process above,
+    /// filling in the next 7 least significant bits of the unsigned integer and so on.
+    /// If the most significant bit was instead 0 we stop decoding any more bits.
     pub fn char(&mut self) -> Result<char, Error> {
         let character = self.word()? as u32;
 
         char::from_u32(character).ok_or(Error::DecodeChar(character))
     }
 
+    // TODO: Do we need this?
     pub fn string(&mut self) -> Result<String, Error> {
         let mut s = String::new();
         while self.bit()? {
@@ -57,6 +86,14 @@ impl<'b> Decoder<'b> {
         Ok(s)
     }
 
+    /// Decode a string.
+    /// Convert to byte array and then use byte array decoding.
+    /// Decodes a filler to byte align the buffer,
+    /// then decodes the next byte to get the array length up to a max of 255.
+    /// We decode bytes equal to the array length to form the byte array.
+    /// If the following byte for array length is not 0 we decode it and repeat above to continue decoding the byte array.
+    /// We stop once we hit a byte array length of 0.
+    /// If array length is 0 for first byte array length the we return a empty array.
     pub fn utf8(&mut self) -> Result<String, Error> {
         // TODO: Better Error Handling
         String::from_utf8(Vec::<u8>::decode(self)?).map_err(Error::from)
