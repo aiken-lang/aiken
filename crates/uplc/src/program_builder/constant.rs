@@ -7,6 +7,11 @@ pub trait WithConstant: WithTerm {
         self.next(term)
     }
 
+    fn with_byte_string(self, bytes: Vec<u8>) -> Self::Next {
+        let term = Term::Constant(Constant::ByteString(bytes));
+        self.next(term)
+    }
+
     fn with_bool(self, bool: bool) -> Self::Next {
         let term = Term::Constant(Constant::Bool(bool));
         self.next(term)
@@ -35,6 +40,19 @@ mod tests {
             let actual = Builder::new(11, 22, 33).with_constant_int(int).build_named();
             assert_eq!(expected, actual);
         }
+    }
+
+    #[test]
+    fn build_named__with_bytestring() {
+        let code = r"(program
+                       11.22.33
+                       (con bytestring #01020304)
+                     )";
+        let expected = parser::program(code).unwrap();
+        let actual = Builder::new(11, 22, 33)
+            .with_byte_string(vec![1, 2, 3, 4])
+            .build_named();
+        assert_eq!(expected, actual);
     }
 
     #[test]

@@ -91,6 +91,7 @@ impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
 
 impl Builder {
     #[allow(clippy::new_ret_no_self)]
+    /// Max: `9223372036854775807`
     pub fn new(maj: usize, min: usize, patch: usize) -> NeedsTerm {
         NeedsTerm {
             version: (maj, min, patch),
