@@ -31,7 +31,8 @@ impl Encoder {
 
         Ok(self)
     }
-
+    /// Encode one unsined byte.
+    /// Uses the next 8 bits in the buffer, can be byte aligned or byte unaligned
     pub fn u8(&mut self, x: u8) -> Result<&mut Self, Error> {
         if self.used_bits == 0 {
             self.current_byte = x;
@@ -44,6 +45,7 @@ impl Encoder {
     }
 
     /// Encode a `bool` value.
+    /// Uses the next bit in the buffer to encode this information.
     pub fn bool(&mut self, x: bool) -> &mut Self {
         if x {
             self.one();
@@ -53,7 +55,10 @@ impl Encoder {
 
         self
     }
-
+    /// Encode a byte array.
+    /// Uses filler to byte align the buffer, then writes byte array length up to 255.
+    /// Following that it writes the next 255 bytes from the array.
+    /// After reaching the end of the buffer we write a 0 byte. Only write 0 byte if the byte array is empty.
     pub fn bytes(&mut self, x: &[u8]) -> Result<&mut Self, Error> {
         // use filler to write current buffer so bits used gets reset
         self.filler();
@@ -61,6 +66,10 @@ impl Encoder {
         self.byte_array(x)
     }
 
+    /// Encode a byte array in a byte aligned buffer. Throws exception if any bits for the current buffer byte were used.
+    /// writes byte array length up to 255
+    /// following that it writes the next 255 bytes from the array.
+    /// After reaching the end of the buffer we write a 0 byte. Only write 0 if the byte array is empty.
     pub fn byte_array(&mut self, arr: &[u8]) -> Result<&mut Self, Error> {
         if self.used_bits != 0 {
             return Err(Error::BufferNotByteAligned);
@@ -71,6 +80,10 @@ impl Encoder {
         Ok(self)
     }
 
+    /// Encode a integer of any size.
+    /// First we use zigzag to double the number and encode the negative sign as the least significant bit.
+    /// Next we encode the 7 least significant bits of the unsigned integer. If the number is greater than
+    /// 127 we encode a leading one followed by repeating the above for the next 7 bits and so on.
     pub fn integer(&mut self, i: isize) -> &mut Self {
         let i = zigzag::to_usize(i);
 
@@ -79,6 +92,9 @@ impl Encoder {
         self
     }
 
+    /// Encode a char of 32 bits.
+    /// We encode the 7 least significant bits of the unsigned byte. If the char value is greater than
+    /// 127 we encode a leading one followed by repeating the above for the next 7 bits and so on.
     pub fn char(&mut self, c: char) -> &mut Self {
         self.word(c as usize);
 
@@ -96,11 +112,18 @@ impl Encoder {
 
         self
     }
-
+    /// Encode a string.
+    /// Convert to byte array and then use byte array coding.
+    /// Uses filler to byte align the buffer, then writes byte array length up to 255.
+    /// Following that it writes the next 255 bytes from the array.
+    /// After reaching the end of the buffer we write a 0 byte. Only write 0 byte if the byte array is empty.
     pub fn utf8(&mut self, s: &str) -> Result<&mut Self, Error> {
         self.bytes(s.as_bytes())
     }
 
+    /// Encode a unsigned integer of any size
+    /// We encode the 7 least significant bits of the unsigned byte. If the char value is greater than
+    /// 127 we encode a leading one followed by repeating the above for the next 7 bits and so on.
     pub fn word(&mut self, c: usize) -> &mut Self {
         let mut d = c;
         loop {
@@ -120,6 +143,9 @@ impl Encoder {
         self
     }
 
+    /// Encode a list of bytes with a function
+    /// If there are bytes in a list then write one bit followed by the functions encoding.
+    /// After the last item write a zero bit. If the list is empty only encode a zero bit.
     pub fn encode_list_with(
         &mut self,
         list: Vec<u8>,
@@ -180,6 +206,8 @@ impl Encoder {
         self
     }
 
+    /// A filler amount of end 0s followed by a 1 at the end of a byte.
+    /// Used to byte align the buffer by padding out the rest of the byte.
     pub(crate) fn filler(&mut self) -> &mut Self {
         self.current_byte |= 1;
         self.next_word();
@@ -187,6 +215,8 @@ impl Encoder {
         self
     }
 
+    /// Write a zero bit into the buffer.
+    /// Write out buffer if last used bit in a byte.
     fn zero(&mut self) {
         if self.used_bits == 7 {
             self.next_word();
@@ -195,6 +225,8 @@ impl Encoder {
         }
     }
 
+    /// Write a one bit into the buffer.
+    /// If last used bit in a byte then make last bit one and write out buffer.
     fn one(&mut self) {
         if self.used_bits == 7 {
             self.current_byte |= 1;
@@ -204,7 +236,9 @@ impl Encoder {
             self.used_bits += 1;
         }
     }
-
+    /// Write out byte regardless of current buffer alignment.
+    /// Write most signifcant bits in remaining unused bits for current byte,
+    /// then write out the remaining bits at the beginning of the next byte.
     fn byte_unaligned(&mut self, x: u8) {
         let x_shift = self.current_byte | (x >> self.used_bits);
         self.buffer.push(x_shift);
@@ -212,6 +246,8 @@ impl Encoder {
         self.current_byte = x << (8 - self.used_bits);
     }
 
+    /// Write the current byte out to the buffer and begin next byte to write out.
+    /// Add current byte to the buffer and set current byte and used bits to 0.
     fn next_word(&mut self) {
         self.buffer.push(self.current_byte);
 
@@ -219,6 +255,9 @@ impl Encoder {
         self.used_bits = 0;
     }
 
+    /// Writes byte array length up to 255
+    /// Following that it writes the next 255 bytes from the array.
+    /// After reaching the end of the buffer we write a 0 byte. Only write 0 if the byte array is empty.
     fn write_blk(&mut self, arr: &[u8], src_ptr: &mut usize) {
         let src_len = arr.len() - *src_ptr;
         let blk_len = src_len.min(255);
