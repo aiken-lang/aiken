@@ -1,11 +1,13 @@
 #![cfg_attr(test, allow(non_snake_case))]
 
-use crate::ast::{Constant, Name, Program, Term, Unique};
+use crate::ast::{Name, Program, Term, Unique};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests;
+
+mod constant;
 
 pub struct Builder {
     version: (usize, usize, usize),
@@ -32,11 +34,6 @@ where
 
     fn next(self, term: Term<Name>) -> Self::Next;
     fn get_name(&self, name_str: &str) -> Name;
-
-    fn with_constant_int(self, int: isize) -> Self::Next {
-        let term = Term::Constant(Constant::Integer(int));
-        self.next(term)
-    }
 
     fn with_lambda(self, name_str: &str) -> LambdaBuilder<Self> {
         let parameter_name = self.get_name(name_str);

@@ -1,27 +1,6 @@
 use super::*;
 use crate::parser;
-
-#[test]
-fn build_named__with_const() {
-    let code = r"(program
-                       11.22.33
-                       (con integer 11)
-                     )";
-    let expected = parser::program(code).unwrap();
-    let actual = Builder::new(11, 22, 33).with_constant_int(11).build_named();
-    assert_eq!(expected, actual);
-}
-
-#[test]
-fn build_named__with_different_const() {
-    let code = r"(program
-                       11.22.33
-                       (con integer 22)
-                     )";
-    let expected = parser::program(code).unwrap();
-    let actual = Builder::new(11, 22, 33).with_constant_int(22).build_named();
-    assert_eq!(expected, actual);
-}
+use crate::program_builder::constant::WithConstant;
 
 #[test]
 fn build_named__with_const_different_version() {
