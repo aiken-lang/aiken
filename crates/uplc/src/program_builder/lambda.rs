@@ -48,7 +48,7 @@ mod tests {
                        (lam i_0 (con integer 1))
                      )";
         let expected = parser::program(code).unwrap();
-        let actual = Builder::new(1, 2, 3)
+        let actual = Builder::start(1, 2, 3)
             .with_lambda("i_0")
             .with_constant_int(1)
             .build_named();
@@ -62,7 +62,7 @@ mod tests {
                        (lam i_0 (lam i_1 (con integer 1)))
                      )";
         let expected = parser::program(code).unwrap();
-        let actual = Builder::new(1, 2, 3)
+        let actual = Builder::start(1, 2, 3)
             .with_lambda("i_0")
             .with_lambda("i_1")
             .with_constant_int(1)

@@ -1,7 +1,7 @@
 #![cfg_attr(test, allow(non_snake_case))]
 
 use crate::ast::{Name, Program, Term, Unique};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -18,11 +18,41 @@ pub struct Builder {
     term: Term<Name>,
 }
 
-pub struct NeedsTerm {
+struct Context {
+    next_unique: isize,
+    names: HashMap<String, Unique>,
+}
+
+impl Context {
+    pub fn new() -> Context {
+        Context {
+            next_unique: 0,
+            names: HashMap::new(),
+        }
+    }
+
+    pub fn get_name(&mut self, name_str: &str) -> Name {
+        if let Some(unique) = self.names.get(name_str) {
+            Name {
+                text: name_str.to_string(),
+                unique: *unique,
+            }
+        } else {
+            let next_unique = self.next_unique;
+            self.next_unique = next_unique + 1;
+            let unique = Unique::new(next_unique);
+            self.names.insert(name_str.to_string(), unique);
+            Name {
+                text: name_str.to_string(),
+                unique,
+            }
+        }
+    }
+}
+
+pub struct Core {
     version: (usize, usize, usize),
-    // TODO: Hide these two behind interface
-    next_unique: Cell<isize>,
-    names: RefCell<HashMap<String, Unique>>,
+    ctx: RefCell<Context>,
 }
 
 pub trait WithTerm
@@ -35,7 +65,7 @@ where
     fn get_name(&self, name_str: &str) -> Name;
 }
 
-impl WithTerm for NeedsTerm {
+impl WithTerm for Core {
     type Next = Builder;
     fn next(self, term: Term<Name>) -> Self::Next {
         Builder {
@@ -45,33 +75,17 @@ impl WithTerm for NeedsTerm {
     }
 
     fn get_name(&self, name_str: &str) -> Name {
-        let mut names = self.names.borrow_mut();
-        if let Some(unique) = names.get(name_str) {
-            Name {
-                text: name_str.to_string(),
-                unique: *unique,
-            }
-        } else {
-            let next_unique = self.next_unique.get();
-            self.next_unique.set(next_unique + 1);
-            let unique = Unique::new(next_unique);
-            names.insert(name_str.to_string(), unique);
-            Name {
-                text: name_str.to_string(),
-                unique,
-            }
-        }
+        let mut ctx = self.ctx.borrow_mut();
+        ctx.get_name(name_str)
     }
 }
 
 impl Builder {
-    #[allow(clippy::new_ret_no_self)]
     /// Max: `9223372036854775807`
-    pub fn new(maj: usize, min: usize, patch: usize) -> NeedsTerm {
-        NeedsTerm {
+    pub fn start(maj: usize, min: usize, patch: usize) -> Core {
+        Core {
             version: (maj, min, patch),
-            next_unique: Cell::new(0),
-            names: RefCell::new(HashMap::new()),
+            ctx: RefCell::new(Context::new()),
         }
     }
 

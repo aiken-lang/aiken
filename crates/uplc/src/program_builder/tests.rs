@@ -26,7 +26,7 @@ proptest! {
                            (con integer 11)
                          )", maj, min, patch);
         let expected = parser::program(&code).unwrap();
-        let actual = Builder::new(maj, min, patch).with_constant_int(11).build_named();
+        let actual = Builder::start(maj, min, patch).with_constant_int(11).build_named();
         assert_eq!(expected, actual);
     }
 }
