@@ -8,6 +8,10 @@ use std::collections::HashMap;
 mod tests;
 
 mod constant;
+mod lambda;
+
+pub use constant::*;
+pub use lambda::*;
 
 pub struct Builder {
     version: (usize, usize, usize),
@@ -21,11 +25,6 @@ pub struct NeedsTerm {
     names: RefCell<HashMap<String, Unique>>,
 }
 
-pub struct LambdaBuilder<T> {
-    outer: T,
-    parameter_name: Name,
-}
-
 pub trait WithTerm
 where
     Self: Sized,
@@ -34,14 +33,6 @@ where
 
     fn next(self, term: Term<Name>) -> Self::Next;
     fn get_name(&self, name_str: &str) -> Name;
-
-    fn with_lambda(self, name_str: &str) -> LambdaBuilder<Self> {
-        let parameter_name = self.get_name(name_str);
-        LambdaBuilder {
-            outer: self,
-            parameter_name,
-        }
-    }
 }
 
 impl WithTerm for NeedsTerm {
@@ -70,22 +61,6 @@ impl WithTerm for NeedsTerm {
                 unique,
             }
         }
-    }
-}
-
-impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
-    type Next = T::Next;
-
-    fn next(self, term: Term<Name>) -> Self::Next {
-        let term = Term::Lambda {
-            parameter_name: self.parameter_name,
-            body: Box::new(term),
-        };
-        self.outer.next(term)
-    }
-
-    fn get_name(&self, name_str: &str) -> Name {
-        self.outer.get_name(name_str)
     }
 }
 
