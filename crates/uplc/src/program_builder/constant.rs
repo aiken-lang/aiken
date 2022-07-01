@@ -42,17 +42,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn build_named__with_bytestring() {
-        let code = r"(program
-                       11.22.33
-                       (con bytestring #01020304)
-                     )";
-        let expected = parser::program(code).unwrap();
-        let actual = Builder::start(11, 22, 33)
-            .with_byte_string(vec![1, 2, 3, 4])
-            .build_named();
-        assert_eq!(expected, actual);
+    proptest! {
+        #[test]
+        fn build_named__with_bytestring(
+           bytes: Vec<u8>
+        ) {
+            let bstring = hex::encode(&bytes);
+            let code = format!(r"(program
+                           11.22.33
+                           (con bytestring #{})
+                         )", bstring);
+            let expected = parser::program(&code).unwrap();
+            let actual = Builder::start(11, 22, 33)
+                .with_byte_string(bytes)
+                .build_named();
+            assert_eq!(expected, actual);
+        }
     }
 
     #[test]
