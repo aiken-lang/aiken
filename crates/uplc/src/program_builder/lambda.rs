@@ -50,7 +50,7 @@ mod tests {
         let expected = parser::program(code).unwrap();
         let actual = Builder::start(1, 2, 3)
             .with_lambda("i_0")
-            .with_constant_int(1)
+            .with_int(1)
             .build_named();
         assert_eq!(expected, actual);
     }
@@ -65,7 +65,7 @@ mod tests {
         let actual = Builder::start(1, 2, 3)
             .with_lambda("i_0")
             .with_lambda("i_1")
-            .with_constant_int(1)
+            .with_int(1)
             .build_named();
         assert_eq!(expected, actual);
     }

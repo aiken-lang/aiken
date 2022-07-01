@@ -2,13 +2,18 @@ use crate::ast::{Constant, Term};
 use crate::program_builder::WithTerm;
 
 pub trait WithConstant: WithTerm {
-    fn with_constant_int(self, int: isize) -> Self::Next {
+    fn with_int(self, int: isize) -> Self::Next {
         let term = Term::Constant(Constant::Integer(int));
         self.next(term)
     }
 
     fn with_byte_string(self, bytes: Vec<u8>) -> Self::Next {
         let term = Term::Constant(Constant::ByteString(bytes));
+        self.next(term)
+    }
+
+    fn with_string(self, string: String) -> Self::Next {
+        let term = Term::Constant(Constant::String(string));
         self.next(term)
     }
 
@@ -37,7 +42,7 @@ mod tests {
                            (con integer {})
                          )", int);
             let expected = parser::program(&code).unwrap();
-            let actual = Builder::start(11, 22, 33).with_constant_int(int).build_named();
+            let actual = Builder::start(11, 22, 33).with_int(int).build_named();
             assert_eq!(expected, actual);
         }
     }
@@ -55,6 +60,35 @@ mod tests {
             let expected = parser::program(&code).unwrap();
             let actual = Builder::start(11, 22, 33)
                 .with_byte_string(bytes)
+                .build_named();
+            assert_eq!(expected, actual);
+        }
+    }
+
+    prop_compose! {
+        fn safe_string()(
+            some_string: String
+        ) -> String {
+            some_string.chars().filter(|a| *a != '\"').collect()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn build_named__with_string(
+            some_string in safe_string()
+        ) {
+            // let some_string = "We are such stuff as dreams are made on".to_string();
+            let code = format!(
+                r#"(program
+                               11.22.33
+                               (con string "{}")
+                             )"#,
+                &some_string
+            );
+            let expected = parser::program(&code).unwrap();
+            let actual = Builder::start(11, 22, 33)
+                .with_string(some_string)
                 .build_named();
             assert_eq!(expected, actual);
         }
