@@ -23,6 +23,11 @@ pub trait WithConstant: WithTerm {
     //     self.next(term)
     // }
 
+    fn with_unit(self) -> Self::Next {
+        let term = Term::Constant(Constant::Unit);
+        self.next(term)
+    }
+
     fn with_bool(self, bool: bool) -> Self::Next {
         let term = Term::Constant(Constant::Bool(bool));
         self.next(term)
@@ -129,6 +134,17 @@ mod tests {
     //         assert_eq!(expected, actual);
     //     }
     // }
+
+    #[test]
+    fn build_named__with_unit() {
+        let code = r"(program
+                       11.22.33
+                       (con unit ())
+                     )";
+        let expected = parser::program(code).unwrap();
+        let actual = Builder::start(11, 22, 33).with_unit().build_named();
+        assert_eq!(expected, actual);
+    }
 
     #[test]
     fn build_named__with_true() {
