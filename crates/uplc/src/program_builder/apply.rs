@@ -1,22 +1,22 @@
 use crate::ast::{Name, Term};
 use crate::program_builder::WithTerm;
 
-pub struct ApplyBuilderFirst<T> {
+pub struct ApplyBuilderFunction<T> {
     outer: T,
 }
 
-pub struct ApplyBuilderSecond<T> {
+pub struct ApplyBuilderArgument<T> {
     outer: T,
-    first: Term<Name>,
+    function: Term<Name>,
 }
 
-impl<T: WithTerm> WithTerm for ApplyBuilderFirst<T> {
-    type Next = ApplyBuilderSecond<T>;
+impl<T: WithTerm> WithTerm for ApplyBuilderFunction<T> {
+    type Next = ApplyBuilderArgument<T>;
 
     fn next(self, term: Term<Name>) -> Self::Next {
-        ApplyBuilderSecond {
+        ApplyBuilderArgument {
             outer: self.outer,
-            first: term,
+            function: term,
         }
     }
 
@@ -25,12 +25,12 @@ impl<T: WithTerm> WithTerm for ApplyBuilderFirst<T> {
     }
 }
 
-impl<T: WithTerm> WithTerm for ApplyBuilderSecond<T> {
+impl<T: WithTerm> WithTerm for ApplyBuilderArgument<T> {
     type Next = T::Next;
 
     fn next(self, term: Term<Name>) -> Self::Next {
         let term = Term::Apply {
-            function: Box::new(self.first),
+            function: Box::new(self.function),
             argument: Box::new(term),
         };
         self.outer.next(term)
@@ -42,8 +42,8 @@ impl<T: WithTerm> WithTerm for ApplyBuilderSecond<T> {
 }
 
 pub trait WithApply: WithTerm {
-    fn with_apply(self) -> ApplyBuilderFirst<Self> {
-        ApplyBuilderFirst { outer: self }
+    fn with_apply(self) -> ApplyBuilderFunction<Self> {
+        ApplyBuilderFunction { outer: self }
     }
 }
 
