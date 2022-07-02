@@ -10,11 +10,14 @@ mod tests;
 mod apply;
 mod constant;
 mod delay;
+mod force;
 mod lambda;
 mod var;
 
+pub use apply::*;
 pub use constant::*;
 pub use delay::*;
+pub use force::*;
 pub use lambda::*;
 pub use var::*;
 
