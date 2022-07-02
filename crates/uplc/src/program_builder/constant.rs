@@ -34,6 +34,8 @@ pub trait WithConstant: WithTerm {
     }
 }
 
+// This is a naive blanket impl. If needed, we can control which states of the builder can
+// call this by implementing manually.
 impl<T: WithTerm> WithConstant for T {}
 
 #[cfg(test)]
@@ -112,6 +114,7 @@ mod tests {
     //     }
     // }
 
+    // TODO: After https://github.com/txpipe/aiken/issues/18 is completed
     // proptest! {
     //     #[test]
     //     fn build_named__with_char(

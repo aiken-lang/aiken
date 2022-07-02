@@ -9,9 +9,11 @@ mod tests;
 
 mod constant;
 mod lambda;
+mod var;
 
 pub use constant::*;
 pub use lambda::*;
+pub use var::*;
 
 pub struct Builder {
     version: (usize, usize, usize),

@@ -32,6 +32,8 @@ pub trait WithLambda: WithTerm {
     }
 }
 
+// This is a naive blanket impl. If needed, we can control which states of the builder can
+// call this by implementing manually.
 impl<T: WithTerm> WithLambda for T {}
 
 #[cfg(test)]
