@@ -7,6 +7,7 @@ use std::collections::HashMap;
 #[cfg(test)]
 mod tests;
 
+mod apply;
 mod constant;
 mod delay;
 mod lambda;
