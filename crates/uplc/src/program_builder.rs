@@ -8,6 +8,7 @@ use std::collections::HashMap;
 mod tests;
 
 mod apply;
+mod builtin;
 mod constant;
 mod delay;
 mod error;
@@ -16,6 +17,7 @@ mod lambda;
 mod var;
 
 pub use apply::*;
+pub use builtin::*;
 pub use constant::*;
 pub use delay::*;
 pub use error::*;
