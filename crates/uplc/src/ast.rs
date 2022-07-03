@@ -14,6 +14,32 @@ pub struct Program<T> {
     pub term: Term<T>,
 }
 
+impl<T> Program<T>
+where
+    T: Clone,
+{
+    /// We use this to apply the validator to Datum,
+    /// then redeemer, then ScriptContext. If datum is
+    /// even necessary (i.e. minting policy).
+    ///
+    /// ```rust
+    /// program.apply(&datum)
+    ///    .apply(&redeemer)
+    ///    .apply(&script_context);
+    /// ```
+    pub fn apply(&self, program: &Self) -> Self {
+        let applied_term = Term::Apply {
+            function: Box::new(self.term.clone()),
+            argument: Box::new(program.term.clone()),
+        };
+
+        Program {
+            version: self.version,
+            term: applied_term,
+        }
+    }
+}
+
 /// This represents a term in Untyped Plutus Core.
 /// We need a generic type for the different forms that a program may be in.
 /// Specifically, `Var` and `parameter_name` in `Lambda` can be a `Name`,
@@ -372,16 +398,5 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
         let mut converter = Converter::new();
 
         converter.fake_named_debruijn_to_named_debruijn(value)
-    }
-}
-
-pub fn apply_program<T>(p1: Program<T>, p2: Program<T>) -> Program<T> {
-    let applied_term = Term::Apply {
-        function: Box::new(p1.term),
-        argument: Box::new(p2.term),
-    };
-    Program {
-        version: p1.version,
-        term: applied_term,
     }
 }

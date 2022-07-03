@@ -16,6 +16,7 @@ enum StepKind {
     BForce = 5,
     BBuiltin = 6,
 }
+
 impl TryFrom<u8> for StepKind {
     type Error = de::Error;
 
@@ -41,6 +42,7 @@ enum ExBudgetCategory {
     BBuiltinApp(DefaultFunction),
     BStartup,
 }
+
 /// Can be negative
 #[derive(Debug, Clone, PartialEq)]
 struct ExBudget {
@@ -144,29 +146,5 @@ fn spend_accumulated_budget_cek(unbudgeted_steps: &mut Vec<u32>, current_budget:
             ExBudgetCategory::BStep(step),
             get_cost_by_step(step) * unbudgeted_steps[i] as i32,
         );
-    }
-}
-
-fn spend_budget_cek(
-    current_budget: &mut ExBudget,
-    category: ExBudgetCategory,
-    spend_budget: ExBudget,
-) {
-    current_budget.mem -= spend_budget.mem;
-    current_budget.cpu -= spend_budget.cpu;
-    if current_budget.mem < 0 || current_budget.cpu < 0 {
-        panic!("Budget exhausted {:?}", current_budget);
-    }
-}
-
-fn get_cost_by_step(step: StepKind) -> ExBudget {
-    match (step) {
-        StepKind::BConst => ExBudget { mem: 100, cpu: 100 },
-        StepKind::BVar => ExBudget { mem: 100, cpu: 100 },
-        StepKind::BLamAbs => ExBudget { mem: 100, cpu: 100 },
-        StepKind::BApply => ExBudget { mem: 100, cpu: 100 },
-        StepKind::BDelay => ExBudget { mem: 100, cpu: 100 },
-        StepKind::BForce => ExBudget { mem: 100, cpu: 100 },
-        StepKind::BBuiltin => ExBudget { mem: 100, cpu: 100 },
     }
 }
