@@ -3,6 +3,7 @@ pub mod builtins;
 mod debruijn;
 mod flat;
 pub mod interpreter;
+pub mod machine;
 pub mod parser;
 mod pretty;
 pub mod program_builder;
