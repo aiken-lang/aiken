@@ -374,3 +374,14 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
         converter.fake_named_debruijn_to_named_debruijn(value)
     }
 }
+
+pub fn apply_program<T>(p1: Program<T>, p2: Program<T>) -> Program<T> {
+    let applied_term = Term::Apply {
+        function: Box::new(p1.term),
+        argument: Box::new(p2.term),
+    };
+    Program {
+        version: p1.version,
+        term: applied_term,
+    }
+}
