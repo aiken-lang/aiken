@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, DeBruijn, Term},
+    ast::{Constant, NamedDeBruijn, Term},
     builtins::DefaultFunction,
 };
 
@@ -13,6 +13,7 @@ pub struct Machine {
     frames: Vec<Context>,
     slippage: u32,
     env: Vec<Value>,
+    unbudgeted_steps: Vec<u32>,
 }
 
 impl Machine {
@@ -23,23 +24,172 @@ impl Machine {
             slippage,
             frames: vec![],
             env: vec![],
+            unbudgeted_steps: vec![0; 8],
         }
     }
 
     pub fn run(
         &mut self,
-        term: &Term<DeBruijn>,
-    ) -> Result<(Term<DeBruijn>, usize, Vec<String>), Error> {
+        term: &Term<NamedDeBruijn>,
+    ) -> Result<(Term<NamedDeBruijn>, usize, Vec<String>), Error> {
         let startup_budget = self.costs.get(StepKind::StartUp);
 
         self.spend_budget(startup_budget)?;
 
         self.push_frame(Context::NoFrame);
 
-        self.enter_compute(term)
+        self.enter_compute(term)?;
+        todo!()
     }
 
-    fn enter_compute(&mut self, term: &Term<DeBruijn>) {}
+    fn enter_compute(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
+        match term {
+            Term::Var(name) => {
+                self.unbudgeted_steps[1] += 1;
+                self.unbudgeted_steps[7] += 1;
+                if self.unbudgeted_steps[7] >= self.slippage {
+                    self.spend_unbudgeted_steps()?;
+                }
+                let val = self.lookup_var(name.clone())?;
+                self.return_compute(val)
+            }
+            Term::Delay(body) => {
+                self.unbudgeted_steps[4] += 1;
+                self.unbudgeted_steps[7] += 1;
+                if self.unbudgeted_steps[7] >= self.slippage {
+                    self.spend_unbudgeted_steps()?;
+                }
+                self.return_compute(Value::Delay(*body.clone()))
+            }
+            Term::Lambda {
+                parameter_name,
+                body,
+            } => {
+                self.unbudgeted_steps[2] += 1;
+                self.unbudgeted_steps[7] += 1;
+                if self.unbudgeted_steps[7] >= self.slippage {
+                    self.spend_unbudgeted_steps()?;
+                }
+                self.return_compute(Value::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: *body.clone(),
+                })
+            }
+            Term::Apply { function, argument } => {
+                self.unbudgeted_steps[3] += 1;
+                self.unbudgeted_steps[7] += 1;
+                if self.unbudgeted_steps[7] >= self.slippage {
+                    self.spend_unbudgeted_steps()?;
+                }
+                self.push_frame(Context::FrameApplyArg(*argument.clone()));
+                self.enter_compute(function)
+            }
+            Term::Constant(x) => {
+                self.unbudgeted_steps[0] += 1;
+                self.unbudgeted_steps[7] += 1;
+                if self.unbudgeted_steps[7] >= self.slippage {
+                    self.spend_unbudgeted_steps()?;
+                }
+                self.return_compute(Value::Con(x.clone()))
+            }
+            Term::Force(body) => {
+                self.unbudgeted_steps[5] += 1;
+                self.unbudgeted_steps[7] += 1;
+                if self.unbudgeted_steps[7] >= self.slippage {
+                    self.spend_unbudgeted_steps()?;
+                }
+                self.push_frame(Context::FrameForce);
+                self.enter_compute(body)
+            }
+            Term::Error => Err(Error::EvaluationFailure),
+            Term::Builtin(_) => todo!(),
+        }
+    }
+
+    fn return_compute(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
+        let frame = self.frames.last().cloned().unwrap();
+        match frame {
+            Context::FrameApplyFun(function) => {
+                self.pop_frame();
+                self.apply_evaluate(function, value)
+            }
+            Context::FrameApplyArg(arg) => {
+                self.pop_frame();
+                self.push_frame(Context::FrameApplyFun(value));
+                self.enter_compute(&arg)
+            }
+            Context::FrameForce => {
+                self.pop_frame();
+                self.force_evaluate(value)
+            }
+            Context::NoFrame => {
+                if self.unbudgeted_steps[7] > 0 {
+                    self.spend_unbudgeted_steps()?;
+                }
+
+                let term = self.discharge_value(value);
+                Ok(term)
+            }
+        }
+    }
+
+    fn discharge_value(&mut self, value: Value) -> Term<NamedDeBruijn> {
+        match value {
+            Value::Con(x) => Term::Constant(x),
+            Value::Builtin(_, t) => t,
+            Value::Delay(_) => todo!(),
+            Value::Lambda {
+                parameter_name,
+                body,
+            } => self.discharge_value_env(Term::Lambda {
+                parameter_name: NamedDeBruijn {
+                    text: parameter_name.text,
+                    index: 0.into(),
+                },
+                body: Box::new(body),
+            }),
+        }
+    }
+
+    fn discharge_value_env(&mut self, term: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
+        fn rec(i: u32, t: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
+            match t {
+                Term::Var(x) => todo!(),
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => Term::Lambda {
+                    parameter_name,
+                    body: Box::new(rec(i + 1, *body)),
+                },
+                Term::Apply { function, argument } => Term::Apply {
+                    function: Box::new(rec(i, *function)),
+                    argument: Box::new(rec(i, *argument)),
+                },
+
+                Term::Delay(x) => Term::Delay(Box::new(rec(i, *x))),
+                Term::Force(x) => Term::Force(Box::new(rec(i, *x))),
+                rest => rest,
+            }
+        }
+        rec(0, term)
+    }
+
+    fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
+        match value {
+            Value::Delay(body) => self.enter_compute(&body),
+            Value::Builtin(_, _) => todo!(),
+            rest => Err(Error::NonPolymorphicInstantiation(rest)),
+        }
+    }
+
+    fn apply_evaluate(
+        &mut self,
+        function: Value,
+        argument: Value,
+    ) -> Result<Term<NamedDeBruijn>, Error> {
+        todo!()
+    }
 
     fn spend_budget(&mut self, spend_budget: ExBudget) -> Result<(), Error> {
         self.ex_budget.mem -= spend_budget.mem;
@@ -55,30 +205,56 @@ impl Machine {
     fn push_frame(&mut self, frame: Context) {
         self.frames.push(frame);
     }
+
+    fn pop_frame(&mut self) {
+        self.frames.pop();
+    }
+
+    fn lookup_var(&mut self, name: NamedDeBruijn) -> Result<Value, Error> {
+        self.env
+            .get::<usize>(name.index.into())
+            .cloned()
+            .ok_or(Error::OpenTermEvaluated(Term::Var(name)))
+    }
+
+    fn spend_unbudgeted_steps(&mut self) -> Result<(), Error> {
+        for i in 0..self.unbudgeted_steps.len() - 1 {
+            let mut unspent_step_budget = self.costs.get(StepKind::try_from(i as u8)?);
+            unspent_step_budget.occurence(self.unbudgeted_steps[i] as i32);
+            self.spend_budget(unspent_step_budget)?;
+        }
+        self.unbudgeted_steps = vec![0; 8];
+        Ok(())
+    }
 }
 
+#[derive(Clone)]
 enum Context {
-    FrameApplyFun(Term<DeBruijn>, Term<DeBruijn>),
-    FrameApplyArg(Vec<Value>, Term<DeBruijn>, Box<Context>),
-    FrameForce(Box<Context>),
+    FrameApplyFun(Value),
+    FrameApplyArg(Term<NamedDeBruijn>),
+    FrameForce,
     NoFrame,
 }
 
-enum Value {
+#[derive(Clone, Debug)]
+pub enum Value {
     Con(Constant),
-    Delay(Term<DeBruijn>, Vec<Value>),
-    Lambda(DeBruijn, Term<DeBruijn>, Vec<Value>),
+    Delay(Term<NamedDeBruijn>),
+    Lambda {
+        parameter_name: NamedDeBruijn,
+        body: Term<NamedDeBruijn>,
+    },
     Builtin(
         DefaultFunction,
-        Term<DeBruijn>,
+        Term<NamedDeBruijn>,
         // Need to figure out run time stuff
         // BuiltinRuntime (CekValue uni fun)
     ),
 }
 
 /// Can be negative
-#[derive(Debug, Clone, PartialEq)]
-struct ExBudget {
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct ExBudget {
     mem: i32,
     cpu: i32,
 }
@@ -90,7 +266,7 @@ impl ExBudget {
     }
 }
 
-enum StepKind {
+pub enum StepKind {
     Constant,
     Var,
     Lambda,
@@ -101,9 +277,26 @@ enum StepKind {
     StartUp,
 }
 
+impl TryFrom<u8> for StepKind {
+    type Error = error::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(StepKind::Constant),
+            1 => Ok(StepKind::Var),
+            2 => Ok(StepKind::Lambda),
+            3 => Ok(StepKind::Apply),
+            4 => Ok(StepKind::Delay),
+            5 => Ok(StepKind::Force),
+            6 => Ok(StepKind::Builtin),
+            v => Err(error::Error::InvalidStepKind(v)),
+        }
+    }
+}
+
 /// There's no entry for Error since we'll be exiting anyway; also, what would
 /// happen if calling 'Error' caused the budget to be exceeded?
-struct Costs {
+pub struct Costs {
     startup: ExBudget,
     var: ExBudget,
     constant: ExBudget,
