@@ -178,10 +178,19 @@ impl Machine {
 
     fn apply_evaluate(
         &mut self,
-        _function: Value,
-        _argument: Value,
+        function: Value,
+        argument: Value,
     ) -> Result<Term<NamedDeBruijn>, Error> {
-        todo!()
+        match function {
+            Value::Lambda { body, .. } => {
+                self.env.push(argument);
+                let term = self.compute(&body)?;
+                self.env.pop();
+                Ok(term)
+            }
+            Value::Builtin(_, _) => todo!(),
+            rest => Err(Error::NonFunctionalApplication(rest)),
+        }
     }
 
     fn push_frame(&mut self, frame: Context) {
@@ -262,7 +271,7 @@ pub enum Value {
 }
 
 /// Can be negative
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, Default)]
 pub struct ExBudget {
     mem: i32,
     cpu: i32,
@@ -307,6 +316,7 @@ impl TryFrom<u8> for StepKind {
 
 /// There's no entry for Error since we'll be exiting anyway; also, what would
 /// happen if calling 'Error' caused the budget to be exceeded?
+#[derive(Default)]
 pub struct Costs {
     startup: ExBudget,
     var: ExBudget,

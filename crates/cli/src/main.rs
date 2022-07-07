@@ -1,7 +1,7 @@
 use std::fs;
 
 use uplc::{
-    ast::{DeBruijn, Name, Program},
+    ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     parser,
 };
 
@@ -76,6 +76,27 @@ fn main() -> anyhow::Result<()> {
 
                     fs::write(&out_name, pretty)?;
                 }
+            }
+            UplcCommand::Eval { input, flat } => {
+                let program = if flat {
+                    let bytes = std::fs::read(&input)?;
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
+
+                    prog.into()
+                } else {
+                    let code = std::fs::read_to_string(&input)?;
+
+                    let prog = parser::program(&code)?;
+
+                    Program::<NamedDeBruijn>::try_from(prog)?
+                };
+
+                let term = program.eval()?;
+
+                let term: Term<Name> = term.try_into()?;
+
+                println!("{}", term.to_pretty());
             }
         },
     }

@@ -3,6 +3,7 @@ use std::fmt::Display;
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
+    machine::{Costs, ExBudget, Machine},
 };
 
 /// This represents a program in Untyped Plutus Core.
@@ -398,5 +399,14 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
         let mut converter = Converter::new();
 
         converter.fake_named_debruijn_to_named_debruijn(value)
+    }
+}
+
+impl Program<NamedDeBruijn> {
+    pub fn eval(&self) -> Result<Term<NamedDeBruijn>, crate::machine::Error> {
+        let mut machine = Machine::new(Costs::default(), ExBudget::default(), 200);
+
+        let (term, _, _) = machine.run(&self.term)?;
+        Ok(term)
     }
 }

@@ -33,6 +33,13 @@ pub enum UplcCommand {
     },
     /// Format an Untyped Plutus Core program
     Fmt { input: PathBuf },
+
+    /// Evaluate an Untyped Plutus Core program
+    Eval {
+        input: PathBuf,
+        #[clap(short, long)]
+        flat: bool,
+    },
 }
 
 impl Default for Args {
