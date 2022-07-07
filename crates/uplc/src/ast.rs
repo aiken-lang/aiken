@@ -407,6 +407,7 @@ impl Program<NamedDeBruijn> {
         let mut machine = Machine::new(Costs::default(), ExBudget::default(), 200);
 
         let (term, _, _) = machine.run(&self.term)?;
+
         Ok(term)
     }
 }

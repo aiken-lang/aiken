@@ -13,7 +13,7 @@ pub struct Machine {
     frames: Vec<Context>,
     slippage: u32,
     env: Vec<Value>,
-    unbudgeted_steps: Vec<u32>,
+    unbudgeted_steps: [u32; 8],
 }
 
 impl Machine {
@@ -24,7 +24,7 @@ impl Machine {
             slippage,
             frames: vec![Context::NoFrame],
             env: vec![],
-            unbudgeted_steps: vec![0; 8],
+            unbudgeted_steps: [0; 8],
         }
     }
 
@@ -91,7 +91,7 @@ impl Machine {
     }
 
     fn return_compute(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
-        // TODO: avoid unwrap and possible just return an err when None
+        // TODO: avoid unwrap if possible and just return an err when None
         // but honestly it should never be empty anyways because Machine
         // is initialized with `Context::NoFrame`.
         let frame = self.frames.last().cloned().unwrap();
@@ -237,9 +237,9 @@ impl Machine {
             unspent_step_budget.occurences(self.unbudgeted_steps[i] as i32);
 
             self.spend_budget(unspent_step_budget)?;
+            
+            self.unbudgeted_steps[i] = 0;
         }
-
-        self.unbudgeted_steps = vec![0; 8];
 
         Ok(())
     }
