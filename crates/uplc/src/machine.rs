@@ -130,7 +130,7 @@ impl Machine {
         match value {
             Value::Con(x) => Term::Constant(x),
             Value::Builtin(_, t) => t,
-            Value::Delay(_) => todo!(),
+            Value::Delay(body) => self.discharge_value_env(Term::Delay(Box::new(body))),
             Value::Lambda {
                 parameter_name,
                 body,
@@ -145,27 +145,37 @@ impl Machine {
     }
 
     fn discharge_value_env(&mut self, term: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
-        fn rec(i: u32, t: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
+        fn rec(lam_cnt: usize, t: Term<NamedDeBruijn>, this: &mut Machine) -> Term<NamedDeBruijn> {
             match t {
-                Term::Var(_x) => todo!(),
+                Term::Var(name) => {
+                    let index: usize = name.index.into();
+                    if lam_cnt >= index {
+                        Term::Var(name)
+                    } else {
+                        this.env
+                            .get::<usize>(index - lam_cnt)
+                            .cloned()
+                            .map_or(Term::Var(name), |v| this.discharge_value(v))
+                    }
+                }
                 Term::Lambda {
                     parameter_name,
                     body,
                 } => Term::Lambda {
                     parameter_name,
-                    body: Box::new(rec(i + 1, *body)),
+                    body: Box::new(rec(lam_cnt + 1, *body, this)),
                 },
                 Term::Apply { function, argument } => Term::Apply {
-                    function: Box::new(rec(i, *function)),
-                    argument: Box::new(rec(i, *argument)),
+                    function: Box::new(rec(lam_cnt, *function, this)),
+                    argument: Box::new(rec(lam_cnt, *argument, this)),
                 },
 
-                Term::Delay(x) => Term::Delay(Box::new(rec(i, *x))),
-                Term::Force(x) => Term::Force(Box::new(rec(i, *x))),
+                Term::Delay(x) => Term::Delay(Box::new(rec(lam_cnt, *x, this))),
+                Term::Force(x) => Term::Force(Box::new(rec(lam_cnt, *x, this))),
                 rest => rest,
             }
         }
-        rec(0, term)
+        rec(0, term, self)
     }
 
     fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
