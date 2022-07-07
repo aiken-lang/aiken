@@ -22,7 +22,7 @@ impl Machine {
             costs,
             ex_budget: initial_budget,
             slippage,
-            frames: vec![],
+            frames: vec![Context::NoFrame],
             env: vec![],
             unbudgeted_steps: vec![0; 8],
         }
@@ -36,70 +36,54 @@ impl Machine {
 
         self.spend_budget(startup_budget)?;
 
-        self.push_frame(Context::NoFrame);
+        let res = self.compute(term)?;
 
-        self.enter_compute(term)?;
-        todo!()
+        Ok((res, 0, vec![]))
     }
 
-    fn enter_compute(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
+    fn compute(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
         match term {
             Term::Var(name) => {
-                self.unbudgeted_steps[1] += 1;
-                self.unbudgeted_steps[7] += 1;
-                if self.unbudgeted_steps[7] >= self.slippage {
-                    self.spend_unbudgeted_steps()?;
-                }
+                self.step_and_maybe_spend(StepKind::Var)?;
+
                 let val = self.lookup_var(name.clone())?;
+
                 self.return_compute(val)
             }
             Term::Delay(body) => {
-                self.unbudgeted_steps[4] += 1;
-                self.unbudgeted_steps[7] += 1;
-                if self.unbudgeted_steps[7] >= self.slippage {
-                    self.spend_unbudgeted_steps()?;
-                }
+                self.step_and_maybe_spend(StepKind::Delay)?;
+
                 self.return_compute(Value::Delay(*body.clone()))
             }
             Term::Lambda {
                 parameter_name,
                 body,
             } => {
-                self.unbudgeted_steps[2] += 1;
-                self.unbudgeted_steps[7] += 1;
-                if self.unbudgeted_steps[7] >= self.slippage {
-                    self.spend_unbudgeted_steps()?;
-                }
+                self.step_and_maybe_spend(StepKind::Lambda)?;
+
                 self.return_compute(Value::Lambda {
                     parameter_name: parameter_name.clone(),
                     body: *body.clone(),
                 })
             }
             Term::Apply { function, argument } => {
-                self.unbudgeted_steps[3] += 1;
-                self.unbudgeted_steps[7] += 1;
-                if self.unbudgeted_steps[7] >= self.slippage {
-                    self.spend_unbudgeted_steps()?;
-                }
+                self.step_and_maybe_spend(StepKind::Apply)?;
+
                 self.push_frame(Context::FrameApplyArg(*argument.clone()));
-                self.enter_compute(function)
+
+                self.compute(function)
             }
             Term::Constant(x) => {
-                self.unbudgeted_steps[0] += 1;
-                self.unbudgeted_steps[7] += 1;
-                if self.unbudgeted_steps[7] >= self.slippage {
-                    self.spend_unbudgeted_steps()?;
-                }
+                self.step_and_maybe_spend(StepKind::Constant)?;
+
                 self.return_compute(Value::Con(x.clone()))
             }
             Term::Force(body) => {
-                self.unbudgeted_steps[5] += 1;
-                self.unbudgeted_steps[7] += 1;
-                if self.unbudgeted_steps[7] >= self.slippage {
-                    self.spend_unbudgeted_steps()?;
-                }
+                self.step_and_maybe_spend(StepKind::Force)?;
+
                 self.push_frame(Context::FrameForce);
-                self.enter_compute(body)
+
+                self.compute(body)
             }
             Term::Error => Err(Error::EvaluationFailure),
             Term::Builtin(_) => todo!(),
@@ -107,19 +91,27 @@ impl Machine {
     }
 
     fn return_compute(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
+        // TODO: avoid unwrap and possible just return an err when None
+        // but honestly it should never be empty anyways because Machine
+        // is initialized with `Context::NoFrame`.
         let frame = self.frames.last().cloned().unwrap();
+
         match frame {
             Context::FrameApplyFun(function) => {
                 self.pop_frame();
+
                 self.apply_evaluate(function, value)
             }
             Context::FrameApplyArg(arg) => {
                 self.pop_frame();
+
                 self.push_frame(Context::FrameApplyFun(value));
-                self.enter_compute(&arg)
+
+                self.compute(&arg)
             }
             Context::FrameForce => {
                 self.pop_frame();
+
                 self.force_evaluate(value)
             }
             Context::NoFrame => {
@@ -128,6 +120,7 @@ impl Machine {
                 }
 
                 let term = self.discharge_value(value);
+
                 Ok(term)
             }
         }
@@ -154,7 +147,7 @@ impl Machine {
     fn discharge_value_env(&mut self, term: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
         fn rec(i: u32, t: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
             match t {
-                Term::Var(x) => todo!(),
+                Term::Var(_x) => todo!(),
                 Term::Lambda {
                     parameter_name,
                     body,
@@ -177,7 +170,7 @@ impl Machine {
 
     fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
         match value {
-            Value::Delay(body) => self.enter_compute(&body),
+            Value::Delay(body) => self.compute(&body),
             Value::Builtin(_, _) => todo!(),
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
         }
@@ -185,21 +178,10 @@ impl Machine {
 
     fn apply_evaluate(
         &mut self,
-        function: Value,
-        argument: Value,
+        _function: Value,
+        _argument: Value,
     ) -> Result<Term<NamedDeBruijn>, Error> {
         todo!()
-    }
-
-    fn spend_budget(&mut self, spend_budget: ExBudget) -> Result<(), Error> {
-        self.ex_budget.mem -= spend_budget.mem;
-        self.ex_budget.cpu -= spend_budget.cpu;
-
-        if self.ex_budget.mem < 0 || self.ex_budget.cpu < 0 {
-            Err(Error::OutOfExError(self.ex_budget))
-        } else {
-            Ok(())
-        }
     }
 
     fn push_frame(&mut self, frame: Context) {
@@ -217,14 +199,41 @@ impl Machine {
             .ok_or(Error::OpenTermEvaluated(Term::Var(name)))
     }
 
+    fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
+        let index = step as u8;
+        self.unbudgeted_steps[index as usize] += 1;
+        self.unbudgeted_steps[7] += 1;
+
+        if self.unbudgeted_steps[7] >= self.slippage {
+            self.spend_unbudgeted_steps()?;
+        }
+
+        Ok(())
+    }
+
     fn spend_unbudgeted_steps(&mut self) -> Result<(), Error> {
         for i in 0..self.unbudgeted_steps.len() - 1 {
             let mut unspent_step_budget = self.costs.get(StepKind::try_from(i as u8)?);
-            unspent_step_budget.occurence(self.unbudgeted_steps[i] as i32);
+
+            unspent_step_budget.occurences(self.unbudgeted_steps[i] as i32);
+
             self.spend_budget(unspent_step_budget)?;
         }
+
         self.unbudgeted_steps = vec![0; 8];
+
         Ok(())
+    }
+
+    fn spend_budget(&mut self, spend_budget: ExBudget) -> Result<(), Error> {
+        self.ex_budget.mem -= spend_budget.mem;
+        self.ex_budget.cpu -= spend_budget.cpu;
+
+        if self.ex_budget.mem < 0 || self.ex_budget.cpu < 0 {
+            Err(Error::OutOfExError(self.ex_budget))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -260,21 +269,23 @@ pub struct ExBudget {
 }
 
 impl ExBudget {
-    pub fn occurence(&mut self, n: i32) {
+    pub fn occurences(&mut self, n: i32) {
         self.mem *= n;
         self.cpu *= n;
     }
 }
 
+#[repr(u8)]
 pub enum StepKind {
-    Constant,
-    Var,
-    Lambda,
-    Apply,
-    Delay,
-    Force,
-    Builtin,
-    StartUp,
+    Constant = 0,
+    Var = 1,
+    Lambda = 2,
+    Apply = 3,
+    Delay = 4,
+    Force = 5,
+    Builtin = 6,
+    // DO NOT USE THIS IN `step_and_maybe_spend`
+    StartUp = 7,
 }
 
 impl TryFrom<u8> for StepKind {
