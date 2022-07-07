@@ -16,4 +16,6 @@ pub enum Error {
     EvaluationFailure,
     #[error("Attempted to instantiate a non-polymorphic term: {0:#?}")]
     NonPolymorphicInstantiation(Value),
+    #[error("Attempted to apply a non-function: {0:#?}")]
+    NonFunctionalApplication(Value),
 }
