@@ -3,7 +3,10 @@ use std::fmt::Display;
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
-    machine::{Costs, ExBudget, Machine},
+    machine::{
+        cost_model::{ExBudget, MachineCosts},
+        Machine,
+    },
 };
 
 /// This represents a program in Untyped Plutus Core.
@@ -404,7 +407,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 
 impl Program<NamedDeBruijn> {
     pub fn eval(&self) -> Result<Term<NamedDeBruijn>, crate::machine::Error> {
-        let mut machine = Machine::new(Costs::default(), ExBudget::default(), 200);
+        let mut machine = Machine::new(MachineCosts::default(), ExBudget::default(), 200);
 
         let (term, _, _) = machine.run(&self.term)?;
 

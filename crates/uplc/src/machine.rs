@@ -3,12 +3,14 @@ use crate::{
     builtins::DefaultFunction,
 };
 
+pub mod cost_model;
 mod error;
 
+use cost_model::{ExBudget, MachineCosts, StepKind};
 pub use error::Error;
 
 pub struct Machine {
-    costs: Costs,
+    costs: MachineCosts,
     ex_budget: ExBudget,
     frames: Vec<Context>,
     slippage: u32,
@@ -17,7 +19,7 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(costs: Costs, initial_budget: ExBudget, slippage: u32) -> Machine {
+    pub fn new(costs: MachineCosts, initial_budget: ExBudget, slippage: u32) -> Machine {
         Machine {
             costs,
             ex_budget: initial_budget,
@@ -86,7 +88,10 @@ impl Machine {
                 self.compute(body)
             }
             Term::Error => Err(Error::EvaluationFailure),
-            Term::Builtin(_) => todo!(),
+            Term::Builtin(_bn) => {
+                self.step_and_maybe_spend(StepKind::Builtin)?;
+                todo!()
+            }
         }
     }
 
@@ -237,9 +242,11 @@ impl Machine {
             unspent_step_budget.occurences(self.unbudgeted_steps[i] as i32);
 
             self.spend_budget(unspent_step_budget)?;
-            
+
             self.unbudgeted_steps[i] = 0;
         }
+
+        self.unbudgeted_steps[7] = 0;
 
         Ok(())
     }
@@ -278,79 +285,4 @@ pub enum Value {
         // Need to figure out run time stuff
         // BuiltinRuntime (CekValue uni fun)
     ),
-}
-
-/// Can be negative
-#[derive(Debug, Clone, PartialEq, Copy, Default)]
-pub struct ExBudget {
-    mem: i32,
-    cpu: i32,
-}
-
-impl ExBudget {
-    pub fn occurences(&mut self, n: i32) {
-        self.mem *= n;
-        self.cpu *= n;
-    }
-}
-
-#[repr(u8)]
-pub enum StepKind {
-    Constant = 0,
-    Var = 1,
-    Lambda = 2,
-    Apply = 3,
-    Delay = 4,
-    Force = 5,
-    Builtin = 6,
-    // DO NOT USE THIS IN `step_and_maybe_spend`
-    StartUp = 7,
-}
-
-impl TryFrom<u8> for StepKind {
-    type Error = error::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(StepKind::Constant),
-            1 => Ok(StepKind::Var),
-            2 => Ok(StepKind::Lambda),
-            3 => Ok(StepKind::Apply),
-            4 => Ok(StepKind::Delay),
-            5 => Ok(StepKind::Force),
-            6 => Ok(StepKind::Builtin),
-            v => Err(error::Error::InvalidStepKind(v)),
-        }
-    }
-}
-
-/// There's no entry for Error since we'll be exiting anyway; also, what would
-/// happen if calling 'Error' caused the budget to be exceeded?
-#[derive(Default)]
-pub struct Costs {
-    startup: ExBudget,
-    var: ExBudget,
-    constant: ExBudget,
-    lambda: ExBudget,
-    delay: ExBudget,
-    force: ExBudget,
-    apply: ExBudget,
-    /// Just the cost of evaluating a Builtin node, not the builtin itself.
-    builtin: ExBudget,
-}
-
-impl Costs {
-    /// Get the cost of a step
-    pub fn get(&self, step: StepKind) -> ExBudget {
-        match step {
-            StepKind::Constant => self.constant,
-            StepKind::Var => self.var,
-            StepKind::Lambda => self.lambda,
-            StepKind::Apply => self.apply,
-            StepKind::Delay => self.delay,
-            StepKind::Force => self.force,
-            StepKind::Builtin => self.builtin,
-            StepKind::StartUp => self.startup,
-        }
-    }
 }
