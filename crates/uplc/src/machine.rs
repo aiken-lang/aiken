@@ -5,6 +5,7 @@ use crate::{
 
 pub mod cost_model;
 mod error;
+mod runtime;
 
 use cost_model::{ExBudget, MachineCosts, StepKind};
 pub use error::Error;
