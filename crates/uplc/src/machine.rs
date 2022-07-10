@@ -10,6 +10,8 @@ mod runtime;
 use cost_model::{ExBudget, MachineCosts, StepKind};
 pub use error::Error;
 
+use self::runtime::BuiltinRuntime;
+
 pub struct Machine {
     costs: MachineCosts,
     ex_budget: ExBudget,
@@ -89,9 +91,16 @@ impl Machine {
                 self.compute(body)
             }
             Term::Error => Err(Error::EvaluationFailure),
-            Term::Builtin(_bn) => {
+            Term::Builtin(fun) => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
-                todo!()
+
+                let runtime: BuiltinRuntime = (*fun).into();
+
+                self.return_compute(Value::Builtin {
+                    fun: *fun,
+                    term: term.clone(),
+                    runtime,
+                })
             }
         }
     }
@@ -135,7 +144,7 @@ impl Machine {
     fn discharge_value(&mut self, value: Value) -> Term<NamedDeBruijn> {
         match value {
             Value::Con(x) => Term::Constant(x),
-            Value::Builtin(_, t) => t,
+            Value::Builtin { term, .. } => term,
             Value::Delay(body) => self.discharge_value_env(Term::Delay(Box::new(body))),
             Value::Lambda {
                 parameter_name,
@@ -187,7 +196,7 @@ impl Machine {
     fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
         match value {
             Value::Delay(body) => self.compute(&body),
-            Value::Builtin(_, _) => todo!(),
+            Value::Builtin { .. } => todo!(),
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
         }
     }
@@ -204,8 +213,42 @@ impl Machine {
                 self.env.pop();
                 Ok(term)
             }
-            Value::Builtin(_, _) => todo!(),
+            Value::Builtin {
+                fun,
+                term,
+                mut runtime,
+            } => {
+                let arg_term = self.discharge_value(argument.clone());
+
+                let t = Term::<NamedDeBruijn>::Apply {
+                    function: Box::new(term),
+                    argument: Box::new(arg_term),
+                };
+
+                if runtime.is_arrow() {
+                    runtime.push(argument)?;
+                }
+
+                let res = self.eval_builtin_app(fun, t, runtime)?;
+
+                self.return_compute(res)
+            }
             rest => Err(Error::NonFunctionalApplication(rest)),
+        }
+    }
+
+    fn eval_builtin_app(
+        &mut self,
+        fun: DefaultFunction,
+        term: Term<NamedDeBruijn>,
+        runtime: BuiltinRuntime,
+    ) -> Result<Value, Error> {
+        if runtime.is_ready() {
+            self.spend_budget(ExBudget::default())?;
+
+            runtime.call()
+        } else {
+            Ok(Value::Builtin { fun, term, runtime })
         }
     }
 
@@ -280,10 +323,15 @@ pub enum Value {
         parameter_name: NamedDeBruijn,
         body: Term<NamedDeBruijn>,
     },
-    Builtin(
-        DefaultFunction,
-        Term<NamedDeBruijn>,
-        // Need to figure out run time stuff
-        // BuiltinRuntime (CekValue uni fun)
-    ),
+    Builtin {
+        fun: DefaultFunction,
+        term: Term<NamedDeBruijn>,
+        runtime: BuiltinRuntime,
+    },
+}
+
+impl Value {
+    pub fn is_integer(&self) -> bool {
+        matches!(self, Value::Con(Constant::Integer(_)))
+    }
 }
