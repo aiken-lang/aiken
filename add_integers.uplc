@@ -1,4 +1,4 @@
 (program
   1.0.0
-  [ (builtin addInteger) (con integer 2) (con integer 3) ] 
+  [ (lam x (lam y [ (builtin addInteger) x y ])) (con integer 5) (con integer 7) ] 
 )

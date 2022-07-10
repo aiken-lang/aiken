@@ -168,7 +168,7 @@ impl Machine {
                         Term::Var(name)
                     } else {
                         this.env
-                            .get::<usize>(index - lam_cnt)
+                            .get::<usize>(index - lam_cnt - 1)
                             .cloned()
                             .map_or(Term::Var(name), |v| this.discharge_value(v))
                     }
@@ -262,7 +262,7 @@ impl Machine {
 
     fn lookup_var(&mut self, name: NamedDeBruijn) -> Result<Value, Error> {
         self.env
-            .get::<usize>(name.index.into())
+            .get::<usize>(usize::from(name.index) - 1)
             .cloned()
             .ok_or(Error::OpenTermEvaluated(Term::Var(name)))
     }
