@@ -17,12 +17,6 @@ pub trait WithConstant: WithTerm {
         self.next(term)
     }
 
-    // TODO: After https://github.com/txpipe/aiken/issues/18 is completed
-    // fn with_char(self, a: char) -> Self::Next {
-    //     let term = Term::Constant(Constant::Char(a));
-    //     self.next(term)
-    // }
-
     fn with_unit(self) -> Self::Next {
         let term = Term::Constant(Constant::Unit);
         self.next(term)
@@ -105,38 +99,6 @@ mod tests {
             assert_eq!(expected, actual);
         }
     }
-
-    // prop_compose! {
-    //     fn some_char()(
-    //         some_char: char
-    //     ) -> char {
-    //         some_char
-    //     }
-    // }
-
-    // TODO: After https://github.com/txpipe/aiken/issues/18 is completed
-    // proptest! {
-    //     #[test]
-    //     fn build_named__with_char(
-    //         some_char in some_char().prop_filter("Cannot be a double quote", |a| *a != '\"')
-    //     ) {
-    //         let char_as_string = &some_char.to_string();
-    //         let code = format!(
-    //             r#"(program
-    //                            11.22.33
-    //                            (con char '{}')
-    //                          )"#,
-    //             char_as_string
-    //         );
-    //
-    //         println!("{:#?}", &code);
-    //         let expected = parser::program(&code).unwrap();
-    //         let actual = Builder::start(11, 22, 33)
-    //             .with_char(some_char)
-    //             .build_named();
-    //         assert_eq!(expected, actual);
-    //     }
-    // }
 
     #[test]
     fn build_named__with_unit() {
