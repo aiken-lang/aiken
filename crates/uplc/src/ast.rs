@@ -4,7 +4,7 @@ use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
     machine::{
-        cost_model::{ExBudget, MachineCosts},
+        cost_model::{ExBudget, CostModel},
         Machine,
     },
 };
@@ -407,7 +407,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 
 impl Program<NamedDeBruijn> {
     pub fn eval(&self) -> Result<Term<NamedDeBruijn>, crate::machine::Error> {
-        let mut machine = Machine::new(MachineCosts::default(), ExBudget::default(), 200);
+        let mut machine = Machine::new(CostModel::default(), ExBudget::default(), 200);
 
         let (term, _, _) = machine.run(&self.term)?;
 

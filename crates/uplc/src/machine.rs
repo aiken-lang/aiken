@@ -7,13 +7,13 @@ pub mod cost_model;
 mod error;
 mod runtime;
 
-use cost_model::{ExBudget, MachineCosts, StepKind};
+use cost_model::{ExBudget, StepKind};
 pub use error::Error;
 
-use self::runtime::BuiltinRuntime;
+use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
 pub struct Machine {
-    costs: MachineCosts,
+    costs: CostModel,
     ex_budget: ExBudget,
     frames: Vec<Context>,
     slippage: u32,
@@ -22,7 +22,7 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(costs: MachineCosts, initial_budget: ExBudget, slippage: u32) -> Machine {
+    pub fn new(costs: CostModel, initial_budget: ExBudget, slippage: u32) -> Machine {
         Machine {
             costs,
             ex_budget: initial_budget,
@@ -37,7 +37,7 @@ impl Machine {
         &mut self,
         term: &Term<NamedDeBruijn>,
     ) -> Result<(Term<NamedDeBruijn>, usize, Vec<String>), Error> {
-        let startup_budget = self.costs.get(StepKind::StartUp);
+        let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
 
         self.spend_budget(startup_budget)?;
 
@@ -244,7 +244,7 @@ impl Machine {
         runtime: BuiltinRuntime,
     ) -> Result<Value, Error> {
         if runtime.is_ready() {
-            self.spend_budget(ExBudget::default())?;
+            self.spend_budget(todo!())?;
 
             runtime.call()
         } else {
@@ -281,7 +281,8 @@ impl Machine {
 
     fn spend_unbudgeted_steps(&mut self) -> Result<(), Error> {
         for i in 0..self.unbudgeted_steps.len() - 1 {
-            let mut unspent_step_budget = self.costs.get(StepKind::try_from(i as u8)?);
+            let mut unspent_step_budget =
+                self.costs.machine_costs.get(StepKind::try_from(i as u8)?);
 
             unspent_step_budget.occurences(self.unbudgeted_steps[i] as i32);
 
