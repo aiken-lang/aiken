@@ -198,6 +198,7 @@ impl Machine {
             Value::Delay(body) => self.compute(&body),
             Value::Builtin { fun, term, runtime } => {
                 let force_term = Term::Force(Box::new(term));
+                println!("{:#?}", runtime);
                 todo!()
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
@@ -289,7 +290,7 @@ impl Machine {
             let mut unspent_step_budget =
                 self.costs.machine_costs.get(StepKind::try_from(i as u8)?);
 
-            unspent_step_budget.occurences(self.unbudgeted_steps[i] as i32);
+            unspent_step_budget.occurences(self.unbudgeted_steps[i] as i64);
 
             self.spend_budget(unspent_step_budget)?;
 
@@ -341,7 +342,7 @@ impl Value {
         matches!(self, Value::Con(Constant::Integer(_)))
     }
 
-    pub fn to_ex_mem(&self) -> i32 {
+    pub fn to_ex_mem(&self) -> i64 {
         match self {
             Value::Con(_) => todo!(),
             Value::Delay(_) => 1,
