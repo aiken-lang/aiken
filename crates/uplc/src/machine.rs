@@ -14,11 +14,12 @@ use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
 pub struct Machine {
     costs: CostModel,
-    ex_budget: ExBudget,
+    pub ex_budget: ExBudget,
     frames: Vec<Context>,
     slippage: u32,
     env: Vec<Value>,
     unbudgeted_steps: [u32; 8],
+    pub logs: Vec<String>,
 }
 
 impl Machine {
@@ -30,20 +31,16 @@ impl Machine {
             frames: vec![Context::NoFrame],
             env: vec![],
             unbudgeted_steps: [0; 8],
+            logs: vec![],
         }
     }
 
-    pub fn run(
-        &mut self,
-        term: &Term<NamedDeBruijn>,
-    ) -> Result<(Term<NamedDeBruijn>, usize, Vec<String>), Error> {
+    pub fn run(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
         let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
 
         self.spend_budget(startup_budget)?;
 
-        let res = self.compute(term)?;
-
-        Ok((res, 0, vec![]))
+        self.compute(term)
     }
 
     fn compute(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
@@ -106,7 +103,7 @@ impl Machine {
     }
 
     fn return_compute(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
-        // TODO: avoid unwrap if possible and just return an err when None
+        // avoid unwrap if possible and just return an err when None
         // but honestly it should never be empty anyways because Machine
         // is initialized with `Context::NoFrame`.
         let frame = self.frames.last().cloned().unwrap();
@@ -197,7 +194,9 @@ impl Machine {
         match value {
             Value::Delay(body) => self.compute(&body),
             Value::Builtin { fun, term, runtime } => {
-                let force_term = Term::Force(Box::new(term));
+                let force_term = Term::Force(Box::new(dbg!(term)));
+
+                if runtime.is_all() {}
                 println!("{:#?}", runtime);
                 todo!()
             }
@@ -342,9 +341,14 @@ impl Value {
         matches!(self, Value::Con(Constant::Integer(_)))
     }
 
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Value::Con(Constant::Bool(_)))
+    }
+
     pub fn to_ex_mem(&self) -> i64 {
         match self {
-            Value::Con(_) => todo!(),
+            // TODO: this is not 1
+            Value::Con(_) => 1,
             Value::Delay(_) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
