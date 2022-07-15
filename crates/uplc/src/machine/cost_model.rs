@@ -319,152 +319,201 @@ impl Default for BuiltinCosts {
                 }),
             },
             less_than_equals_byte_string: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 197145,
+                    slope: 156,
+                }),
             },
             sha2_256: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 806990,
+                    slope: 30482,
+                }),
             },
             sha3_256: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1927926,
+                    slope: 82523,
+                }),
             },
             blake2b_256: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 117366,
+                    slope: 10475,
+                }),
             },
             verify_ed25519_signature: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: ThreeArguments::ConstantCost(10),
+                cpu: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: 41047009,
+                    slope: 18816,
+                }),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: ThreeArguments::ConstantCost(10),
+                cpu: ThreeArguments::ConstantCost(35190005),
             },
             verify_schnorr_secp256k1_signature: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: ThreeArguments::ConstantCost(10),
+                cpu: ThreeArguments::LinearInY(LinearSize {
+                    intercept: 39121781,
+                    slope: 32260,
+                }),
             },
             append_string: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 4,
+                    slope: 1,
+                }),
+                cpu: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 1000,
+                    slope: 24177,
+                }),
             },
             equals_string: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::LinearOnDiagonal(ConstantOrLinear {
+                    constant: 187000,
+                    intercept: 1000,
+                    slope: 52998,
+                }),
             },
             encode_utf8: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 4,
+                    slope: 2,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1000,
+                    slope: 28662,
+                }),
             },
             decode_utf8: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 4,
+                    slope: 2,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 497525,
+                    slope: 14068,
+                }),
             },
             if_then_else: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: ThreeArguments::ConstantCost(1),
+                cpu: ThreeArguments::ConstantCost(80556),
             },
             choose_unit: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(4),
+                cpu: TwoArguments::ConstantCost(46417),
             },
             trace: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(212342),
             },
             fst_pair: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(80436),
             },
             snd_pair: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(85931),
             },
             choose_list: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: ThreeArguments::ConstantCost(32),
+                cpu: ThreeArguments::ConstantCost(175354),
             },
             mk_cons: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(65493),
             },
             head_list: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(43249),
             },
             tail_list: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(41182),
             },
             null_list: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(60091),
             },
             choose_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: SixArguments::ConstantCost(32),
+                cpu: SixArguments::ConstantCost(19537),
             },
             constr_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(89141),
             },
             map_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(64832),
             },
             list_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(52467),
             },
             i_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(1000),
             },
             b_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(1000),
             },
             un_constr_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(32696),
             },
             un_map_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(38314),
             },
             un_list_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(32247),
             },
             un_i_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(43357),
             },
             un_b_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(31220),
             },
             equals_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 1060367,
+                    slope: 12586,
+                }),
             },
             mk_pair_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(76511),
             },
             mk_nil_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(22558),
             },
             mk_nil_pair_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(16563),
             },
             serialise_data: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 0,
+                    slope: 2,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1159724,
+                    slope: 392670,
+                }),
             },
         }
     }
