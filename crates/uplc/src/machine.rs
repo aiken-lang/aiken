@@ -196,7 +196,10 @@ impl Machine {
     fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
         match value {
             Value::Delay(body) => self.compute(&body),
-            Value::Builtin { .. } => todo!(),
+            Value::Builtin { fun, term, runtime } => {
+                let force_term = Term::Force(Box::new(term));
+                todo!()
+            }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
         }
     }
@@ -244,7 +247,9 @@ impl Machine {
         runtime: BuiltinRuntime,
     ) -> Result<Value, Error> {
         if runtime.is_ready() {
-            self.spend_budget(todo!())?;
+            let cost = runtime.to_ex_budget(&self.costs.builtin_costs);
+
+            self.spend_budget(cost)?;
 
             runtime.call()
         } else {
@@ -334,5 +339,14 @@ pub enum Value {
 impl Value {
     pub fn is_integer(&self) -> bool {
         matches!(self, Value::Con(Constant::Integer(_)))
+    }
+
+    pub fn to_ex_mem(&self) -> i32 {
+        match self {
+            Value::Con(_) => todo!(),
+            Value::Delay(_) => 1,
+            Value::Lambda { .. } => 1,
+            Value::Builtin { .. } => 1,
+        }
     }
 }
