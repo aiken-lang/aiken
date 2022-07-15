@@ -1,6 +1,7 @@
 use crate::{ast::Constant, builtins::DefaultFunction};
 
 use super::{
+    cost_model::{BuiltinCosts, ExBudget},
     // cost_model::{CostingFun, ExBudget},
     Error,
     Value,
@@ -20,23 +21,15 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub struct BuiltinRuntime {
-    meaning: BuiltinMeaning,
-    // budget: fn(Vec<u32>) -> ExBudget,
-}
-
-#[derive(Clone, Debug)]
-struct BuiltinMeaning {
     args: Vec<Value>,
     fun: DefaultFunction,
 }
 
-impl BuiltinMeaning {
-    pub fn new(fun: DefaultFunction) -> BuiltinMeaning {
+impl BuiltinRuntime {
+    pub fn new(fun: DefaultFunction) -> BuiltinRuntime {
         Self { args: vec![], fun }
     }
-}
 
-impl BuiltinRuntime {
     // fn from_builtin_runtime_options<G>(
     //     eval_mode: EvalMode,
     //     cost: CostingFun<G>,
@@ -48,37 +41,33 @@ impl BuiltinRuntime {
     // }
 
     pub fn is_arrow(&self) -> bool {
-        self.meaning.args.len() != self.meaning.fun.arity()
+        self.args.len() != self.fun.arity()
     }
 
     pub fn is_ready(&self) -> bool {
-        self.meaning.args.len() == self.meaning.fun.arity()
+        self.args.len() == self.fun.arity()
     }
 
     pub fn call(&self) -> Result<Value, Error> {
-        self.meaning.fun.call(&self.meaning.args)
+        self.fun.call(&self.args)
     }
 
     pub fn push(&mut self, arg: Value) -> Result<(), Error> {
-        self.meaning.fun.check_type(&arg)?;
+        self.fun.check_type(&arg)?;
 
-        self.meaning.args.push(arg);
+        self.args.push(arg);
 
         Ok(())
     }
-}
 
-impl From<DefaultFunction> for BuiltinMeaning {
-    fn from(fun: DefaultFunction) -> Self {
-        BuiltinMeaning::new(fun)
+    pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> ExBudget {
+        costs.to_ex_budget(self.fun, &self.args)
     }
 }
 
 impl From<DefaultFunction> for BuiltinRuntime {
     fn from(fun: DefaultFunction) -> Self {
-        BuiltinRuntime {
-            meaning: fun.into(),
-        }
+        BuiltinRuntime::new(fun)
     }
 }
 

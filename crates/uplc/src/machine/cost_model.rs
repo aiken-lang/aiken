@@ -1,3 +1,7 @@
+use crate::builtins::DefaultFunction;
+
+use super::Value;
+
 /// Can be negative
 #[derive(Debug, Clone, PartialEq, Copy, Default)]
 pub struct ExBudget {
@@ -154,7 +158,7 @@ impl Default for BuiltinCosts {
     fn default() -> Self {
         Self {
             add_integer: CostingFun {
-                memory: TwoArguments::MaxSize(MaxSize {
+                mem: TwoArguments::MaxSize(MaxSize {
                     intercept: 1,
                     slope: 1,
                 }),
@@ -164,7 +168,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             subtract_integer: CostingFun {
-                memory: TwoArguments::MaxSize(MaxSize {
+                mem: TwoArguments::MaxSize(MaxSize {
                     intercept: 1,
                     slope: 1,
                 }),
@@ -174,7 +178,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             multiply_integer: CostingFun {
-                memory: TwoArguments::AddedSizes(AddedSizes {
+                mem: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 0,
                     slope: 1,
                 }),
@@ -185,7 +189,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             divide_integer: CostingFun {
-                memory: TwoArguments::SubtractedSizes(SubtractedSizes {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
                     intercept: 0,
                     slope: 1,
                     minimum: 1,
@@ -199,7 +203,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             quotient_integer: CostingFun {
-                memory: TwoArguments::SubtractedSizes(SubtractedSizes {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
                     intercept: 0,
                     slope: 1,
                     minimum: 1,
@@ -213,7 +217,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             remainder_integer: CostingFun {
-                memory: TwoArguments::SubtractedSizes(SubtractedSizes {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
                     intercept: 0,
                     slope: 1,
                     minimum: 1,
@@ -227,7 +231,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             mod_integer: CostingFun {
-                memory: TwoArguments::SubtractedSizes(SubtractedSizes {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
                     intercept: 0,
                     slope: 1,
                     minimum: 1,
@@ -241,28 +245,28 @@ impl Default for BuiltinCosts {
                 }),
             },
             equals_integer: CostingFun {
-                memory: TwoArguments::ConstantCost(1),
+                mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
                     intercept: 208512,
                     slope: 421,
                 }),
             },
             less_than_integer: CostingFun {
-                memory: TwoArguments::ConstantCost(1),
+                mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
                     intercept: 208896,
                     slope: 511,
                 }),
             },
             less_than_equals_integer: CostingFun {
-                memory: TwoArguments::ConstantCost(1),
+                mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
                     intercept: 204924,
                     slope: 473,
                 }),
             },
             append_byte_string: CostingFun {
-                memory: TwoArguments::AddedSizes(AddedSizes {
+                mem: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 1000,
                     slope: 571,
                 }),
@@ -272,7 +276,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             cons_byte_string: CostingFun {
-                memory: TwoArguments::AddedSizes(AddedSizes {
+                mem: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 0,
                     slope: 1,
                 }),
@@ -282,7 +286,7 @@ impl Default for BuiltinCosts {
                 }),
             },
             slice_byte_string: CostingFun {
-                memory: ThreeArguments::LinearInZ(LinearSize {
+                mem: ThreeArguments::LinearInZ(LinearSize {
                     intercept: 4,
                     slope: 0,
                 }),
@@ -292,15 +296,15 @@ impl Default for BuiltinCosts {
                 }),
             },
             length_of_byte_string: CostingFun {
-                memory: OneArgument::ConstantCost(10),
+                mem: OneArgument::ConstantCost(10),
                 cpu: OneArgument::ConstantCost(1000),
             },
             index_byte_string: CostingFun {
-                memory: TwoArguments::ConstantCost(4),
+                mem: TwoArguments::ConstantCost(4),
                 cpu: TwoArguments::ConstantCost(57667),
             },
             equals_byte_string: CostingFun {
-                memory: TwoArguments::ConstantCost(1),
+                mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::LinearOnDiagonal(ConstantOrLinear {
                     constant: 245000,
                     intercept: 216773,
@@ -308,176 +312,255 @@ impl Default for BuiltinCosts {
                 }),
             },
             less_than_byte_string: CostingFun {
-                memory: TwoArguments::ConstantCost(1),
+                mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
                     intercept: 197145,
                     slope: 156,
                 }),
             },
             less_than_equals_byte_string: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             sha2_256: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             sha3_256: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             blake2b_256: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             verify_ed25519_signature: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             verify_schnorr_secp256k1_signature: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             append_string: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             equals_string: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             encode_utf8: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             decode_utf8: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             if_then_else: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             choose_unit: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             trace: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             fst_pair: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             snd_pair: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             choose_list: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             mk_cons: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             head_list: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             tail_list: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             null_list: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             choose_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             constr_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             map_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             list_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             i_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             b_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             un_constr_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             un_map_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             un_list_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             un_i_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             un_b_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             equals_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             mk_pair_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             mk_nil_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             mk_nil_pair_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
             serialise_data: CostingFun {
-                memory: todo!(),
+                mem: todo!(),
                 cpu: todo!(),
             },
         }
     }
 }
 
+impl BuiltinCosts {
+    pub fn to_ex_budget(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
+        match fun {
+            DefaultFunction::AddInteger => ExBudget {
+                mem: self
+                    .add_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .add_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::SubtractInteger => todo!(),
+            DefaultFunction::MultiplyInteger => todo!(),
+            DefaultFunction::DivideInteger => todo!(),
+            DefaultFunction::QuotientInteger => todo!(),
+            DefaultFunction::RemainderInteger => todo!(),
+            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::EqualsInteger => todo!(),
+            DefaultFunction::LessThanInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::AppendByteString => todo!(),
+            DefaultFunction::ConsByteString => todo!(),
+            DefaultFunction::SliceByteString => todo!(),
+            DefaultFunction::LengthOfByteString => todo!(),
+            DefaultFunction::IndexByteString => todo!(),
+            DefaultFunction::EqualsByteString => todo!(),
+            DefaultFunction::LessThanByteString => todo!(),
+            DefaultFunction::LessThanEqualsByteString => todo!(),
+            DefaultFunction::Sha2_256 => todo!(),
+            DefaultFunction::Sha3_256 => todo!(),
+            DefaultFunction::Blake2b_256 => todo!(),
+            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
+            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
+            DefaultFunction::AppendString => todo!(),
+            DefaultFunction::EqualsString => todo!(),
+            DefaultFunction::EncodeUtf8 => todo!(),
+            DefaultFunction::DecodeUtf8 => todo!(),
+            DefaultFunction::IfThenElse => todo!(),
+            DefaultFunction::ChooseUnit => todo!(),
+            DefaultFunction::Trace => todo!(),
+            DefaultFunction::FstPair => todo!(),
+            DefaultFunction::SndPair => todo!(),
+            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::MkCons => todo!(),
+            DefaultFunction::HeadList => todo!(),
+            DefaultFunction::TailList => todo!(),
+            DefaultFunction::NullList => todo!(),
+            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ConstrData => todo!(),
+            DefaultFunction::MapData => todo!(),
+            DefaultFunction::ListData => todo!(),
+            DefaultFunction::IData => todo!(),
+            DefaultFunction::BData => todo!(),
+            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnMapData => todo!(),
+            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkNilData => todo!(),
+            DefaultFunction::MkNilPairData => todo!(),
+        }
+    }
+}
+
 pub struct CostingFun<T> {
-    pub memory: T,
+    pub mem: T,
     pub cpu: T,
 }
 
 pub enum OneArgument {
-    ConstantCost(isize),
+    ConstantCost(i32),
     LinearCost(LinearSize),
 }
 
+impl OneArgument {
+    pub fn cost(&self, x: i32) -> i32 {
+        match self {
+            OneArgument::ConstantCost(c) => *c,
+            OneArgument::LinearCost(m) => m.slope * x + m.intercept,
+        }
+    }
+}
+#[derive(Clone)]
 pub enum TwoArguments {
-    ConstantCost(isize),
+    ConstantCost(i32),
     LinearInX(LinearSize),
     LinearInY(LinearSize),
     AddedSizes(AddedSizes),
@@ -489,58 +572,123 @@ pub enum TwoArguments {
     ConstAboveDiagonal(ConstantOrTwoArguments),
     ConstBelowDiagonal(ConstantOrTwoArguments),
 }
+impl TwoArguments {
+    pub fn cost(&self, x: i32, y: i32) -> i32 {
+        match self {
+            TwoArguments::ConstantCost(c) => *c,
+            TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
+            TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
+            TwoArguments::AddedSizes(s) => s.slope * (x + y) + s.intercept,
+            TwoArguments::SubtractedSizes(s) => s.slope * s.minimum.min(x - y) + s.intercept,
+            TwoArguments::MultipliedSizes(s) => s.slope * (x * y) + s.intercept,
+            TwoArguments::MinSize(s) => s.slope * x.min(y) + s.intercept,
+            TwoArguments::MaxSize(s) => s.slope * x.max(y) + s.intercept,
+            TwoArguments::LinearOnDiagonal(l) => {
+                if x == y {
+                    x * l.slope + l.intercept
+                } else {
+                    l.constant
+                }
+            }
+            TwoArguments::ConstAboveDiagonal(l) => {
+                if x > y {
+                    l.constant
+                } else {
+                    let p = *l.model.clone();
+                    p.cost(x, y)
+                }
+            }
+            TwoArguments::ConstBelowDiagonal(l) => {
+                if x < y {
+                    l.constant
+                } else {
+                    let p = *l.model.clone();
+                    p.cost(x, y)
+                }
+            }
+        }
+    }
+}
 
 pub enum ThreeArguments {
-    ConstantCost(isize),
+    ConstantCost(i32),
     AddedSizes(AddedSizes),
     LinearInX(LinearSize),
     LinearInY(LinearSize),
     LinearInZ(LinearSize),
 }
 
+impl ThreeArguments {
+    pub fn cost(&self, x: i32, y: i32, z: i32) -> i32 {
+        match self {
+            ThreeArguments::ConstantCost(c) => *c,
+            ThreeArguments::AddedSizes(s) => (x + y + z) * s.slope + s.intercept,
+            ThreeArguments::LinearInX(l) => x * l.slope + l.intercept,
+            ThreeArguments::LinearInY(l) => y * l.slope + l.intercept,
+            ThreeArguments::LinearInZ(l) => z * l.slope + l.intercept,
+        }
+    }
+}
+
 pub enum SixArguments {
-    ConstantCost(isize),
+    ConstantCost(i32),
 }
 
+impl SixArguments {
+    pub fn cost(&self, _: i32, _: i32, _: i32, _: i32, _: i32, _: i32) -> i32 {
+        match self {
+            SixArguments::ConstantCost(c) => *c,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct LinearSize {
-    pub intercept: isize,
-    pub slope: isize,
+    pub intercept: i32,
+    pub slope: i32,
 }
 
+#[derive(Clone)]
 pub struct AddedSizes {
-    pub intercept: isize,
-    pub slope: isize,
+    pub intercept: i32,
+    pub slope: i32,
 }
 
+#[derive(Clone)]
 pub struct SubtractedSizes {
-    pub intercept: isize,
-    pub slope: isize,
-    pub minimum: isize,
+    pub intercept: i32,
+    pub slope: i32,
+    pub minimum: i32,
 }
 
+#[derive(Clone)]
 pub struct MultipliedSizes {
-    pub intercept: isize,
-    pub slope: isize,
+    pub intercept: i32,
+    pub slope: i32,
 }
 
+#[derive(Clone)]
 pub struct MinSize {
-    pub intercept: isize,
-    pub slope: isize,
+    pub intercept: i32,
+    pub slope: i32,
 }
 
+#[derive(Clone)]
 pub struct MaxSize {
-    pub intercept: isize,
-    pub slope: isize,
+    pub intercept: i32,
+    pub slope: i32,
 }
 
+#[derive(Clone)]
 pub struct ConstantOrLinear {
-    pub constant: isize,
-    pub intercept: isize,
-    pub slope: isize,
+    pub constant: i32,
+    pub intercept: i32,
+    pub slope: i32,
 }
 
+#[derive(Clone)]
 pub struct ConstantOrTwoArguments {
-    pub constant: isize,
+    pub constant: i32,
     pub model: Box<TwoArguments>,
 }
 
