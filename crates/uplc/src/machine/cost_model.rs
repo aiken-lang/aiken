@@ -3,18 +3,28 @@ use crate::builtins::DefaultFunction;
 use super::Value;
 
 /// Can be negative
-#[derive(Debug, Clone, PartialEq, Copy, Default)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ExBudget {
-    pub mem: i32,
-    pub cpu: i32,
+    pub mem: i64,
+    pub cpu: i64,
 }
 
 impl ExBudget {
-    pub fn occurences(&mut self, n: i32) {
+    pub fn occurences(&mut self, n: i64) {
         self.mem *= n;
         self.cpu *= n;
     }
 }
+
+impl Default for ExBudget {
+    fn default() -> Self {
+        ExBudget {
+            mem: 14000000,
+            cpu: 10000000000,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct CostModel {
     pub machine_costs: MachineCosts,
@@ -595,12 +605,12 @@ pub struct CostingFun<T> {
 }
 
 pub enum OneArgument {
-    ConstantCost(i32),
+    ConstantCost(i64),
     LinearCost(LinearSize),
 }
 
 impl OneArgument {
-    pub fn cost(&self, x: i32) -> i32 {
+    pub fn cost(&self, x: i64) -> i64 {
         match self {
             OneArgument::ConstantCost(c) => *c,
             OneArgument::LinearCost(m) => m.slope * x + m.intercept,
@@ -609,7 +619,7 @@ impl OneArgument {
 }
 #[derive(Clone)]
 pub enum TwoArguments {
-    ConstantCost(i32),
+    ConstantCost(i64),
     LinearInX(LinearSize),
     LinearInY(LinearSize),
     AddedSizes(AddedSizes),
@@ -622,7 +632,7 @@ pub enum TwoArguments {
     ConstBelowDiagonal(ConstantOrTwoArguments),
 }
 impl TwoArguments {
-    pub fn cost(&self, x: i32, y: i32) -> i32 {
+    pub fn cost(&self, x: i64, y: i64) -> i64 {
         match self {
             TwoArguments::ConstantCost(c) => *c,
             TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
@@ -660,7 +670,7 @@ impl TwoArguments {
 }
 
 pub enum ThreeArguments {
-    ConstantCost(i32),
+    ConstantCost(i64),
     AddedSizes(AddedSizes),
     LinearInX(LinearSize),
     LinearInY(LinearSize),
@@ -668,7 +678,7 @@ pub enum ThreeArguments {
 }
 
 impl ThreeArguments {
-    pub fn cost(&self, x: i32, y: i32, z: i32) -> i32 {
+    pub fn cost(&self, x: i64, y: i64, z: i64) -> i64 {
         match self {
             ThreeArguments::ConstantCost(c) => *c,
             ThreeArguments::AddedSizes(s) => (x + y + z) * s.slope + s.intercept,
@@ -680,11 +690,11 @@ impl ThreeArguments {
 }
 
 pub enum SixArguments {
-    ConstantCost(i32),
+    ConstantCost(i64),
 }
 
 impl SixArguments {
-    pub fn cost(&self, _: i32, _: i32, _: i32, _: i32, _: i32, _: i32) -> i32 {
+    pub fn cost(&self, _: i64, _: i64, _: i64, _: i64, _: i64, _: i64) -> i64 {
         match self {
             SixArguments::ConstantCost(c) => *c,
         }
@@ -693,51 +703,51 @@ impl SixArguments {
 
 #[derive(Clone)]
 pub struct LinearSize {
-    pub intercept: i32,
-    pub slope: i32,
+    pub intercept: i64,
+    pub slope: i64,
 }
 
 #[derive(Clone)]
 pub struct AddedSizes {
-    pub intercept: i32,
-    pub slope: i32,
+    pub intercept: i64,
+    pub slope: i64,
 }
 
 #[derive(Clone)]
 pub struct SubtractedSizes {
-    pub intercept: i32,
-    pub slope: i32,
-    pub minimum: i32,
+    pub intercept: i64,
+    pub slope: i64,
+    pub minimum: i64,
 }
 
 #[derive(Clone)]
 pub struct MultipliedSizes {
-    pub intercept: i32,
-    pub slope: i32,
+    pub intercept: i64,
+    pub slope: i64,
 }
 
 #[derive(Clone)]
 pub struct MinSize {
-    pub intercept: i32,
-    pub slope: i32,
+    pub intercept: i64,
+    pub slope: i64,
 }
 
 #[derive(Clone)]
 pub struct MaxSize {
-    pub intercept: i32,
-    pub slope: i32,
+    pub intercept: i64,
+    pub slope: i64,
 }
 
 #[derive(Clone)]
 pub struct ConstantOrLinear {
-    pub constant: i32,
-    pub intercept: i32,
-    pub slope: i32,
+    pub constant: i64,
+    pub intercept: i64,
+    pub slope: i64,
 }
 
 #[derive(Clone)]
 pub struct ConstantOrTwoArguments {
-    pub constant: i32,
+    pub constant: i64,
     pub model: Box<TwoArguments>,
 }
 
