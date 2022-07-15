@@ -569,7 +569,18 @@ impl BuiltinCosts {
             DefaultFunction::EqualsString => todo!(),
             DefaultFunction::EncodeUtf8 => todo!(),
             DefaultFunction::DecodeUtf8 => todo!(),
-            DefaultFunction::IfThenElse => todo!(),
+            DefaultFunction::IfThenElse => ExBudget {
+                mem: self.if_then_else.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.if_then_else.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
             DefaultFunction::ChooseUnit => todo!(),
             DefaultFunction::Trace => todo!(),
             DefaultFunction::FstPair => todo!(),

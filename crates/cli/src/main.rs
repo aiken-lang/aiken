@@ -92,11 +92,20 @@ fn main() -> anyhow::Result<()> {
                     Program::<NamedDeBruijn>::try_from(prog)?
                 };
 
-                let term = program.eval()?;
+                let (term, cost, _logs) = program.eval();
 
-                let term: Term<Name> = term.try_into()?;
+                match term {
+                    Ok(term) => {
+                        let term: Term<Name> = term.try_into()?;
 
-                println!("{}", term.to_pretty());
+                        println!("{}", term.to_pretty());
+                    }
+                    Err(err) => {
+                        eprintln!("{}", err);
+                    }
+                }
+
+                println!("Costs - memory: {} & cpu: {}", cost.mem, cost.cpu);
             }
         },
     }

@@ -48,12 +48,16 @@ impl BuiltinRuntime {
         self.args.len() == self.fun.arity()
     }
 
+    pub fn is_all(&self) -> bool {
+        self.args.is_empty()
+    }
+
     pub fn call(&self) -> Result<Value, Error> {
         self.fun.call(&self.args)
     }
 
     pub fn push(&mut self, arg: Value) -> Result<(), Error> {
-        self.fun.check_type(&arg)?;
+        self.fun.check_type(&arg, &self.args)?;
 
         self.args.push(arg);
 
@@ -102,7 +106,7 @@ impl DefaultFunction {
             DefaultFunction::EqualsString => todo!(),
             DefaultFunction::EncodeUtf8 => todo!(),
             DefaultFunction::DecodeUtf8 => todo!(),
-            DefaultFunction::IfThenElse => todo!(),
+            DefaultFunction::IfThenElse => 3,
             DefaultFunction::ChooseUnit => todo!(),
             DefaultFunction::Trace => todo!(),
             DefaultFunction::FstPair => todo!(),
@@ -131,7 +135,11 @@ impl DefaultFunction {
         }
     }
 
-    pub fn check_type(&self, arg: &Value) -> Result<(), Error> {
+    pub fn force_count() -> i32 {
+        3
+    }
+
+    pub fn check_type(&self, arg: &Value, args: &[Value]) -> Result<(), Error> {
         match self {
             DefaultFunction::AddInteger => {
                 if arg.is_integer() {
@@ -167,7 +175,17 @@ impl DefaultFunction {
             DefaultFunction::EqualsString => todo!(),
             DefaultFunction::EncodeUtf8 => todo!(),
             DefaultFunction::DecodeUtf8 => todo!(),
-            DefaultFunction::IfThenElse => todo!(),
+            DefaultFunction::IfThenElse => {
+                if args.is_empty() {
+                    if arg.is_bool() {
+                        return Ok(());
+                    } else {
+                        todo!("type error")
+                    }
+                }
+
+                Ok(())
+            }
             DefaultFunction::ChooseUnit => todo!(),
             DefaultFunction::Trace => todo!(),
             DefaultFunction::FstPair => todo!(),
@@ -237,7 +255,16 @@ impl DefaultFunction {
             DefaultFunction::EqualsString => todo!(),
             DefaultFunction::EncodeUtf8 => todo!(),
             DefaultFunction::DecodeUtf8 => todo!(),
-            DefaultFunction::IfThenElse => todo!(),
+            DefaultFunction::IfThenElse => match args[0] {
+                Value::Con(Constant::Bool(condition)) => {
+                    if condition {
+                        Ok(args[1].clone())
+                    } else {
+                        Ok(args[2].clone())
+                    }
+                }
+                _ => todo!("handle error"),
+            },
             DefaultFunction::ChooseUnit => todo!(),
             DefaultFunction::Trace => todo!(),
             DefaultFunction::FstPair => todo!(),
