@@ -23,11 +23,16 @@ use super::{
 pub struct BuiltinRuntime {
     args: Vec<Value>,
     fun: DefaultFunction,
+    forces: u32,
 }
 
 impl BuiltinRuntime {
     pub fn new(fun: DefaultFunction) -> BuiltinRuntime {
-        Self { args: vec![], fun }
+        Self {
+            args: vec![],
+            fun,
+            forces: 0,
+        }
     }
 
     // fn from_builtin_runtime_options<G>(
@@ -48,8 +53,12 @@ impl BuiltinRuntime {
         self.args.len() == self.fun.arity()
     }
 
-    pub fn is_all(&self) -> bool {
-        self.args.is_empty()
+    pub fn needs_force(&self) -> bool {
+        self.forces < self.fun.force_count()
+    }
+
+    pub fn consume_force(&mut self) {
+        self.forces += 1;
     }
 
     pub fn call(&self) -> Result<Value, Error> {
@@ -135,8 +144,63 @@ impl DefaultFunction {
         }
     }
 
-    pub fn force_count() -> i32 {
-        3
+    pub fn force_count(&self) -> u32 {
+        match self {
+            DefaultFunction::AddInteger => 0,
+            DefaultFunction::SubtractInteger => 0,
+            DefaultFunction::MultiplyInteger => todo!(),
+            DefaultFunction::DivideInteger => todo!(),
+            DefaultFunction::QuotientInteger => todo!(),
+            DefaultFunction::RemainderInteger => todo!(),
+            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::EqualsInteger => todo!(),
+            DefaultFunction::LessThanInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::AppendByteString => todo!(),
+            DefaultFunction::ConsByteString => todo!(),
+            DefaultFunction::SliceByteString => todo!(),
+            DefaultFunction::LengthOfByteString => todo!(),
+            DefaultFunction::IndexByteString => todo!(),
+            DefaultFunction::EqualsByteString => todo!(),
+            DefaultFunction::LessThanByteString => todo!(),
+            DefaultFunction::LessThanEqualsByteString => todo!(),
+            DefaultFunction::Sha2_256 => todo!(),
+            DefaultFunction::Sha3_256 => todo!(),
+            DefaultFunction::Blake2b_256 => todo!(),
+            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
+            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
+            DefaultFunction::AppendString => todo!(),
+            DefaultFunction::EqualsString => todo!(),
+            DefaultFunction::EncodeUtf8 => todo!(),
+            DefaultFunction::DecodeUtf8 => todo!(),
+            DefaultFunction::IfThenElse => 1,
+            DefaultFunction::ChooseUnit => 1,
+            DefaultFunction::Trace => todo!(),
+            DefaultFunction::FstPair => todo!(),
+            DefaultFunction::SndPair => todo!(),
+            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::MkCons => todo!(),
+            DefaultFunction::HeadList => todo!(),
+            DefaultFunction::TailList => todo!(),
+            DefaultFunction::NullList => todo!(),
+            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ConstrData => todo!(),
+            DefaultFunction::MapData => todo!(),
+            DefaultFunction::ListData => todo!(),
+            DefaultFunction::IData => todo!(),
+            DefaultFunction::BData => todo!(),
+            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnMapData => todo!(),
+            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkNilData => todo!(),
+            DefaultFunction::MkNilPairData => todo!(),
+        }
     }
 
     pub fn check_type(&self, arg: &Value, args: &[Value]) -> Result<(), Error> {
