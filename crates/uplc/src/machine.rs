@@ -193,12 +193,22 @@ impl Machine {
     fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
         match value {
             Value::Delay(body) => self.compute(&body),
-            Value::Builtin { fun, term, runtime } => {
+            Value::Builtin {
+                fun,
+                term,
+                mut runtime,
+            } => {
                 let force_term = Term::Force(Box::new(dbg!(term)));
 
-                if runtime.is_all() {}
-                println!("{:#?}", runtime);
-                todo!()
+                if runtime.needs_force() {
+                    runtime.consume_force();
+
+                    let res = self.eval_builtin_app(fun, force_term, runtime)?;
+
+                    self.return_compute(res)
+                } else {
+                    todo!()
+                }
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
         }
@@ -228,13 +238,15 @@ impl Machine {
                     argument: Box::new(arg_term),
                 };
 
-                if runtime.is_arrow() {
+                if runtime.is_arrow() && !runtime.needs_force() {
                     runtime.push(argument)?;
+
+                    let res = self.eval_builtin_app(fun, t, runtime)?;
+
+                    self.return_compute(res)
+                } else {
+                    todo!()
                 }
-
-                let res = self.eval_builtin_app(fun, t, runtime)?;
-
-                self.return_compute(res)
             }
             rest => Err(Error::NonFunctionalApplication(rest)),
         }
@@ -348,7 +360,22 @@ impl Value {
     pub fn to_ex_mem(&self) -> i64 {
         match self {
             // TODO: this is not 1
-            Value::Con(_) => 1,
+            Value::Con(c) => match c {
+                Constant::Integer(i) => {
+                    if *i == 0 {
+                        1
+                    } else {
+                        //TODO
+                        //    std::mem::size_of( i.abs()
+                        todo!()
+                    }
+                }
+                Constant::ByteString(b) => (((b.len() - 1) / 8) + 1) as i64,
+                Constant::String(s) => s.chars().count() as i64,
+                Constant::Char(_) => 1,
+                Constant::Unit => 1,
+                Constant::Bool(_) => 1,
+            },
             Value::Delay(_) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
