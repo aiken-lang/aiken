@@ -10,7 +10,7 @@ mod runtime;
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
 
-use self::{cost_model::CostModel, runtime::BuiltinRuntime};
+use self::{cost_model::CostModel, error::Type, runtime::BuiltinRuntime};
 
 pub struct Machine {
     costs: CostModel,
@@ -198,7 +198,7 @@ impl Machine {
                 term,
                 mut runtime,
             } => {
-                let force_term = Term::Force(Box::new(dbg!(term)));
+                let force_term = Term::Force(Box::new(term));
 
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -207,7 +207,7 @@ impl Machine {
 
                     self.return_compute(res)
                 } else {
-                    todo!()
+                    Err(Error::BuiltinTermArgumentExpected(force_term))
                 }
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
@@ -245,7 +245,7 @@ impl Machine {
 
                     self.return_compute(res)
                 } else {
-                    todo!()
+                    Err(Error::UnexpectedBuiltinTermArgument(t))
                 }
             }
             rest => Err(Error::NonFunctionalApplication(rest)),
@@ -367,7 +367,7 @@ impl Value {
                     } else {
                         //TODO
                         //    std::mem::size_of( i.abs()
-                        todo!()
+                        1
                     }
                 }
                 Constant::ByteString(b) => (((b.len() - 1) / 8) + 1) as i64,
@@ -379,6 +379,24 @@ impl Value {
             Value::Delay(_) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
+        }
+    }
+}
+
+impl From<&Value> for Type {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Con(constant) => match constant {
+                Constant::Integer(_) => Type::Integer,
+                Constant::ByteString(_) => Type::ByteString,
+                Constant::String(_) => Type::String,
+                Constant::Char(_) => todo!(),
+                Constant::Unit => Type::Unit,
+                Constant::Bool(_) => Type::Bool,
+            },
+            Value::Delay(_) => todo!(),
+            Value::Lambda { .. } => todo!(),
+            Value::Builtin { .. } => todo!(),
         }
     }
 }

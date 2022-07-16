@@ -32,8 +32,11 @@ pub enum UplcCommand {
         out: Option<String>,
     },
     /// Format an Untyped Plutus Core program
-    Fmt { input: PathBuf },
-
+    Fmt {
+        input: PathBuf,
+        #[clap(short, long)]
+        print: bool,
+    },
     /// Evaluate an Untyped Plutus Core program
     Eval {
         input: PathBuf,

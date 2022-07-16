@@ -82,10 +82,10 @@ peg::parser! {
           }
 
         rule delay() -> Term<Name>
-          = "(" _* "delay" _+ t:term() _* ")" { Term::Delay(Box::new(t)) }
+          = "(" _* "delay" _* t:term() _* ")" { Term::Delay(Box::new(t)) }
 
         rule force() -> Term<Name>
-          = "(" _* "force" _+ t:term() _* ")" { Term::Force(Box::new(t)) }
+          = "(" _* "force" _* t:term() _* ")" { Term::Force(Box::new(t)) }
 
         rule error() -> Term<Name>
           = "(" _* "error" _* ")" { Term::Error }

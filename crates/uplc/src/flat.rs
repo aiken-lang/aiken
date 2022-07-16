@@ -18,6 +18,7 @@ const TERM_TAG_WIDTH: u32 = 4;
 pub trait Binder<'b>: Encode + Decode<'b> {
     fn binder_encode(&self, e: &mut Encoder) -> Result<(), en::Error>;
     fn binder_decode(d: &mut Decoder) -> Result<Self, de::Error>;
+    fn text(&self) -> &str;
 }
 
 impl<'b, T> Flat<'b> for Program<T> where T: Binder<'b> + Debug {}
@@ -246,6 +247,10 @@ impl<'b> Binder<'b> for Name {
     fn binder_decode(d: &mut Decoder) -> Result<Self, de::Error> {
         Name::decode(d)
     }
+
+    fn text(&self) -> &str {
+        &self.text
+    }
 }
 
 impl Encode for NamedDeBruijn {
@@ -279,6 +284,10 @@ impl<'b> Binder<'b> for NamedDeBruijn {
             index: DeBruijn::new(0),
         })
     }
+
+    fn text(&self) -> &str {
+        &self.text
+    }
 }
 
 impl Encode for DeBruijn {
@@ -302,6 +311,10 @@ impl<'b> Binder<'b> for DeBruijn {
 
     fn binder_decode(_d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(DeBruijn::new(0))
+    }
+
+    fn text(&self) -> &str {
+        "i"
     }
 }
 
@@ -332,6 +345,10 @@ impl<'b> Binder<'b> for FakeNamedDeBruijn {
         let index = DeBruijn::new(0);
 
         Ok(index.into())
+    }
+
+    fn text(&self) -> &str {
+        &self.0.text
     }
 }
 
