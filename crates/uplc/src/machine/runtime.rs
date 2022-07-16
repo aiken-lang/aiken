@@ -2,9 +2,8 @@ use crate::{ast::Constant, builtins::DefaultFunction};
 
 use super::{
     cost_model::{BuiltinCosts, ExBudget},
-    // cost_model::{CostingFun, ExBudget},
-    Error,
-    Value,
+    error::Type,
+    Error, Value,
 };
 
 //#[derive(std::cmp::PartialEq)]
@@ -12,12 +11,6 @@ use super::{
 //    Immediate,
 //    Deferred,
 //}
-
-// pub struct BuiltinRuntimeOptions<T, G> {
-//     immediate_eval: T,
-//     deferred_eval: T,
-//     budget: fn(CostingFun<G>) -> fn(Vec<u32>) -> ExBudget,
-// }
 
 #[derive(Clone, Debug)]
 pub struct BuiltinRuntime {
@@ -34,16 +27,6 @@ impl BuiltinRuntime {
             forces: 0,
         }
     }
-
-    // fn from_builtin_runtime_options<G>(
-    //     eval_mode: EvalMode,
-    //     cost: CostingFun<G>,
-    //     runtime_options: BuiltinRuntimeOptions<T, G>,
-    // ) -> BuiltinRuntime {
-    //    Self {
-    //      budget: (runtime_options.budget)(cost),
-    //    }
-    // }
 
     pub fn is_arrow(&self) -> bool {
         self.args.len() != self.fun.arity()
@@ -209,7 +192,7 @@ impl DefaultFunction {
                 if arg.is_integer() {
                     Ok(())
                 } else {
-                    todo!("type error")
+                    Err(Error::TypeMismatch(Type::Integer, arg.into()))
                 }
             }
             DefaultFunction::SubtractInteger => todo!(),
@@ -240,15 +223,11 @@ impl DefaultFunction {
             DefaultFunction::EncodeUtf8 => todo!(),
             DefaultFunction::DecodeUtf8 => todo!(),
             DefaultFunction::IfThenElse => {
-                if args.is_empty() {
-                    if arg.is_bool() {
-                        return Ok(());
-                    } else {
-                        todo!("type error")
-                    }
+                if args.is_empty() && !arg.is_bool() {
+                    Err(Error::TypeMismatch(Type::Bool, arg.into()))
+                } else {
+                    Ok(())
                 }
-
-                Ok(())
             }
             DefaultFunction::ChooseUnit => todo!(),
             DefaultFunction::Trace => todo!(),
@@ -278,18 +257,19 @@ impl DefaultFunction {
         }
     }
 
+    // This should be safe because we've already checked
+    // the types of the args as they were pushed. Although
+    // the unreachables look ugly, it's the reality of the situation.
     pub fn call(&self, args: &[Value]) -> Result<Value, Error> {
         match self {
             DefaultFunction::AddInteger => {
-                assert_eq!(args.len(), self.arity());
-
                 let args = (&args[0], &args[1]);
 
                 match args {
                     (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
                         Ok(Value::Con(Constant::Integer(arg1 + arg2)))
                     }
-                    _ => todo!("handle error"),
+                    _ => unreachable!(),
                 }
             }
             DefaultFunction::SubtractInteger => todo!(),
@@ -327,7 +307,7 @@ impl DefaultFunction {
                         Ok(args[2].clone())
                     }
                 }
-                _ => todo!("handle error"),
+                _ => unreachable!(),
             },
             DefaultFunction::ChooseUnit => todo!(),
             DefaultFunction::Trace => todo!(),

@@ -162,7 +162,7 @@ impl PartialEq for NamedDeBruijn {
 /// It allows for injecting fake textual names while also using Debruijn for decoding
 /// without having to loop through twice.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FakeNamedDeBruijn(NamedDeBruijn);
+pub struct FakeNamedDeBruijn(pub NamedDeBruijn);
 
 impl From<DeBruijn> for FakeNamedDeBruijn {
     fn from(d: DeBruijn) -> Self {

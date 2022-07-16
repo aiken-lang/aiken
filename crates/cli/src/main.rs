@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fmt::Write as _, fs};
 
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
                     let mut output = String::new();
 
                     for (i, byte) in bytes.iter().enumerate() {
-                        output.push_str(&format!("{:08b}", byte));
+                        let _ = write!(output, "{:08b}", byte);
 
                         if (i + 1) % 4 == 0 {
                             output.push('\n');
@@ -47,14 +47,18 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&out_name, &bytes)?;
                 }
             }
-            UplcCommand::Fmt { input } => {
+            UplcCommand::Fmt { input, print } => {
                 let code = std::fs::read_to_string(&input)?;
 
                 let program = parser::program(&code)?;
 
                 let pretty = program.to_pretty();
 
-                fs::write(&input, pretty)?;
+                if print {
+                    println!("{}", pretty);
+                } else {
+                    fs::write(&input, pretty)?;
+                }
             }
             UplcCommand::Unflat { input, print, out } => {
                 let bytes = std::fs::read(&input)?;
@@ -105,7 +109,7 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
 
-                println!("Costs - memory: {} & cpu: {}", cost.mem, cost.cpu);
+                println!("\nCosts - memory: {} & cpu: {}", cost.mem, cost.cpu);
             }
         },
     }

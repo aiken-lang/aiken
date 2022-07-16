@@ -1,8 +1,14 @@
 use pretty::RcDoc;
 
-use crate::ast::{Constant, Name, Program, Term};
+use crate::{
+    ast::{Constant, Program, Term},
+    flat::Binder,
+};
 
-impl Program<Name> {
+impl<'a, T> Program<T>
+where
+    T: Binder<'a>,
+{
     pub fn to_pretty(&self) -> String {
         let mut w = Vec::new();
 
@@ -40,7 +46,10 @@ impl Program<Name> {
     }
 }
 
-impl Term<Name> {
+impl<'a, T> Term<T>
+where
+    T: Binder<'a>,
+{
     pub fn to_pretty(&self) -> String {
         let mut w = Vec::new();
 
@@ -65,7 +74,7 @@ impl Term<Name> {
 
     fn to_doc(&self) -> RcDoc<()> {
         match self {
-            Term::Var(name) => RcDoc::text(&name.text),
+            Term::Var(name) => RcDoc::text(name.text()),
             Term::Delay(term) => RcDoc::text("(")
                 .append(
                     RcDoc::text("delay")
@@ -82,7 +91,7 @@ impl Term<Name> {
                 .append(
                     RcDoc::text("lam")
                         .append(RcDoc::line())
-                        .append(RcDoc::text(&parameter_name.text))
+                        .append(RcDoc::text(parameter_name.text()))
                         .append(RcDoc::line())
                         .append(body.to_doc())
                         .nest(2),
@@ -161,7 +170,7 @@ impl Constant {
                 .append(RcDoc::text("()")),
             Constant::Bool(b) => RcDoc::text("bool")
                 .append(RcDoc::line())
-                .append(RcDoc::text(if *b { "true" } else { "false" })),
+                .append(RcDoc::text(if *b { "True" } else { "False" })),
         }
     }
 }
