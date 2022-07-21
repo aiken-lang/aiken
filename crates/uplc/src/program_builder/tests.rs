@@ -9,9 +9,10 @@ prop_compose! {
         min: isize,
         patch: isize,
     ) -> (usize, usize, usize){
-        let maj = maj.abs() as usize;
-        let min = min.abs() as usize;
-        let patch = patch.abs() as usize;
+        let maj = maj.unsigned_abs();
+        let min = min.unsigned_abs();
+        let patch = patch.unsigned_abs();
+
         (maj, min, patch)
     }
 }
