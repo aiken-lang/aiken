@@ -377,22 +377,31 @@ impl Value {
             Value::Builtin { .. } => 1,
         }
     }
+
+    pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
+        match self {
+            Value::Con(constant) => {
+                let constant_type = Type::from(constant);
+
+                if constant_type == r#type {
+                    Ok(())
+                } else {
+                    Err(Error::TypeMismatch(r#type, constant_type))
+                }
+            }
+            rest => Err(Error::NotAConstant(rest.clone())),
+        }
+    }
 }
 
-impl From<&Value> for Type {
-    fn from(value: &Value) -> Self {
-        match value {
-            Value::Con(constant) => match constant {
-                Constant::Integer(_) => Type::Integer,
-                Constant::ByteString(_) => Type::ByteString,
-                Constant::String(_) => Type::String,
-                Constant::Char(_) => todo!(),
-                Constant::Unit => Type::Unit,
-                Constant::Bool(_) => Type::Bool,
-            },
-            Value::Delay(_) => todo!(),
-            Value::Lambda { .. } => todo!(),
-            Value::Builtin { .. } => todo!(),
+impl From<&Constant> for Type {
+    fn from(constant: &Constant) -> Self {
+        match constant {
+            Constant::Integer(_) => Type::Integer,
+            Constant::ByteString(_) => Type::ByteString,
+            Constant::String(_) => Type::String,
+            Constant::Unit => Type::Unit,
+            Constant::Bool(_) => Type::Bool,
         }
     }
 }

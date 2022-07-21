@@ -25,12 +25,6 @@ where
     /// We use this to apply the validator to Datum,
     /// then redeemer, then ScriptContext. If datum is
     /// even necessary (i.e. minting policy).
-    ///
-    /// ```rust
-    /// program.apply(&datum)
-    ///    .apply(&redeemer)
-    ///    .apply(&script_context);
-    /// ```
     pub fn apply(&self, program: &Self) -> Self {
         let applied_term = Term::Apply {
             function: Box::new(self.term.clone()),
@@ -86,10 +80,8 @@ pub enum Constant {
     // tag: 2
     String(String),
     // tag: 3
-    Char(char),
-    // tag: 4
     Unit,
-    // tag: 5
+    // tag: 4
     Bool(bool),
 }
 

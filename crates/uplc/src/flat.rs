@@ -170,14 +170,6 @@ impl Encode for &Constant {
                 encode_constant(2, e)?;
                 s.encode(e)?;
             }
-            // there is no char constant tag
-            Constant::Char(c) => {
-                let mut b = [0; 4];
-
-                let s = c.encode_utf8(&mut b);
-
-                s.as_bytes().encode(e)?;
-            }
             Constant::Unit => encode_constant(3, e)?,
             Constant::Bool(b) => {
                 encode_constant(4, e)?;
