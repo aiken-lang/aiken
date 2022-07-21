@@ -359,20 +359,16 @@ impl Value {
 
     pub fn to_ex_mem(&self) -> i64 {
         match self {
-            // TODO: this is not 1
             Value::Con(c) => match c {
                 Constant::Integer(i) => {
                     if *i == 0 {
                         1
                     } else {
-                        //TODO
-                        //    std::mem::size_of( i.abs()
-                        1
+                        ((i.abs() as f64).log2().floor() as i64 / 64) + 1
                     }
                 }
                 Constant::ByteString(b) => (((b.len() - 1) / 8) + 1) as i64,
                 Constant::String(s) => s.chars().count() as i64,
-                Constant::Char(_) => 1,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
             },
