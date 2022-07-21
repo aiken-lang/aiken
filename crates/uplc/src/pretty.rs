@@ -164,7 +164,6 @@ impl Constant {
                 .append(RcDoc::text("\""))
                 .append(RcDoc::text(s))
                 .append(RcDoc::text("\"")),
-            Constant::Char(c) => unimplemented!("char: {}", c),
             Constant::Unit => RcDoc::text("unit")
                 .append(RcDoc::line())
                 .append(RcDoc::text("()")),

@@ -1,7 +1,5 @@
 (program
   1.0.0
-  [
-    [ [ (force (builtin ifThenElse)) (con integer 2) ] (con integer 1) ]
-    (con string "yo")
-  ]
+  [ (force (builtin ifThenElse)) (con string "yo") (con integer 3) (con integer 4) ]
 )
+

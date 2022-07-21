@@ -188,13 +188,7 @@ impl DefaultFunction {
 
     pub fn check_type(&self, arg: &Value, args: &[Value]) -> Result<(), Error> {
         match self {
-            DefaultFunction::AddInteger => {
-                if arg.is_integer() {
-                    Ok(())
-                } else {
-                    Err(Error::TypeMismatch(Type::Integer, arg.into()))
-                }
-            }
+            DefaultFunction::AddInteger => arg.expect_type(Type::Integer),
             DefaultFunction::SubtractInteger => todo!(),
             DefaultFunction::MultiplyInteger => todo!(),
             DefaultFunction::DivideInteger => todo!(),
@@ -224,7 +218,7 @@ impl DefaultFunction {
             DefaultFunction::DecodeUtf8 => todo!(),
             DefaultFunction::IfThenElse => {
                 if args.is_empty() && !arg.is_bool() {
-                    Err(Error::TypeMismatch(Type::Bool, arg.into()))
+                    arg.expect_type(Type::Bool)
                 } else {
                     Ok(())
                 }
