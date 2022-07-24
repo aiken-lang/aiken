@@ -103,10 +103,13 @@ impl Machine {
     }
 
     fn return_compute(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
-        // avoid unwrap if possible and just return an err when None
-        // but honestly it should never be empty anyways because Machine
+        // frames should never be empty anyways because Machine
         // is initialized with `Context::NoFrame`.
-        let frame = self.frames.last().cloned().unwrap();
+        let frame = self
+            .frames
+            .last()
+            .cloned()
+            .expect("frames should never be empty");
 
         match frame {
             Context::FrameApplyFun(function) => {
