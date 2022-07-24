@@ -159,14 +159,15 @@ impl Encode for &Constant {
         match self {
             // Integers are typically smaller so we save space
             // by encoding them in 7 bits and this allows it to be byte alignment agnostic.
+            // Strings and bytestrings span multiple bytes so using bytestring is
+            // the most effective encoding.
+            // i.e. A 17 or greater length byte array loses efficiency being encoded as
+            // a unsigned integer instead of a byte array
             Constant::Integer(i) => {
                 encode_constant(0, e)?;
                 i.encode(e)?;
             }
-            // Strings and bytestrings span multiple bytes so using bytestring is
-            // the most effective encoding.
-            // i.e. A 17 or greater length byte array loses efficiency being encoded as 
-            // a unsigned integer instead of a byte array
+
             Constant::ByteString(bytes) => {
                 encode_constant(1, e)?;
                 bytes.encode(e)?;
