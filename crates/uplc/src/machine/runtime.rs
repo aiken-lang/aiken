@@ -71,7 +71,7 @@ impl DefaultFunction {
     pub fn arity(&self) -> usize {
         match self {
             DefaultFunction::AddInteger => 2,
-            DefaultFunction::SubtractInteger => todo!(),
+            DefaultFunction::SubtractInteger => 2,
             DefaultFunction::MultiplyInteger => todo!(),
             DefaultFunction::DivideInteger => todo!(),
             DefaultFunction::QuotientInteger => todo!(),
@@ -79,7 +79,7 @@ impl DefaultFunction {
             DefaultFunction::ModInteger => todo!(),
             DefaultFunction::EqualsInteger => todo!(),
             DefaultFunction::LessThanInteger => todo!(),
-            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => 2,
             DefaultFunction::AppendByteString => todo!(),
             DefaultFunction::ConsByteString => todo!(),
             DefaultFunction::SliceByteString => todo!(),
@@ -138,7 +138,7 @@ impl DefaultFunction {
             DefaultFunction::ModInteger => todo!(),
             DefaultFunction::EqualsInteger => todo!(),
             DefaultFunction::LessThanInteger => todo!(),
-            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => 0,
             DefaultFunction::AppendByteString => todo!(),
             DefaultFunction::ConsByteString => todo!(),
             DefaultFunction::SliceByteString => todo!(),
@@ -189,7 +189,7 @@ impl DefaultFunction {
     pub fn check_type(&self, arg: &Value, args: &[Value]) -> Result<(), Error> {
         match self {
             DefaultFunction::AddInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::SubtractInteger => todo!(),
+            DefaultFunction::SubtractInteger => arg.expect_type(Type::Integer),
             DefaultFunction::MultiplyInteger => todo!(),
             DefaultFunction::DivideInteger => todo!(),
             DefaultFunction::QuotientInteger => todo!(),
@@ -197,7 +197,7 @@ impl DefaultFunction {
             DefaultFunction::ModInteger => todo!(),
             DefaultFunction::EqualsInteger => todo!(),
             DefaultFunction::LessThanInteger => todo!(),
-            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => arg.expect_type(Type::Integer),
             DefaultFunction::AppendByteString => todo!(),
             DefaultFunction::ConsByteString => todo!(),
             DefaultFunction::SliceByteString => todo!(),
@@ -266,7 +266,16 @@ impl DefaultFunction {
                     _ => unreachable!(),
                 }
             }
-            DefaultFunction::SubtractInteger => todo!(),
+            DefaultFunction::SubtractInteger => {
+                let args = (&args[0], &args[1]);
+
+                match args {
+                    (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                        Ok(Value::Con(Constant::Integer(arg1 - arg2)))
+                    }
+                    _ => unreachable!(),
+                }
+            }
             DefaultFunction::MultiplyInteger => todo!(),
             DefaultFunction::DivideInteger => todo!(),
             DefaultFunction::QuotientInteger => todo!(),
@@ -274,7 +283,16 @@ impl DefaultFunction {
             DefaultFunction::ModInteger => todo!(),
             DefaultFunction::EqualsInteger => todo!(),
             DefaultFunction::LessThanInteger => todo!(),
-            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => {
+                let args = (&args[0], &args[1]);
+
+                match args {
+                    (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                        Ok(Value::Con(Constant::Bool(arg1 <= arg2)))
+                    }
+                    _ => unreachable!(),
+                }
+            }
             DefaultFunction::AppendByteString => todo!(),
             DefaultFunction::ConsByteString => todo!(),
             DefaultFunction::SliceByteString => todo!(),

@@ -1,5 +1,5 @@
 (program
   1.0.0
-  [ (force (builtin ifThenElse)) (con string "yo") (con integer 3) (con integer 4) ]
+  [  (builtin subtractInteger ) (con integer 7) (con integer 4) ]
 )
 

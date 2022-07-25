@@ -542,7 +542,16 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::SubtractInteger => todo!(),
+            DefaultFunction::SubtractInteger => ExBudget {
+                mem: self
+                    .subtract_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .subtract_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::MultiplyInteger => todo!(),
             DefaultFunction::DivideInteger => todo!(),
             DefaultFunction::QuotientInteger => todo!(),
@@ -550,7 +559,16 @@ impl BuiltinCosts {
             DefaultFunction::ModInteger => todo!(),
             DefaultFunction::EqualsInteger => todo!(),
             DefaultFunction::LessThanInteger => todo!(),
-            DefaultFunction::LessThanEqualsInteger => todo!(),
+            DefaultFunction::LessThanEqualsInteger => ExBudget {
+                mem: self
+                    .less_than_equals_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .less_than_equals_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::AppendByteString => todo!(),
             DefaultFunction::ConsByteString => todo!(),
             DefaultFunction::SliceByteString => todo!(),
