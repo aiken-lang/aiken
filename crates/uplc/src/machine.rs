@@ -15,9 +15,7 @@ use self::{cost_model::CostModel, error::Type, runtime::BuiltinRuntime};
 pub struct Machine {
     costs: CostModel,
     pub ex_budget: ExBudget,
-    frames: Vec<Context>,
     slippage: u32,
-    env: Vec<Value>,
     unbudgeted_steps: [u32; 8],
     pub logs: Vec<String>,
 }
@@ -28,8 +26,6 @@ impl Machine {
             costs,
             ex_budget: initial_budget,
             slippage,
-            frames: vec![Context::NoFrame],
-            env: vec![],
             unbudgeted_steps: [0; 8],
             logs: vec![],
         }
@@ -40,22 +36,27 @@ impl Machine {
 
         self.spend_budget(startup_budget)?;
 
-        self.compute(term)
+        self.compute(Context::NoFrame, vec![], term)
     }
 
-    fn compute(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
+    fn compute(
+        &mut self,
+        context: Context,
+        env: Vec<Value>,
+        term: &Term<NamedDeBruijn>,
+    ) -> Result<Term<NamedDeBruijn>, Error> {
         match term {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
-                let val = self.lookup_var(name.clone())?;
+                let val = self.lookup_var(name.clone(), env)?;
 
-                self.return_compute(val)
+                self.return_compute(context, val)
             }
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                self.return_compute(Value::Delay(*body.clone()))
+                self.return_compute(context, Value::Delay(*body.clone(), env))
             }
             Term::Lambda {
                 parameter_name,
@@ -63,29 +64,33 @@ impl Machine {
             } => {
                 self.step_and_maybe_spend(StepKind::Lambda)?;
 
-                self.return_compute(Value::Lambda {
-                    parameter_name: parameter_name.clone(),
-                    body: *body.clone(),
-                })
+                self.return_compute(
+                    context,
+                    Value::Lambda {
+                        parameter_name: parameter_name.clone(),
+                        body: *body.clone(),
+                        env,
+                    },
+                )
             }
             Term::Apply { function, argument } => {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
-                self.push_frame(Context::FrameApplyArg(*argument.clone()));
-
-                self.compute(function)
+                self.compute(
+                    Context::FrameApplyArg(env.clone(), *argument.clone(), Box::new(context)),
+                    env,
+                    function,
+                )
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                self.return_compute(Value::Con(x.clone()))
+                self.return_compute(context, Value::Con(x.clone()))
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
-                self.push_frame(Context::FrameForce);
-
-                self.compute(body)
+                self.compute(Context::FrameForce(Box::new(context)), env, body)
             }
             Term::Error => Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
@@ -93,42 +98,29 @@ impl Machine {
 
                 let runtime: BuiltinRuntime = (*fun).into();
 
-                self.return_compute(Value::Builtin {
-                    fun: *fun,
-                    term: term.clone(),
-                    runtime,
-                })
+                self.return_compute(
+                    context,
+                    Value::Builtin {
+                        fun: *fun,
+                        term: term.clone(),
+                        runtime,
+                    },
+                )
             }
         }
     }
 
-    fn return_compute(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
-        // frames should never be empty anyways because Machine
-        // is initialized with `Context::NoFrame`.
-        let frame = self
-            .frames
-            .last()
-            .cloned()
-            .expect("frames should never be empty");
-
-        match frame {
-            Context::FrameApplyFun(function) => {
-                self.pop_frame();
-
-                self.apply_evaluate(function, value)
+    fn return_compute(
+        &mut self,
+        context: Context,
+        value: Value,
+    ) -> Result<Term<NamedDeBruijn>, Error> {
+        match context {
+            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value),
+            Context::FrameApplyArg(arg_var_env, arg, ctx) => {
+                self.compute(Context::FrameApplyFun(value, ctx), arg_var_env, &arg)
             }
-            Context::FrameApplyArg(arg) => {
-                self.pop_frame();
-
-                self.push_frame(Context::FrameApplyFun(value));
-
-                self.compute(&arg)
-            }
-            Context::FrameForce => {
-                self.pop_frame();
-
-                self.force_evaluate(value)
-            }
+            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
             Context::NoFrame => {
                 if self.unbudgeted_steps[7] > 0 {
                     self.spend_unbudgeted_steps()?;
@@ -145,57 +137,76 @@ impl Machine {
         match value {
             Value::Con(x) => Term::Constant(x),
             Value::Builtin { term, .. } => term,
-            Value::Delay(body) => self.discharge_value_env(Term::Delay(Box::new(body))),
+            Value::Delay(body, env) => self.discharge_value_env(env, Term::Delay(Box::new(body))),
             Value::Lambda {
                 parameter_name,
                 body,
-            } => self.discharge_value_env(Term::Lambda {
-                parameter_name: NamedDeBruijn {
-                    text: parameter_name.text,
-                    index: 0.into(),
+                env,
+            } => self.discharge_value_env(
+                env,
+                Term::Lambda {
+                    parameter_name: NamedDeBruijn {
+                        text: parameter_name.text,
+                        index: 0.into(),
+                    },
+                    body: Box::new(body),
                 },
-                body: Box::new(body),
-            }),
+            ),
         }
     }
 
-    fn discharge_value_env(&mut self, term: Term<NamedDeBruijn>) -> Term<NamedDeBruijn> {
-        fn rec(lam_cnt: usize, t: Term<NamedDeBruijn>, this: &mut Machine) -> Term<NamedDeBruijn> {
-            match t {
+    fn discharge_value_env(
+        &mut self,
+        env: Vec<Value>,
+        term: Term<NamedDeBruijn>,
+    ) -> Term<NamedDeBruijn> {
+        let mut lam_cnt = 0;
+        let mut term = term;
+
+        loop {
+            match term {
                 Term::Var(name) => {
                     let index: usize = name.index.into();
                     if lam_cnt >= index {
-                        Term::Var(name)
+                        return Term::Var(name);
                     } else {
-                        this.env
-                            .get::<usize>(index - lam_cnt - 1)
+                        return env
+                            .get::<usize>(index - lam_cnt)
                             .cloned()
-                            .map_or(Term::Var(name), |v| this.discharge_value(v))
+                            .map_or(Term::Var(name), |v| self.discharge_value(v));
                     }
                 }
                 Term::Lambda {
                     parameter_name,
                     body,
-                } => Term::Lambda {
-                    parameter_name,
-                    body: Box::new(rec(lam_cnt + 1, *body, this)),
-                },
+                } => {
+                    term = *body;
+                    lam_cnt += 1;
+
+                    return Term::Lambda {
+                        parameter_name,
+                        body: Box::new(rec(lam_cnt + 1, *body, env, this)),
+                    };
+                }
                 Term::Apply { function, argument } => Term::Apply {
-                    function: Box::new(rec(lam_cnt, *function, this)),
-                    argument: Box::new(rec(lam_cnt, *argument, this)),
+                    function: Box::new(rec(lam_cnt, *function, env, this)),
+                    argument: Box::new(rec(lam_cnt, *argument, env, this)),
                 },
 
-                Term::Delay(x) => Term::Delay(Box::new(rec(lam_cnt, *x, this))),
-                Term::Force(x) => Term::Force(Box::new(rec(lam_cnt, *x, this))),
+                Term::Delay(x) => Term::Delay(Box::new(rec(lam_cnt, *x, env, this))),
+                Term::Force(x) => Term::Force(Box::new(rec(lam_cnt, *x, env, this))),
                 rest => rest,
             }
         }
-        rec(0, term, self)
     }
 
-    fn force_evaluate(&mut self, value: Value) -> Result<Term<NamedDeBruijn>, Error> {
+    fn force_evaluate(
+        &mut self,
+        context: Context,
+        value: Value,
+    ) -> Result<Term<NamedDeBruijn>, Error> {
         match value {
-            Value::Delay(body) => self.compute(&body),
+            Value::Delay(body, env) => self.compute(context, env, &body),
             Value::Builtin {
                 fun,
                 term,
@@ -208,7 +219,7 @@ impl Machine {
 
                     let res = self.eval_builtin_app(fun, force_term, runtime)?;
 
-                    self.return_compute(res)
+                    self.return_compute(context, res)
                 } else {
                     Err(Error::BuiltinTermArgumentExpected(force_term))
                 }
@@ -219,15 +230,17 @@ impl Machine {
 
     fn apply_evaluate(
         &mut self,
+        context: Context,
         function: Value,
         argument: Value,
     ) -> Result<Term<NamedDeBruijn>, Error> {
         match function {
-            Value::Lambda { body, .. } => {
-                self.env.push(argument);
-                let term = self.compute(&body)?;
-                self.env.pop();
-                Ok(term)
+            Value::Lambda { body, env, .. } => {
+                let mut e = env;
+
+                e.push(argument);
+
+                self.compute(context, e, &body)
             }
             Value::Builtin {
                 fun,
@@ -246,7 +259,7 @@ impl Machine {
 
                     let res = self.eval_builtin_app(fun, t, runtime)?;
 
-                    self.return_compute(res)
+                    self.return_compute(context, res)
                 } else {
                     Err(Error::UnexpectedBuiltinTermArgument(t))
                 }
@@ -272,17 +285,8 @@ impl Machine {
         }
     }
 
-    fn push_frame(&mut self, frame: Context) {
-        self.frames.push(frame);
-    }
-
-    fn pop_frame(&mut self) {
-        self.frames.pop();
-    }
-
-    fn lookup_var(&mut self, name: NamedDeBruijn) -> Result<Value, Error> {
-        self.env
-            .get::<usize>(usize::from(name.index) - 1)
+    fn lookup_var(&mut self, name: NamedDeBruijn, env: Vec<Value>) -> Result<Value, Error> {
+        env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
             .ok_or(Error::OpenTermEvaluated(Term::Var(name)))
     }
@@ -330,19 +334,20 @@ impl Machine {
 
 #[derive(Clone)]
 enum Context {
-    FrameApplyFun(Value),
-    FrameApplyArg(Term<NamedDeBruijn>),
-    FrameForce,
+    FrameApplyFun(Value, Box<Context>),
+    FrameApplyArg(Vec<Value>, Term<NamedDeBruijn>, Box<Context>),
+    FrameForce(Box<Context>),
     NoFrame,
 }
 
 #[derive(Clone, Debug)]
 pub enum Value {
     Con(Constant),
-    Delay(Term<NamedDeBruijn>),
+    Delay(Term<NamedDeBruijn>, Vec<Value>),
     Lambda {
         parameter_name: NamedDeBruijn,
         body: Term<NamedDeBruijn>,
+        env: Vec<Value>,
     },
     Builtin {
         fun: DefaultFunction,
@@ -375,7 +380,7 @@ impl Value {
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
             },
-            Value::Delay(_) => 1,
+            Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
         }
