@@ -28,6 +28,8 @@ pub enum Error {
     BuiltinTermArgumentExpected(Term<NamedDeBruijn>),
     #[error("Unable to unlift value because it is not a constant:\n\n{0:#?}")]
     NotAConstant(Value),
+    #[error("The evaluation never reached a final state")]
+    MachineNeverReachedDone,
 }
 
 #[derive(Debug, Clone, PartialEq)]

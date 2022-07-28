@@ -12,12 +12,30 @@ pub use error::Error;
 
 use self::{cost_model::CostModel, error::Type, runtime::BuiltinRuntime};
 
+enum MachineStep {
+    Return(Context, Value),
+    Compute(Context, Vec<Value>, Term<NamedDeBruijn>),
+    Done(Term<NamedDeBruijn>),
+}
+
+impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
+    type Error = Error;
+
+    fn try_from(value: Option<MachineStep>) -> Result<Self, Error> {
+        match value {
+            Some(MachineStep::Done(term)) => Ok(term),
+            _ => Err(Error::MachineNeverReachedDone),
+        }
+    }
+}
+
 pub struct Machine {
     costs: CostModel,
     pub ex_budget: ExBudget,
     slippage: u32,
     unbudgeted_steps: [u32; 8],
     pub logs: Vec<String>,
+    stack: Vec<MachineStep>,
 }
 
 impl Machine {
@@ -28,15 +46,37 @@ impl Machine {
             slippage,
             unbudgeted_steps: [0; 8],
             logs: vec![],
+            stack: vec![],
         }
     }
 
     pub fn run(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
+        use MachineStep::*;
+
         let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
 
         self.spend_budget(startup_budget)?;
 
-        self.compute(Context::NoFrame, vec![], term)
+        self.stack
+            .push(Compute(Context::NoFrame, vec![], term.clone()));
+
+        while let Some(step) = self.stack.pop() {
+            match step {
+                Compute(context, env, t) => {
+                    self.compute(context, env, &t)?;
+                }
+                Return(context, value) => {
+                    self.return_compute(context, value)?;
+                }
+                d @ Done(_) => {
+                    self.stack.push(d);
+
+                    break;
+                }
+            };
+        }
+
+        self.stack.pop().try_into()
     }
 
     fn compute(
@@ -44,19 +84,22 @@ impl Machine {
         context: Context,
         env: Vec<Value>,
         term: &Term<NamedDeBruijn>,
-    ) -> Result<Term<NamedDeBruijn>, Error> {
+    ) -> Result<(), Error> {
         match term {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
                 let val = self.lookup_var(name.clone(), env)?;
 
-                self.return_compute(context, val)
+                self.stack.push(MachineStep::Return(context, val));
             }
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                self.return_compute(context, Value::Delay(*body.clone(), env))
+                self.stack.push(MachineStep::Return(
+                    context,
+                    Value::Delay(*body.clone(), env),
+                ));
             }
             Term::Lambda {
                 parameter_name,
@@ -64,63 +107,70 @@ impl Machine {
             } => {
                 self.step_and_maybe_spend(StepKind::Lambda)?;
 
-                self.return_compute(
+                self.stack.push(MachineStep::Return(
                     context,
                     Value::Lambda {
                         parameter_name: parameter_name.clone(),
                         body: *body.clone(),
                         env,
                     },
-                )
+                ));
             }
             Term::Apply { function, argument } => {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
-                self.compute(
+                self.stack.push(MachineStep::Compute(
                     Context::FrameApplyArg(env.clone(), *argument.clone(), Box::new(context)),
                     env,
-                    function,
-                )
+                    *function.clone(),
+                ));
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                self.return_compute(context, Value::Con(x.clone()))
+                self.stack
+                    .push(MachineStep::Return(context, Value::Con(x.clone())));
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
-                self.compute(Context::FrameForce(Box::new(context)), env, body)
+                self.stack.push(MachineStep::Compute(
+                    Context::FrameForce(Box::new(context)),
+                    env,
+                    *body.clone(),
+                ));
             }
-            Term::Error => Err(Error::EvaluationFailure),
+            Term::Error => return Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
 
                 let runtime: BuiltinRuntime = (*fun).into();
 
-                self.return_compute(
+                self.stack.push(MachineStep::Return(
                     context,
                     Value::Builtin {
                         fun: *fun,
                         term: term.clone(),
                         runtime,
                     },
-                )
+                ));
             }
-        }
+        };
+
+        Ok(())
     }
 
-    fn return_compute(
-        &mut self,
-        context: Context,
-        value: Value,
-    ) -> Result<Term<NamedDeBruijn>, Error> {
+    fn return_compute(&mut self, context: Context, value: Value) -> Result<(), Error> {
         match context {
-            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value),
+            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value)?,
             Context::FrameApplyArg(arg_var_env, arg, ctx) => {
-                self.compute(Context::FrameApplyFun(value, ctx), arg_var_env, &arg)
+                self.stack.push(MachineStep::Compute(
+                    Context::FrameApplyFun(value, ctx),
+                    arg_var_env,
+                    arg,
+                ));
             }
-            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
+            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value)?,
             Context::NoFrame => {
                 if self.unbudgeted_steps[7] > 0 {
                     self.spend_unbudgeted_steps()?;
@@ -128,9 +178,11 @@ impl Machine {
 
                 let term = self.discharge_value(value);
 
-                Ok(term)
+                self.stack.push(MachineStep::Done(term));
             }
-        }
+        };
+
+        Ok(())
     }
 
     fn discharge_value(&mut self, value: Value) -> Term<NamedDeBruijn> {
@@ -197,13 +249,13 @@ impl Machine {
         rec(0, term, self, &env)
     }
 
-    fn force_evaluate(
-        &mut self,
-        context: Context,
-        value: Value,
-    ) -> Result<Term<NamedDeBruijn>, Error> {
+    fn force_evaluate(&mut self, context: Context, value: Value) -> Result<(), Error> {
         match value {
-            Value::Delay(body, env) => self.compute(context, env, &body),
+            Value::Delay(body, env) => {
+                self.stack.push(MachineStep::Compute(context, env, body));
+
+                Ok(())
+            }
             Value::Builtin {
                 fun,
                 term,
@@ -216,7 +268,9 @@ impl Machine {
 
                     let res = self.eval_builtin_app(fun, force_term, runtime)?;
 
-                    self.return_compute(context, res)
+                    self.stack.push(MachineStep::Return(context, res));
+
+                    Ok(())
                 } else {
                     Err(Error::BuiltinTermArgumentExpected(force_term))
                 }
@@ -230,14 +284,16 @@ impl Machine {
         context: Context,
         function: Value,
         argument: Value,
-    ) -> Result<Term<NamedDeBruijn>, Error> {
+    ) -> Result<(), Error> {
         match function {
             Value::Lambda { body, env, .. } => {
                 let mut e = env;
 
                 e.push(argument);
 
-                self.compute(context, e, &body)
+                self.stack.push(MachineStep::Compute(context, e, body));
+
+                Ok(())
             }
             Value::Builtin {
                 fun,
@@ -256,7 +312,9 @@ impl Machine {
 
                     let res = self.eval_builtin_app(fun, t, runtime)?;
 
-                    self.return_compute(context, res)
+                    self.stack.push(MachineStep::Return(context, res));
+
+                    Ok(())
                 } else {
                     Err(Error::UnexpectedBuiltinTermArgument(t))
                 }
