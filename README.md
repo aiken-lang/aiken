@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-dark-mode-only" alt="Aiken" height="240" />
-  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-light.png?sanitize=true#gh-light-mode-only" alt="Aiken" height="240" />
+  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" height="240" />
+  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" height="240" />
   <hr />
     <h2 align="center" style="border-bottom: none">Cardano smart contract language and toolchain</h2>
     <img alt="GitHub" src="https://img.shields.io/github/license/txpipe/aiken" />
@@ -69,6 +69,16 @@ is not necessariy the implementation order or full scope.
   - Rust
   - Gleam
 - [ ] Language Server
+
+## Art Credit
+
+We'd like to give a special thanks to [@nkz](https://twitter.com/nkzthecreator)
+for creating the logo and giving us the idea to name the project aiken.
+
+**Why Aiken?**
+
+The name comes from [Howard Aiken](https://en.wikipedia.org/wiki/Howard_H._Aiken),
+an American physicist and a pioneer in computing
 
 ## Resources
 
