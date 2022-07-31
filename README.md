@@ -78,7 +78,7 @@ for creating the logo and giving us the idea to name the project aiken.
 **Why Aiken?**
 
 The name comes from [Howard Aiken](https://en.wikipedia.org/wiki/Howard_H._Aiken),
-an American physicist and a pioneer in computing
+an American physicist and a pioneer in computing.
 
 ## Resources
 
