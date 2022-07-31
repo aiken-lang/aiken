@@ -1,6 +1,13 @@
-# AIKEN
-
-A cardano smart contract language and toolchain
+<div align="center">
+  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-dark-mode-only" alt="Aiken" height="240" />
+  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-light.png?sanitize=true#gh-light-mode-only" alt="Aiken" height="240" />
+  <hr />
+    <h2 align="center" style="border-bottom: none">Cardano smart contract language and toolchain</h2>
+    <img alt="GitHub" src="https://img.shields.io/github/license/txpipe/aiken" />
+    <img alt="Crates.io" src="https://img.shields.io/crates/v/aiken" />
+    <img alt="GitHub Workflow Status" src="https://img.shields.io/github/workflow/status/txpipe/aiken/Rust" />
+  <hr/>
+</div>
 
 ## Install
 
@@ -53,7 +60,7 @@ is not necessariy the implementation order or full scope.
 
 - [x] compile plutus core into it's on chain encoding
 - [x] reverse the on chain encoding into plutus core
-- [ ] Plutus Core interpreter
+- [x] Plutus Core interpreter
 - [ ] create a higher level syntax with inspiration from
   - JS
   - ReasonML
