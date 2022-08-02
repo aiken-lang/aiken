@@ -412,3 +412,17 @@ impl Program<NamedDeBruijn> {
         (term, machine.ex_budget, machine.logs)
     }
 }
+
+impl Program<DeBruijn> {
+    pub fn eval(
+        &self,
+    ) -> (
+        Result<Term<NamedDeBruijn>, crate::machine::Error>,
+        ExBudget,
+        Vec<String>,
+    ) {
+        let program: Program<NamedDeBruijn> = self.clone().into();
+
+        program.eval()
+    }
+}
