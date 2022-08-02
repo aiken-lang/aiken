@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" height="240" />
-  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" height="240" />
+  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" max-height="240" />
+  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" max-height="240" />
   <hr />
     <h2 align="center" style="border-bottom: none">Cardano smart contract language and toolchain</h2>
     <img alt="GitHub" src="https://img.shields.io/github/license/txpipe/aiken" />
