@@ -33,8 +33,14 @@ where
         self.flat()
     }
 
-    pub fn flat_hex(&self) -> Result<String, en::Error> {
-        let bytes = self.flat()?;
+    pub fn to_cbor(&self) -> Result<Vec<u8>, en::Error> {
+        let flat_bytes = self.flat()?;
+
+        minicbor::to_vec(&flat_bytes).map_err(|err| en::Error::Message(err.to_string()))
+    }
+
+    pub fn to_hex(&self) -> Result<String, en::Error> {
+        let bytes = self.to_cbor()?;
 
         let hex = hex::encode(&bytes);
 
