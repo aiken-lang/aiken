@@ -83,6 +83,21 @@ pub enum Constant {
     Unit,
     // tag: 4
     Bool(bool),
+    // tag: 5
+    ProtoList(Vec<Constant>),
+    // tag: 6
+    ProtoPair(Box<Constant>, Box<Constant>),
+    // tag: 8
+    Data(Data),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Data {
+    Constr(isize, Vec<Data>),
+    Map(Vec<(Data, Data)>),
+    List(Vec<Data>),
+    I(isize),
+    B(Vec<u8>),
 }
 
 /// A Name containing it's parsed textual representation
