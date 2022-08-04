@@ -30,10 +30,29 @@ impl<'b, T> Program<T>
 where
     T: Binder<'b> + Debug,
 {
-    // convenient so that people don't need to depend on the flat crate
-    // directly to call programs flat function
-    pub fn to_flat(&self) -> Result<Vec<u8>, en::Error> {
-        self.flat()
+    pub fn from_cbor(bytes: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<Self, de::Error> {
+        let flat_bytes: Vec<u8> =
+            minicbor::decode(bytes).map_err(|err| de::Error::Message(err.to_string()))?;
+
+        buffer.extend(flat_bytes);
+
+        Self::unflat(buffer)
+    }
+
+    pub fn from_flat(bytes: &'b [u8]) -> Result<Self, de::Error> {
+        Self::unflat(bytes)
+    }
+
+    pub fn from_hex(
+        hex_str: &str,
+        cbor_buffer: &'b mut Vec<u8>,
+        flat_buffer: &'b mut Vec<u8>,
+    ) -> Result<Self, de::Error> {
+        let cbor_bytes = hex::decode(hex_str).map_err(|err| de::Error::Message(err.to_string()))?;
+
+        cbor_buffer.extend(cbor_bytes);
+
+        Self::from_cbor(cbor_buffer, flat_buffer)
     }
 
     pub fn to_cbor(&self) -> Result<Vec<u8>, en::Error> {
@@ -42,16 +61,18 @@ where
         minicbor::to_vec(&flat_bytes).map_err(|err| en::Error::Message(err.to_string()))
     }
 
+    // convenient so that people don't need to depend on the flat crate
+    // directly to call programs flat function
+    pub fn to_flat(&self) -> Result<Vec<u8>, en::Error> {
+        self.flat()
+    }
+
     pub fn to_hex(&self) -> Result<String, en::Error> {
         let bytes = self.to_cbor()?;
 
         let hex = hex::encode(&bytes);
 
         Ok(hex)
-    }
-
-    pub fn from_flat(bytes: &'b [u8]) -> Result<Self, de::Error> {
-        Self::unflat(bytes)
     }
 }
 
