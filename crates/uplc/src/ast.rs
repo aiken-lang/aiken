@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use pallas_primitives::alonzo::PlutusData;
+
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
@@ -109,7 +111,7 @@ pub enum Constant {
     // tag: 7
     // Apply(Box<Constant>, Type),
     // tag: 8
-    Data(Data),
+    Data(PlutusData),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -137,15 +139,6 @@ impl Display for Type {
             Type::Data => write!(f, "data"),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Data {
-    Constr(isize, Vec<Data>),
-    Map(Vec<(Data, Data)>),
-    List(Vec<Data>),
-    I(isize),
-    B(Vec<u8>),
 }
 
 /// A Name containing it's parsed textual representation
