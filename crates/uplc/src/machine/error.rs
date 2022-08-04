@@ -1,8 +1,6 @@
-use std::fmt::Display;
-
 use thiserror::Error;
 
-use crate::ast::{NamedDeBruijn, Term};
+use crate::ast::{NamedDeBruijn, Term, Type};
 
 use super::{ExBudget, Value};
 
@@ -30,25 +28,4 @@ pub enum Error {
     NotAConstant(Value),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-    Bool,
-    Integer,
-    String,
-    ByteString,
-    Unit,
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Bool => write!(f, "bool"),
-            Type::Integer => write!(f, "integer"),
-            Type::String => write!(f, "string"),
-            Type::ByteString => write!(f, "bytestring"),
-            Type::Unit => write!(f, "unit"),
-        }
-    }
 }

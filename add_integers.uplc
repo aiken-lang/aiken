@@ -1,5 +1,5 @@
 (program
   1.0.0
-  [  (builtin subtractInteger ) (con integer 7) (con integer 4) ]
+  (con (list (list integer)) [[7], [5]])
 )
 

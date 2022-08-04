@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, NamedDeBruijn, Term},
+    ast::{Constant, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
 };
 
@@ -10,7 +10,7 @@ mod runtime;
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
 
-use self::{cost_model::CostModel, error::Type, runtime::BuiltinRuntime};
+use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
 enum MachineStep {
     Return(Context, Value),
@@ -434,6 +434,9 @@ impl Value {
                 Constant::String(s) => s.chars().count() as i64,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
+                Constant::ProtoList(_, _) => todo!(),
+                Constant::ProtoPair(_, _, _, _) => todo!(),
+                Constant::Data(_) => todo!(),
             },
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
@@ -465,6 +468,11 @@ impl From<&Constant> for Type {
             Constant::String(_) => Type::String,
             Constant::Unit => Type::Unit,
             Constant::Bool(_) => Type::Bool,
+            Constant::ProtoList(t, _) => Type::List(Box::new(t.clone())),
+            Constant::ProtoPair(t1, t2, _, _) => {
+                Type::Pair(Box::new(t1.clone()), Box::new(t2.clone()))
+            }
+            Constant::Data(_) => todo!(),
         }
     }
 }

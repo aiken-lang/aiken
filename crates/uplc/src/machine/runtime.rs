@@ -1,8 +1,10 @@
-use crate::{ast::Constant, builtins::DefaultFunction};
+use crate::{
+    ast::{Constant, Type},
+    builtins::DefaultFunction,
+};
 
 use super::{
     cost_model::{BuiltinCosts, ExBudget},
-    error::Type,
     Error, Value,
 };
 
