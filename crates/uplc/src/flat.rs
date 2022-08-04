@@ -5,7 +5,7 @@ use flat_rs::{
     en::{self, Encode, Encoder},
     Flat,
 };
-use pallas_primitives::Fragment;
+use pallas_primitives::{babbage::PlutusData, Fragment};
 
 use crate::{
     ast::{
@@ -302,6 +302,14 @@ impl<'b> Decode<'b> for Constant {
             2 => Ok(Constant::String(String::decode(d)?)),
             3 => Ok(Constant::Unit),
             4 => Ok(Constant::Bool(bool::decode(d)?)),
+            8 => {
+                let cbor = Vec::<u8>::decode(d)?;
+
+                let data = PlutusData::decode_fragment(&cbor)
+                    .map_err(|err| de::Error::Message(err.to_string()))?;
+
+                Ok(Constant::Data(data))
+            }
             x => Err(de::Error::Message(format!(
                 "Unknown constant constructor tag: {}",
                 x
