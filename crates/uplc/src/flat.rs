@@ -5,6 +5,7 @@ use flat_rs::{
     en::{self, Encode, Encoder},
     Flat,
 };
+use pallas_primitives::Fragment;
 
 use crate::{
     ast::{
@@ -78,6 +79,7 @@ where
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         let version = (usize::decode(d)?, usize::decode(d)?, usize::decode(d)?);
         let term = Term::decode(d)?;
+
         Ok(Program { version, term })
     }
 }
@@ -163,15 +165,15 @@ where
     }
 }
 
+/// Integers are typically smaller so we save space
+/// by encoding them in 7 bits and this allows it to be byte alignment agnostic.
+/// Strings and bytestrings span multiple bytes so using bytestring is
+/// the most effective encoding.
+/// i.e. A 17 or greater length byte array loses efficiency being encoded as
+/// a unsigned integer instead of a byte array
 impl Encode for Constant {
     fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         match self {
-            // Integers are typically smaller so we save space
-            // by encoding them in 7 bits and this allows it to be byte alignment agnostic.
-            // Strings and bytestrings span multiple bytes so using bytestring is
-            // the most effective encoding.
-            // i.e. A 17 or greater length byte array loses efficiency being encoded as
-            // a unsigned integer instead of a byte array
             Constant::Integer(i) => {
                 encode_constant(&[0], e)?;
                 i.encode(e)?;
@@ -210,9 +212,14 @@ impl Encode for Constant {
                 encode_constant_value(a, e)?;
                 encode_constant_value(b, e)?;
             }
-            Constant::Data(_) => {
+            Constant::Data(data) => {
                 encode_constant(&[8], e)?;
-                todo!()
+
+                let cbor = data
+                    .encode_fragment()
+                    .map_err(|err| en::Error::Message(err.to_string()))?;
+
+                cbor.encode(e)?;
             }
         }
 
