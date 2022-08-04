@@ -3,6 +3,7 @@ use std::fmt::Display;
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
+    flat::Binder,
     machine::{
         cost_model::{CostModel, ExBudget},
         Machine,
@@ -38,6 +39,15 @@ where
     }
 }
 
+impl<'a, T> Display for Program<T>
+where
+    T: Binder<'a>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_pretty())
+    }
+}
+
 /// This represents a term in Untyped Plutus Core.
 /// We need a generic type for the different forms that a program may be in.
 /// Specifically, `Var` and `parameter_name` in `Lambda` can be a `Name`,
@@ -67,6 +77,15 @@ pub enum Term<T> {
     Error,
     // tag: 7
     Builtin(DefaultFunction),
+}
+
+impl<'a, T> Display for Term<T>
+where
+    T: Binder<'a>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_pretty())
+    }
 }
 
 /// A container for the various constants that are available
