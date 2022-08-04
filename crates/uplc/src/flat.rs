@@ -240,10 +240,16 @@ fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error>
         }
         Constant::ProtoPair(_, _, a, b) => {
             encode_constant_value(a, e)?;
-            encode_constant_value(b, e)?;
-            Ok(())
+
+            encode_constant_value(b, e)
         }
-        Constant::Data(_) => todo!(),
+        Constant::Data(data) => {
+            let cbor = data
+                .encode_fragment()
+                .map_err(|err| en::Error::Message(err.to_string()))?;
+
+            cbor.encode(e)
+        }
     }
 }
 
@@ -263,7 +269,7 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
             encode_type(type1, bytes);
             encode_type(type2, bytes);
         }
-        Type::Data => todo!(),
+        Type::Data => bytes.push(8),
     }
 }
 
