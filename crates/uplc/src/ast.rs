@@ -103,11 +103,40 @@ pub enum Constant {
     // tag: 4
     Bool(bool),
     // tag: 5
-    ProtoList(Vec<Constant>),
+    ProtoList(Type, Vec<Constant>),
     // tag: 6
-    ProtoPair(Box<Constant>, Box<Constant>),
+    ProtoPair(Type, Type, Box<Constant>, Box<Constant>),
+    // tag: 7
+    // Apply(Box<Constant>, Type),
     // tag: 8
     Data(Data),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    Bool,
+    Integer,
+    String,
+    ByteString,
+    Unit,
+    List(Box<Type>),
+    Pair(Box<Type>, Box<Type>),
+    Data,
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Bool => write!(f, "bool"),
+            Type::Integer => write!(f, "integer"),
+            Type::String => write!(f, "string"),
+            Type::ByteString => write!(f, "bytestring"),
+            Type::Unit => write!(f, "unit"),
+            Type::List(t) => write!(f, "list {}", t),
+            Type::Pair(t1, t2) => write!(f, "pair {} {}", t1, t2),
+            Type::Data => write!(f, "data"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

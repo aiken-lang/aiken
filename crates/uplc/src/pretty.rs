@@ -170,6 +170,9 @@ impl Constant {
             Constant::Bool(b) => RcDoc::text("bool")
                 .append(RcDoc::line())
                 .append(RcDoc::text(if *b { "True" } else { "False" })),
+            Constant::ProtoList(_, _) => todo!(),
+            Constant::ProtoPair(_, _, _, _) => todo!(),
+            Constant::Data(_) => todo!(),
         }
     }
 }

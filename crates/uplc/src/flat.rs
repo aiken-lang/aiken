@@ -7,7 +7,9 @@ use flat_rs::{
 };
 
 use crate::{
-    ast::{Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Unique},
+    ast::{
+        Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type, Unique,
+    },
     builtins::DefaultFunction,
 };
 
@@ -161,7 +163,7 @@ where
     }
 }
 
-impl Encode for &Constant {
+impl Encode for Constant {
     fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         match self {
             // Integers are typically smaller so we save space
@@ -171,26 +173,90 @@ impl Encode for &Constant {
             // i.e. A 17 or greater length byte array loses efficiency being encoded as
             // a unsigned integer instead of a byte array
             Constant::Integer(i) => {
-                encode_constant(0, e)?;
+                encode_constant(&[0], e)?;
                 i.encode(e)?;
             }
 
             Constant::ByteString(bytes) => {
-                encode_constant(1, e)?;
+                encode_constant(&[1], e)?;
                 bytes.encode(e)?;
             }
             Constant::String(s) => {
-                encode_constant(2, e)?;
+                encode_constant(&[2], e)?;
                 s.encode(e)?;
             }
-            Constant::Unit => encode_constant(3, e)?,
+            Constant::Unit => encode_constant(&[3], e)?,
             Constant::Bool(b) => {
-                encode_constant(4, e)?;
+                encode_constant(&[4], e)?;
                 b.encode(e)?;
+            }
+            Constant::ProtoList(typ, list) => {
+                let mut type_encode = vec![7, 5];
+
+                encode_type(typ, &mut type_encode);
+
+                encode_constant(&type_encode, e)?;
+
+                e.encode_list_with(list, encode_constant_value)?;
+            }
+            Constant::ProtoPair(type1, type2, a, b) => {
+                let mut type_encode = vec![7, 7, 6];
+
+                encode_type(type1, &mut type_encode);
+
+                encode_type(type2, &mut type_encode);
+
+                encode_constant(&type_encode, e)?;
+                encode_constant_value(a, e)?;
+                encode_constant_value(b, e)?;
+            }
+            Constant::Data(_) => {
+                encode_constant(&[8], e)?;
+                todo!()
             }
         }
 
         Ok(())
+    }
+}
+
+fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error> {
+    match x {
+        Constant::Integer(x) => x.encode(e),
+        Constant::ByteString(b) => b.encode(e),
+        Constant::String(s) => s.encode(e),
+        Constant::Unit => Ok(()),
+        Constant::Bool(b) => b.encode(e),
+        Constant::ProtoList(_, list) => {
+            e.encode_list_with(list, encode_constant_value)?;
+            Ok(())
+        }
+        Constant::ProtoPair(_, _, a, b) => {
+            encode_constant_value(a, e)?;
+            encode_constant_value(b, e)?;
+            Ok(())
+        }
+        Constant::Data(_) => todo!(),
+    }
+}
+
+fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
+    match typ {
+        Type::Bool => bytes.push(4),
+        Type::Integer => bytes.push(0),
+        Type::String => bytes.push(2),
+        Type::ByteString => bytes.push(1),
+        Type::Unit => bytes.push(3),
+        Type::List(sub_typ) => {
+            bytes.extend(vec![7, 5]);
+            encode_type(sub_typ, bytes);
+        }
+        Type::Pair(type1, type2) => {
+            bytes.extend(vec![7, 7, 6]);
+            encode_type(type1, bytes);
+            encode_type(type2, bytes);
+        }
+        Type::Data => todo!(),
     }
 }
 
@@ -392,8 +458,8 @@ fn safe_encode_bits(num_bits: u32, byte: u8, e: &mut Encoder) -> Result<(), en::
     }
 }
 
-pub fn encode_constant(tag: u8, e: &mut Encoder) -> Result<(), en::Error> {
-    e.encode_list_with([tag].to_vec(), encode_constant_tag)?;
+pub fn encode_constant(tag: &[u8], e: &mut Encoder) -> Result<(), en::Error> {
+    e.encode_list_with(tag, encode_constant_tag)?;
 
     Ok(())
 }
@@ -410,8 +476,8 @@ pub fn decode_constant(d: &mut Decoder) -> Result<u8, de::Error> {
     }
 }
 
-pub fn encode_constant_tag(tag: u8, e: &mut Encoder) -> Result<(), en::Error> {
-    safe_encode_bits(CONST_TAG_WIDTH, tag, e)
+pub fn encode_constant_tag(tag: &u8, e: &mut Encoder) -> Result<(), en::Error> {
+    safe_encode_bits(CONST_TAG_WIDTH, *tag, e)
 }
 
 pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, de::Error> {
@@ -422,7 +488,7 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 mod test {
     use flat_rs::Flat;
 
-    use crate::ast::Name;
+    use crate::ast::{Name, Type};
 
     use super::{Constant, Program, Term};
 
@@ -438,6 +504,58 @@ mod test {
         assert_eq!(
             bytes,
             vec![0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001]
+        )
+    }
+
+    #[test]
+    fn flat_encode_list_list_integer() {
+        let program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::ProtoList(
+                Type::List(Box::new(Type::Integer)),
+                vec![
+                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
+                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
+                ],
+            )),
+        };
+
+        let bytes = program.to_flat().unwrap();
+
+        assert_eq!(
+            bytes,
+            vec![
+                0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11010110, 0b11110101, 0b10000011,
+                0b00001110, 0b01100001, 0b01000001
+            ]
+        )
+    }
+
+    #[test]
+    fn flat_encode_pair_pair_integer_bool_integer() {
+        let program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::ProtoPair(
+                Type::Pair(Box::new(Type::Integer), Box::new(Type::Bool)),
+                Type::Integer,
+                Box::new(Constant::ProtoPair(
+                    Type::Integer,
+                    Type::Bool,
+                    Box::new(Constant::Integer(11)),
+                    Box::new(Constant::Bool(true)),
+                )),
+                Box::new(Constant::Integer(11)),
+            )),
+        };
+
+        let bytes = program.to_flat().unwrap();
+
+        assert_eq!(
+            bytes,
+            vec![
+                0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11011110, 0b11010111, 0b10111101,
+                0b10100001, 0b01001000, 0b00000101, 0b10100010, 0b11000001
+            ]
         )
     }
 

@@ -156,11 +156,14 @@ impl Encoder {
     /// This is byte alignment agnostic.
     /// If there are bytes in a list then write 1 bit followed by the functions encoding.
     /// After the last item write a 0 bit. If the list is empty only encode a 0 bit.
-    pub fn encode_list_with(
+    pub fn encode_list_with<T>(
         &mut self,
-        list: Vec<u8>,
-        encoder_func: for<'r> fn(u8, &'r mut Encoder) -> Result<(), Error>,
-    ) -> Result<&mut Self, Error> {
+        list: &[T],
+        encoder_func: for<'r> fn(&T, &'r mut Encoder) -> Result<(), Error>,
+    ) -> Result<&mut Self, Error>
+    where
+        T: Encode,
+    {
         for item in list {
             self.one();
             encoder_func(item, self)?;
