@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{collections::VecDeque, fmt::Debug};
 
 use flat_rs::{
     de::{self, Decode, Decoder},
@@ -296,13 +296,34 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
 
 impl<'b> Decode<'b> for Constant {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
-        match decode_constant(d)? {
-            0 => Ok(Constant::Integer(isize::decode(d)?)),
-            1 => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
-            2 => Ok(Constant::String(String::decode(d)?)),
-            3 => Ok(Constant::Unit),
-            4 => Ok(Constant::Bool(bool::decode(d)?)),
-            8 => {
+        match &decode_constant(d)?[..] {
+            [0] => Ok(Constant::Integer(isize::decode(d)?)),
+            [1] => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
+            [2] => Ok(Constant::String(String::decode(d)?)),
+            [3] => Ok(Constant::Unit),
+            [4] => Ok(Constant::Bool(bool::decode(d)?)),
+            [7, 5, rest @ ..] => {
+                let mut rest = VecDeque::from(rest.to_vec());
+
+                let typ = decode_type(&mut rest)?;
+
+                let list: Vec<Constant> =
+                    d.decode_list_with(|d| decode_constant_value(typ.clone(), d))?;
+
+                Ok(Constant::ProtoList(typ, list))
+            }
+            [7, 7, 6, rest @ ..] => {
+                let mut rest = VecDeque::from(rest.to_vec());
+
+                let type1 = decode_type(&mut rest)?;
+                let type2 = decode_type(&mut rest)?;
+
+                let a = decode_constant_value(type1.clone(), d)?;
+                let b = decode_constant_value(type2.clone(), d)?;
+
+                Ok(Constant::ProtoPair(type1, type2, Box::new(a), Box::new(b)))
+            }
+            [8] => {
                 let cbor = Vec::<u8>::decode(d)?;
 
                 let data = PlutusData::decode_fragment(&cbor)
@@ -311,10 +332,83 @@ impl<'b> Decode<'b> for Constant {
                 Ok(Constant::Data(data))
             }
             x => Err(de::Error::Message(format!(
-                "Unknown constant constructor tag: {}",
+                "Unknown constant constructor tag: {:?}",
                 x
             ))),
         }
+    }
+}
+
+fn decode_constant_value(typ: Type, d: &mut Decoder) -> Result<Constant, de::Error> {
+    match typ {
+        Type::Integer => Ok(Constant::Integer(isize::decode(d)?)),
+        Type::ByteString => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
+        Type::String => Ok(Constant::String(String::decode(d)?)),
+        Type::Unit => Ok(Constant::Unit),
+        Type::Bool => Ok(Constant::Bool(bool::decode(d)?)),
+        Type::List(sub_type) => {
+            let list: Vec<Constant> =
+                d.decode_list_with(|d| decode_constant_value(*sub_type.clone(), d))?;
+
+            Ok(Constant::ProtoList(*sub_type, list))
+        }
+        Type::Pair(type1, type2) => {
+            let a = decode_constant_value(*type1.clone(), d)?;
+            let b = decode_constant_value(*type2.clone(), d)?;
+
+            Ok(Constant::ProtoPair(
+                *type1,
+                *type2,
+                Box::new(a),
+                Box::new(b),
+            ))
+        }
+        Type::Data => {
+            let cbor = Vec::<u8>::decode(d)?;
+
+            let data = PlutusData::decode_fragment(&cbor)
+                .map_err(|err| de::Error::Message(err.to_string()))?;
+
+            Ok(Constant::Data(data))
+        }
+    }
+}
+
+fn decode_type(types: &mut VecDeque<u8>) -> Result<Type, de::Error> {
+    match types.pop_front() {
+        Some(4) => Ok(Type::Bool),
+        Some(0) => Ok(Type::Integer),
+        Some(2) => Ok(Type::String),
+        Some(1) => Ok(Type::ByteString),
+        Some(3) => Ok(Type::Unit),
+        Some(8) => Ok(Type::Data),
+        Some(7) => match types.pop_front() {
+            Some(5) => Ok(Type::List(Box::new(decode_type(types)?))),
+            Some(7) => match types.pop_front() {
+                Some(6) => {
+                    let type1 = decode_type(types)?;
+                    let type2 = decode_type(types)?;
+
+                    Ok(Type::Pair(Box::new(type1), Box::new(type2)))
+                }
+                Some(x) => Err(de::Error::Message(format!(
+                    "Unknown constant type tag: {}",
+                    x
+                ))),
+                None => Err(de::Error::Message("Unexpected empty buffer".to_string())),
+            },
+            Some(x) => Err(de::Error::Message(format!(
+                "Unknown constant type tag: {}",
+                x
+            ))),
+            None => Err(de::Error::Message("Unexpected empty buffer".to_string())),
+        },
+
+        Some(x) => Err(de::Error::Message(format!(
+            "Unknown constant type tag: {}",
+            x
+        ))),
+        None => Err(de::Error::Message("Unexpected empty buffer".to_string())),
     }
 }
 
@@ -506,16 +600,8 @@ pub fn encode_constant(tag: &[u8], e: &mut Encoder) -> Result<(), en::Error> {
     Ok(())
 }
 
-pub fn decode_constant(d: &mut Decoder) -> Result<u8, de::Error> {
-    let u8_list = d.decode_list_with(decode_constant_tag)?;
-    if u8_list.len() > 1 {
-        Err(de::Error::Message(
-            "Improper encoding on constant tag. Should be list of one item encoded in 4 bits"
-                .to_string(),
-        ))
-    } else {
-        Ok(u8_list[0])
-    }
+pub fn decode_constant(d: &mut Decoder) -> Result<Vec<u8>, de::Error> {
+    d.decode_list_with(decode_constant_tag)
 }
 
 pub fn encode_constant_tag(tag: &u8, e: &mut Encoder) -> Result<(), en::Error> {
@@ -541,12 +627,13 @@ mod test {
             term: Term::Constant(Constant::Integer(11)),
         };
 
-        let bytes = program.to_flat().unwrap();
+        let expected_bytes = vec![
+            0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001,
+        ];
 
-        assert_eq!(
-            bytes,
-            vec![0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001]
-        )
+        let actual_bytes = program.to_flat().unwrap();
+
+        assert_eq!(actual_bytes, expected_bytes)
     }
 
     #[test]
@@ -562,15 +649,14 @@ mod test {
             )),
         };
 
-        let bytes = program.to_flat().unwrap();
+        let expected_bytes = vec![
+            0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11010110, 0b11110101, 0b10000011,
+            0b00001110, 0b01100001, 0b01000001,
+        ];
 
-        assert_eq!(
-            bytes,
-            vec![
-                0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11010110, 0b11110101, 0b10000011,
-                0b00001110, 0b01100001, 0b01000001
-            ]
-        )
+        let actual_bytes = program.to_flat().unwrap();
+
+        assert_eq!(actual_bytes, expected_bytes)
     }
 
     #[test]
@@ -590,20 +676,69 @@ mod test {
             )),
         };
 
-        let bytes = program.to_flat().unwrap();
+        let expected_bytes = vec![
+            0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11011110, 0b11010111, 0b10111101,
+            0b10100001, 0b01001000, 0b00000101, 0b10100010, 0b11000001,
+        ];
 
-        assert_eq!(
-            bytes,
-            vec![
-                0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11011110, 0b11010111, 0b10111101,
-                0b10100001, 0b01001000, 0b00000101, 0b10100010, 0b11000001
-            ]
-        )
+        let actual_bytes = program.to_flat().unwrap();
+
+        assert_eq!(actual_bytes, expected_bytes)
+    }
+
+    #[test]
+    fn flat_decode_list_list_integer() {
+        let bytes = vec![
+            0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11010110, 0b11110101, 0b10000011,
+            0b00001110, 0b01100001, 0b01000001,
+        ];
+
+        let expected_program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::ProtoList(
+                Type::List(Box::new(Type::Integer)),
+                vec![
+                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
+                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
+                ],
+            )),
+        };
+
+        let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
+
+        assert_eq!(actual_program, expected_program)
+    }
+
+    #[test]
+    fn flat_decode_pair_pair_integer_bool_integer() {
+        let bytes = vec![
+            0b00000001, 0b00000000, 0b00000000, 0b01001011, 0b11011110, 0b11010111, 0b10111101,
+            0b10100001, 0b01001000, 0b00000101, 0b10100010, 0b11000001,
+        ];
+
+        let expected_program = Program::<Name> {
+            version: (1, 0, 0),
+            term: Term::Constant(Constant::ProtoPair(
+                Type::Pair(Box::new(Type::Integer), Box::new(Type::Bool)),
+                Type::Integer,
+                Box::new(Constant::ProtoPair(
+                    Type::Integer,
+                    Type::Bool,
+                    Box::new(Constant::Integer(11)),
+                    Box::new(Constant::Bool(true)),
+                )),
+                Box::new(Constant::Integer(11)),
+            )),
+        };
+
+        let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
+
+        assert_eq!(actual_program, expected_program)
     }
 
     #[test]
     fn flat_decode_integer() {
-        let flat_encoded = vec![
+        let bytes = vec![
             0b00001011, 0b00010110, 0b00100001, 0b01001000, 0b00000101, 0b10000001,
         ];
 
@@ -612,7 +747,7 @@ mod test {
             term: Term::Constant(Constant::Integer(11)),
         };
 
-        let actual_program: Program<Name> = Program::unflat(&flat_encoded).unwrap();
+        let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
 
         assert_eq!(actual_program, expected_program)
     }

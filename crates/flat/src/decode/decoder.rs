@@ -137,10 +137,10 @@ impl<'b> Decoder<'b> {
     /// Otherwise we decode an item in the list with the decoder function passed in.
     /// Then decode the next bit in the buffer and repeat above.
     /// Returns a list of items decoded with the decoder function.
-    pub fn decode_list_with<T: Decode<'b>>(
-        &mut self,
-        decoder_func: for<'r> fn(&'r mut Decoder) -> Result<T, Error>,
-    ) -> Result<Vec<T>, Error> {
+    pub fn decode_list_with<T: Decode<'b>, F>(&mut self, decoder_func: F) -> Result<Vec<T>, Error>
+    where
+        F: Copy + FnOnce(&mut Decoder) -> Result<T, Error>,
+    {
         let mut vec_array: Vec<T> = Vec::new();
         while self.bit()? {
             vec_array.push(decoder_func(self)?)
