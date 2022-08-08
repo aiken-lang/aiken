@@ -3,9 +3,12 @@
   <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" max-height="240" />
   <hr />
     <h2 align="center" style="border-bottom: none">Cardano smart contract language and toolchain</h2>
-    <img alt="GitHub" src="https://img.shields.io/github/license/txpipe/aiken" />
-    <img alt="Crates.io" src="https://img.shields.io/crates/v/aiken" />
-    <img alt="GitHub Workflow Status" src="https://img.shields.io/github/workflow/status/txpipe/aiken/Rust" />
+  
+[![Licence](https://img.shields.io/github/license/txpipe/aiken)](https://github.com/txpipe/aiken/blob/main/LICENSE) 
+[![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
+[![Rust Build](https://github.com/txpipe/aiken/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/txpipe/aiken/actions/workflows/rust.yml)
+[![Nix Build](https://github.com/txpipe/aiken/actions/workflows/build_nix.yml/badge.svg?branch=main)](https://github.com/txpipe/aiken/actions/workflows/build_nix.yml)
+  
   <hr/>
 </div>
 
