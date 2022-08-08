@@ -1,3 +1,5 @@
+use std::string::FromUtf8Error;
+
 use thiserror::Error;
 
 use crate::ast::{NamedDeBruijn, Term, Type};
@@ -28,4 +30,6 @@ pub enum Error {
     NotAConstant(Value),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
+    #[error("Decoding utf8")]
+    Utf8(#[from] FromUtf8Error),
 }

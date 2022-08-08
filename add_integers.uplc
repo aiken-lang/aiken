@@ -1,5 +1,5 @@
 (program
   1.0.0
-  (con (list (list integer)) [[7], [5]])
+  [ (builtin decodeUtf8) [ (builtin encodeUtf8) (con string "hello world") ] ]
 )
 
