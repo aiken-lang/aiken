@@ -642,6 +642,7 @@ checksum = "7e8820f5d777f6224dc4be3632222971ac30164d4a258d595640799554ebfd99"
 name = "uplc"
 version = "0.0.7"
 dependencies = [
+ "cryptoxide",
  "flat-rs",
  "hex",
  "minicbor 0.18.0",

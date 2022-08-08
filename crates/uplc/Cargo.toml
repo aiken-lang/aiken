@@ -13,6 +13,7 @@ exclude = ["test_data/*"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cryptoxide = "0.4.2"
 flat-rs = { path = "../flat", version = "0.0.7" }
 hex = "0.4.3"
 minicbor = { version = "0.18.0", features = ["std"] }

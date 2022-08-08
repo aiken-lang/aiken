@@ -552,13 +552,40 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::MultiplyInteger => todo!(),
+            DefaultFunction::MultiplyInteger => ExBudget {
+                mem: self
+                    .multiply_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .multiply_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::DivideInteger => todo!(),
             DefaultFunction::QuotientInteger => todo!(),
             DefaultFunction::RemainderInteger => todo!(),
             DefaultFunction::ModInteger => todo!(),
-            DefaultFunction::EqualsInteger => todo!(),
-            DefaultFunction::LessThanInteger => todo!(),
+            DefaultFunction::EqualsInteger => ExBudget {
+                mem: self
+                    .equals_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .equals_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::LessThanInteger => ExBudget {
+                mem: self
+                    .less_than_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .less_than_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::LessThanEqualsInteger => ExBudget {
                 mem: self
                     .less_than_equals_integer
@@ -569,24 +596,75 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::AppendByteString => todo!(),
+            DefaultFunction::AppendByteString => ExBudget {
+                mem: self
+                    .append_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .append_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::ConsByteString => todo!(),
             DefaultFunction::SliceByteString => todo!(),
             DefaultFunction::LengthOfByteString => todo!(),
             DefaultFunction::IndexByteString => todo!(),
-            DefaultFunction::EqualsByteString => todo!(),
+            DefaultFunction::EqualsByteString => ExBudget {
+                mem: self
+                    .equals_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .equals_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::LessThanByteString => todo!(),
             DefaultFunction::LessThanEqualsByteString => todo!(),
-            DefaultFunction::Sha2_256 => todo!(),
-            DefaultFunction::Sha3_256 => todo!(),
-            DefaultFunction::Blake2b_256 => todo!(),
+            DefaultFunction::Sha2_256 => ExBudget {
+                mem: self.sha2_256.mem.cost(args[0].to_ex_mem()),
+                cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Sha3_256 => ExBudget {
+                mem: self.sha3_256.mem.cost(args[0].to_ex_mem()),
+                cpu: self.sha3_256.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Blake2b_256 => ExBudget {
+                mem: self.blake2b_256.mem.cost(args[0].to_ex_mem()),
+                cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::VerifySignature => todo!(),
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
-            DefaultFunction::AppendString => todo!(),
-            DefaultFunction::EqualsString => todo!(),
-            DefaultFunction::EncodeUtf8 => todo!(),
-            DefaultFunction::DecodeUtf8 => todo!(),
+            DefaultFunction::AppendString => ExBudget {
+                mem: self
+                    .append_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .append_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::EqualsString => ExBudget {
+                mem: self
+                    .equals_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .equals_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::EncodeUtf8 => ExBudget {
+                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem()),
+                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::DecodeUtf8 => ExBudget {
+                mem: self.decode_utf8.mem.cost(args[0].to_ex_mem()),
+                cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::IfThenElse => ExBudget {
                 mem: self.if_then_else.mem.cost(
                     args[0].to_ex_mem(),
@@ -599,8 +677,26 @@ impl BuiltinCosts {
                     args[2].to_ex_mem(),
                 ),
             },
-            DefaultFunction::ChooseUnit => todo!(),
-            DefaultFunction::Trace => todo!(),
+            DefaultFunction::ChooseUnit => ExBudget {
+                mem: self
+                    .choose_unit
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .choose_unit
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Trace => ExBudget {
+                mem: self
+                    .trace
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .trace
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::FstPair => todo!(),
             DefaultFunction::SndPair => todo!(),
             DefaultFunction::ChooseList => todo!(),

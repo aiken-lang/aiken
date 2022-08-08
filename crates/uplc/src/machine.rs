@@ -334,7 +334,7 @@ impl Machine {
 
             self.spend_budget(cost)?;
 
-            runtime.call()
+            runtime.call(&mut self.logs)
         } else {
             Ok(Value::Builtin { fun, term, runtime })
         }
@@ -430,7 +430,7 @@ impl Value {
                         ((i.abs() as f64).log2().floor() as i64 / 64) + 1
                     }
                 }
-                Constant::ByteString(b) => (((b.len() - 1) / 8) + 1) as i64,
+                Constant::ByteString(b) => (((b.len() as i64 - 1) / 8) + 1),
                 Constant::String(s) => s.chars().count() as i64,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
