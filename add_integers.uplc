@@ -1,5 +1,5 @@
 (program
   1.0.0
-  [ (builtin decodeUtf8) [ (builtin encodeUtf8) (con string "hello world") ] ]
+  [ (builtin divideInteger) (con integer 5) (con integer 2) ]
 )
 

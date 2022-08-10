@@ -32,4 +32,8 @@ pub enum Error {
     MachineNeverReachedDone,
     #[error("Decoding utf8")]
     Utf8(#[from] FromUtf8Error),
+    #[error("Out of Bounds\n\nindex: {}\nbytestring: {}\npossible: 0 - {}", .0, hex::encode(.1), .1.len() - 1)]
+    ByteStringOutOfBounds(isize, Vec<u8>),
+    #[error("Divide By Zero\n\n{0} / {1}")]
+    DivideByZero(isize, isize),
 }

@@ -2,6 +2,7 @@ use std::{fmt::Write as _, fs};
 
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
+    machine::cost_model::ExBudget,
     parser,
 };
 
@@ -102,14 +103,24 @@ fn main() -> anyhow::Result<()> {
                     Ok(term) => {
                         let term: Term<Name> = term.try_into()?;
 
-                        println!("{}", term.to_pretty());
+                        println!("\nResult\n------\n\n{}\n", term.to_pretty());
                     }
                     Err(err) => {
-                        eprintln!("{}", err);
+                        eprintln!("\nError\n-----\n\n{}\n", err);
                     }
                 }
 
-                println!("\nCosts - memory: {} & cpu: {}", cost.mem, cost.cpu);
+                let budget = ExBudget::default();
+
+                println!(
+                    "\nCosts\n-----\ncpu: {}\nmemory: {}",
+                    budget.cpu - cost.cpu,
+                    budget.mem - cost.mem
+                );
+                println!(
+                    "\nBudget\n------\ncpu: {}\nmemory: {}\n",
+                    cost.cpu, cost.mem
+                );
             }
         },
     }
