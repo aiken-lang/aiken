@@ -562,7 +562,16 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::DivideInteger => todo!(),
+            DefaultFunction::DivideInteger => ExBudget {
+                mem: self
+                    .divide_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .divide_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::QuotientInteger => todo!(),
             DefaultFunction::RemainderInteger => todo!(),
             DefaultFunction::ModInteger => todo!(),
@@ -606,10 +615,42 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::ConsByteString => todo!(),
-            DefaultFunction::SliceByteString => todo!(),
-            DefaultFunction::LengthOfByteString => todo!(),
-            DefaultFunction::IndexByteString => todo!(),
+            DefaultFunction::ConsByteString => ExBudget {
+                mem: self
+                    .cons_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .cons_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::SliceByteString => ExBudget {
+                mem: self.slice_byte_string.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.slice_byte_string.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
+            DefaultFunction::LengthOfByteString => ExBudget {
+                mem: self.length_of_byte_string.mem.cost(args[0].to_ex_mem()),
+                cpu: self.length_of_byte_string.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::IndexByteString => ExBudget {
+                mem: self
+                    .index_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .index_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::EqualsByteString => ExBudget {
                 mem: self
                     .equals_byte_string
@@ -620,8 +661,26 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::LessThanByteString => todo!(),
-            DefaultFunction::LessThanEqualsByteString => todo!(),
+            DefaultFunction::LessThanByteString => ExBudget {
+                mem: self
+                    .less_than_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .less_than_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::LessThanEqualsByteString => ExBudget {
+                mem: self
+                    .less_than_equals_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .less_than_equals_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::Sha2_256 => ExBudget {
                 mem: self.sha2_256.mem.cost(args[0].to_ex_mem()),
                 cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem()),
@@ -763,7 +822,7 @@ impl TwoArguments {
             TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
             TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
             TwoArguments::AddedSizes(s) => s.slope * (x + y) + s.intercept,
-            TwoArguments::SubtractedSizes(s) => s.slope * s.minimum.min(x - y) + s.intercept,
+            TwoArguments::SubtractedSizes(s) => s.slope * s.minimum.max(x - y) + s.intercept,
             TwoArguments::MultipliedSizes(s) => s.slope * (x * y) + s.intercept,
             TwoArguments::MinSize(s) => s.slope * x.min(y) + s.intercept,
             TwoArguments::MaxSize(s) => s.slope * x.max(y) + s.intercept,
