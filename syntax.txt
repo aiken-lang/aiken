@@ -1,0 +1,66 @@
+// imports
+use std/address.Address as A // alias
+
+use std/list.{map, foldl} // access module members in one import
+
+// `///` used for document generation
+
+// Records (single constructor `data` type)
+pub type Datum {
+    signer: Address,
+}
+
+// above is suger for
+pub type Datum {
+    Datum { signer: Address },
+}
+
+// type aliases
+type A = Address
+
+// multiple constructors and a `generic`
+pub type Redeemer(a) {
+    // records wrapped in parens
+    Buy(Address, a),
+    // records wrapped in curlies
+    Sell { address: Address, some_thing: a },
+}
+
+pub fn main(datum: Datum, redeemer: Redeemer, ctx: ScriptContext) {
+    [1, 2, 3]
+    |> list.map(fn(x) -> x + 1)
+}
+
+// named and anonymous functions
+fn(x) -> x + 1
+
+fn add_one(x) -> x + 1
+
+fn(x: Int) -> x + 1
+
+fn add_one(label x: Int) -> x + 1
+
+fn(x: Int) {
+    x + 1
+}
+
+fn(x: Int) -> Int {
+    x + 1
+}
+
+fn add_one(x: Int) -> Int {
+    x + 1
+}
+
+// can be curried
+fn add(a, b) {
+  a + 1
+}
+
+let add_one = add(1)
+
+// matching
+when redeemer is {
+    Buyer(address, thing) -> do_stuff(),
+    Seller { address, some_thing } -> do_seller_stuff(),
+}
