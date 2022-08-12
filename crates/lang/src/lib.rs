@@ -1,10 +1,8 @@
 pub mod ast;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+pub mod build;
+pub mod error;
+pub mod expr;
+pub mod lexer;
+pub mod parser;
+pub mod tipo;
+pub mod token;

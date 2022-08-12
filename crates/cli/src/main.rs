@@ -14,6 +14,31 @@ fn main() -> anyhow::Result<()> {
     let args = Args::default();
 
     match args {
+        Args::Build => {
+            // 1. load and parse modules
+            //    * lib - contains modules, types, and functions
+            //    * contracts - contains validators
+            //    * scripts - contains native scripts dsl
+            // 2. type check everything
+            // 3. generate uplc and policy/address if relevant
+            todo!()
+        }
+
+        Args::Dev => {
+            // launch a development server
+            // this should allow people to test
+            // their contracts over http
+            todo!()
+        }
+
+        Args::New { name } => {
+            if !name.exists() {
+                fs::create_dir_all(name.join("lib"))?;
+                fs::create_dir_all(name.join("policies"))?;
+                fs::create_dir_all(name.join("scripts"))?;
+            }
+        }
+
         Args::Uplc(uplc) => match uplc {
             UplcCommand::Flat { input, print, out } => {
                 let code = std::fs::read_to_string(&input)?;
@@ -48,6 +73,7 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&out_name, &bytes)?;
                 }
             }
+
             UplcCommand::Fmt { input, print } => {
                 let code = std::fs::read_to_string(&input)?;
 
@@ -61,6 +87,7 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&input, pretty)?;
                 }
             }
+
             UplcCommand::Unflat { input, print, out } => {
                 let bytes = std::fs::read(&input)?;
 
@@ -82,6 +109,7 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&out_name, pretty)?;
                 }
             }
+
             UplcCommand::Eval { input, flat } => {
                 let program = if flat {
                     let bytes = std::fs::read(&input)?;

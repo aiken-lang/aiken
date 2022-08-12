@@ -1,47 +1,505 @@
-pub struct Module {
-    pub name: Vec<String>,
-    pub docs: Vec<String>,
-    pub is_script: bool,
-    pub is_lib: bool,
-    pub is_policy: bool,
+use std::{collections::HashMap, fmt, ops::Range, sync::Arc};
+
+use internment::Intern;
+
+use crate::{
+    expr::{TypedExpr, UntypedExpr},
+    tipo::{self, PatternConstructor, Type, ValueConstructor},
+};
+
+pub type TypedModule = Module<tipo::Module, TypedDefinition>;
+pub type UntypedModule = Module<(), UntypedDefinition>;
+
+pub enum ModuleKind {
+    Contract,
+    Lib,
+    Script,
 }
 
-pub enum Definition {
+pub struct Module<Info, Definitions> {
+    pub name: Vec<String>,
+    pub docs: Vec<String>,
+    pub type_info: Info,
+    pub definitons: Vec<Definitions>,
+    pub kind: ModuleKind,
+}
+
+pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
+
+pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     Fn {
-        arguments: Vec<String>,
+        location: Span,
+        arguments: Vec<Vec<Arg<T>>>,
         body: Expr,
         doc: Option<String>,
         name: String,
         public: bool,
-        return_annotation: Option<()>,
-        return_type: (),
+        return_annotation: Option<Annotation>,
+        return_type: T,
     },
 
     TypeAlias {
+        location: Span,
         alias: String,
-        annotation: (),
+        annotation: Annotation,
         doc: Option<String>,
         parameters: Vec<String>,
         public: bool,
-        tipo: (),
+        tipo: T,
     },
 
     DataType {
-        constructors: Vec<()>,
+        location: Span,
+        constructors: Vec<RecordConstructor<T>>,
         doc: Option<String>,
         name: String,
         opaque: bool,
         parameters: Vec<String>,
         public: bool,
-        typed_parameters: Vec<()>,
+        typed_parameters: Vec<T>,
     },
 
     Use {
         module: Vec<String>,
         as_name: Option<String>,
-        // unqualified: Vec<UnqualifiedImport>,
-        // package: PackageName,
+        unqualified: Vec<UnqualifiedImport>,
+        package: PackageName,
+    },
+
+    ModuleConstant {
+        doc: Option<String>,
+        location: Span,
+        public: bool,
+        name: String,
+        annotation: Option<Annotation>,
+        value: Box<Constant<T, ConstantRecordTag>>,
+        tipo: T,
     },
 }
 
-pub enum Expr {}
+pub type TypedConstant = Constant<Arc<Type>, String>;
+pub type UntypedConstant = Constant<(), ()>;
+
+pub enum Constant<T, RecordTag> {
+    Int {
+        location: Span,
+        value: String,
+    },
+
+    String {
+        location: Span,
+        value: String,
+    },
+
+    Pair {
+        location: Span,
+        elements: Vec<Self>,
+    },
+
+    List {
+        location: Span,
+        elements: Vec<Self>,
+        tipo: T,
+    },
+
+    Record {
+        location: Span,
+        module: Option<String>,
+        name: String,
+        args: Vec<CallArg<Self>>,
+        tag: RecordTag,
+        tipo: T,
+        field_map: Option<FieldMap>,
+    },
+
+    ByteString {
+        location: Span,
+        // segments: Vec<BitStringSegment<Self, T>>,
+    },
+
+    Var {
+        location: Span,
+        module: Option<String>,
+        name: String,
+        constructor: Option<Box<ValueConstructor>>,
+        tipo: T,
+    },
+}
+
+pub struct CallArg<A> {
+    pub label: Option<String>,
+    pub location: Span,
+    pub value: A,
+}
+
+pub struct FieldMap {
+    pub arity: usize,
+    pub fields: HashMap<String, usize>,
+}
+
+pub struct RecordConstructor<T> {
+    pub location: Span,
+    pub name: String,
+    pub arguments: Vec<RecordConstructorArg<T>>,
+    pub documentation: Option<String>,
+}
+
+pub struct RecordConstructorArg<T> {
+    pub label: Option<String>,
+    // ast
+    pub annotation: Annotation,
+    pub location: Span,
+    pub tipo: T,
+    pub doc: Option<String>,
+}
+
+pub struct Arg<T> {
+    pub names: ArgName,
+    pub location: Span,
+    pub annotation: Option<Annotation>,
+    pub tipo: T,
+}
+
+pub enum ArgName {
+    Discard { name: String },
+    LabeledDiscard { label: String, name: String },
+    Named { name: String },
+    NamedLabeled { name: String, label: String },
+}
+
+pub struct UnqualifiedImport {
+    pub location: Span,
+    pub name: String,
+    pub as_name: Option<String>,
+    pub layer: Layer,
+}
+
+// TypeAst
+pub enum Annotation {
+    Constructor {
+        location: Span,
+        module: Option<String>,
+        name: String,
+        arguments: Vec<Self>,
+    },
+
+    Fn {
+        location: Span,
+        arguments: Vec<Self>,
+        ret: Box<Self>,
+    },
+
+    Var {
+        location: Span,
+        name: String,
+    },
+
+    Tuple {
+        location: Span,
+        elems: Vec<Self>,
+    },
+
+    Hole {
+        location: Span,
+        name: String,
+    },
+}
+
+pub enum Layer {
+    Value,
+    Type,
+}
+
+impl Default for Layer {
+    fn default() -> Self {
+        Layer::Value
+    }
+}
+
+pub enum BinOp {
+    // Boolean logic
+    And,
+    Or,
+
+    // Equality
+    Eq,
+    NotEq,
+
+    // Order comparison
+    LtInt,
+    LtEqInt,
+    GtEqInt,
+    GtInt,
+
+    // Maths
+    AddInt,
+    SubInt,
+    MultInt,
+    DivInt,
+    ModInt,
+}
+
+pub enum Pattern<Constructor, Type> {
+    Int {
+        location: Span,
+        value: String,
+    },
+
+    Float {
+        location: Span,
+        value: String,
+    },
+
+    String {
+        location: Span,
+        value: String,
+    },
+
+    /// The creation of a variable.
+    /// e.g. `assert [this_is_a_var, .._] = x`
+    Var {
+        location: Span,
+        name: String,
+    },
+
+    /// A reference to a variable in a bit string. This is always a variable
+    /// being used rather than a new variable being assigned.
+    VarUsage {
+        location: Span,
+        name: String,
+        tipo: Type,
+    },
+
+    /// A name given to a sub-pattern using the `as` keyword.
+    /// e.g. `assert #(1, [_, _] as the_list) = x`
+    Assign {
+        name: String,
+        location: Span,
+        pattern: Box<Self>,
+    },
+
+    /// A pattern that binds to any value but does not assign a variable.
+    /// Always starts with an underscore.
+    Discard {
+        name: String,
+        location: Span,
+    },
+
+    List {
+        location: Span,
+        elements: Vec<Self>,
+        tail: Option<Box<Self>>,
+    },
+
+    /// The constructor for a custom type. Starts with an uppercase letter.
+    Constructor {
+        location: Span,
+        name: String,
+        arguments: Vec<CallArg<Self>>,
+        module: Option<String>,
+        constructor: Constructor,
+        with_spread: bool,
+        tipo: Type,
+    },
+
+    Tuple {
+        location: Span,
+        elems: Vec<Self>,
+    },
+}
+
+pub enum AssignmentKind {
+    Let,
+    Assert,
+}
+
+pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor, Type>>;
+
+pub type UntypedMultiPattern = MultiPattern<(), ()>;
+pub type TypedMultiPattern = MultiPattern<PatternConstructor, Arc<Type>>;
+
+pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>, String>;
+
+pub type UntypedClause = Clause<UntypedExpr, (), (), ()>;
+
+pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
+    pub location: Span,
+    pub pattern: MultiPattern<PatternConstructor, Type>,
+    pub alternative_patterns: Vec<MultiPattern<PatternConstructor, Type>>,
+    pub guard: Option<ClauseGuard<Type, RecordTag>>,
+    pub then: Expr,
+}
+
+pub enum ClauseGuard<Type, RecordTag> {
+    Equals {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    NotEquals {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    GtInt {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    GtEqInt {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    LtInt {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    LtEqInt {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    Or {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    And {
+        location: Span,
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+
+    Var {
+        location: Span,
+        tipo: Type,
+        name: String,
+    },
+
+    TupleIndex {
+        location: Span,
+        index: u64,
+        tipo: Type,
+        tuple: Box<Self>,
+    },
+
+    Constant(Constant<Type, RecordTag>),
+}
+
+pub struct TypedRecordUpdateArg {
+    pub label: String,
+    pub location: Span,
+    pub value: TypedExpr,
+    pub index: usize,
+}
+
+pub struct UntypedRecordUpdateArg {
+    pub label: String,
+    // pub location: SrcSpan,
+    pub value: UntypedExpr,
+}
+
+pub struct RecordUpdateSpread {
+    pub base: Box<UntypedExpr>,
+    pub location: Span,
+}
+
+pub enum TodoKind {
+    Keyword,
+    EmptyFunction,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct SrcId(Intern<Vec<String>>);
+
+impl SrcId {
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        SrcId(Intern::new(Vec::new()))
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct Span {
+    pub src: SrcId,
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        use chumsky::Span;
+
+        Self::new(SrcId::empty(), 0..0)
+    }
+
+    pub fn src(&self) -> SrcId {
+        self.src
+    }
+
+    pub fn range(&self) -> Range<usize> {
+        use chumsky::Span;
+
+        self.start()..self.end()
+    }
+
+    pub fn union(self, other: Self) -> Self {
+        use chumsky::Span;
+
+        assert_eq!(
+            self.src, other.src,
+            "attempted to union spans with different sources"
+        );
+
+        Self {
+            start: self.start().min(other.start()),
+            end: self.end().max(other.end()),
+            ..self
+        }
+    }
+}
+
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}:{:?}", self.src, self.range())
+    }
+}
+
+impl chumsky::Span for Span {
+    type Context = SrcId;
+
+    type Offset = usize;
+
+    fn new(context: Self::Context, range: Range<Self::Offset>) -> Self {
+        assert!(range.start <= range.end);
+
+        Self {
+            src: context,
+            start: range.start,
+            end: range.end,
+        }
+    }
+
+    fn context(&self) -> Self::Context {
+        self.src
+    }
+
+    fn start(&self) -> Self::Offset {
+        self.start
+    }
+
+    fn end(&self) -> Self::Offset {
+        self.end
+    }
+}
