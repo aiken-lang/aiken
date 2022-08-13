@@ -5,6 +5,7 @@ use crate::{
     build::Origin,
 };
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     /// A nominal (named) type such as `Int`, `Float`, or a programmer defined
     /// custom type such as `Person`. The type can take other types as
@@ -39,6 +40,7 @@ pub enum Type {
     Tuple { elems: Vec<Arc<Type>> },
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeVar {
     /// Unbound is an unbound variable. It is one specific type but we don't
     /// know what yet in the inference process. It has a unique id which can be used to
@@ -65,12 +67,14 @@ pub enum TypeVar {
     Generic { id: u64 },
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ValueConstructor {
     pub public: bool,
     pub variant: ValueConstructorVariant,
     pub tipo: Arc<Type>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValueConstructorVariant {
     /// A locally defined variable or function parameter
     LocalVariable { location: Span },

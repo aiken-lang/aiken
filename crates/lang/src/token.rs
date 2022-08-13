@@ -2,11 +2,11 @@ use std::fmt;
 
 use internment::Intern;
 
-#[derive(Copy, Clone, Debug, PartialEq, Hash, Eq)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum Token {
     Error(char),
-    Name { name: Intern<String> },
-    UpName { name: Intern<String> },
+    Name { name: String },
+    UpName { name: String },
     DiscardName { name: Intern<String> },
     Int { value: Intern<String> },
     String { value: Intern<String> },
@@ -82,8 +82,8 @@ impl fmt::Display for Token {
 
                 return Ok(());
             }
-            Token::Name { name } => &**name,
-            Token::UpName { name } => &**name,
+            Token::Name { name } => name,
+            Token::UpName { name } => name,
             Token::DiscardName { name } => &**name,
             Token::Int { value } => &**value,
             Token::String { value } => &**value,

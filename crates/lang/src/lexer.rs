@@ -26,6 +26,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just('/').to(Token::Slash),
         just('%').to(Token::Percent),
         just("|>").to(Token::Pipe),
+        just(',').to(Token::Comma),
     ));
 
     let grouping = choice((
@@ -75,7 +76,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             if s.chars().next().map_or(false, |c| c.is_uppercase()) {
                 Token::UpName {
                     // TODO: do not allow _ in upname
-                    name: Intern::new(s),
+                    name: s,
                 }
             } else if s.starts_with('_') {
                 Token::DiscardName {
@@ -85,7 +86,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             } else {
                 Token::Name {
                     // TODO: do not allow uppercase letters in name
-                    name: Intern::new(s),
+                    name: s,
                 }
             }
         }
@@ -93,7 +94,11 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
 
     let token = choice((keyword, int, op, grouping, string))
         .or(any().map(Token::Error).validate(|t, span, emit| {
-            emit(ParseError::expected_input_found(span, None, Some(t)));
+            emit(ParseError::expected_input_found(
+                span,
+                None,
+                Some(t.clone()),
+            ));
             t
         }))
         .map_with_span(move |token, span| (token, span))
@@ -149,13 +154,13 @@ mod tests {
                 Token::GreaterEqual,
                 Token::LeftBrace,
                 Token::UpName {
-                    name: Intern::new("Thing".to_string())
+                    name: "Thing".to_string()
                 },
                 Token::DiscardName {
                     name: Intern::new("_na_thing".to_string())
                 },
                 Token::Name {
-                    name: Intern::new("name".to_string())
+                    name: "name".to_string()
                 }
             ]),
         );

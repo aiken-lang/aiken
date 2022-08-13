@@ -153,6 +153,7 @@ pub enum TypedExpr {
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum UntypedExpr {
     Int {
         location: Span,

@@ -10,23 +10,26 @@ use crate::{
 pub type TypedModule = Module<tipo::Module, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ModuleKind {
     Contract,
     Lib,
     Script,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module<Info, Definitions> {
     pub name: Vec<String>,
     pub docs: Vec<String>,
     pub type_info: Info,
-    pub definitons: Vec<Definitions>,
+    pub definitions: Vec<Definitions>,
     pub kind: ModuleKind,
 }
 
 pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     Fn {
         location: Span,
@@ -61,6 +64,7 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     },
 
     Use {
+        location: Span,
         module: Vec<String>,
         as_name: Option<String>,
         unqualified: Vec<UnqualifiedImport>,
@@ -81,6 +85,7 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
 pub type TypedConstant = Constant<Arc<Type>, String>;
 pub type UntypedConstant = Constant<(), ()>;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant<T, RecordTag> {
     Int {
         location: Span,
@@ -127,17 +132,20 @@ pub enum Constant<T, RecordTag> {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg<A> {
     pub label: Option<String>,
     pub location: Span,
     pub value: A,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldMap {
     pub arity: usize,
     pub fields: HashMap<String, usize>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct RecordConstructor<T> {
     pub location: Span,
     pub name: String,
@@ -145,6 +153,7 @@ pub struct RecordConstructor<T> {
     pub documentation: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct RecordConstructorArg<T> {
     pub label: Option<String>,
     // ast
@@ -154,6 +163,7 @@ pub struct RecordConstructorArg<T> {
     pub doc: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Arg<T> {
     pub names: ArgName,
     pub location: Span,
@@ -161,6 +171,7 @@ pub struct Arg<T> {
     pub tipo: T,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgName {
     Discard { name: String },
     LabeledDiscard { label: String, name: String },
@@ -168,6 +179,7 @@ pub enum ArgName {
     NamedLabeled { name: String, label: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnqualifiedImport {
     pub location: Span,
     pub name: String,
@@ -176,6 +188,7 @@ pub struct UnqualifiedImport {
 }
 
 // TypeAst
+#[derive(Debug, Clone, PartialEq)]
 pub enum Annotation {
     Constructor {
         location: Span,
@@ -206,6 +219,7 @@ pub enum Annotation {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Layer {
     Value,
     Type,
@@ -217,6 +231,7 @@ impl Default for Layer {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOp {
     // Boolean logic
     And,
@@ -240,6 +255,7 @@ pub enum BinOp {
     ModInt,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Pattern<Constructor, Type> {
     Int {
         location: Span,
@@ -309,6 +325,7 @@ pub enum Pattern<Constructor, Type> {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssignmentKind {
     Let,
     Assert,
@@ -323,6 +340,7 @@ pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>, String>;
 
 pub type UntypedClause = Clause<UntypedExpr, (), (), ()>;
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
     pub location: Span,
     pub pattern: MultiPattern<PatternConstructor, Type>,
@@ -331,6 +349,7 @@ pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
     pub then: Expr,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum ClauseGuard<Type, RecordTag> {
     Equals {
         location: Span,
@@ -403,17 +422,20 @@ pub struct TypedRecordUpdateArg {
     pub index: usize,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct UntypedRecordUpdateArg {
     pub label: String,
     // pub location: SrcSpan,
     pub value: UntypedExpr,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct RecordUpdateSpread {
     pub base: Box<UntypedExpr>,
     pub location: Span,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TodoKind {
     Keyword,
     EmptyFunction,
