@@ -27,6 +27,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just('%').to(Token::Percent),
         just("|>").to(Token::Pipe),
         just(',').to(Token::Comma),
+        just(':').to(Token::Colon),
     ));
 
     let grouping = choice((
@@ -81,7 +82,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             } else if s.starts_with('_') {
                 Token::DiscardName {
                     // TODO: do not allow uppercase letters in discard name
-                    name: Intern::new(s),
+                    name: s,
                 }
             } else {
                 Token::Name {
@@ -125,7 +126,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
 #[cfg(test)]
 mod tests {
     use chumsky::prelude::*;
-    use internment::Intern;
 
     use crate::{
         ast::{Span, SrcId},
@@ -157,7 +157,7 @@ mod tests {
                     name: "Thing".to_string()
                 },
                 Token::DiscardName {
-                    name: Intern::new("_na_thing".to_string())
+                    name: "_na_thing".to_string()
                 },
                 Token::Name {
                     name: "name".to_string()

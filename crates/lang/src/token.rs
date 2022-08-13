@@ -7,7 +7,7 @@ pub enum Token {
     Error(char),
     Name { name: String },
     UpName { name: String },
-    DiscardName { name: Intern<String> },
+    DiscardName { name: String },
     Int { value: Intern<String> },
     String { value: Intern<String> },
     // Groupings
@@ -84,7 +84,7 @@ impl fmt::Display for Token {
             }
             Token::Name { name } => name,
             Token::UpName { name } => name,
-            Token::DiscardName { name } => &**name,
+            Token::DiscardName { name } => name,
             Token::Int { value } => &**value,
             Token::String { value } => &**value,
             Token::LeftParen => "(",

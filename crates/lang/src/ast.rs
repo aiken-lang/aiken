@@ -32,10 +32,10 @@ pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     Fn {
-        location: Span,
         arguments: Vec<Vec<Arg<T>>>,
         body: Expr,
         doc: Option<String>,
+        location: Span,
         name: String,
         public: bool,
         return_annotation: Option<Annotation>,
@@ -43,19 +43,19 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     },
 
     TypeAlias {
-        location: Span,
         alias: String,
         annotation: Annotation,
         doc: Option<String>,
+        location: Span,
         parameters: Vec<String>,
         public: bool,
         tipo: T,
     },
 
     DataType {
-        location: Span,
         constructors: Vec<RecordConstructor<T>>,
         doc: Option<String>,
+        location: Span,
         name: String,
         opaque: bool,
         parameters: Vec<String>,
@@ -64,11 +64,11 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     },
 
     Use {
+        as_name: Option<String>,
         location: Span,
         module: Vec<String>,
-        as_name: Option<String>,
-        unqualified: Vec<UnqualifiedImport>,
         package: PackageName,
+        unqualified: Vec<UnqualifiedImport>,
     },
 
     ModuleConstant {
@@ -151,6 +151,7 @@ pub struct RecordConstructor<T> {
     pub name: String,
     pub arguments: Vec<RecordConstructorArg<T>>,
     pub documentation: Option<String>,
+    pub sugar: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
