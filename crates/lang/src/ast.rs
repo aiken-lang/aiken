@@ -32,7 +32,7 @@ pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     Fn {
-        arguments: Vec<Vec<Arg<T>>>,
+        arguments: Vec<Arg<T>>,
         body: Expr,
         doc: Option<String>,
         location: Span,
@@ -164,9 +164,11 @@ pub struct RecordConstructorArg<T> {
     pub doc: Option<String>,
 }
 
+pub type UntypedArg = Arg<()>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Arg<T> {
-    pub names: ArgName,
+    pub arg_name: ArgName,
     pub location: Span,
     pub annotation: Option<Annotation>,
     pub tipo: T,
@@ -174,10 +176,22 @@ pub struct Arg<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgName {
-    Discard { name: String },
-    LabeledDiscard { label: String, name: String },
-    Named { name: String },
-    NamedLabeled { name: String, label: String },
+    Discard {
+        name: String,
+        location: Span,
+    },
+    LabeledDiscard {
+        label: String,
+        name: String,
+        location: Span,
+    },
+    Named {
+        name: String,
+    },
+    NamedLabeled {
+        name: String,
+        label: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,20 +1,25 @@
 use chumsky::prelude::*;
 
-use crate::{ast, error::ParseError, token::Token};
+use crate::{ast, error::ParseError, expr, token::Token};
 
 pub fn module_parser(
     kind: ast::ModuleKind,
 ) -> impl Parser<Token, ast::UntypedModule, Error = ParseError> {
-    choice((import_parser(), data_parser()))
-        .repeated()
-        .then_ignore(end())
-        .map(move |definitions| ast::UntypedModule {
-            kind,
-            definitions,
-            docs: vec![],
-            name: vec![],
-            type_info: (),
-        })
+    choice((
+        import_parser(),
+        data_parser(),
+        type_alias_parser(),
+        fn_parser(),
+    ))
+    .repeated()
+    .then_ignore(end())
+    .map(move |definitions| ast::UntypedModule {
+        kind,
+        definitions,
+        docs: vec![],
+        name: vec![],
+        type_info: (),
+    })
 }
 
 pub fn import_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -105,20 +110,10 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
         }]
     });
 
-    just(Token::Pub)
-        .ignored()
+    pub_parser()
         .then(just(Token::Opaque).ignored().or_not())
         .or_not()
-        .then(
-            just(Token::Type).ignore_then(
-                select! {Token::UpName { name } => name}.then(
-                    select! {Token::Name { name } => name}
-                        .separated_by(just(Token::Comma))
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                        .or_not(),
-                ),
-            ),
-        )
+        .then(type_name_with_args())
         .then(choice((constructors, record_sugar)))
         .map_with_span(|((pub_opaque, (name, parameters)), constructors), span| {
             ast::UntypedDefinition::DataType {
@@ -144,6 +139,82 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
             }
         })
 }
+
+pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
+    pub_parser()
+        .or_not()
+        .then(type_name_with_args())
+        .then_ignore(just(Token::Equal))
+        .then(type_parser())
+        .map_with_span(|((opt_pub, (alias, parameters)), annotation), span| {
+            ast::UntypedDefinition::TypeAlias {
+                alias,
+                annotation,
+                doc: None,
+                location: span,
+                parameters: parameters.unwrap_or_default(),
+                public: opt_pub.is_some(),
+                tipo: (),
+            }
+        })
+}
+
+pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
+    pub_parser()
+        .or_not()
+        .then_ignore(just(Token::Fn))
+        .then(select! {Token::Name {name} => name})
+        .then(
+            fn_param_parser()
+                .separated_by(just(Token::Comma))
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+        )
+        .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
+        .then_ignore(just(Token::LeftBrace))
+        .then(expr_seq_parser())
+        .then_ignore(just(Token::RightBrace))
+        .map_with_span(
+            |((((opt_pub, name), arguments), return_annotation), body), span| {
+                ast::UntypedDefinition::Fn {
+                    arguments,
+                    body,
+                    doc: None,
+                    location: span,
+                    name,
+                    public: opt_pub.is_some(),
+                    return_annotation,
+                    return_type: (),
+                }
+            },
+        )
+}
+
+pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
+    choice((
+        select! {Token::Name {name} => name}
+            .then(select! {Token::DiscardName {name} => name})
+            .map_with_span(|(label, name), span| ast::ArgName::LabeledDiscard {
+                label,
+                name,
+                location: span,
+            }),
+        select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
+            ast::ArgName::Discard {
+                name,
+                location: span,
+            }
+        }),
+    ))
+    .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+    .map_with_span(|(arg_name, annotation), span| ast::Arg {
+        location: span,
+        annotation,
+        tipo: (),
+        arg_name,
+    })
+}
+
+pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
 
 pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
     recursive(|r| {
@@ -226,6 +297,22 @@ pub fn labeled_constructor_type_args(
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
 }
 
+pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>), Error = ParseError>
+{
+    just(Token::Type).ignore_then(
+        select! {Token::UpName { name } => name}.then(
+            select! {Token::Name { name } => name}
+                .separated_by(just(Token::Comma))
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                .or_not(),
+        ),
+    )
+}
+
+pub fn pub_parser() -> impl Parser<Token, (), Error = ParseError> {
+    just(Token::Pub).ignored()
+}
+
 #[cfg(test)]
 mod tests {
     use chumsky::prelude::*;
@@ -252,6 +339,19 @@ mod tests {
             pub opaque type User {
                 name: _w
             }
+
+            type Thing = Option(Int)
+
+            pub type Me = Option(String)
+
+            pub fn add_one(a) {
+                a + 1
+            }
+
+            pub fn add_one(a: Int) -> Int {
+              [1, 2, 3]
+                |> list.map(fn(x) { x + a })
+            }
         "#;
         let len = code.chars().count();
 
@@ -263,8 +363,6 @@ mod tests {
                 code.chars().enumerate().map(|(i, c)| (c, span(i))),
             ))
             .unwrap();
-
-        dbg!(tokens.clone());
 
         let res = module_parser(ast::ModuleKind::Script)
             .parse(chumsky::Stream::from_iter(span(len), tokens.into_iter()))
@@ -416,7 +514,45 @@ mod tests {
                         parameters: vec![],
                         public: true,
                         typed_parameters: vec![],
-                    }
+                    },
+                    ast::UntypedDefinition::TypeAlias {
+                        alias: "Thing".to_string(),
+                        annotation: ast::Annotation::Constructor {
+                            location: Span::new(SrcId::empty(), 348..359),
+                            module: None,
+                            name: "Option".to_string(),
+                            arguments: vec![ast::Annotation::Constructor {
+                                location: Span::new(SrcId::empty(), 355..358),
+                                module: None,
+                                name: "Int".to_string(),
+                                arguments: vec![],
+                            },],
+                        },
+                        doc: None,
+                        location: Span::new(SrcId::empty(), 335..359),
+                        parameters: vec![],
+                        public: false,
+                        tipo: (),
+                    },
+                    ast::UntypedDefinition::TypeAlias {
+                        alias: "Me".to_string(),
+                        annotation: ast::Annotation::Constructor {
+                            location: Span::new(SrcId::empty(), 387..401),
+                            module: None,
+                            name: "Option".to_string(),
+                            arguments: vec![ast::Annotation::Constructor {
+                                location: Span::new(SrcId::empty(), 394..400),
+                                module: None,
+                                name: "String".to_string(),
+                                arguments: vec![],
+                            },],
+                        },
+                        doc: None,
+                        location: Span::new(SrcId::empty(), 373..401),
+                        parameters: vec![],
+                        public: true,
+                        tipo: (),
+                    },
                 ]
             },
             "{:#?}",
