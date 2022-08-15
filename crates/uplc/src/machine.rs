@@ -63,7 +63,7 @@ impl Machine {
         while let Some(step) = self.stack.pop() {
             match step {
                 Compute(context, env, t) => {
-                    self.compute(context, env, &t)?;
+                    self.compute(context, env, t)?;
                 }
                 Return(context, value) => {
                     self.return_compute(context, value)?;
@@ -83,23 +83,21 @@ impl Machine {
         &mut self,
         context: Context,
         env: Vec<Value>,
-        term: &Term<NamedDeBruijn>,
+        term: Term<NamedDeBruijn>,
     ) -> Result<(), Error> {
         match term {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
-                let val = self.lookup_var(name.clone(), env)?;
+                let val = self.lookup_var(name, env)?;
 
                 self.stack.push(MachineStep::Return(context, val));
             }
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                self.stack.push(MachineStep::Return(
-                    context,
-                    Value::Delay(*body.clone(), env),
-                ));
+                self.stack
+                    .push(MachineStep::Return(context, Value::Delay(*body, env)));
             }
             Term::Lambda {
                 parameter_name,
@@ -110,8 +108,8 @@ impl Machine {
                 self.stack.push(MachineStep::Return(
                     context,
                     Value::Lambda {
-                        parameter_name: parameter_name.clone(),
-                        body: *body.clone(),
+                        parameter_name,
+                        body: *body,
                         env,
                     },
                 ));
@@ -120,16 +118,15 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameApplyArg(env.clone(), *argument.clone(), Box::new(context)),
+                    Context::FrameApplyArg(env.clone(), *argument, Box::new(context)),
                     env,
-                    *function.clone(),
+                    *function,
                 ));
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                self.stack
-                    .push(MachineStep::Return(context, Value::Con(x.clone())));
+                self.stack.push(MachineStep::Return(context, Value::Con(x)));
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
@@ -137,19 +134,19 @@ impl Machine {
                 self.stack.push(MachineStep::Compute(
                     Context::FrameForce(Box::new(context)),
                     env,
-                    *body.clone(),
+                    *body,
                 ));
             }
             Term::Error => return Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
 
-                let runtime: BuiltinRuntime = (*fun).into();
+                let runtime: BuiltinRuntime = (fun).into();
 
                 self.stack.push(MachineStep::Return(
                     context,
                     Value::Builtin {
-                        fun: *fun,
+                        fun,
                         term: term.clone(),
                         runtime,
                     },
