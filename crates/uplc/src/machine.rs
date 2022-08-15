@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
@@ -13,8 +15,8 @@ pub use error::Error;
 use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
 enum MachineStep {
-    Return(Context, Value),
-    Compute(Context, Vec<Value>, Term<NamedDeBruijn>),
+    Return(Rc<Context>, Value),
+    Compute(Rc<Context>, Vec<Value>, Term<NamedDeBruijn>),
     Done(Term<NamedDeBruijn>),
 }
 
@@ -58,7 +60,7 @@ impl Machine {
         self.spend_budget(startup_budget)?;
 
         self.stack
-            .push(Compute(Context::NoFrame, vec![], term.clone()));
+            .push(Compute(Rc::new(Context::NoFrame), vec![], term.clone()));
 
         while let Some(step) = self.stack.pop() {
             match step {
@@ -81,7 +83,7 @@ impl Machine {
 
     fn compute(
         &mut self,
-        context: Context,
+        context: Rc<Context>,
         env: Vec<Value>,
         term: Term<NamedDeBruijn>,
     ) -> Result<(), Error> {
@@ -118,7 +120,7 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameApplyArg(env.clone(), *argument, Box::new(context)),
+                    Rc::new(Context::FrameApplyArg(env.clone(), *argument, context)),
                     env,
                     *function,
                 ));
@@ -132,7 +134,7 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameForce(Box::new(context)),
+                    Rc::new(Context::FrameForce(context)),
                     env,
                     *body,
                 ));
@@ -145,11 +147,7 @@ impl Machine {
 
                 self.stack.push(MachineStep::Return(
                     context,
-                    Value::Builtin {
-                        fun,
-                        term: term.clone(),
-                        runtime,
-                    },
+                    Value::Builtin { fun, term, runtime },
                 ));
             }
         };
@@ -157,17 +155,19 @@ impl Machine {
         Ok(())
     }
 
-    fn return_compute(&mut self, context: Context, value: Value) -> Result<(), Error> {
-        match context {
-            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value)?,
+    fn return_compute(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
+        match context.as_ref() {
+            Context::FrameApplyFun(function, ctx) => {
+                self.apply_evaluate(ctx.to_owned(), function.to_owned(), value)?
+            }
             Context::FrameApplyArg(arg_var_env, arg, ctx) => {
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameApplyFun(value, ctx),
-                    arg_var_env,
-                    arg,
+                    Rc::new(Context::FrameApplyFun(value, ctx.to_owned())),
+                    arg_var_env.to_owned(),
+                    arg.to_owned(),
                 ));
             }
-            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value)?,
+            Context::FrameForce(ctx) => self.force_evaluate(ctx.to_owned(), value)?,
             Context::NoFrame => {
                 if self.unbudgeted_steps[7] > 0 {
                     self.spend_unbudgeted_steps()?;
@@ -246,7 +246,7 @@ impl Machine {
         rec(0, term, self, &env)
     }
 
-    fn force_evaluate(&mut self, context: Context, value: Value) -> Result<(), Error> {
+    fn force_evaluate(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
         match value {
             Value::Delay(body, env) => {
                 self.stack.push(MachineStep::Compute(context, env, body));
@@ -278,7 +278,7 @@ impl Machine {
 
     fn apply_evaluate(
         &mut self,
-        context: Context,
+        context: Rc<Context>,
         function: Value,
         argument: Value,
     ) -> Result<(), Error> {
@@ -386,9 +386,9 @@ impl Machine {
 
 #[derive(Clone)]
 enum Context {
-    FrameApplyFun(Value, Box<Context>),
-    FrameApplyArg(Vec<Value>, Term<NamedDeBruijn>, Box<Context>),
-    FrameForce(Box<Context>),
+    FrameApplyFun(Value, Rc<Context>),
+    FrameApplyArg(Vec<Value>, Term<NamedDeBruijn>, Rc<Context>),
+    FrameForce(Rc<Context>),
     NoFrame,
 }
 
