@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::{
-    ast::{Constant, Name, Program, Term},
+    ast::{Constant, Name, Program, Term, Type},
     builtins::DefaultFunction,
 };
 
@@ -24,6 +24,7 @@ pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {
     Ok(program)
 }
 
+
 peg::parser! {
     grammar uplc() for str {
         pub rule program() -> Program<Name>
@@ -37,7 +38,7 @@ peg::parser! {
           }
 
         rule term() -> Term<Name>
-          = constant()
+          = constant_term()
           / builtin()
           / var()
           / lambda()
@@ -46,15 +47,22 @@ peg::parser! {
           / force()
           / error()
 
-        rule constant() -> Term<Name>
+        rule constant_term() -> Term<Name>
+          = con:constant() {
+            Term::Constant(con)
+          }
+
+        rule constant() -> Constant
           = "(" _* "con" _+ con:(
             constant_integer()
             / constant_bytestring()
             / constant_string()
             / constant_unit()
             / constant_bool()
+            / constant_list()
+            / constant_pair()
             ) _* ")" {
-            Term::Constant(con)
+              con
           }
 
         rule builtin() -> Term<Name>
@@ -107,6 +115,21 @@ peg::parser! {
         rule constant_unit() -> Constant
           = "unit" _+ "()" { Constant::Unit }
 
+        rule constant_list() -> Constant
+          = "list" _+ "[" _* contents:(ls:(t:constant() _* "," _* { t })* _* l:constant() {
+            ls.into_iter().chain(std::iter::once(l)).collect::<Vec<_>>()
+          })? "]" {
+              match contents {
+                None => Constant::ProtoList(Type::Unit, vec![]),
+                Some(ls) => Constant::ProtoList(Type::from(&ls[0]), ls)
+              }
+          }
+
+        rule constant_pair() -> Constant
+          = "pair" _+ "(" _* l:constant() _* "," _* r:constant() _* ")" {
+            Constant::ProtoPair(Type::from(&l), Type::from(&r), Box::new(l), Box::new(r))
+          }
+
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
@@ -140,6 +163,36 @@ mod test {
             Program::<Name> {
                 version: (11, 22, 33),
                 term: Term::Constant(Constant::Integer(11)),
+            }
+        );
+    }
+}
+
+#[cfg(test)]
+mod test2 {
+    use crate::ast::{Constant, Name, Program, Term, Type};
+
+    #[test]
+    fn parse_program() {
+        let code = r#"
+        (program 11.22.33
+            (con pair ((con list [(con integer 11), (con integer 12)]), (con bytestring #10)))
+        )
+        "#;
+        let program = super::program(code).unwrap();
+
+        assert_eq!(
+            program,
+            Program::<Name> {
+                version: (11, 22, 33),
+                term: Term::Constant(
+                  Constant::ProtoPair(
+                    Type::List(Box::new(Type::Integer)),
+                    Type::ByteString,
+                    Box::new(Constant::ProtoList(Type::Integer, vec![Constant::Integer(11), Constant::Integer(12)])),
+                    Box::new(Constant::ByteString(vec![0x10]))
+                  )
+                ),
             }
         );
     }
