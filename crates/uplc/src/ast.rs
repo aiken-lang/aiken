@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use pallas_primitives::alonzo::PlutusData;
 
@@ -30,8 +30,8 @@ where
     /// even necessary (i.e. minting policy).
     pub fn apply(&self, program: &Self) -> Self {
         let applied_term = Term::Apply {
-            function: Box::new(self.term.clone()),
-            argument: Box::new(program.term.clone()),
+            function: Rc::new(self.term.clone()),
+            argument: Rc::new(program.term.clone()),
         };
 
         Program {
@@ -60,21 +60,21 @@ pub enum Term<T> {
     // tag: 0
     Var(T),
     // tag: 1
-    Delay(Box<Term<T>>),
+    Delay(Rc<Term<T>>),
     // tag: 2
     Lambda {
         parameter_name: T,
-        body: Box<Term<T>>,
+        body: Rc<Term<T>>,
     },
     // tag: 3
     Apply {
-        function: Box<Term<T>>,
-        argument: Box<Term<T>>,
+        function: Rc<Term<T>>,
+        argument: Rc<Term<T>>,
     },
     // tag: 4
     Constant(Constant),
     // tag: 5
-    Force(Box<Term<T>>),
+    Force(Rc<Term<T>>),
     // tag: 6
     Error,
     // tag: 7
@@ -306,7 +306,7 @@ impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
     fn try_from(value: Term<Name>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter.name_to_named_debruijn(value)?;
+        let term = converter.name_to_named_debruijn(&value)?;
 
         Ok(term)
     }
@@ -333,7 +333,7 @@ impl TryFrom<Term<Name>> for Term<DeBruijn> {
     fn try_from(value: Term<Name>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter.name_to_debruijn(value)?;
+        let term = converter.name_to_debruijn(&value)?;
 
         Ok(term)
     }
@@ -356,7 +356,7 @@ impl TryFrom<Term<NamedDeBruijn>> for Term<Name> {
     fn try_from(value: Term<NamedDeBruijn>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter.named_debruijn_to_name(value)?;
+        let term = converter.named_debruijn_to_name(&value)?;
 
         Ok(term)
     }
@@ -375,7 +375,7 @@ impl From<Term<NamedDeBruijn>> for Term<DeBruijn> {
     fn from(value: Term<NamedDeBruijn>) -> Self {
         let mut converter = Converter::new();
 
-        converter.named_debruijn_to_debruijn(value)
+        converter.named_debruijn_to_debruijn(&value)
     }
 }
 
@@ -392,7 +392,7 @@ impl From<Term<NamedDeBruijn>> for Term<FakeNamedDeBruijn> {
     fn from(value: Term<NamedDeBruijn>) -> Self {
         let mut converter = Converter::new();
 
-        converter.named_debruijn_to_fake_named_debruijn(value)
+        converter.named_debruijn_to_fake_named_debruijn(&value)
     }
 }
 
@@ -413,7 +413,7 @@ impl TryFrom<Term<DeBruijn>> for Term<Name> {
     fn try_from(value: Term<DeBruijn>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
-        let term = converter.debruijn_to_name(value)?;
+        let term = converter.debruijn_to_name(&value)?;
 
         Ok(term)
     }
@@ -432,7 +432,7 @@ impl From<Term<DeBruijn>> for Term<NamedDeBruijn> {
     fn from(value: Term<DeBruijn>) -> Self {
         let mut converter = Converter::new();
 
-        converter.debruijn_to_named_debruijn(value)
+        converter.debruijn_to_named_debruijn(&value)
     }
 }
 
@@ -449,7 +449,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
     fn from(value: Term<FakeNamedDeBruijn>) -> Self {
         let mut converter = Converter::new();
 
-        converter.fake_named_debruijn_to_named_debruijn(value)
+        converter.fake_named_debruijn_to_named_debruijn(&value)
     }
 }
 

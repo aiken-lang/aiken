@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use thiserror::Error;
 
 use crate::ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Term, Unique};
@@ -32,14 +34,14 @@ impl Converter {
 
     pub fn name_to_named_debruijn(
         &mut self,
-        term: Term<Name>,
+        term: &Term<Name>,
     ) -> Result<Term<NamedDeBruijn>, Error> {
         let converted_term = match term {
             Term::Var(Name { text, unique }) => Term::Var(NamedDeBruijn {
-                text,
-                index: self.get_index(unique)?,
+                text: text.to_string(),
+                index: self.get_index(*unique)?,
             }),
-            Term::Delay(term) => Term::Delay(Box::new(self.name_to_named_debruijn(*term)?)),
+            Term::Delay(term) => Term::Delay(Rc::new(self.name_to_named_debruijn(term)?)),
             Term::Lambda {
                 parameter_name,
                 body,
@@ -49,13 +51,13 @@ impl Converter {
                 let index = self.get_index(parameter_name.unique)?;
 
                 let name = NamedDeBruijn {
-                    text: parameter_name.text,
+                    text: parameter_name.text.to_string(),
                     index,
                 };
 
                 self.start_scope();
 
-                let body = self.name_to_named_debruijn(*body)?;
+                let body = self.name_to_named_debruijn(body)?;
 
                 self.end_scope();
 
@@ -63,26 +65,26 @@ impl Converter {
 
                 Term::Lambda {
                     parameter_name: name,
-                    body: Box::new(body),
+                    body: Rc::new(body),
                 }
             }
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.name_to_named_debruijn(*function)?),
-                argument: Box::new(self.name_to_named_debruijn(*argument)?),
+                function: Rc::new(self.name_to_named_debruijn(function)?),
+                argument: Rc::new(self.name_to_named_debruijn(argument)?),
             },
-            Term::Constant(constant) => Term::Constant(constant),
-            Term::Force(term) => Term::Force(Box::new(self.name_to_named_debruijn(*term)?)),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
+            Term::Force(term) => Term::Force(Rc::new(self.name_to_named_debruijn(term)?)),
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         };
 
         Ok(converted_term)
     }
 
-    pub fn name_to_debruijn(&mut self, term: Term<Name>) -> Result<Term<DeBruijn>, Error> {
+    pub fn name_to_debruijn(&mut self, term: &Term<Name>) -> Result<Term<DeBruijn>, Error> {
         let converted_term = match term {
-            Term::Var(Name { unique, .. }) => Term::Var(self.get_index(unique)?),
-            Term::Delay(term) => Term::Delay(Box::new(self.name_to_debruijn(*term)?)),
+            Term::Var(Name { unique, .. }) => Term::Var(self.get_index(*unique)?),
+            Term::Delay(term) => Term::Delay(Rc::new(self.name_to_debruijn(term)?)),
             Term::Lambda {
                 parameter_name,
                 body,
@@ -93,7 +95,7 @@ impl Converter {
 
                 self.start_scope();
 
-                let body = self.name_to_debruijn(*body)?;
+                let body = self.name_to_debruijn(body)?;
 
                 self.end_scope();
 
@@ -101,17 +103,17 @@ impl Converter {
 
                 Term::Lambda {
                     parameter_name: name,
-                    body: Box::new(body),
+                    body: Rc::new(body),
                 }
             }
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.name_to_debruijn(*function)?),
-                argument: Box::new(self.name_to_debruijn(*argument)?),
+                function: Rc::new(self.name_to_debruijn(function)?),
+                argument: Rc::new(self.name_to_debruijn(argument)?),
             },
-            Term::Constant(constant) => Term::Constant(constant),
-            Term::Force(term) => Term::Force(Box::new(self.name_to_debruijn(*term)?)),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
+            Term::Force(term) => Term::Force(Rc::new(self.name_to_debruijn(term)?)),
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         };
 
         Ok(converted_term)
@@ -119,14 +121,14 @@ impl Converter {
 
     pub fn named_debruijn_to_name(
         &mut self,
-        term: Term<NamedDeBruijn>,
+        term: &Term<NamedDeBruijn>,
     ) -> Result<Term<Name>, Error> {
         let converted_term = match term {
             Term::Var(NamedDeBruijn { text, index }) => Term::Var(Name {
-                text,
-                unique: self.get_unique(index)?,
+                text: text.to_string(),
+                unique: self.get_unique(*index)?,
             }),
-            Term::Delay(term) => Term::Delay(Box::new(self.named_debruijn_to_name(*term)?)),
+            Term::Delay(term) => Term::Delay(Rc::new(self.named_debruijn_to_name(term)?)),
             Term::Lambda {
                 parameter_name,
                 body,
@@ -136,52 +138,52 @@ impl Converter {
                 let unique = self.get_unique(parameter_name.index)?;
 
                 let name = Name {
-                    text: parameter_name.text,
+                    text: parameter_name.text.to_string(),
                     unique,
                 };
 
                 self.start_scope();
 
-                let body = self.named_debruijn_to_name(*body)?;
+                let body = self.named_debruijn_to_name(body)?;
 
                 self.end_scope();
 
                 Term::Lambda {
                     parameter_name: name,
-                    body: Box::new(body),
+                    body: Rc::new(body),
                 }
             }
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.named_debruijn_to_name(*function)?),
-                argument: Box::new(self.named_debruijn_to_name(*argument)?),
+                function: Rc::new(self.named_debruijn_to_name(function)?),
+                argument: Rc::new(self.named_debruijn_to_name(argument)?),
             },
-            Term::Constant(constant) => Term::Constant(constant),
-            Term::Force(term) => Term::Force(Box::new(self.named_debruijn_to_name(*term)?)),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
+            Term::Force(term) => Term::Force(Rc::new(self.named_debruijn_to_name(term)?)),
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         };
 
         Ok(converted_term)
     }
 
-    pub fn debruijn_to_name(&mut self, term: Term<DeBruijn>) -> Result<Term<Name>, Error> {
+    pub fn debruijn_to_name(&mut self, term: &Term<DeBruijn>) -> Result<Term<Name>, Error> {
         let converted_term = match term {
             Term::Var(index) => {
-                let unique = self.get_unique(index)?;
+                let unique = self.get_unique(*index)?;
 
                 Term::Var(Name {
                     text: format!("i_{}", unique),
                     unique,
                 })
             }
-            Term::Delay(term) => Term::Delay(Box::new(self.debruijn_to_name(*term)?)),
+            Term::Delay(term) => Term::Delay(Rc::new(self.debruijn_to_name(term)?)),
             Term::Lambda {
                 parameter_name,
                 body,
             } => {
                 self.declare_binder();
 
-                let unique = self.get_unique(parameter_name)?;
+                let unique = self.get_unique(*parameter_name)?;
 
                 let name = Name {
                     text: format!("i_{}", unique),
@@ -190,127 +192,127 @@ impl Converter {
 
                 self.start_scope();
 
-                let body = self.debruijn_to_name(*body)?;
+                let body = self.debruijn_to_name(body)?;
 
                 self.end_scope();
 
                 Term::Lambda {
                     parameter_name: name,
-                    body: Box::new(body),
+                    body: Rc::new(body),
                 }
             }
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.debruijn_to_name(*function)?),
-                argument: Box::new(self.debruijn_to_name(*argument)?),
+                function: Rc::new(self.debruijn_to_name(function)?),
+                argument: Rc::new(self.debruijn_to_name(argument)?),
             },
-            Term::Constant(constant) => Term::Constant(constant),
-            Term::Force(term) => Term::Force(Box::new(self.debruijn_to_name(*term)?)),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
+            Term::Force(term) => Term::Force(Rc::new(self.debruijn_to_name(term)?)),
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         };
 
         Ok(converted_term)
     }
 
-    pub fn named_debruijn_to_debruijn(&mut self, term: Term<NamedDeBruijn>) -> Term<DeBruijn> {
+    pub fn named_debruijn_to_debruijn(&mut self, term: &Term<NamedDeBruijn>) -> Term<DeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.into()),
-            Term::Delay(term) => Term::Delay(Box::new(self.named_debruijn_to_debruijn(*term))),
+            Term::Var(name) => Term::Var(name.clone().into()),
+            Term::Delay(term) => Term::Delay(Rc::new(self.named_debruijn_to_debruijn(term))),
             Term::Lambda {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.into(),
-                body: Box::new(self.named_debruijn_to_debruijn(*body)),
+                parameter_name: parameter_name.clone().into(),
+                body: Rc::new(self.named_debruijn_to_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.named_debruijn_to_debruijn(*function)),
-                argument: Box::new(self.named_debruijn_to_debruijn(*argument)),
+                function: Rc::new(self.named_debruijn_to_debruijn(function)),
+                argument: Rc::new(self.named_debruijn_to_debruijn(argument)),
             },
-            Term::Constant(constant) => Term::Constant(constant),
-            Term::Force(term) => Term::Force(Box::new(self.named_debruijn_to_debruijn(*term))),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
+            Term::Force(term) => Term::Force(Rc::new(self.named_debruijn_to_debruijn(term))),
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         }
     }
 
-    pub fn debruijn_to_named_debruijn(&mut self, term: Term<DeBruijn>) -> Term<NamedDeBruijn> {
+    pub fn debruijn_to_named_debruijn(&mut self, term: &Term<DeBruijn>) -> Term<NamedDeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.into()),
-            Term::Delay(term) => Term::Delay(Box::new(self.debruijn_to_named_debruijn(*term))),
+            Term::Var(name) => Term::Var((*name).into()),
+            Term::Delay(term) => Term::Delay(Rc::new(self.debruijn_to_named_debruijn(term))),
             Term::Lambda {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.into(),
-                body: Box::new(self.debruijn_to_named_debruijn(*body)),
+                parameter_name: (*parameter_name).into(),
+                body: Rc::new(self.debruijn_to_named_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.debruijn_to_named_debruijn(*function)),
-                argument: Box::new(self.debruijn_to_named_debruijn(*argument)),
+                function: Rc::new(self.debruijn_to_named_debruijn(function)),
+                argument: Rc::new(self.debruijn_to_named_debruijn(argument)),
             },
-            Term::Constant(constant) => Term::Constant(constant),
-            Term::Force(term) => Term::Force(Box::new(self.debruijn_to_named_debruijn(*term))),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
+            Term::Force(term) => Term::Force(Rc::new(self.debruijn_to_named_debruijn(term))),
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         }
     }
 
     pub fn fake_named_debruijn_to_named_debruijn(
         &mut self,
-        term: Term<FakeNamedDeBruijn>,
+        term: &Term<FakeNamedDeBruijn>,
     ) -> Term<NamedDeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.into()),
+            Term::Var(name) => Term::Var(name.clone().into()),
             Term::Delay(term) => {
-                Term::Delay(Box::new(self.fake_named_debruijn_to_named_debruijn(*term)))
+                Term::Delay(Rc::new(self.fake_named_debruijn_to_named_debruijn(term)))
             }
             Term::Lambda {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.into(),
-                body: Box::new(self.fake_named_debruijn_to_named_debruijn(*body)),
+                parameter_name: parameter_name.clone().into(),
+                body: Rc::new(self.fake_named_debruijn_to_named_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.fake_named_debruijn_to_named_debruijn(*function)),
-                argument: Box::new(self.fake_named_debruijn_to_named_debruijn(*argument)),
+                function: Rc::new(self.fake_named_debruijn_to_named_debruijn(function)),
+                argument: Rc::new(self.fake_named_debruijn_to_named_debruijn(argument)),
             },
-            Term::Constant(constant) => Term::Constant(constant),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
             Term::Force(term) => {
-                Term::Force(Box::new(self.fake_named_debruijn_to_named_debruijn(*term)))
+                Term::Force(Rc::new(self.fake_named_debruijn_to_named_debruijn(term)))
             }
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         }
     }
 
     pub fn named_debruijn_to_fake_named_debruijn(
         &mut self,
-        term: Term<NamedDeBruijn>,
+        term: &Term<NamedDeBruijn>,
     ) -> Term<FakeNamedDeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.into()),
+            Term::Var(name) => Term::Var(name.clone().into()),
             Term::Delay(term) => {
-                Term::Delay(Box::new(self.named_debruijn_to_fake_named_debruijn(*term)))
+                Term::Delay(Rc::new(self.named_debruijn_to_fake_named_debruijn(term)))
             }
             Term::Lambda {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.into(),
-                body: Box::new(self.named_debruijn_to_fake_named_debruijn(*body)),
+                parameter_name: parameter_name.clone().into(),
+                body: Rc::new(self.named_debruijn_to_fake_named_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
-                function: Box::new(self.named_debruijn_to_fake_named_debruijn(*function)),
-                argument: Box::new(self.named_debruijn_to_fake_named_debruijn(*argument)),
+                function: Rc::new(self.named_debruijn_to_fake_named_debruijn(function)),
+                argument: Rc::new(self.named_debruijn_to_fake_named_debruijn(argument)),
             },
-            Term::Constant(constant) => Term::Constant(constant),
+            Term::Constant(constant) => Term::Constant(constant.clone()),
             Term::Force(term) => {
-                Term::Force(Box::new(self.named_debruijn_to_fake_named_debruijn(*term)))
+                Term::Force(Rc::new(self.named_debruijn_to_fake_named_debruijn(term)))
             }
             Term::Error => Term::Error,
-            Term::Builtin(builtin) => Term::Builtin(builtin),
+            Term::Builtin(builtin) => Term::Builtin(*builtin),
         }
     }
 

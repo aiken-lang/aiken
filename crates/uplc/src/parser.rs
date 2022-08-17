@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{rc::Rc, str::FromStr};
 
 use crate::{
     ast::{Constant, Name, Program, Term},
@@ -67,7 +67,7 @@ peg::parser! {
 
         rule lambda() -> Term<Name>
           = "(" _* "lam" _+ parameter_name:name() _+ t:term() _* ")" {
-            Term::Lambda { parameter_name, body: Box::new(t) }
+            Term::Lambda { parameter_name, body: Rc::new(t) }
           }
 
         #[cache_left_rec]
@@ -76,16 +76,16 @@ peg::parser! {
             terms
                 .into_iter()
                 .fold(initial, |lhs, rhs| Term::Apply {
-                    function: Box::new(lhs),
-                    argument: Box::new(rhs)
+                    function: Rc::new(lhs),
+                    argument: Rc::new(rhs)
                 })
           }
 
         rule delay() -> Term<Name>
-          = "(" _* "delay" _* t:term() _* ")" { Term::Delay(Box::new(t)) }
+          = "(" _* "delay" _* t:term() _* ")" { Term::Delay(Rc::new(t)) }
 
         rule force() -> Term<Name>
-          = "(" _* "force" _* t:term() _* ")" { Term::Force(Box::new(t)) }
+          = "(" _* "force" _* t:term() _* ")" { Term::Force(Rc::new(t)) }
 
         rule error() -> Term<Name>
           = "(" _* "error" _* ")" { Term::Error }
