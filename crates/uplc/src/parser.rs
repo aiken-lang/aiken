@@ -7,6 +7,7 @@ use crate::{
 
 use interner::Interner;
 use peg::{error::ParseError, str::LineCol};
+use pallas_primitives::alonzo::PlutusData;
 
 mod interner;
 
@@ -98,6 +99,23 @@ peg::parser! {
         rule error() -> Term<Name>
           = "(" _* "error" _* ")" { Term::Error }
 
+        rule constant_type() -> Type
+          = r:(
+              immediate_type:(
+                "integer" { Type::Integer } /
+                "bytestring" {Type::ByteString} /
+                "string" {Type::String} /
+                "bool" {Type::Bool} /
+                "unit" {Type::Unit}
+              ) {immediate_type} /
+              compound_type:( "(" _*  c:(
+                  "list" _+ lt:constant_type() { Type::List(Box::new(lt)) } /
+                  "pair" _+ pl:constant_type() _* pr:constant_type() { Type::Pair(Box::new(pl), Box::new(pr)) }
+                ) _* ")" {c}  
+              ) { compound_type }
+            ) { r }
+        
+
         rule constant_integer() -> Constant
           = "integer" _+ i:number() { Constant::Integer(i as isize) }
 
@@ -116,18 +134,30 @@ peg::parser! {
           = "unit" _+ "()" { Constant::Unit }
 
         rule constant_list() -> Constant
-          = "list" _+ "[" _* contents:(ls:(t:constant() _* "," _* { t })* _* l:constant() {
+          = "(" _* "list" _+ t:constant_type() _* ")" _+ "[" _* contents:(ls:(t:constant() _* "," _* { t })* _* l:constant() {
             ls.into_iter().chain(std::iter::once(l)).collect::<Vec<_>>()
-          })? "]" {
+          })? "]" {?
               match contents {
-                None => Constant::ProtoList(Type::Unit, vec![]),
-                Some(ls) => Constant::ProtoList(Type::from(&ls[0]), ls)
+                None => Ok(Constant::ProtoList(t, vec![])),
+                Some(ls) => {
+                  return if ls.iter().all(|x| Type::from(x) == t) {
+                    Err("Not all members of list have declared type")
+                  } else {
+                    Ok(Constant::ProtoList(t, ls))
+                  }
+                }
               }
           }
-
+        
         rule constant_pair() -> Constant
-          = "pair" _+ "(" _* l:constant() _* "," _* r:constant() _* ")" {
-            Constant::ProtoPair(Type::from(&l), Type::from(&r), Box::new(l), Box::new(r))
+          = "(" _* "pair" _+ lt:constant_type() _+ rt:constant_type() _* ")" _+ "(" _* l:constant() _* "," _* r:constant() _* ")" {?
+            return if Type::from(&l) != lt {
+              Err("Declared left type of pair and actual type of left member distinct")
+            } else if Type::from(&r) != rt {
+              Err("Declared right type of pair and actual type of right member distinct")
+            } else {
+              Ok(Constant::ProtoPair(Type::from(&l), Type::from(&r), Box::new(l), Box::new(r)))
+            }
           }
 
         rule number() -> isize
