@@ -16,8 +16,8 @@ use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
 enum MachineStep {
     Return(Rc<Context>, Value),
-    Compute(Rc<Context>, Vec<Value>, Term<NamedDeBruijn>),
-    Done(Term<NamedDeBruijn>),
+    Compute(Rc<Context>, Rc<Vec<Value>>, Rc<Term<NamedDeBruijn>>),
+    Done(Rc<Term<NamedDeBruijn>>),
 }
 
 impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
@@ -25,7 +25,7 @@ impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
 
     fn try_from(value: Option<MachineStep>) -> Result<Self, Error> {
         match value {
-            Some(MachineStep::Done(term)) => Ok(term),
+            Some(MachineStep::Done(term)) => Ok(Rc::as_ref(&term).clone()),
             _ => Err(Error::MachineNeverReachedDone),
         }
     }
@@ -59,8 +59,11 @@ impl Machine {
 
         self.spend_budget(startup_budget)?;
 
-        self.stack
-            .push(Compute(Rc::new(Context::NoFrame), vec![], term.clone()));
+        self.stack.push(Compute(
+            Rc::new(Context::NoFrame),
+            Rc::new(vec![]),
+            Rc::new(term.clone()),
+        ));
 
         while let Some(step) = self.stack.pop() {
             match step {
@@ -84,10 +87,10 @@ impl Machine {
     fn compute(
         &mut self,
         context: Rc<Context>,
-        env: Vec<Value>,
-        term: Term<NamedDeBruijn>,
+        env: Rc<Vec<Value>>,
+        term: Rc<Term<NamedDeBruijn>>,
     ) -> Result<(), Error> {
-        match term {
+        match term.as_ref() {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
@@ -98,8 +101,10 @@ impl Machine {
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                self.stack
-                    .push(MachineStep::Return(context, Value::Delay(*body, env)));
+                self.stack.push(MachineStep::Return(
+                    context,
+                    Value::Delay(Rc::clone(body), env),
+                ));
             }
             Term::Lambda {
                 parameter_name,
@@ -110,8 +115,8 @@ impl Machine {
                 self.stack.push(MachineStep::Return(
                     context,
                     Value::Lambda {
-                        parameter_name,
-                        body: *body,
+                        parameter_name: parameter_name.clone(),
+                        body: Rc::clone(body),
                         env,
                     },
                 ));
@@ -120,15 +125,20 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 self.stack.push(MachineStep::Compute(
-                    Rc::new(Context::FrameApplyArg(env.clone(), *argument, context)),
+                    Rc::new(Context::FrameApplyArg(
+                        Rc::clone(&env),
+                        Rc::clone(argument),
+                        context,
+                    )),
                     env,
-                    *function,
+                    Rc::clone(function),
                 ));
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                self.stack.push(MachineStep::Return(context, Value::Con(x)));
+                self.stack
+                    .push(MachineStep::Return(context, Value::Con(x.clone())));
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
@@ -136,18 +146,22 @@ impl Machine {
                 self.stack.push(MachineStep::Compute(
                     Rc::new(Context::FrameForce(context)),
                     env,
-                    *body,
+                    Rc::clone(body),
                 ));
             }
             Term::Error => return Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
 
-                let runtime: BuiltinRuntime = (fun).into();
+                let runtime: BuiltinRuntime = (*fun).into();
 
                 self.stack.push(MachineStep::Return(
                     context,
-                    Value::Builtin { fun, term, runtime },
+                    Value::Builtin {
+                        fun: *fun,
+                        term,
+                        runtime,
+                    },
                 ));
             }
         };
@@ -164,7 +178,7 @@ impl Machine {
                 self.stack.push(MachineStep::Compute(
                     Rc::new(Context::FrameApplyFun(value, ctx.to_owned())),
                     arg_var_env.to_owned(),
-                    arg.to_owned(),
+                    Rc::clone(arg),
                 ));
             }
             Context::FrameForce(ctx) => self.force_evaluate(ctx.to_owned(), value)?,
@@ -182,68 +196,70 @@ impl Machine {
         Ok(())
     }
 
-    fn discharge_value(&mut self, value: Value) -> Term<NamedDeBruijn> {
+    fn discharge_value(&mut self, value: Value) -> Rc<Term<NamedDeBruijn>> {
         match value {
-            Value::Con(x) => Term::Constant(x),
+            Value::Con(x) => Rc::new(Term::Constant(x)),
             Value::Builtin { term, .. } => term,
-            Value::Delay(body, env) => self.discharge_value_env(env, Term::Delay(Box::new(body))),
+            Value::Delay(body, env) => self.discharge_value_env(env, Rc::new(Term::Delay(body))),
             Value::Lambda {
                 parameter_name,
                 body,
                 env,
             } => self.discharge_value_env(
                 env,
-                Term::Lambda {
+                Rc::new(Term::Lambda {
                     parameter_name: NamedDeBruijn {
                         text: parameter_name.text,
                         index: 0.into(),
                     },
-                    body: Box::new(body),
-                },
+                    body,
+                }),
             ),
         }
     }
 
     fn discharge_value_env(
         &mut self,
-        env: Vec<Value>,
-        term: Term<NamedDeBruijn>,
-    ) -> Term<NamedDeBruijn> {
+        env: Rc<Vec<Value>>,
+        term: Rc<Term<NamedDeBruijn>>,
+    ) -> Rc<Term<NamedDeBruijn>> {
         fn rec(
             lam_cnt: usize,
-            t: Term<NamedDeBruijn>,
+            t: Rc<Term<NamedDeBruijn>>,
             this: &mut Machine,
-            env: &[Value],
-        ) -> Term<NamedDeBruijn> {
-            match t {
+            env: Rc<Vec<Value>>,
+        ) -> Rc<Term<NamedDeBruijn>> {
+            match t.as_ref() {
                 Term::Var(name) => {
                     let index: usize = name.index.into();
                     if lam_cnt >= index {
-                        Term::Var(name)
+                        Rc::new(Term::Var(name.clone()))
                     } else {
                         env.get::<usize>(env.len() - (index - lam_cnt))
                             .cloned()
-                            .map_or(Term::Var(name), |v| this.discharge_value(v))
+                            .map_or(Rc::new(Term::Var(name.clone())), |v| {
+                                this.discharge_value(v)
+                            })
                     }
                 }
                 Term::Lambda {
                     parameter_name,
                     body,
-                } => Term::Lambda {
-                    parameter_name,
-                    body: Box::new(rec(lam_cnt + 1, *body, this, env)),
-                },
-                Term::Apply { function, argument } => Term::Apply {
-                    function: Box::new(rec(lam_cnt, *function, this, env)),
-                    argument: Box::new(rec(lam_cnt, *argument, this, env)),
-                },
+                } => Rc::new(Term::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: rec(lam_cnt + 1, Rc::clone(body), this, env),
+                }),
+                Term::Apply { function, argument } => Rc::new(Term::Apply {
+                    function: rec(lam_cnt, Rc::clone(function), this, Rc::clone(&env)),
+                    argument: rec(lam_cnt, Rc::clone(argument), this, env),
+                }),
 
-                Term::Delay(x) => Term::Delay(Box::new(rec(lam_cnt, *x, this, env))),
-                Term::Force(x) => Term::Force(Box::new(rec(lam_cnt, *x, this, env))),
-                rest => rest,
+                Term::Delay(x) => Rc::new(Term::Delay(rec(lam_cnt, Rc::clone(x), this, env))),
+                Term::Force(x) => Rc::new(Term::Force(rec(lam_cnt, Rc::clone(x), this, env))),
+                rest => Rc::new(rest.clone()),
             }
         }
-        rec(0, term, self, &env)
+        rec(0, term, self, env)
     }
 
     fn force_evaluate(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
@@ -258,7 +274,7 @@ impl Machine {
                 term,
                 mut runtime,
             } => {
-                let force_term = Term::Force(Box::new(term));
+                let force_term = Rc::new(Term::Force(term));
 
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -269,7 +285,9 @@ impl Machine {
 
                     Ok(())
                 } else {
-                    Err(Error::BuiltinTermArgumentExpected(force_term))
+                    Err(Error::BuiltinTermArgumentExpected(
+                        force_term.as_ref().clone(),
+                    ))
                 }
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
@@ -283,12 +301,13 @@ impl Machine {
         argument: Value,
     ) -> Result<(), Error> {
         match function {
-            Value::Lambda { body, env, .. } => {
-                let mut e = env;
+            Value::Lambda { body, mut env, .. } => {
+                let e = Rc::make_mut(&mut env);
 
                 e.push(argument);
 
-                self.stack.push(MachineStep::Compute(context, e, body));
+                self.stack
+                    .push(MachineStep::Compute(context, Rc::new(e.clone()), body));
 
                 Ok(())
             }
@@ -299,10 +318,10 @@ impl Machine {
             } => {
                 let arg_term = self.discharge_value(argument.clone());
 
-                let t = Term::<NamedDeBruijn>::Apply {
-                    function: Box::new(term),
-                    argument: Box::new(arg_term),
-                };
+                let t = Rc::new(Term::<NamedDeBruijn>::Apply {
+                    function: term,
+                    argument: arg_term,
+                });
 
                 if runtime.is_arrow() && !runtime.needs_force() {
                     runtime.push(argument)?;
@@ -313,7 +332,7 @@ impl Machine {
 
                     Ok(())
                 } else {
-                    Err(Error::UnexpectedBuiltinTermArgument(t))
+                    Err(Error::UnexpectedBuiltinTermArgument(t.as_ref().clone()))
                 }
             }
             rest => Err(Error::NonFunctionalApplication(rest)),
@@ -323,7 +342,7 @@ impl Machine {
     fn eval_builtin_app(
         &mut self,
         fun: DefaultFunction,
-        term: Term<NamedDeBruijn>,
+        term: Rc<Term<NamedDeBruijn>>,
         runtime: BuiltinRuntime,
     ) -> Result<Value, Error> {
         if runtime.is_ready() {
@@ -337,10 +356,10 @@ impl Machine {
         }
     }
 
-    fn lookup_var(&mut self, name: NamedDeBruijn, env: Vec<Value>) -> Result<Value, Error> {
+    fn lookup_var(&mut self, name: &NamedDeBruijn, env: Rc<Vec<Value>>) -> Result<Value, Error> {
         env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
-            .ok_or(Error::OpenTermEvaluated(Term::Var(name)))
+            .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone())))
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -387,7 +406,7 @@ impl Machine {
 #[derive(Clone)]
 enum Context {
     FrameApplyFun(Value, Rc<Context>),
-    FrameApplyArg(Vec<Value>, Term<NamedDeBruijn>, Rc<Context>),
+    FrameApplyArg(Rc<Vec<Value>>, Rc<Term<NamedDeBruijn>>, Rc<Context>),
     FrameForce(Rc<Context>),
     NoFrame,
 }
@@ -395,15 +414,15 @@ enum Context {
 #[derive(Clone, Debug)]
 pub enum Value {
     Con(Constant),
-    Delay(Term<NamedDeBruijn>, Vec<Value>),
+    Delay(Rc<Term<NamedDeBruijn>>, Rc<Vec<Value>>),
     Lambda {
         parameter_name: NamedDeBruijn,
-        body: Term<NamedDeBruijn>,
-        env: Vec<Value>,
+        body: Rc<Term<NamedDeBruijn>>,
+        env: Rc<Vec<Value>>,
     },
     Builtin {
         fun: DefaultFunction,
-        term: Term<NamedDeBruijn>,
+        term: Rc<Term<NamedDeBruijn>>,
         runtime: BuiltinRuntime,
     },
 }

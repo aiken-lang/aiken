@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{Name, Term};
 use crate::program_builder::WithTerm;
 
@@ -12,7 +14,7 @@ impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
     fn next(self, term: Term<Name>) -> Self::Next {
         let term = Term::Lambda {
             parameter_name: self.parameter_name,
-            body: Box::new(term),
+            body: Rc::new(term),
         };
         self.outer.next(term)
     }

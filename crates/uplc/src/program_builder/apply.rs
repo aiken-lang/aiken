@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{Name, Term};
 use crate::program_builder::WithTerm;
 
@@ -30,8 +32,8 @@ impl<T: WithTerm> WithTerm for ApplyBuilderArgument<T> {
 
     fn next(self, term: Term<Name>) -> Self::Next {
         let term = Term::Apply {
-            function: Box::new(self.function),
-            argument: Box::new(term),
+            function: Rc::new(self.function),
+            argument: Rc::new(term),
         };
         self.outer.next(term)
     }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::ast::{Name, Program, Term, Unique};
 
@@ -22,20 +22,20 @@ impl Interner {
     pub fn term(&mut self, term: &mut Term<Name>) {
         match term {
             Term::Var(name) => name.unique = self.intern(&name.text),
-            Term::Delay(term) => self.term(term),
+            Term::Delay(term) => self.term(Rc::make_mut(term)),
             Term::Lambda {
                 parameter_name,
                 body,
             } => {
                 parameter_name.unique = self.intern(&parameter_name.text);
-                self.term(body);
+                self.term(Rc::make_mut(body));
             }
             Term::Apply { function, argument } => {
-                self.term(function);
-                self.term(argument);
+                self.term(Rc::make_mut(function));
+                self.term(Rc::make_mut(argument));
             }
             Term::Constant(_) => (),
-            Term::Force(term) => self.term(term),
+            Term::Force(term) => self.term(Rc::make_mut(term)),
             Term::Error => (),
             Term::Builtin(_) => (),
         }
