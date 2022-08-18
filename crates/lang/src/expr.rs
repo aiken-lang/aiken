@@ -268,3 +268,57 @@ pub enum UntypedExpr {
         value: Box<Self>,
     },
 }
+
+impl UntypedExpr {
+    pub fn append_in_sequence(self, next: Self) -> Self {
+        let location = Span {
+            start: self.location().start,
+            end: next.location().end,
+            ..self.location()
+        };
+
+        match self {
+            Self::Sequence {
+                mut expressions, ..
+            } => {
+                expressions.push(next);
+                Self::Sequence {
+                    location,
+                    expressions,
+                }
+            }
+            _ => Self::Sequence {
+                location,
+                expressions: vec![self, next],
+            },
+        }
+    }
+
+    pub fn location(&self) -> Span {
+        match self {
+            Self::Try { then, .. } => then.location(),
+            Self::PipeLine { expressions, .. } => expressions.last().location(),
+            Self::Fn { location, .. }
+            | Self::Var { location, .. }
+            | Self::Int { location, .. }
+            | Self::Todo { location, .. }
+            | Self::Case { location, .. }
+            | Self::Call { location, .. }
+            | Self::List { location, .. }
+            | Self::Float { location, .. }
+            | Self::BinOp { location, .. }
+            | Self::Tuple { location, .. }
+            | Self::String { location, .. }
+            | Self::Assignment { location, .. }
+            | Self::TupleIndex { location, .. }
+            | Self::FieldAccess { location, .. }
+            | Self::RecordUpdate { location, .. }
+            | Self::Negate { location, .. } => *location,
+            Self::Sequence {
+                location,
+                expressions,
+                ..
+            } => expressions.last().map(Self::location).unwrap_or(*location),
+        }
+    }
+}

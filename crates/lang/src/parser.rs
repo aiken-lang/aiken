@@ -227,25 +227,36 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
 
 pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     recursive(|r| {
-        choice((just(Token::Try)
-            .ignore_then(pattern_parser())
-            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-            .then_ignore(just(Token::Equal))
-            .then(expr_parser())
-            .then(r)
-            .map_with_span(|(((pattern, annotation), value), then_), span| {
-                expr::UntypedExpr::Try {
-                    location: span,
-                    value: Box::new(value),
-                    pattern,
-                    then: Box::new(then_),
-                    annotation,
-                }
-            }),))
+        choice((
+            just(Token::Try)
+                .ignore_then(pattern_parser())
+                .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+                .then_ignore(just(Token::Equal))
+                .then(expr_parser())
+                .then(r.clone())
+                .map_with_span(|(((pattern, annotation), value), then_), span| {
+                    expr::UntypedExpr::Try {
+                        location: span,
+                        value: Box::new(value),
+                        pattern,
+                        then: Box::new(then_),
+                        annotation,
+                    }
+                }),
+            expr_parser()
+                .then(r.repeated())
+                .map_with_span(|(expr, exprs), span| {
+                    exprs
+                        .into_iter()
+                        .fold(expr, |acc, elem| acc.append_in_sequence(elem))
+                }),
+        ))
     })
 }
 
 pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
+
+pub fn expr_unit_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
 
 pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
     recursive(|r| {
