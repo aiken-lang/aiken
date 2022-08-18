@@ -5,7 +5,7 @@ use flat_rs::de;
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum DefaultFunction {
     // Integer functions
     AddInteger = 0,

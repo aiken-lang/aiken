@@ -3,7 +3,7 @@ use crate::builtins::DefaultFunction;
 use super::Value;
 
 /// Can be negative
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ExBudget {
     pub mem: i64,
     pub cpu: i64,

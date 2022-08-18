@@ -237,7 +237,7 @@ impl From<NamedDeBruijn> for FakeNamedDeBruijn {
 }
 
 /// Represents a debruijn index.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct DeBruijn(usize);
 
 impl DeBruijn {
