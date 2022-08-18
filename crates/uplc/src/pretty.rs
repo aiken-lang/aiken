@@ -174,10 +174,11 @@ impl Constant {
                 .append(RcDoc::line())
                 .append(RcDoc::text("["))
                 .append(RcDoc::line())
-                .append(RcDoc::intersperse(
-                    ls.into_iter().map(|l| l.to_doc()),
-                    RcDoc::text(" , ")
-                ).nest(2).group())
+                .append(
+                    RcDoc::intersperse(ls.into_iter().map(|l| l.to_doc()), RcDoc::text(" , "))
+                        .nest(2)
+                        .group(),
+                )
                 .append(RcDoc::line())
                 .append(RcDoc::text("]")),
             Constant::ProtoPair(_, _, l, r) => RcDoc::text("pair")
@@ -186,10 +187,10 @@ impl Constant {
                 .append(RcDoc::line())
                 .append(
                     l.to_doc()
-                    .append(RcDoc::text(" , "))
-                    .append(r.to_doc())
-                    .nest(2)
-                    .group()
+                        .append(RcDoc::text(" , "))
+                        .append(r.to_doc())
+                        .nest(2)
+                        .group(),
                 )
                 .append(RcDoc::line())
                 .append(")"),

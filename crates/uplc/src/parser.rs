@@ -6,8 +6,8 @@ use crate::{
 };
 
 use interner::Interner;
-use peg::{error::ParseError, str::LineCol};
 use pallas_primitives::alonzo::PlutusData;
+use peg::{error::ParseError, str::LineCol};
 
 mod interner;
 
@@ -24,7 +24,6 @@ pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {
 
     Ok(program)
 }
-
 
 peg::parser! {
     grammar uplc() for str {
@@ -111,10 +110,10 @@ peg::parser! {
               compound_type:( "(" _*  c:(
                   "list" _+ lt:constant_type() { Type::List(Box::new(lt)) } /
                   "pair" _+ pl:constant_type() _* pr:constant_type() { Type::Pair(Box::new(pl), Box::new(pr)) }
-                ) _* ")" {c}  
+                ) _* ")" {c}
               ) { compound_type }
             ) { r }
-        
+
 
         rule constant_integer() -> Constant
           = "integer" _+ i:number() { Constant::Integer(i as isize) }
@@ -148,7 +147,8 @@ peg::parser! {
                 }
               }
           }
-        
+          use pallas_primitives::alonzo::PlutusData;
+
         rule constant_pair() -> Constant
           = "(" _* "pair" _+ lt:constant_type() _+ rt:constant_type() _* ")" _+ "(" _* l:constant() _* "," _* r:constant() _* ")" {?
             return if Type::from(&l) != lt {
@@ -215,14 +215,15 @@ mod test2 {
             program,
             Program::<Name> {
                 version: (11, 22, 33),
-                term: Term::Constant(
-                  Constant::ProtoPair(
+                term: Term::Constant(Constant::ProtoPair(
                     Type::List(Box::new(Type::Integer)),
                     Type::ByteString,
-                    Box::new(Constant::ProtoList(Type::Integer, vec![Constant::Integer(11), Constant::Integer(12)])),
+                    Box::new(Constant::ProtoList(
+                        Type::Integer,
+                        vec![Constant::Integer(11), Constant::Integer(12)]
+                    )),
                     Box::new(Constant::ByteString(vec![0x10]))
-                  )
-                ),
+                )),
             }
         );
     }
