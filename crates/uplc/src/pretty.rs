@@ -5,7 +5,7 @@ use crate::{
     flat::Binder,
 };
 
-use pallas_primitives::{Fragment, alonzo::PlutusData};
+use pallas_primitives::{alonzo::PlutusData, Fragment};
 
 impl<'a, T> Program<T>
 where
@@ -177,7 +177,9 @@ impl Constant {
             Constant::Data(d) => RcDoc::text("data")
                 .append(RcDoc::line())
                 .append(RcDoc::text("#"))
-                .append(RcDoc::text(hex::encode(PlutusData::encode_fragment(d).unwrap()))),
+                .append(RcDoc::text(hex::encode(
+                    PlutusData::encode_fragment(d).unwrap(),
+                ))),
         }
     }
 }

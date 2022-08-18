@@ -6,8 +6,8 @@ use crate::{
 };
 
 use interner::Interner;
+use pallas_primitives::{alonzo::PlutusData, Fragment};
 use peg::{error::ParseError, str::LineCol};
-use pallas_primitives::{Fragment, alonzo::PlutusData};
 
 mod interner;
 
