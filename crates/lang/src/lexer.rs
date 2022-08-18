@@ -1,12 +1,9 @@
 use chumsky::prelude::*;
-use internment::Intern;
 
 use crate::{ast::Span, error::ParseError, token::Token};
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
-    let int = text::int(10)
-        .map(Intern::new)
-        .map(|value| Token::Int { value });
+    let int = text::int(10).map(|value| Token::Int { value });
 
     let op = choice((
         just("==").to(Token::EqualEqual),
@@ -54,7 +51,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
         .then_ignore(just('"'))
         .collect::<String>()
-        .map(Intern::new)
         .map(|value| Token::String { value })
         .labelled("string");
 

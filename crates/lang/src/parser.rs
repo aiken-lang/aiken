@@ -204,6 +204,17 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
                 location: span,
             }
         }),
+        select! {Token::Name {name} => name}
+            .then(select! {Token::Name {name} => name})
+            .map_with_span(|(label, name), span| ast::ArgName::NamedLabeled {
+                label,
+                name,
+                location: span,
+            }),
+        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
+            name,
+            location: span,
+        }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
     .map_with_span(|(arg_name, annotation), span| ast::Arg {
@@ -214,7 +225,27 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
     })
 }
 
-pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
+pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
+    recursive(|r| {
+        choice((just(Token::Try)
+            .ignore_then(pattern_parser())
+            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+            .then_ignore(just(Token::Equal))
+            .then(expr_parser())
+            .then(r)
+            .map_with_span(|(((pattern, annotation), value), then_), span| {
+                expr::UntypedExpr::Try {
+                    location: span,
+                    value: Box::new(value),
+                    pattern,
+                    then: Box::new(then_),
+                    annotation,
+                }
+            }),))
+    })
+}
+
+pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
 
 pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
     recursive(|r| {
@@ -311,6 +342,118 @@ pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>)
 
 pub fn pub_parser() -> impl Parser<Token, (), Error = ParseError> {
     just(Token::Pub).ignored()
+}
+
+pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
+    recursive(|r| {
+        let constructor_pattern_arg_parser = choice((
+            select! {Token::Name {name} => name}
+                .then_ignore(just(Token::Colon))
+                .then(r.clone())
+                .map_with_span(|(name, pattern), span| ast::CallArg {
+                    location: span,
+                    label: Some(name),
+                    value: pattern,
+                }),
+            r.map_with_span(|pattern, span| ast::CallArg {
+                location: span,
+                value: pattern,
+                label: None,
+            }),
+        ));
+
+        let constructor_pattern_args_parser = constructor_pattern_arg_parser
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .then(
+                just(Token::DotDot)
+                    .then_ignore(just(Token::Comma).or_not())
+                    .ignored()
+                    .or_not(),
+            )
+            .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+            .or_not()
+            .map(|opt_args| {
+                opt_args
+                    .map(|(a, b)| (a, b.is_some()))
+                    .unwrap_or_else(|| (vec![], false))
+            });
+
+        let constructor_pattern_parser =
+            select! {Token::UpName { name } => name}.then(constructor_pattern_args_parser);
+
+        choice((
+            select! { Token::Name {name} => name }
+                .then(
+                    just(Token::Dot)
+                        .ignore_then(constructor_pattern_parser.clone())
+                        .or_not(),
+                )
+                .map_with_span(|(name, opt_pattern), span| {
+                    if let Some((c_name, (arguments, with_spread))) = opt_pattern {
+                        ast::UntypedPattern::Constructor {
+                            location: span,
+                            name: c_name,
+                            arguments,
+                            module: Some(name),
+                            constructor: (),
+                            with_spread,
+                            tipo: (),
+                        }
+                    } else {
+                        ast::UntypedPattern::Var {
+                            location: span,
+                            name,
+                        }
+                    }
+                }),
+            constructor_pattern_parser.map_with_span(|(name, (arguments, with_spread)), span| {
+                ast::UntypedPattern::Constructor {
+                    location: span,
+                    name,
+                    arguments,
+                    module: None,
+                    constructor: (),
+                    with_spread,
+                    tipo: (),
+                }
+            }),
+            select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
+                ast::UntypedPattern::Discard {
+                    name,
+                    location: span,
+                }
+            }),
+            select! {Token::String {value} => value}.map_with_span(|value, span| {
+                ast::UntypedPattern::String {
+                    location: span,
+                    value,
+                }
+            }),
+            select! {Token::Int {value} => value}.map_with_span(|value, span| {
+                ast::UntypedPattern::Int {
+                    location: span,
+                    value,
+                }
+            }),
+        ))
+        .then(
+            just(Token::As)
+                .ignore_then(select! { Token::Name {name} => name})
+                .or_not(),
+        )
+        .map_with_span(|(pattern, opt_as), span| {
+            if let Some(name) = opt_as {
+                ast::UntypedPattern::Assign {
+                    name,
+                    location: span,
+                    pattern: Box::new(pattern),
+                }
+            } else {
+                pattern
+            }
+        })
+    })
 }
 
 #[cfg(test)]

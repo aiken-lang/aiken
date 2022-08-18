@@ -187,10 +187,12 @@ pub enum ArgName {
     },
     Named {
         name: String,
+        location: Span,
     },
     NamedLabeled {
         name: String,
         label: String,
+        location: Span,
     },
 }
 
@@ -269,6 +271,9 @@ pub enum BinOp {
     DivInt,
     ModInt,
 }
+
+pub type UntypedPattern = Pattern<(), ()>;
+pub type TypedPattern = Pattern<PatternConstructor, Arc<Type>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern<Constructor, Type> {

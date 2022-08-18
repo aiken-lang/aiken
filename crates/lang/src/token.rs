@@ -1,15 +1,13 @@
 use std::fmt;
 
-use internment::Intern;
-
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum Token {
     Error(char),
     Name { name: String },
     UpName { name: String },
     DiscardName { name: String },
-    Int { value: Intern<String> },
-    String { value: Intern<String> },
+    Int { value: String },
+    String { value: String },
     // Groupings
     LeftParen,   // (
     RightParen,  // )
@@ -85,8 +83,8 @@ impl fmt::Display for Token {
             Token::Name { name } => name,
             Token::UpName { name } => name,
             Token::DiscardName { name } => name,
-            Token::Int { value } => &**value,
-            Token::String { value } => &**value,
+            Token::Int { value } => value,
+            Token::String { value } => value,
             Token::LeftParen => "(",
             Token::RightParen => ")",
             Token::LeftSquare => "[",
