@@ -6,6 +6,10 @@ use crate::{
 };
 
 use interner::Interner;
+use minicbor::data::Tag;
+use num_bigint::{BigInt, Sign};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_primitives::babbage::{BigInt as PlutusBigInt, Constr, PlutusData};
 use peg::{error::ParseError, str::LineCol};
 
 mod interner;
@@ -53,6 +57,7 @@ peg::parser! {
             / constant_string()
             / constant_unit()
             / constant_bool()
+            / constant_data()
             ) _* ")" {
             Term::Constant(con)
           }
@@ -106,6 +111,46 @@ peg::parser! {
 
         rule constant_unit() -> Constant
           = "unit" _+ "()" { Constant::Unit }
+
+        rule constant_data() -> Constant
+          = "data" _+ d:plutus_data() { Constant::Data(d) }
+
+        rule plutus_data() -> PlutusData
+          = plutus_bigint() / plutus_bytestring() / plutus_array() / plutus_map() / plutus_constr()
+
+        rule plutus_bigint() -> PlutusData
+          = n:$("-"* ['0'..='9']+) {
+            PlutusData::BigInt(
+              match n.parse::<BigInt>().unwrap().to_bytes_be() {
+                (Sign::NoSign | Sign::Plus, bytes) => PlutusBigInt::BigUInt(bytes.into()),
+                (Sign::Minus, bytes) => PlutusBigInt::BigNInt(bytes.into()),
+              }.into()
+            )
+          }
+
+        rule plutus_bytestring() -> PlutusData
+          = "#" i:ident()* {
+            PlutusData::BoundedBytes(hex::decode(String::from_iter(i)).unwrap().into())
+          }
+
+        rule plutus_array() -> PlutusData
+          = "[" _* c:((_* c:plutus_data() _* {c}) ** ",") _* "]" {
+            PlutusData::Array(MaybeIndefArray::Def(c.into()))
+          }
+
+        rule plutus_map() -> PlutusData
+          = "{" _* c:((_* k:plutus_data() _* "=" _* v:plutus_data() {(k, v)}) ** ",") _* "}" {
+            PlutusData::Map(KeyValuePairs::Def(c.into()))
+          }
+
+        rule plutus_constr() -> PlutusData
+          = "(" _* "constr" _+ n:number() _+ "[" _* d:((_* c:plutus_data() _* {c}) ** ",") _* "]" {
+            PlutusData::Constr(Constr {
+              tag: 0xFF,
+              any_constructor: Some(n.try_into().unwrap()),
+              fields: MaybeIndefArray::Def(d.into())
+            })
+          }
 
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
