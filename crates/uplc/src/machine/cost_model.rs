@@ -277,12 +277,12 @@ impl Default for BuiltinCosts {
             },
             append_byte_string: CostingFun {
                 mem: TwoArguments::AddedSizes(AddedSizes {
-                    intercept: 1000,
-                    slope: 571,
-                }),
-                cpu: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 0,
                     slope: 1,
+                }),
+                cpu: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 1000,
+                    slope: 571,
                 }),
             },
             cons_byte_string: CostingFun {
@@ -359,8 +359,8 @@ impl Default for BuiltinCosts {
             verify_ed25519_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(10),
                 cpu: ThreeArguments::LinearInZ(LinearSize {
-                    intercept: 41047009,
-                    slope: 18816,
+                    intercept: 57996947,
+                    slope: 18975,
                 }),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
@@ -693,7 +693,18 @@ impl BuiltinCosts {
                 mem: self.blake2b_256.mem.cost(args[0].to_ex_mem()),
                 cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => ExBudget {
+                mem: self.verify_ed25519_signature.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.verify_ed25519_signature.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => ExBudget {

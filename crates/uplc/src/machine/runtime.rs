@@ -93,7 +93,7 @@ impl DefaultFunction {
             DefaultFunction::Sha2_256 => 1,
             DefaultFunction::Sha3_256 => 1,
             DefaultFunction::Blake2b_256 => 1,
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => 3,
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => 2,
@@ -152,7 +152,7 @@ impl DefaultFunction {
             DefaultFunction::Sha2_256 => 0,
             DefaultFunction::Sha3_256 => 0,
             DefaultFunction::Blake2b_256 => 0,
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => 0,
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => 0,
@@ -229,7 +229,7 @@ impl DefaultFunction {
             DefaultFunction::Sha2_256 => arg.expect_type(Type::ByteString),
             DefaultFunction::Sha3_256 => arg.expect_type(Type::ByteString),
             DefaultFunction::Blake2b_256 => arg.expect_type(Type::ByteString),
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => arg.expect_type(Type::ByteString),
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => arg.expect_type(Type::String),
@@ -459,7 +459,16 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => match (&args[0], &args[1], &args[2]) {
+                (
+                    Value::Con(Constant::ByteString(_arg1)),
+                    Value::Con(Constant::ByteString(_arg2)),
+                    Value::Con(Constant::ByteString(_arg3)),
+                ) => {
+                    todo!()
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => match (&args[0], &args[1]) {
