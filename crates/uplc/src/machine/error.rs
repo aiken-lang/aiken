@@ -22,6 +22,10 @@ pub enum Error {
     NonFunctionalApplication(Value),
     #[error("Type mismatch expected '{0}' got '{1}'")]
     TypeMismatch(Type, Type),
+    #[error("Type mismatch expected '(list a)' got '{0}'")]
+    ListTypeMismatch(Type),
+    #[error("Empty List:\n\n{0:#?}")]
+    EmptyList(Value),
     #[error("A builtin received a term argument when something else was expected:\n\n{0}\n\nYou probably forgot to wrap the builtin with a force.")]
     UnexpectedBuiltinTermArgument(Term<NamedDeBruijn>),
     #[error("A builtin expected a term argument, but something else was received:\n\n{0}\n\nYou probably have an extra force wrapped around a builtin")]
@@ -36,4 +40,8 @@ pub enum Error {
     ByteStringOutOfBounds(isize, Vec<u8>),
     #[error("Divide By Zero\n\n{0} / {1}")]
     DivideByZero(isize, isize),
+    #[error("Ed25519S PublicKey should be 32 bytes but it was {0}")]
+    UnexpectedEd25519PublicKeyLength(usize),
+    #[error("Ed25519S Signature should be 64 bytes but it was {0}")]
+    UnexpectedEd25519SignatureLength(usize),
 }
