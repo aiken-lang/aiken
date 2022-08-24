@@ -450,7 +450,9 @@ impl Value {
                 Constant::String(s) => s.chars().count() as i64,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
-                Constant::ProtoList(_, _) => todo!(),
+                Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
+                    acc + Value::Con(constant.clone()).to_ex_mem()
+                }),
                 Constant::ProtoPair(_, _, _, _) => todo!(),
                 Constant::Data(_) => todo!(),
             },
@@ -461,17 +463,49 @@ impl Value {
     }
 
     pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
-        match self {
-            Value::Con(constant) => {
-                let constant_type = Type::from(constant);
+        let constant: Constant = self.clone().try_into()?;
 
-                if constant_type == r#type {
-                    Ok(())
-                } else {
-                    Err(Error::TypeMismatch(r#type, constant_type))
-                }
-            }
-            rest => Err(Error::NotAConstant(rest.clone())),
+        let constant_type = Type::from(&constant);
+
+        if constant_type == r#type {
+            Ok(())
+        } else {
+            Err(Error::TypeMismatch(r#type, constant_type))
+        }
+    }
+
+    pub fn expect_list(&self) -> Result<(), Error> {
+        let constant: Constant = self.clone().try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        if matches!(constant_type, Type::List(_)) {
+            Ok(())
+        } else {
+            Err(Error::ListTypeMismatch(constant_type))
+        }
+    }
+}
+
+impl TryFrom<Value> for Type {
+    type Error = Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let constant: Constant = value.try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        Ok(constant_type)
+    }
+}
+
+impl TryFrom<Value> for Constant {
+    type Error = Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Con(constant) => Ok(constant),
+            rest => Err(Error::NotAConstant(rest)),
         }
     }
 }

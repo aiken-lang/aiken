@@ -76,9 +76,9 @@ impl DefaultFunction {
             DefaultFunction::SubtractInteger => 2,
             DefaultFunction::MultiplyInteger => 2,
             DefaultFunction::DivideInteger => 2,
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => 2,
+            DefaultFunction::RemainderInteger => 2,
+            DefaultFunction::ModInteger => 2,
             DefaultFunction::EqualsInteger => 2,
             DefaultFunction::LessThanInteger => 2,
             DefaultFunction::LessThanEqualsInteger => 2,
@@ -106,10 +106,10 @@ impl DefaultFunction {
             DefaultFunction::FstPair => todo!(),
             DefaultFunction::SndPair => todo!(),
             DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
+            DefaultFunction::MkCons => 2,
+            DefaultFunction::HeadList => 1,
+            DefaultFunction::TailList => 1,
+            DefaultFunction::NullList => 1,
             DefaultFunction::ChooseData => todo!(),
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
@@ -135,9 +135,9 @@ impl DefaultFunction {
             DefaultFunction::SubtractInteger => 0,
             DefaultFunction::MultiplyInteger => 0,
             DefaultFunction::DivideInteger => 0,
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => 0,
+            DefaultFunction::RemainderInteger => 0,
+            DefaultFunction::ModInteger => 0,
             DefaultFunction::EqualsInteger => 0,
             DefaultFunction::LessThanInteger => 0,
             DefaultFunction::LessThanEqualsInteger => 0,
@@ -165,10 +165,10 @@ impl DefaultFunction {
             DefaultFunction::FstPair => todo!(),
             DefaultFunction::SndPair => todo!(),
             DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
+            DefaultFunction::MkCons => 1,
+            DefaultFunction::HeadList => 1,
+            DefaultFunction::TailList => 1,
+            DefaultFunction::NullList => 1,
             DefaultFunction::ChooseData => todo!(),
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
@@ -194,9 +194,9 @@ impl DefaultFunction {
             DefaultFunction::SubtractInteger => arg.expect_type(Type::Integer),
             DefaultFunction::MultiplyInteger => arg.expect_type(Type::Integer),
             DefaultFunction::DivideInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => arg.expect_type(Type::Integer),
+            DefaultFunction::RemainderInteger => arg.expect_type(Type::Integer),
+            DefaultFunction::ModInteger => arg.expect_type(Type::Integer),
             DefaultFunction::EqualsInteger => arg.expect_type(Type::Integer),
             DefaultFunction::LessThanInteger => arg.expect_type(Type::Integer),
             DefaultFunction::LessThanEqualsInteger => arg.expect_type(Type::Integer),
@@ -260,10 +260,18 @@ impl DefaultFunction {
             DefaultFunction::FstPair => todo!(),
             DefaultFunction::SndPair => todo!(),
             DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
+            DefaultFunction::MkCons => {
+                if args.is_empty() {
+                    Ok(())
+                } else {
+                    let first = args[0].clone();
+
+                    arg.expect_type(Type::List(Box::new(first.try_into()?)))
+                }
+            }
+            DefaultFunction::HeadList => arg.expect_list(),
+            DefaultFunction::TailList => arg.expect_list(),
+            DefaultFunction::NullList => arg.expect_list(),
             DefaultFunction::ChooseData => todo!(),
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
@@ -318,9 +326,44 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    if *arg2 != 0 {
+                        let ret = (*arg1 as f64) / (*arg2 as f64);
+
+                        let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
+
+                        Ok(Value::Con(Constant::Integer(ret as isize)))
+                    } else {
+                        Err(Error::DivideByZero(*arg1, *arg2))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::RemainderInteger => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    if *arg2 != 0 {
+                        let ret = arg1 % arg2;
+
+                        Ok(Value::Con(Constant::Integer(ret)))
+                    } else {
+                        Err(Error::DivideByZero(*arg1, *arg2))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::ModInteger => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    if *arg2 != 0 {
+                        let ret = arg1 % arg2;
+
+                        Ok(Value::Con(Constant::Integer(ret.abs())))
+                    } else {
+                        Err(Error::DivideByZero(*arg1, *arg2))
+                    }
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::EqualsInteger => match (&args[0], &args[1]) {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
                     Ok(Value::Con(Constant::Bool(arg1 == arg2)))
@@ -461,11 +504,25 @@ impl DefaultFunction {
             },
             DefaultFunction::VerifyEd25519Signature => match (&args[0], &args[1], &args[2]) {
                 (
-                    Value::Con(Constant::ByteString(_arg1)),
-                    Value::Con(Constant::ByteString(_arg2)),
-                    Value::Con(Constant::ByteString(_arg3)),
+                    Value::Con(Constant::ByteString(public_key)),
+                    Value::Con(Constant::ByteString(message)),
+                    Value::Con(Constant::ByteString(signature)),
                 ) => {
-                    todo!()
+                    use cryptoxide::ed25519;
+
+                    let public_key: [u8; 32] = public_key
+                        .clone()
+                        .try_into()
+                        .map_err(|e: Vec<u8>| Error::UnexpectedEd25519PublicKeyLength(e.len()))?;
+
+                    let signature: [u8; 64] = signature
+                        .clone()
+                        .try_into()
+                        .map_err(|e: Vec<u8>| Error::UnexpectedEd25519SignatureLength(e.len()))?;
+
+                    let valid = ed25519::verify(message, &public_key, &signature);
+
+                    Ok(Value::Con(Constant::Bool(valid)))
                 }
                 _ => unreachable!(),
             },
@@ -524,10 +581,44 @@ impl DefaultFunction {
             DefaultFunction::FstPair => todo!(),
             DefaultFunction::SndPair => todo!(),
             DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
+            DefaultFunction::MkCons => match (&args[0], &args[1]) {
+                (Value::Con(item), Value::Con(Constant::ProtoList(r#type, list))) => {
+                    let mut ret = vec![item.clone()];
+                    ret.extend(list.clone());
+
+                    Ok(Value::Con(Constant::ProtoList(r#type.clone(), ret)))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::HeadList => match &args[0] {
+                c @ Value::Con(Constant::ProtoList(_, list)) => {
+                    if list.is_empty() {
+                        Err(Error::EmptyList(c.clone()))
+                    } else {
+                        Ok(Value::Con(list[0].clone()))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::TailList => match &args[0] {
+                c @ Value::Con(Constant::ProtoList(r#type, list)) => {
+                    if list.is_empty() {
+                        Err(Error::EmptyList(c.clone()))
+                    } else {
+                        Ok(Value::Con(Constant::ProtoList(
+                            r#type.clone(),
+                            list[1..].to_vec(),
+                        )))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::NullList => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    Ok(Value::Con(Constant::Bool(list.is_empty())))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::ChooseData => todo!(),
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),

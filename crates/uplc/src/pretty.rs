@@ -1,7 +1,7 @@
 use pretty::RcDoc;
 
 use crate::{
-    ast::{Constant, Program, Term},
+    ast::{Constant, Program, Term, Type},
     flat::Binder,
 };
 
@@ -170,9 +170,65 @@ impl Constant {
             Constant::Bool(b) => RcDoc::text("bool")
                 .append(RcDoc::line())
                 .append(RcDoc::text(if *b { "True" } else { "False" })),
-            Constant::ProtoList(_, _) => todo!(),
+            Constant::ProtoList(r#type, items) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("list")
+                        .append(RcDoc::line())
+                        .append(r#type.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")"))
+                .append(RcDoc::line())
+                .append(RcDoc::text("["))
+                .append(RcDoc::intersperse(
+                    items.iter().map(|c| c.to_doc_list()),
+                    RcDoc::text(","),
+                ))
+                .append(RcDoc::text("]")),
             Constant::ProtoPair(_, _, _, _) => todo!(),
             Constant::Data(_) => todo!(),
+        }
+    }
+
+    fn to_doc_list(&self) -> RcDoc<()> {
+        match self {
+            Constant::Integer(i) => RcDoc::as_string(i),
+            Constant::ByteString(bs) => RcDoc::text("#").append(RcDoc::text(hex::encode(bs))),
+            Constant::String(s) => RcDoc::text("\"")
+                .append(RcDoc::text(s))
+                .append(RcDoc::text("\"")),
+            Constant::Unit => RcDoc::text("()"),
+            Constant::Bool(b) => RcDoc::text(if *b { "True" } else { "False" }),
+            Constant::ProtoList(_, items) => RcDoc::text("[")
+                .append(RcDoc::intersperse(
+                    items.iter().map(|c| c.to_doc_list()),
+                    RcDoc::text(","),
+                ))
+                .append(RcDoc::text("]")),
+            Constant::ProtoPair(_, _, _, _) => todo!(),
+            Constant::Data(_) => todo!(),
+        }
+    }
+}
+
+impl Type {
+    fn to_doc(&self) -> RcDoc<()> {
+        match self {
+            Type::Bool => RcDoc::text("bool"),
+            Type::Integer => RcDoc::text("integer"),
+            Type::String => RcDoc::text("string"),
+            Type::ByteString => RcDoc::text("bytestring"),
+            Type::Unit => RcDoc::text("unit"),
+            Type::List(r#type) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("list")
+                        .append(RcDoc::line())
+                        .append(r#type.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")")),
+            Type::Pair(_, _) => todo!(),
+            Type::Data => todo!(),
         }
     }
 }

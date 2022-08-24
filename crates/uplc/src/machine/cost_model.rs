@@ -572,9 +572,36 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => ExBudget {
+                mem: self
+                    .quotient_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .quotient_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::RemainderInteger => ExBudget {
+                mem: self
+                    .remainder_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .remainder_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::ModInteger => ExBudget {
+                mem: self
+                    .mod_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .mod_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::EqualsInteger => ExBudget {
                 mem: self
                     .equals_integer
@@ -770,10 +797,28 @@ impl BuiltinCosts {
             DefaultFunction::FstPair => todo!(),
             DefaultFunction::SndPair => todo!(),
             DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
+            DefaultFunction::MkCons => ExBudget {
+                mem: self
+                    .mk_cons
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .mk_cons
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::HeadList => ExBudget {
+                mem: self.head_list.mem.cost(args[0].to_ex_mem()),
+                cpu: self.head_list.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::TailList => ExBudget {
+                mem: self.tail_list.mem.cost(args[0].to_ex_mem()),
+                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::NullList => ExBudget {
+                mem: self.null_list.mem.cost(args[0].to_ex_mem()),
+                cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::ChooseData => todo!(),
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
