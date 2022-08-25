@@ -15,4 +15,11 @@ mod test {
         let converted_i = to_isize(u);
         converted_i == i
     }
+
+    #[quickcheck]
+    fn zagzig(u: usize) -> bool {
+        let i = to_isize(u);
+        let converted_u = to_usize(i);
+        converted_u == u
+    }
 }
