@@ -19,7 +19,7 @@ mod test {
 
         let decoded: bool = decode(bytes.as_slice()).unwrap();
 
-        assert_eq!(decoded, true);
+        assert!(decoded);
 
         let bytes = encode(&false).unwrap();
 
@@ -27,7 +27,7 @@ mod test {
 
         let decoded: bool = decode(bytes.as_slice()).unwrap();
 
-        assert_eq!(decoded, false);
+        assert!(!decoded);
     }
 
     #[test]
