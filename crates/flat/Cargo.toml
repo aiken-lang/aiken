@@ -16,3 +16,4 @@ thiserror = "1.0.31"
 
 [dev-dependencies]
 quickcheck = "1"
+quickcheck_macros = "1"
