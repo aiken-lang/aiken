@@ -6,12 +6,9 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 use flat_rs::{decode, encode};
-use quickcheck::{Arbitrary, Gen};
 
 #[cfg(test)]
 mod test {
-    use core::num;
-
     use quickcheck::Arbitrary;
 
     #[test]
