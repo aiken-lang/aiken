@@ -278,19 +278,19 @@ impl Encoder {
     /// After reaching the end of the buffer we write a 0 byte. Only write 0 if the byte array is empty.
     /// This is byte alignment agnostic.
     fn write_blk(&mut self, arr: &[u8], src_ptr: &mut usize) {
-        let src_len = arr.len() - *src_ptr;
-        let blk_len = src_len.min(255);
+        loop {
+            let src_len = arr.len() - *src_ptr;
+            let blk_len = src_len.min(255);
 
-        self.buffer.push(blk_len as u8);
+            self.buffer.push(blk_len as u8);
 
-        if blk_len == 0 {
-            return;
+            if blk_len == 0 {
+                return;
+            }
+
+            self.buffer.extend(&arr[*src_ptr..blk_len]);
+
+            *src_ptr += blk_len;
         }
-
-        self.buffer.extend(&arr[*src_ptr..blk_len]);
-
-        *src_ptr += blk_len;
-
-        self.write_blk(arr, src_ptr);
     }
 }
