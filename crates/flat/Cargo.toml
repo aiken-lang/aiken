@@ -13,3 +13,6 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 anyhow = "1.0.57"
 thiserror = "1.0.31"
+
+[dev-dependencies]
+quickcheck = "1"
