@@ -13,4 +13,5 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 anyhow = "1.0.57"
 clap = { version = "3.1.14", features = ["derive"] }
+hex = "0.4.3"
 uplc = { path = '../uplc', version = "0.0.10" }

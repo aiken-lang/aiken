@@ -185,7 +185,22 @@ impl Constant {
                     RcDoc::text(","),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(_, _, _, _) => todo!(),
+            Constant::ProtoPair(r#type1, r#type2, left, right) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("pair")
+                        .append(RcDoc::line())
+                        .append(r#type1.to_doc())
+                        .append(RcDoc::line())
+                        .append(r#type2.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")"))
+                .append(RcDoc::line())
+                .append(RcDoc::text("("))
+                .append(left.to_doc_list())
+                .append(RcDoc::text(","))
+                .append(right.to_doc_list())
+                .append(RcDoc::text(")")),
             Constant::Data(_) => todo!(),
         }
     }
@@ -206,7 +221,7 @@ impl Constant {
                 ))
                 .append(RcDoc::text("]")),
             Constant::ProtoPair(_, _, _, _) => todo!(),
-            Constant::Data(_) => todo!(),
+            Constant::Data(data) => RcDoc::text("todo"),
         }
     }
 }
@@ -228,7 +243,7 @@ impl Type {
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
             Type::Pair(_, _) => todo!(),
-            Type::Data => todo!(),
+            Type::Data => RcDoc::text("data"),
         }
     }
 }

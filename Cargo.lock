@@ -8,6 +8,7 @@ version = "0.0.10"
 dependencies = [
  "anyhow",
  "clap",
+ "hex",
  "uplc",
 ]
 
@@ -251,16 +252,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5e575910763b21a0db7df5e142907fe944bff84d1dfc78e2ba92e7f3bdfd36b"
 dependencies = [
  "half",
- "minicbor-derive 0.11.0",
-]
-
-[[package]]
-name = "minicbor"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a20020e8e2d1881d8736f64011bb5ff99f1db9947ce3089706945c8915695cb"
-dependencies = [
- "minicbor-derive 0.12.0",
+ "minicbor-derive",
 ]
 
 [[package]]
@@ -268,17 +260,6 @@ name = "minicbor-derive"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a86c5f04def8fb7735ae918bb589af82f985526f4c62e0249544b668b2f456"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "minicbor-derive"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8608fb1c805b5b6b3d5ab7bd95c40c396df622b64d77b2d621a5eae1eed050ee"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -306,7 +287,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dce0ea17341c1a0e43e2bb4a637740198dcb09826879ce3ac5ae1c6f4398a5d"
 dependencies = [
- "minicbor 0.17.1",
+ "minicbor",
 ]
 
 [[package]]
@@ -646,7 +627,7 @@ dependencies = [
  "cryptoxide",
  "flat-rs",
  "hex",
- "minicbor 0.18.0",
+ "minicbor",
  "pallas-primitives",
  "peg",
  "pretty",

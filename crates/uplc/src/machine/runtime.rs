@@ -1,3 +1,7 @@
+use std::ops::Deref;
+
+use pallas_primitives::babbage::PlutusData;
+
 use crate::{
     ast::{Constant, Type},
     builtins::DefaultFunction,
@@ -116,7 +120,7 @@ impl DefaultFunction {
             DefaultFunction::ListData => todo!(),
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnConstrData => 1,
             DefaultFunction::UnMapData => todo!(),
             DefaultFunction::UnListData => todo!(),
             DefaultFunction::UnIData => todo!(),
@@ -175,7 +179,7 @@ impl DefaultFunction {
             DefaultFunction::ListData => todo!(),
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnConstrData => 0,
             DefaultFunction::UnMapData => todo!(),
             DefaultFunction::UnListData => todo!(),
             DefaultFunction::UnIData => todo!(),
@@ -278,7 +282,7 @@ impl DefaultFunction {
             DefaultFunction::ListData => todo!(),
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
             DefaultFunction::UnMapData => todo!(),
             DefaultFunction::UnListData => todo!(),
             DefaultFunction::UnIData => todo!(),
@@ -625,7 +629,24 @@ impl DefaultFunction {
             DefaultFunction::ListData => todo!(),
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnConstrData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Constr(c))) => {
+                    Ok(Value::Con(Constant::ProtoPair(
+                        Type::Integer,
+                        Type::List(Box::new(Type::Data)),
+                        Box::new(Constant::Integer(c.tag as isize)),
+                        Box::new(Constant::ProtoList(
+                            Type::Data,
+                            c.fields
+                                .deref()
+                                .iter()
+                                .map(|d| Constant::Data(d.clone()))
+                                .collect(),
+                        )),
+                    )))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::UnMapData => todo!(),
             DefaultFunction::UnListData => todo!(),
             DefaultFunction::UnIData => todo!(),
