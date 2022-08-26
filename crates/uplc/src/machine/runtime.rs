@@ -121,10 +121,10 @@ impl DefaultFunction {
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => 1,
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnMapData => 1,
+            DefaultFunction::UnListData => 1,
             DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::UnBData => 1,
             DefaultFunction::EqualsData => todo!(),
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => todo!(),
@@ -180,10 +180,10 @@ impl DefaultFunction {
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => 0,
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnMapData => 0,
+            DefaultFunction::UnListData => 0,
             DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::UnBData => 0,
             DefaultFunction::EqualsData => todo!(),
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => todo!(),
@@ -283,10 +283,10 @@ impl DefaultFunction {
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnMapData => arg.expect_type(Type::Data),
+            DefaultFunction::UnListData => arg.expect_type(Type::Data),
             DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::UnBData => arg.expect_type(Type::Data),
             DefaultFunction::EqualsData => todo!(),
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => todo!(),
@@ -634,7 +634,8 @@ impl DefaultFunction {
                     Ok(Value::Con(Constant::ProtoPair(
                         Type::Integer,
                         Type::List(Box::new(Type::Data)),
-                        Box::new(Constant::Integer(c.tag as isize)),
+                        // TODO: handle other types of constructor tags
+                        Box::new(Constant::Integer(c.tag as isize - 121)),
                         Box::new(Constant::ProtoList(
                             Type::Data,
                             c.fields
@@ -647,10 +648,45 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnMapData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Map(m))) => {
+                    Ok(Value::Con(Constant::ProtoList(
+                        Type::Pair(Box::new(Type::Data), Box::new(Type::Data)),
+                        m.deref()
+                            .iter()
+                            .map(|p| -> Constant {
+                                Constant::ProtoPair(
+                                    Type::Data,
+                                    Type::Data,
+                                    Box::new(Constant::Data(p.0.clone())),
+                                    Box::new(Constant::Data(p.1.clone())),
+                                )
+                            })
+                            .collect(),
+                    )))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::UnListData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Array(l)))
+                | Value::Con(Constant::Data(PlutusData::ArrayIndef(l))) => {
+                    Ok(Value::Con(Constant::ProtoList(
+                        Type::Data,
+                        l.deref()
+                            .iter()
+                            .map(|d| Constant::Data(d.clone()))
+                            .collect(),
+                    )))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::UnBData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::BoundedBytes(b))) => {
+                    Ok(Value::Con(Constant::ByteString(b.to_vec())))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::EqualsData => todo!(),
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => todo!(),
