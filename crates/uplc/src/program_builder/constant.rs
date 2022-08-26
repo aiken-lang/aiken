@@ -37,67 +37,71 @@ mod tests {
     use super::*;
     use crate::parser;
     use crate::program_builder::Builder;
-    use proptest::prelude::*;
+    use quickcheck::Gen;
 
-    proptest! {
-        #[test]
-        fn build_named__with_const(
-            int: isize
-        ) {
-            let code = format!(r"(program
+    #[quickcheck]
+    fn build_named__with_const(int: isize) -> bool {
+        let code = format!(
+            r"(program
                            11.22.33
                            (con integer {})
-                         )", int);
-            let expected = parser::program(&code).unwrap();
-            let actual = Builder::start(11, 22, 33).with_int(int).build_named();
-            assert_eq!(expected, actual);
+                         )",
+            int
+        );
+        let expected = parser::program(&code).unwrap();
+        let actual = Builder::start(11, 22, 33).with_int(int).build_named();
+        expected == actual
+    }
+
+    #[quickcheck]
+    fn build_named__with_bytestring(bytes: Vec<u8>) -> bool {
+        let bstring = hex::encode(&bytes);
+        let code = format!(
+            r"(program
+                               11.22.33
+                               (con bytestring #{})
+                             )",
+            bstring
+        );
+        let expected = parser::program(&code).unwrap();
+        let actual = Builder::start(11, 22, 33)
+            .with_byte_string(bytes)
+            .build_named();
+        expected == actual
+    }
+
+    #[derive(Clone, Debug)]
+    struct SafeString(String);
+
+    impl SafeString {
+        fn inner(self) -> String {
+            self.0
         }
     }
 
-    proptest! {
-        #[test]
-        fn build_named__with_bytestring(
-           bytes: Vec<u8>
-        ) {
-            let bstring = hex::encode(&bytes);
-            let code = format!(r"(program
-                           11.22.33
-                           (con bytestring #{})
-                         )", bstring);
-            let expected = parser::program(&code).unwrap();
-            let actual = Builder::start(11, 22, 33)
-                .with_byte_string(bytes)
-                .build_named();
-            assert_eq!(expected, actual);
+    impl quickcheck::Arbitrary for SafeString {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let string = String::arbitrary(g);
+            let inner = string.chars().filter(|a| *a != '\"').collect();
+            SafeString(inner)
         }
     }
 
-    prop_compose! {
-        fn safe_string()(
-            some_string: String
-        ) -> String {
-            some_string.chars().filter(|a| *a != '\"').collect()
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn build_named__with_string(
-            some_string in safe_string()
-        ) {
-            let code = format!(
-                r#"(program
+    #[quickcheck]
+    fn build_named__with_string(safe_string: SafeString) {
+        let some_string = safe_string.inner();
+        let code = format!(
+            r#"(program
                                11.22.33
                                (con string "{}")
                              )"#,
-                &some_string
-            );
-            let expected = parser::program(&code).unwrap();
-            let actual = Builder::start(11, 22, 33)
-                .with_string(some_string)
-                .build_named();
-            assert_eq!(expected, actual);
-        }
+            &some_string
+        );
+        let expected = parser::program(&code).unwrap();
+        let actual = Builder::start(11, 22, 33)
+            .with_string(some_string)
+            .build_named();
+        assert_eq!(expected, actual);
     }
 
     #[test]

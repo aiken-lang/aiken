@@ -1,33 +1,65 @@
 use super::*;
 use crate::parser;
 use crate::program_builder::constant::WithConstant;
-use proptest::prelude::*;
+use quickcheck::{Arbitrary, Gen};
 
-prop_compose! {
-    fn arb_version()(
-        maj: isize,
-        min: isize,
-        patch: isize,
-    ) -> (usize, usize, usize){
-        let maj = maj.unsigned_abs();
-        let min = min.unsigned_abs();
-        let patch = patch.unsigned_abs();
+// #[derive(Clone, Debug)]
+// struct Version {
+//     maj: isize,
+//     min: isize,
+//     patch: isize,
+// }
+//
+// impl Version {
+//     fn inner(&self) -> (isize, isize, isize) {
+//         (self.maj, self.min, self.patch)
+//     }
+// }
+//
+// impl Arbitrary for Version {
+//     fn arbitrary(g: &mut Gen) -> Self {
+//         let maj = isize::arbitrary(g).unsigned_abs() as isize;
+//         let min = isize::arbitrary(g).unsigned_abs() as isize;
+//         let patch = isize::arbitrary(g).unsigned_abs() as isize;
+//         Version { maj, min, patch }
+//     }
+// }
 
-        (maj, min, patch)
+#[derive(Clone, Debug)]
+struct Version {
+    maj: usize,
+    min: usize,
+    patch: usize,
+}
+
+impl Version {
+    fn inner(&self) -> (usize, usize, usize) {
+        (self.maj, self.min, self.patch)
     }
 }
 
-proptest! {
-    #[test]
-    fn build_named__with_version(
-        (maj, min, patch) in arb_version(),
-    ) {
-        let code = format!(r"(program
-                           {}.{}.{}
-                           (con integer 11)
-                         )", maj, min, patch);
-        let expected = parser::program(&code).unwrap();
-        let actual = Builder::start(maj, min, patch).with_int(11).build_named();
-        assert_eq!(expected, actual);
+impl Arbitrary for Version {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let maj = isize::arbitrary(g).unsigned_abs();
+        let min = isize::arbitrary(g).unsigned_abs();
+        let patch = isize::arbitrary(g).unsigned_abs();
+        Version { maj, min, patch }
     }
+}
+
+#[quickcheck]
+fn build_named__with_version(version: Version) -> bool {
+    let (maj, min, patch) = version.inner();
+    let code = format!(
+        r"(program
+             {}.{}.{}
+             (con integer 11)
+           )",
+        maj, min, patch
+    );
+    let expected = parser::program(&code).unwrap();
+    let actual = Builder::start(maj as usize, min as usize, patch as usize)
+        .with_int(11)
+        .build_named();
+    expected == actual
 }
