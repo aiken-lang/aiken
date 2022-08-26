@@ -866,8 +866,14 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::MkNilData => ExBudget {
+                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::MkNilPairData => ExBudget {
+                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem()),
+            },
         }
     }
 }

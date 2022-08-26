@@ -128,8 +128,8 @@ impl DefaultFunction {
             DefaultFunction::EqualsData => 2,
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => 2,
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::MkNilData => 1,
+            DefaultFunction::MkNilPairData => 1,
         }
     }
 
@@ -187,8 +187,8 @@ impl DefaultFunction {
             DefaultFunction::EqualsData => 0,
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => 0,
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::MkNilData => 0,
+            DefaultFunction::MkNilPairData => 0,
         }
     }
 
@@ -290,8 +290,8 @@ impl DefaultFunction {
             DefaultFunction::EqualsData => arg.expect_type(Type::Data),
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => arg.expect_type(Type::Data),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::MkNilData => arg.expect_type(Type::Unit),
+            DefaultFunction::MkNilPairData => arg.expect_type(Type::Unit),
         }
     }
 
@@ -716,8 +716,11 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::MkNilData => Ok(Value::Con(Constant::ProtoList(Type::Data, vec![]))),
+            DefaultFunction::MkNilPairData => Ok(Value::Con(Constant::ProtoList(
+                Type::Pair(Box::new(Type::Data), Box::new(Type::Data)),
+                vec![],
+            ))),
         }
     }
 }
