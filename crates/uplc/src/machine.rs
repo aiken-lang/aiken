@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{collections::VecDeque, ops::Deref, rc::Rc};
 
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
@@ -11,6 +11,7 @@ mod runtime;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
+use pallas_primitives::babbage::{BigInt, PlutusData};
 
 use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
@@ -436,6 +437,7 @@ impl Value {
         matches!(self, Value::Con(Constant::Bool(_)))
     }
 
+    // TODO: Make this to_ex_mem not recursive.
     pub fn to_ex_mem(&self) -> i64 {
         match self {
             Value::Con(c) => match c {
@@ -453,13 +455,79 @@ impl Value {
                 Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
                     acc + Value::Con(constant.clone()).to_ex_mem()
                 }),
-                Constant::ProtoPair(_, _, _, _) => todo!(),
-                Constant::Data(_) => todo!(),
+                Constant::ProtoPair(_, _, l, r) => {
+                    Value::Con(*l.clone()).to_ex_mem() + Value::Con(*r.clone()).to_ex_mem()
+                }
+                Constant::Data(item) => self.data_to_ex_mem(item),
             },
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
         }
+    }
+
+    // I made data not recursive since data tends to be deeply nested
+    // thus causing a significant hit on performance
+    pub fn data_to_ex_mem(&self, data: &PlutusData) -> i64 {
+        let mut stack: VecDeque<&PlutusData> = VecDeque::new();
+        let mut total = 0;
+        stack.push_front(data);
+        while let Some(item) = stack.pop_front() {
+            // each time we deconstruct a data we add 4 memory units
+            total += 4;
+            match item {
+                PlutusData::Constr(c) => {
+                    // note currently tag is not factored into cost of memory
+                    // create new stack with of items from the list of data
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(c.fields.deref().iter());
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::Map(m) => {
+                    let mut new_stack: VecDeque<&PlutusData>;
+                    // create new stack with of items from the list of pairs of data
+                    new_stack = m.deref().iter().fold(VecDeque::new(), |mut acc, d| {
+                        acc.push_back(&d.0);
+                        acc.push_back(&d.1);
+                        acc
+                    });
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::BigInt(i) => {
+                    if let BigInt::Int(g) = i {
+                        let numb: i64 = (*g).try_into().unwrap();
+                        total += Value::Con(Constant::Integer(numb as isize)).to_ex_mem();
+                    } else {
+                        unreachable!()
+                    };
+                }
+                PlutusData::BoundedBytes(b) => {
+                    let byte_string: Vec<u8> = b.deref().clone();
+                    total += Value::Con(Constant::ByteString(byte_string)).to_ex_mem();
+                }
+                PlutusData::Array(a) => {
+                    // create new stack with of items from the list of data
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(a.deref().iter());
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::ArrayIndef(a) => {
+                    // create new stack with of items from the list of data
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(a.deref().iter());
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+            }
+        }
+        total
     }
 
     pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
@@ -522,7 +590,7 @@ impl From<&Constant> for Type {
             Constant::ProtoPair(t1, t2, _, _) => {
                 Type::Pair(Box::new(t1.clone()), Box::new(t2.clone()))
             }
-            Constant::Data(_) => todo!(),
+            Constant::Data(_) => Type::Data,
         }
     }
 }

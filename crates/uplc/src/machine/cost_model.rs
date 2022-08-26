@@ -825,7 +825,10 @@ impl BuiltinCosts {
             DefaultFunction::ListData => todo!(),
             DefaultFunction::IData => todo!(),
             DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnConstrData => ExBudget {
+                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::UnMapData => todo!(),
             DefaultFunction::UnListData => todo!(),
             DefaultFunction::UnIData => todo!(),
