@@ -118,7 +118,7 @@ impl DefaultFunction {
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
             DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
+            DefaultFunction::IData => 1,
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => 1,
             DefaultFunction::UnMapData => 1,
@@ -177,7 +177,7 @@ impl DefaultFunction {
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
             DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
+            DefaultFunction::IData => 0,
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => 0,
             DefaultFunction::UnMapData => 0,
@@ -280,7 +280,7 @@ impl DefaultFunction {
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
             DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
+            DefaultFunction::IData => arg.expect_type(Type::Integer),
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
             DefaultFunction::UnMapData => arg.expect_type(Type::Data),
@@ -627,7 +627,12 @@ impl DefaultFunction {
             DefaultFunction::ConstrData => todo!(),
             DefaultFunction::MapData => todo!(),
             DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
+            DefaultFunction::IData => match &args[0] {
+                Value::Con(Constant::Integer(i)) => Ok(Value::Con(Constant::Data(
+                    PlutusData::BigInt(BigInt::Int((*i as i64).try_into().unwrap())),
+                ))),
+                _ => unreachable!(),
+            },
             DefaultFunction::BData => todo!(),
             DefaultFunction::UnConstrData => match &args[0] {
                 Value::Con(Constant::Data(PlutusData::Constr(c))) => {
