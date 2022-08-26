@@ -837,14 +837,35 @@ impl BuiltinCosts {
                 mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnIData => ExBudget {
+                mem: self.un_i_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::UnBData => ExBudget {
                 mem: self.un_b_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::EqualsData => ExBudget {
+                mem: self
+                    .equals_data
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .equals_data
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkPairData => ExBudget {
+                mem: self
+                    .mk_pair_data
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .mk_pair_data
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::MkNilData => todo!(),
             DefaultFunction::MkNilPairData => todo!(),
         }
