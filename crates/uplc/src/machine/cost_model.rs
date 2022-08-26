@@ -829,10 +829,19 @@ impl BuiltinCosts {
                 mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnMapData => ExBudget {
+                mem: self.un_map_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnListData => ExBudget {
+                mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::UnBData => ExBudget {
+                mem: self.un_b_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::EqualsData => todo!(),
             DefaultFunction::SerialiseData => todo!(),
             DefaultFunction::MkPairData => todo!(),

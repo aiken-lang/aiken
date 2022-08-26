@@ -3,6 +3,7 @@ use pretty::RcDoc;
 use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
+    plutus_data_to_bytes,
 };
 
 impl<'a, T> Program<T>
@@ -220,8 +221,15 @@ impl Constant {
                     RcDoc::text(","),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(_, _, _, _) => todo!(),
-            Constant::Data(data) => RcDoc::text("todo"),
+            Constant::ProtoPair(_, _, left, right) => RcDoc::text("(")
+                .append((*left).to_doc_list())
+                .append(RcDoc::text(", "))
+                .append((*right).to_doc_list())
+                .append(RcDoc::text(")")),
+
+            Constant::Data(data) => {
+                RcDoc::text("#").append(RcDoc::text(hex::encode(plutus_data_to_bytes(data))))
+            }
         }
     }
 }
@@ -242,7 +250,16 @@ impl Type {
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
-            Type::Pair(_, _) => todo!(),
+            Type::Pair(r#type1, r#type2) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("list")
+                        .append(RcDoc::line())
+                        .append(r#type1.to_doc())
+                        .append(RcDoc::line())
+                        .append(r#type2.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")")),
             Type::Data => RcDoc::text("data"),
         }
     }
