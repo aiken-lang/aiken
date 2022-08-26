@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use pallas_primitives::babbage::PlutusData;
+use pallas_primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
     ast::{Constant, Type},
@@ -123,11 +123,11 @@ impl DefaultFunction {
             DefaultFunction::UnConstrData => 1,
             DefaultFunction::UnMapData => 1,
             DefaultFunction::UnListData => 1,
-            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnIData => 1,
             DefaultFunction::UnBData => 1,
-            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::EqualsData => 2,
             DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkPairData => 2,
             DefaultFunction::MkNilData => todo!(),
             DefaultFunction::MkNilPairData => todo!(),
         }
@@ -182,11 +182,11 @@ impl DefaultFunction {
             DefaultFunction::UnConstrData => 0,
             DefaultFunction::UnMapData => 0,
             DefaultFunction::UnListData => 0,
-            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnIData => 0,
             DefaultFunction::UnBData => 0,
-            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::EqualsData => 0,
             DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkPairData => 0,
             DefaultFunction::MkNilData => todo!(),
             DefaultFunction::MkNilPairData => todo!(),
         }
@@ -285,11 +285,11 @@ impl DefaultFunction {
             DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
             DefaultFunction::UnMapData => arg.expect_type(Type::Data),
             DefaultFunction::UnListData => arg.expect_type(Type::Data),
-            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnIData => arg.expect_type(Type::Data),
             DefaultFunction::UnBData => arg.expect_type(Type::Data),
-            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::EqualsData => arg.expect_type(Type::Data),
             DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkPairData => arg.expect_type(Type::Data),
             DefaultFunction::MkNilData => todo!(),
             DefaultFunction::MkNilPairData => todo!(),
         }
@@ -680,16 +680,42 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnIData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::BigInt(b))) => {
+                    if let BigInt::Int(i) = b {
+                        let x: i64 = (*i).try_into().unwrap();
+
+                        Ok(Value::Con(Constant::Integer(x as isize)))
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::UnBData => match &args[0] {
                 Value::Con(Constant::Data(PlutusData::BoundedBytes(b))) => {
                     Ok(Value::Con(Constant::ByteString(b.to_vec())))
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::EqualsData => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
+                    Ok(Value::Con(Constant::Bool(d1.eq(d2))))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkPairData => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
+                    Ok(Value::Con(Constant::ProtoPair(
+                        Type::Data,
+                        Type::Data,
+                        Box::new(Constant::Data(d1.clone())),
+                        Box::new(Constant::Data(d2.clone())),
+                    )))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::MkNilData => todo!(),
             DefaultFunction::MkNilPairData => todo!(),
         }
