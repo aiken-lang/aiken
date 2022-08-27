@@ -6,7 +6,7 @@ edition = "2021"
 repository = "https://github.com/txpipe/aiken/crates/flat"
 homepage = "https://github.com/txpipe/aiken"
 license = "Apache-2.0"
-authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>" ]
+authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
