@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
-use pallas_primitives::babbage::{BigInt, PlutusData};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
 
 use crate::{
     ast::{Constant, Type},
@@ -115,11 +116,11 @@ impl DefaultFunction {
             DefaultFunction::TailList => 1,
             DefaultFunction::NullList => 1,
             DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
+            DefaultFunction::ConstrData => 2,
+            DefaultFunction::MapData => 1,
+            DefaultFunction::ListData => 1,
             DefaultFunction::IData => 1,
-            DefaultFunction::BData => todo!(),
+            DefaultFunction::BData => 1,
             DefaultFunction::UnConstrData => 1,
             DefaultFunction::UnMapData => 1,
             DefaultFunction::UnListData => 1,
@@ -174,11 +175,11 @@ impl DefaultFunction {
             DefaultFunction::TailList => 1,
             DefaultFunction::NullList => 1,
             DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
+            DefaultFunction::ConstrData => 0,
+            DefaultFunction::MapData => 0,
+            DefaultFunction::ListData => 0,
             DefaultFunction::IData => 0,
-            DefaultFunction::BData => todo!(),
+            DefaultFunction::BData => 0,
             DefaultFunction::UnConstrData => 0,
             DefaultFunction::UnMapData => 0,
             DefaultFunction::UnListData => 0,
@@ -277,11 +278,20 @@ impl DefaultFunction {
             DefaultFunction::TailList => arg.expect_list(),
             DefaultFunction::NullList => arg.expect_list(),
             DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
+            DefaultFunction::ConstrData => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Integer)
+                } else {
+                    arg.expect_type(Type::List(Box::new(Type::Data)))
+                }
+            }
+            DefaultFunction::MapData => arg.expect_type(Type::List(Box::new(Type::Pair(
+                Box::new(Type::Data),
+                Box::new(Type::Data),
+            )))),
+            DefaultFunction::ListData => arg.expect_type(Type::List(Box::new(Type::Data))),
             DefaultFunction::IData => arg.expect_type(Type::Integer),
-            DefaultFunction::BData => todo!(),
+            DefaultFunction::BData => arg.expect_type(Type::ByteString),
             DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
             DefaultFunction::UnMapData => arg.expect_type(Type::Data),
             DefaultFunction::UnListData => arg.expect_type(Type::Data),
@@ -624,16 +634,75 @@ impl DefaultFunction {
                 _ => unreachable!(),
             },
             DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
+            DefaultFunction::ConstrData => match (&args[0], &args[1]) {
+                (
+                    Value::Con(Constant::Integer(i)),
+                    Value::Con(Constant::ProtoList(Type::Data, l)),
+                ) => {
+                    let data_list: Vec<PlutusData> = l
+                        .iter()
+                        .map(|item| match item {
+                            Constant::Data(d) => d.clone(),
+                            _ => unreachable!(),
+                        })
+                        .collect();
+
+                    let constr_data = PlutusData::Constr(Constr {
+                        tag: (*i as u64) + 121,
+                        any_constructor: None,
+                        fields: MaybeIndefArray::Indef(data_list),
+                    });
+                    Ok(Value::Con(Constant::Data(constr_data)))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::MapData => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    let data_list: Vec<(PlutusData, PlutusData)> = list
+                        .iter()
+                        .map(|item| match item {
+                            Constant::ProtoPair(Type::Data, Type::Data, left, right) => {
+                                match (*left.clone(), *right.clone()) {
+                                    (Constant::Data(key), Constant::Data(value)) => (key, value),
+                                    _ => unreachable!(),
+                                }
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect();
+                    Ok(Value::Con(Constant::Data(PlutusData::Map(
+                        KeyValuePairs::Def(data_list),
+                    ))))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::ListData => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    let data_list: Vec<PlutusData> = list
+                        .iter()
+                        .map(|item| match item {
+                            Constant::Data(d) => d.clone(),
+                            _ => unreachable!(),
+                        })
+                        .collect();
+                    Ok(Value::Con(Constant::Data(PlutusData::ArrayIndef(
+                        MaybeIndefArray::Indef(data_list),
+                    ))))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::IData => match &args[0] {
                 Value::Con(Constant::Integer(i)) => Ok(Value::Con(Constant::Data(
                     PlutusData::BigInt(BigInt::Int((*i as i64).try_into().unwrap())),
                 ))),
                 _ => unreachable!(),
             },
-            DefaultFunction::BData => todo!(),
+            DefaultFunction::BData => match &args[0] {
+                Value::Con(Constant::ByteString(b)) => Ok(Value::Con(Constant::Data(
+                    PlutusData::BoundedBytes(b.clone().try_into().unwrap()),
+                ))),
+                _ => unreachable!(),
+            },
             DefaultFunction::UnConstrData => match &args[0] {
                 Value::Con(Constant::Data(PlutusData::Constr(c))) => {
                     Ok(Value::Con(Constant::ProtoPair(
