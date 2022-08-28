@@ -115,7 +115,7 @@ impl DefaultFunction {
             DefaultFunction::HeadList => 1,
             DefaultFunction::TailList => 1,
             DefaultFunction::NullList => 1,
-            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ChooseData => 6,
             DefaultFunction::ConstrData => 2,
             DefaultFunction::MapData => 1,
             DefaultFunction::ListData => 1,
@@ -174,7 +174,7 @@ impl DefaultFunction {
             DefaultFunction::HeadList => 1,
             DefaultFunction::TailList => 1,
             DefaultFunction::NullList => 1,
-            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ChooseData => 1,
             DefaultFunction::ConstrData => 0,
             DefaultFunction::MapData => 0,
             DefaultFunction::ListData => 0,
@@ -277,7 +277,13 @@ impl DefaultFunction {
             DefaultFunction::HeadList => arg.expect_list(),
             DefaultFunction::TailList => arg.expect_list(),
             DefaultFunction::NullList => arg.expect_list(),
-            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ChooseData => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Data)
+                } else {
+                    Ok(())
+                }
+            }
             DefaultFunction::ConstrData => {
                 if args.is_empty() {
                     arg.expect_type(Type::Integer)
@@ -633,7 +639,15 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ChooseData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Constr(_))) => Ok(args[1].clone()),
+                Value::Con(Constant::Data(PlutusData::Map(_))) => Ok(args[2].clone()),
+                Value::Con(Constant::Data(PlutusData::Array(_)))
+                | Value::Con(Constant::Data(PlutusData::ArrayIndef(_))) => Ok(args[3].clone()),
+                Value::Con(Constant::Data(PlutusData::BigInt(_))) => Ok(args[4].clone()),
+                Value::Con(Constant::Data(PlutusData::BoundedBytes(_))) => Ok(args[5].clone()),
+                _ => unreachable!(),
+            },
             DefaultFunction::ConstrData => match (&args[0], &args[1]) {
                 (
                     Value::Con(Constant::Integer(i)),
@@ -648,6 +662,7 @@ impl DefaultFunction {
                         .collect();
 
                     let constr_data = PlutusData::Constr(Constr {
+                        // TODO: handle other types of constructor tags
                         tag: (*i as u64) + 121,
                         any_constructor: None,
                         fields: MaybeIndefArray::Indef(data_list),

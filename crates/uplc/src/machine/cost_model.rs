@@ -819,7 +819,24 @@ impl BuiltinCosts {
                 mem: self.null_list.mem.cost(args[0].to_ex_mem()),
                 cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ChooseData => ExBudget {
+                mem: self.choose_data.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                    args[3].to_ex_mem(),
+                    args[4].to_ex_mem(),
+                    args[5].to_ex_mem(),
+                ),
+                cpu: self.choose_data.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                    args[3].to_ex_mem(),
+                    args[4].to_ex_mem(),
+                    args[5].to_ex_mem(),
+                ),
+            },
             DefaultFunction::ConstrData => ExBudget {
                 mem: self
                     .constr_data
