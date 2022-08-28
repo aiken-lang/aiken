@@ -186,13 +186,13 @@ impl Constant {
                     RcDoc::text(","),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(r#type1, r#type2, left, right) => RcDoc::text("(")
+            Constant::ProtoPair(type1, type2, left, right) => RcDoc::text("(")
                 .append(
                     RcDoc::text("pair")
                         .append(RcDoc::line())
-                        .append(r#type1.to_doc())
+                        .append(type1.to_doc())
                         .append(RcDoc::line())
-                        .append(r#type2.to_doc()),
+                        .append(type2.to_doc()),
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")"))
@@ -250,13 +250,13 @@ impl Type {
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
-            Type::Pair(r#type1, r#type2) => RcDoc::text("(")
+            Type::Pair(type1, type2) => RcDoc::text("(")
                 .append(
                     RcDoc::text("list")
                         .append(RcDoc::line())
-                        .append(r#type1.to_doc())
+                        .append(type1.to_doc())
                         .append(RcDoc::line())
-                        .append(r#type2.to_doc()),
+                        .append(type2.to_doc()),
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
