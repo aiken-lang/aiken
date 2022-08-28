@@ -820,14 +820,32 @@ impl BuiltinCosts {
                 cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
             },
             DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
+            DefaultFunction::ConstrData => ExBudget {
+                mem: self
+                    .constr_data
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .constr_data
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::MapData => ExBudget {
+                mem: self.map_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.map_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ListData => ExBudget {
+                mem: self.list_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.list_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::IData => ExBudget {
                 mem: self.i_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.i_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::BData => todo!(),
+            DefaultFunction::BData => ExBudget {
+                mem: self.b_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.b_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::UnConstrData => ExBudget {
                 mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),

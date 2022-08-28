@@ -628,6 +628,7 @@ dependencies = [
  "flat-rs",
  "hex",
  "minicbor",
+ "pallas-codec",
  "pallas-primitives",
  "peg",
  "pretty",
