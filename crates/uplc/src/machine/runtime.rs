@@ -663,7 +663,7 @@ impl DefaultFunction {
 
                     let constr_data = PlutusData::Constr(Constr {
                         // TODO: handle other types of constructor tags
-                        tag: (*i as u64) + 121,
+                        tag: convert_constr_to_tag(*i as u64),
                         any_constructor: None,
                         fields: MaybeIndefArray::Indef(data_list),
                     });
@@ -724,7 +724,7 @@ impl DefaultFunction {
                         Type::Integer,
                         Type::List(Box::new(Type::Data)),
                         // TODO: handle other types of constructor tags
-                        Box::new(Constant::Integer(c.tag as isize - 121)),
+                        Box::new(Constant::Integer(convert_tag_to_constr(c.tag as isize))),
                         Box::new(Constant::ProtoList(
                             Type::Data,
                             c.fields
@@ -811,5 +811,25 @@ impl DefaultFunction {
                 vec![],
             ))),
         }
+    }
+}
+
+fn convert_tag_to_constr(tag: isize) -> isize {
+    if tag < 128 {
+        tag - 121
+    } else if (1280..1401).contains(&tag) {
+        tag - 1280
+    } else {
+        todo!()
+    }
+}
+
+fn convert_constr_to_tag(constr: u64) -> u64 {
+    if constr < 7 {
+        constr + 121
+    } else if constr < 128 {
+        constr + 1280
+    } else {
+        todo!()
     }
 }
