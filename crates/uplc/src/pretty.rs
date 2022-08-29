@@ -227,9 +227,9 @@ impl Constant {
                 .append((*right).to_doc_list())
                 .append(RcDoc::text(")")),
 
-            Constant::Data(data) => {
-                RcDoc::text("#").append(RcDoc::text(hex::encode(plutus_data_to_bytes(data))))
-            }
+            Constant::Data(data) => RcDoc::text("#").append(RcDoc::text(hex::encode(
+                plutus_data_to_bytes(data).unwrap(),
+            ))),
         }
     }
 }

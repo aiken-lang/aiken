@@ -16,7 +16,7 @@ exclude = ["test_data/*"]
 cryptoxide = "0.4.2"
 flat-rs = { path = "../flat", version = "0.0.10" }
 hex = "0.4.3"
-minicbor = { version = "0.17.1", features = ["std"] }
+minicbor = { version = "0.18.0", features = ["std"] }
 pallas-codec = "0.12.0"
 pallas-primitives = "0.12.0"
 peg = "0.8.0"
