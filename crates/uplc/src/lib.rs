@@ -8,12 +8,13 @@ mod pretty;
 pub mod program_builder;
 
 pub use pallas_primitives::alonzo::PlutusData;
+pub type Error = Box<dyn std::error::Error>;
 use pallas_primitives::Fragment;
 
-pub fn plutus_data(bytes: &[u8]) -> PlutusData {
-    PlutusData::decode_fragment(bytes).unwrap()
+pub fn plutus_data(bytes: &[u8]) -> Result<PlutusData, Error> {
+    PlutusData::decode_fragment(bytes)
 }
 
-pub fn plutus_data_to_bytes(data: &PlutusData) -> Vec<u8> {
-    PlutusData::encode_fragment(data).unwrap()
+pub fn plutus_data_to_bytes(data: &PlutusData) -> Result<Vec<u8>, Error> {
+    PlutusData::encode_fragment(data)
 }
