@@ -6,6 +6,7 @@ use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
 use crate::{
     ast::{Constant, Type},
     builtins::DefaultFunction,
+    plutus_data_to_bytes,
 };
 
 use super::{
@@ -108,9 +109,9 @@ impl DefaultFunction {
             DefaultFunction::IfThenElse => 3,
             DefaultFunction::ChooseUnit => 2,
             DefaultFunction::Trace => 2,
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::FstPair => 1,
+            DefaultFunction::SndPair => 1,
+            DefaultFunction::ChooseList => 3,
             DefaultFunction::MkCons => 2,
             DefaultFunction::HeadList => 1,
             DefaultFunction::TailList => 1,
@@ -127,7 +128,7 @@ impl DefaultFunction {
             DefaultFunction::UnIData => 1,
             DefaultFunction::UnBData => 1,
             DefaultFunction::EqualsData => 2,
-            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::SerialiseData => 1,
             DefaultFunction::MkPairData => 2,
             DefaultFunction::MkNilData => 1,
             DefaultFunction::MkNilPairData => 1,
@@ -167,9 +168,9 @@ impl DefaultFunction {
             DefaultFunction::IfThenElse => 1,
             DefaultFunction::ChooseUnit => 1,
             DefaultFunction::Trace => 1,
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::FstPair => 2,
+            DefaultFunction::SndPair => 2,
+            DefaultFunction::ChooseList => 2,
             DefaultFunction::MkCons => 1,
             DefaultFunction::HeadList => 1,
             DefaultFunction::TailList => 1,
@@ -186,7 +187,7 @@ impl DefaultFunction {
             DefaultFunction::UnIData => 0,
             DefaultFunction::UnBData => 0,
             DefaultFunction::EqualsData => 0,
-            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::SerialiseData => 0,
             DefaultFunction::MkPairData => 0,
             DefaultFunction::MkNilData => 0,
             DefaultFunction::MkNilPairData => 0,
@@ -262,9 +263,15 @@ impl DefaultFunction {
                     Ok(())
                 }
             }
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::FstPair => arg.expect_pair(),
+            DefaultFunction::SndPair => arg.expect_pair(),
+            DefaultFunction::ChooseList => {
+                if args.is_empty() {
+                    arg.expect_list()
+                } else {
+                    Ok(())
+                }
+            }
             DefaultFunction::MkCons => {
                 if args.is_empty() {
                     Ok(())
@@ -304,7 +311,7 @@ impl DefaultFunction {
             DefaultFunction::UnIData => arg.expect_type(Type::Data),
             DefaultFunction::UnBData => arg.expect_type(Type::Data),
             DefaultFunction::EqualsData => arg.expect_type(Type::Data),
-            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::SerialiseData => arg.expect_type(Type::Data),
             DefaultFunction::MkPairData => arg.expect_type(Type::Data),
             DefaultFunction::MkNilData => arg.expect_type(Type::Unit),
             DefaultFunction::MkNilPairData => arg.expect_type(Type::Unit),
@@ -598,9 +605,24 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::FstPair => match &args[0] {
+                Value::Con(Constant::ProtoPair(_, _, first, _)) => Ok(Value::Con(*first.clone())),
+                _ => unreachable!(),
+            },
+            DefaultFunction::SndPair => match &args[0] {
+                Value::Con(Constant::ProtoPair(_, _, _, second)) => Ok(Value::Con(*second.clone())),
+                _ => unreachable!(),
+            },
+            DefaultFunction::ChooseList => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    if list.is_empty() {
+                        Ok(args[1].clone())
+                    } else {
+                        Ok(args[2].clone())
+                    }
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::MkCons => match (&args[0], &args[1]) {
                 (Value::Con(item), Value::Con(Constant::ProtoList(r#type, list))) => {
                     let mut ret = vec![item.clone()];
@@ -793,7 +815,13 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::SerialiseData => match &args[0] {
+                Value::Con(Constant::Data(d)) => {
+                    let serialized_data = plutus_data_to_bytes(d).unwrap();
+                    Ok(Value::Con(Constant::ByteString(serialized_data)))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::MkPairData => match (&args[0], &args[1]) {
                 (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
                     Ok(Value::Con(Constant::ProtoPair(

@@ -794,9 +794,26 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::FstPair => ExBudget {
+                mem: self.fst_pair.mem.cost(args[0].to_ex_mem()),
+                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::SndPair => ExBudget {
+                mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
+                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ChooseList => ExBudget {
+                mem: self.choose_list.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.choose_list.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
             DefaultFunction::MkCons => ExBudget {
                 mem: self
                     .mk_cons
@@ -893,7 +910,10 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::SerialiseData => ExBudget {
+                mem: self.serialise_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.serialise_data.cpu.cost(args[0].to_ex_mem()),
+            },
             DefaultFunction::MkPairData => ExBudget {
                 mem: self
                     .mk_pair_data
