@@ -26,6 +26,7 @@ dependencies = [
 name = "aiken"
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "0.0.11"
 =======
 =======
@@ -39,6 +40,9 @@ version = "0.0.10"
 version = "0.0.8"
 >>>>>>> c50961c (feat: add deps)
 >>>>>>> 508f3c6 (feat: add deps)
+=======
+version = "0.0.10"
+>>>>>>> 75036f5 (chore: lock file again)
 dependencies = [
  "anyhow",
  "clap",
@@ -140,9 +144,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.17"
+version = "3.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29e724a68d9319343bb3328c9cc2dfde263f4b3142ee1059a9980580171c954b"
+checksum = "68d43934757334b5c0519ff882e1ab9647ac0258b47c24c4f490d78e42697fd5"
 dependencies = [
  "atty",
  "bitflags",
@@ -157,9 +161,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.2.17"
+version = "3.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13547f7012c01ab4a0e8f8967730ada8f9fdf419e8b6c792788f39cf4e46eefa"
+checksum = "ea0c8bce528c4be4da13ea6fead8965e95b6073585a2f05204bd8f4119f82a65"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -222,24 +226,12 @@ dependencies = [
 
 [[package]]
 name = "flat-rs"
-<<<<<<< HEAD
 version = "0.0.10"
 dependencies = [
  "anyhow",
  "proptest",
  "thiserror",
 ]
-=======
-version = "0.0.7"
-<<<<<<< HEAD
-dependencies = ["anyhow", "thiserror"]
->>>>>>> c50961c (feat: add deps)
-=======
-dependencies = [
- "anyhow",
- "thiserror",
-]
->>>>>>> 2f7eda3 (chore: update lock file)
 
 [[package]]
 name = "fnv"
@@ -343,9 +335,9 @@ checksum = "8371e4e5341c3a96db127eb2465ac681ced4c433e01dd0e938adbef26ba93ba5"
 
 [[package]]
 name = "lock_api"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327fa5b6a6940e4699ec49a9beae1ea4845c6bab9314e4f84ac68742139d8c53"
+checksum = "9f80bf5aacaf25cbfc8210d1cfb718f2bf3b11c4c54e5afe36c236853a8ec390"
 dependencies = [
  "autocfg",
  "scopeguard",
@@ -720,15 +712,15 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "serde"
-version = "1.0.143"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e8e5d5b70924f74ff5c6d64d9a5acd91422117c60f48c4e07855238a254553"
+checksum = "0f747710de3dcd43b88c9168773254e809d8ddbdf9653b84e2554ab219f17860"
 
 [[package]]
 name = "serde_json"
-version = "1.0.83"
+version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38dd04e3c8279e75b31ef29dbdceebfe5ad89f4d0937213c53f7d49d01b3d5a7"
+checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
 dependencies = [
  "itoa",
  "ryu",
@@ -837,6 +829,7 @@ checksum = "7e8820f5d777f6224dc4be3632222971ac30164d4a258d595640799554ebfd99"
 [[package]]
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 name = "uplc"
 <<<<<<< HEAD
 version = "0.0.11"
@@ -848,12 +841,15 @@ version = "0.0.8"
 =======
 =======
 >>>>>>> 360364e (chore: fix lock file)
+=======
+>>>>>>> 75036f5 (chore: lock file again)
 name = "unicode-width"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ed742d4ea2bd1176e236172c8429aaf54486e7ac098db29ffe6529e0ce50973"
 
 [[package]]
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 >>>>>>> 27331bc (feat: add deps)
@@ -869,8 +865,10 @@ dependencies = [
 =======
 =======
 >>>>>>> 360364e (chore: fix lock file)
+=======
+>>>>>>> 75036f5 (chore: lock file again)
 name = "uplc"
-version = "0.0.8"
+version = "0.0.10"
 dependencies = [
  "cryptoxide",
  "flat-rs",
