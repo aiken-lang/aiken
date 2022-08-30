@@ -553,6 +553,18 @@ impl Value {
             Err(Error::ListTypeMismatch(constant_type))
         }
     }
+
+    pub fn expect_pair(&self) -> Result<(), Error> {
+        let constant: Constant = self.clone().try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        if matches!(constant_type, Type::Pair(_, _)) {
+            Ok(())
+        } else {
+            Err(Error::PairTypeMismatch(constant_type))
+        }
+    }
 }
 
 impl TryFrom<Value> for Type {

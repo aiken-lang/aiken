@@ -24,6 +24,8 @@ pub enum Error {
     TypeMismatch(Type, Type),
     #[error("Type mismatch expected '(list a)' got '{0}'")]
     ListTypeMismatch(Type),
+    #[error("Type mismatch expected '(pair a b)' got '{0}'")]
+    PairTypeMismatch(Type),
     #[error("Empty List:\n\n{0:#?}")]
     EmptyList(Value),
     #[error("A builtin received a term argument when something else was expected:\n\n{0}\n\nYou probably forgot to wrap the builtin with a force.")]
