@@ -1,6 +1,11 @@
 use chumsky::prelude::*;
 
-use crate::{ast, error::ParseError, expr, token::Token};
+use crate::{
+    ast::{self, TodoKind},
+    error::ParseError,
+    expr,
+    token::Token,
+};
 
 pub fn module_parser(
     kind: ast::ModuleKind,
@@ -256,7 +261,41 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
 
 pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
 
-pub fn expr_unit_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
+pub fn expr_unit_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
+    choice((
+        select! {Token::String {value} => value}.map_with_span(|value, span| {
+            expr::UntypedExpr::String {
+                location: span,
+                value,
+            }
+        }),
+        select! { Token::Int {value} => value}.map_with_span(|value, span| {
+            expr::UntypedExpr::Int {
+                location: span,
+                value,
+            }
+        }),
+        select! {
+            Token::Name { name } => name,
+            Token::UpName { name } => name,
+        }
+        .map_with_span(|name, span| expr::UntypedExpr::Var {
+            location: span,
+            name,
+        }),
+        just(Token::Todo)
+            .ignore_then(
+                select! {Token::String {value} => value}
+                    .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                    .or_not(),
+            )
+            .map_with_span(|label, span| expr::UntypedExpr::Todo {
+                kind: TodoKind::Keyword,
+                location: span,
+                label,
+            }),
+    ))
+}
 
 pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
     recursive(|r| {
