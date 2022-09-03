@@ -22,13 +22,29 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     let cbor_hex = fs::read_to_string(input)?;
 
-                    hex::decode(cbor_hex)?
+                    hex::decode(cbor_hex.trim())?
                 };
 
                 let tx = MultiEraTx::decode(Era::Alonzo, &tx_bytes)
                     .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
 
-                println!("{:?}", tx);
+                println!("Simulating: {}", tx.hash());
+
+                println!("\nPlutus Data:");
+
+                println!("{:#?}", tx.witnesses().plutus_data());
+
+                println!("\nRedeemer:");
+
+                println!("{:#?}", tx.witnesses().redeemer());
+
+                println!("\nPlutus V1 Script:");
+
+                println!("{:#?}", tx.witnesses().plutus_v1_script());
+
+                println!("\nPlutus V2 Script:");
+
+                println!("{:#?}", tx.witnesses().plutus_v2_script());
             }
         },
         Args::Uplc(uplc_cmd) => match uplc_cmd {
