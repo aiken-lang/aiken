@@ -1,20 +1,18 @@
 use std::{
     fmt::Write as _,
     fs::{self, File},
-    io::BufReader, collections::HashMap, thread::LocalKey,
+    io::BufReader,
 };
 
-use pallas_addresses::Address;
-use pallas_codec::{minicbor::bytes::ByteVec, utils::{MaybeIndefArray, KeyValuePairs}};
-use pallas_primitives::babbage::{BigInt, Constr};
 use pallas_traverse::{Era, MultiEraTx};
 use uplc::{
-    ast::{Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
+    ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
-    parser, PlutusData,
+    parser,
 };
 
 mod args;
+mod utils;
 
 use args::{Args, TxCommand, UplcCommand};
 
@@ -69,131 +67,8 @@ fn main() -> anyhow::Result<()> {
                         let file = File::open(&resolved_inputs)?;
                         let reader = BufReader::new(file);
                         let resolved_inputs: Vec<ResolvedInput> = serde_json::from_reader(reader)?;
-                        let tx_in_info: Vec<PlutusData> = resolved_inputs
-                            .iter()
-                            .map(|resolved_input| {
-                                let tx_out_ref = PlutusData::Constr(Constr {
-                                    tag: 0,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        PlutusData::BoundedBytes(
-                                            hex::decode(resolved_input.input.tx_hash.clone())
-                                                .unwrap()
-                                                .into(),
-                                        ),
-                                        PlutusData::BigInt(BigInt::Int(
-                                            resolved_input.input.index.into(),
-                                        )),
-                                    ]),
-                                });
 
-                                let address =
-                                    Address::from_bech32(&resolved_input.ouput.address).unwrap();
-
-                                let payment_tag = match address.typeid() % 2 {
-                                    0 => 0,
-                                    1 => 1,
-                                    _ => unreachable!(),
-                                };
-                                let stake_tag = match address.typeid() {
-                                    0 | 1 => Some(0),
-                                    2 | 3 => Some(1),
-                                    _ => None,
-                                };
-
-                                let (payment_part, stake_part) = match address {
-                                    Address::Shelley(s) => {
-                                        (s.payment().to_vec(), s.delegation().to_vec())
-                                    }
-                                    _ => unreachable!(),
-                                };
-
-                                let lovelace = resolved_input.ouput.value.0;
-
-                                let mut assets = resolved_input.ouput.value.1.clone();
-
-                                assets.insert("".to_string(), vec![("".to_string(), lovelace)].into_iter().collect());
-
-                                let tx_out = PlutusData::Constr(Constr {
-                                    tag: 0,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        // txOutAddress
-                                        PlutusData::Constr(Constr {
-                                            tag: 0,
-                                            any_constructor: None,
-                                            fields: MaybeIndefArray::Indef(vec![
-                                                // addressCredential
-                                                PlutusData::Constr(Constr {
-                                                    tag: payment_tag,
-                                                    any_constructor: None,
-                                                    fields: MaybeIndefArray::Indef(vec![
-                                                        PlutusData::BoundedBytes(
-                                                            payment_part.into(),
-                                                        ),
-                                                    ]),
-                                                }),
-                                                // addressStakingCredential
-                                                PlutusData::Constr(Constr {
-                                                    tag: if stake_tag.is_some() { 0 } else { 1 },
-                                                    any_constructor: None,
-                                                    fields: MaybeIndefArray::Indef(
-                                                        if stake_tag.is_some() {
-                                                            vec![
-                                                                // StakingCredential
-                                                                PlutusData::Constr(Constr {
-                                                                    tag: 0,
-                                                                    any_constructor: None,
-                                                                    fields: MaybeIndefArray::Indef(vec![
-                                                                        // StakingHash
-                                                                        PlutusData::Constr(Constr {
-                                                                            tag: stake_tag.unwrap(),
-                                                                            any_constructor: None,
-                                                                            fields: MaybeIndefArray::Indef(vec![
-                                                                                PlutusData::BoundedBytes(
-                                                                                    stake_part.into(),
-                                                                                ),
-                                                                            ]),
-                                                                        }),
-                                                                    ]),
-                                                                }),
-                                                            ]
-
-                                                        } else {
-                                                            vec![]
-                                                        },
-                                                    ),
-                                                }),
-                                            ]),
-                                        }),
-                                        
-                                        // txOutValue
-                                        PlutusData::Map(KeyValuePairs::Def(
-                                            assets.iter().map(|val| {
-                                                let currency_symbol = PlutusData::BoundedBytes(hex::decode(val.0).unwrap().into());
-                                                let token_map = PlutusData::Map(KeyValuePairs::Def(
-                                                    val.1.iter().map(|token| {
-                                                        ( PlutusData::BoundedBytes(token.0.as_bytes().to_vec().into()),  PlutusData::BigInt(BigInt::Int((*token.1).into())))
-                                                    }).collect()
-
-                                                ));
-                                                (currency_symbol, token_map)
-                                            }).collect()
-                                        )   ),
-
-
-                                    ]),
-                                });
-                                PlutusData::Constr(Constr{
-                                    tag: 0,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        tx_out_ref,
-                                        tx_out
-                                    ])
-                                })
-                            })
-                            .collect();
+                        let tx_in_info = utils::get_tx_in_info(&resolved_inputs)?;
                     }
                 }
 
