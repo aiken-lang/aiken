@@ -1,5 +1,6 @@
 use std::{fmt::Write as _, fs};
 
+use pallas_traverse::{Era, MultiEraTx};
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
@@ -8,13 +9,29 @@ use uplc::{
 
 mod args;
 
-use args::{Args, UplcCommand};
+use args::{Args, TxCommand, UplcCommand};
 
 fn main() -> anyhow::Result<()> {
     let args = Args::default();
 
     match args {
-        Args::Uplc(uplc) => match uplc {
+        Args::Tx(tx_cmd) => match tx_cmd {
+            TxCommand::Simulate { input, cbor } => {
+                let tx_bytes = if cbor {
+                    fs::read(input)?
+                } else {
+                    let cbor_hex = fs::read_to_string(input)?;
+
+                    hex::decode(cbor_hex)?
+                };
+
+                let tx = MultiEraTx::decode(Era::Alonzo, &tx_bytes)
+                    .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
+
+                println!("{:?}", tx);
+            }
+        },
+        Args::Uplc(uplc_cmd) => match uplc_cmd {
             UplcCommand::Flat { input, print, out } => {
                 let code = std::fs::read_to_string(&input)?;
 

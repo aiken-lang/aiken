@@ -13,4 +13,7 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 anyhow = "1.0.57"
 clap = { version = "3.1.14", features = ["derive"] }
+hex = "0.4.3"
+pallas-primitives = "0.13.2"
+pallas-traverse = "0.13.2"
 uplc = { path = '../uplc', version = "0.0.10" }
