@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::{Parser, Subcommand};
-use serde::{de, Deserialize};
+use serde::Deserialize;
 
 /// Cardano smart contract toolchain
 #[derive(Parser)]
