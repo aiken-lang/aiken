@@ -2,7 +2,7 @@ use std::{fmt::Write as _, fs};
 
 use pallas_traverse::{Era, MultiEraTx};
 use uplc::{
-    ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
+    ast::{Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
     parser,
 };
@@ -30,17 +30,30 @@ fn main() -> anyhow::Result<()> {
 
                 println!("Simulating: {}", tx.hash());
 
-                println!("\nPlutus Data:");
+                let witnesses = tx.witnesses();
 
-                println!("{:#?}", tx.witnesses().plutus_data());
+                if let Some(((datums, redeemers), scripts)) = witnesses
+                    .plutus_data()
+                    .zip(witnesses.redeemer())
+                    .zip(witnesses.plutus_v1_script())
+                {
+                    for ((datum, redeemer), script) in
+                        datums.iter().zip(redeemers.iter()).zip(scripts.iter())
+                    {
+                        let program: Program<NamedDeBruijn> = {
+                            let mut buffer = Vec::new();
 
-                println!("\nRedeemer:");
+                            let prog =
+                                Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
 
-                println!("{:#?}", tx.witnesses().redeemer());
+                            prog.into()
+                        };
 
-                println!("\nPlutus V1 Script:");
-
-                println!("{:#?}", tx.witnesses().plutus_v1_script());
+                        program
+                            .apply_data(datum.clone())
+                            .apply_data(redeemer.data.clone());
+                    }
+                }
 
                 println!("\nPlutus V2 Script:");
 

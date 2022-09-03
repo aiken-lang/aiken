@@ -9,7 +9,7 @@ dependencies = [
  "anyhow",
  "clap",
  "hex",
- "pallas-primitives 0.13.2",
+ "pallas-primitives",
  "pallas-traverse",
  "uplc",
 ]
@@ -318,18 +318,9 @@ dependencies = [
  "base58",
  "bech32 0.8.1",
  "hex",
- "pallas-codec 0.13.2",
- "pallas-crypto 0.13.2",
+ "pallas-codec",
+ "pallas-crypto",
  "thiserror",
-]
-
-[[package]]
-name = "pallas-codec"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dce0ea17341c1a0e43e2bb4a637740198dcb09826879ce3ac5ae1c6f4398a5d"
-dependencies = [
- "minicbor 0.17.1",
 ]
 
 [[package]]
@@ -343,44 +334,15 @@ dependencies = [
 
 [[package]]
 name = "pallas-crypto"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "051226367cd851895c73e3115d378b58495ade1ee60c3a154c0d0c30554565fa"
-dependencies = [
- "cryptoxide",
- "hex",
- "pallas-codec 0.12.0",
- "rand_core",
- "thiserror",
-]
-
-[[package]]
-name = "pallas-crypto"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17a13efbe2609916de03c063d5bbef840616b02c658f3db5222785a18b63362"
 dependencies = [
  "cryptoxide",
  "hex",
- "pallas-codec 0.13.2",
+ "pallas-codec",
  "rand_core",
  "thiserror",
-]
-
-[[package]]
-name = "pallas-primitives"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97a0fcc7d5a7120bc2b2e203ec5e7f8088107c500c0eb665569d0e77a910d3c0"
-dependencies = [
- "base58",
- "bech32 0.9.0",
- "hex",
- "log",
- "pallas-codec 0.12.0",
- "pallas-crypto 0.12.0",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -393,8 +355,8 @@ dependencies = [
  "bech32 0.9.0",
  "hex",
  "log",
- "pallas-codec 0.13.2",
- "pallas-crypto 0.13.2",
+ "pallas-codec",
+ "pallas-crypto",
  "serde",
  "serde_json",
 ]
@@ -407,9 +369,9 @@ checksum = "0549db2f8bbaf22d13fc35791dd50fb13a50a1290a342a98929c8ce6c422ed86"
 dependencies = [
  "hex",
  "pallas-addresses",
- "pallas-codec 0.13.2",
- "pallas-crypto 0.13.2",
- "pallas-primitives 0.13.2",
+ "pallas-codec",
+ "pallas-crypto",
+ "pallas-primitives",
  "thiserror",
 ]
 
@@ -722,8 +684,8 @@ dependencies = [
  "flat-rs",
  "hex",
  "minicbor 0.18.0",
- "pallas-codec 0.12.0",
- "pallas-primitives 0.12.0",
+ "pallas-codec",
+ "pallas-primitives",
  "peg",
  "pretty",
  "proptest",

@@ -31,8 +31,11 @@ where
     T: Binder<'b> + Debug,
 {
     pub fn from_cbor(bytes: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<Self, de::Error> {
-        let flat_bytes: Vec<u8> =
-            minicbor::decode(bytes).map_err(|err| de::Error::Message(err.to_string()))?;
+        let mut cbor_decoder = minicbor::Decoder::new(bytes);
+
+        let flat_bytes = cbor_decoder
+            .bytes()
+            .map_err(|err| de::Error::Message(err.to_string()))?;
 
         buffer.extend(flat_bytes);
 
@@ -58,7 +61,15 @@ where
     pub fn to_cbor(&self) -> Result<Vec<u8>, en::Error> {
         let flat_bytes = self.flat()?;
 
-        minicbor::to_vec(&flat_bytes).map_err(|err| en::Error::Message(err.to_string()))
+        let mut bytes = Vec::new();
+
+        let mut cbor_encoder = minicbor::Encoder::new(&mut bytes);
+
+        cbor_encoder
+            .bytes(&flat_bytes)
+            .map_err(|err| en::Error::Message(err.to_string()))?;
+
+        Ok(bytes)
     }
 
     // convenient so that people don't need to depend on the flat crate

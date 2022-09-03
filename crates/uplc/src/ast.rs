@@ -54,6 +54,18 @@ where
             term: applied_term,
         }
     }
+
+    pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
+        let applied_term = Term::Apply {
+            function: Rc::new(self.term.clone()),
+            argument: Rc::new(Term::Constant(Constant::Data(plutus_data))),
+        };
+
+        Program {
+            version: self.version,
+            term: applied_term,
+        }
+    }
 }
 
 impl<'a, T> Display for Program<T>
