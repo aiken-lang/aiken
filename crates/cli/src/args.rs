@@ -7,9 +7,23 @@ use clap::{Parser, Subcommand};
 #[clap(version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub enum Args {
+    /// A subcommand for working with transactions
+    #[clap(subcommand)]
+    Tx(TxCommand),
     /// A subcommand for working with Untyped Plutus Core
     #[clap(subcommand)]
     Uplc(UplcCommand),
+}
+
+/// Commands for working with transactions
+#[derive(Subcommand)]
+pub enum TxCommand {
+    /// Simulate a transaction by evaluating it's script
+    Simulate {
+        input: PathBuf,
+        #[clap(short, long)]
+        cbor: bool,
+    },
 }
 
 /// Commands for working with Untyped Plutus Core
