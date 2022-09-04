@@ -18,7 +18,7 @@ pub fn get_tx_in_info(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<Vec<P
             ]),
         });
 
-        let address = Address::from_bech32(&resolved_input.ouput.address)?;
+        let address = Address::from_bech32(&resolved_input.output.address)?;
 
         let payment_tag = match address.typeid() % 2 {
             0 => 0,
@@ -36,9 +36,9 @@ pub fn get_tx_in_info(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<Vec<P
             _ => unreachable!(),
         };
 
-        let lovelace = resolved_input.ouput.value.0;
+        let lovelace = resolved_input.output.value.0;
 
-        let mut assets = resolved_input.ouput.value.1.clone();
+        let mut assets = resolved_input.output.value.1.clone();
 
         assets.insert(
             "".to_string(),

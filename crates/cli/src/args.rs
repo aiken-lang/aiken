@@ -31,7 +31,7 @@ pub enum TxCommand {
 #[derive(Deserialize)]
 pub struct ResolvedInput {
     pub input: Input,
-    pub ouput: Output,
+    pub output: Output,
 }
 
 #[derive(Deserialize)]
@@ -44,6 +44,15 @@ pub struct Input {
 pub struct Output {
     pub address: String,
     pub value: (u64, HashMap<String, HashMap<String, u64>>),
+    pub datum: Option<OutputDatum>,
+    pub script: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputDatum {
+    DatumHash(String),
+    Datum(String),
 }
 
 /// Commands for working with Untyped Plutus Core
