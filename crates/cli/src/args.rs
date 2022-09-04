@@ -24,6 +24,7 @@ pub enum TxCommand {
         input: PathBuf,
         #[clap(short, long)]
         cbor: bool,
+        #[clap(short, long)]
         resolved_inputs: PathBuf,
     },
 }
