@@ -66,6 +66,8 @@ pub enum UplcCommand {
         print: bool,
         #[clap(short, long)]
         out: Option<String>,
+        #[clap(short, long)]
+        cbor_hex: bool,
     },
     /// Decode flat bytes to textual Untyped Plutus Core
     Unflat {
@@ -74,6 +76,8 @@ pub enum UplcCommand {
         print: bool,
         #[clap(short, long)]
         out: Option<String>,
+        #[clap(short, long)]
+        cbor_hex: bool,
     },
     /// Format an Untyped Plutus Core program
     Fmt {

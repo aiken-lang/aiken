@@ -78,37 +78,58 @@ fn main() -> anyhow::Result<()> {
             }
         },
         Args::Uplc(uplc_cmd) => match uplc_cmd {
-            UplcCommand::Flat { input, print, out } => {
+            UplcCommand::Flat {
+                input,
+                print,
+                out,
+                cbor_hex,
+            } => {
                 let code = std::fs::read_to_string(&input)?;
 
                 let program = parser::program(&code)?;
 
                 let program = Program::<DeBruijn>::try_from(program)?;
 
-                let bytes = program.to_flat()?;
+                if cbor_hex {
+                    let bytes = program.to_flat()?;
 
-                if print {
-                    let mut output = String::new();
+                    if print {
+                        let mut output = String::new();
 
-                    for (i, byte) in bytes.iter().enumerate() {
-                        let _ = write!(output, "{:08b}", byte);
+                        for (i, byte) in bytes.iter().enumerate() {
+                            let _ = write!(output, "{:08b}", byte);
 
-                        if (i + 1) % 4 == 0 {
-                            output.push('\n');
-                        } else {
-                            output.push(' ');
+                            if (i + 1) % 4 == 0 {
+                                output.push('\n');
+                            } else {
+                                output.push(' ');
+                            }
                         }
-                    }
 
-                    println!("{}", output);
-                } else {
-                    let out_name = if let Some(out) = out {
-                        out
+                        println!("{}", output);
                     } else {
-                        format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
-                    };
+                        let out_name = if let Some(out) = out {
+                            out
+                        } else {
+                            format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
+                        };
 
-                    fs::write(&out_name, &bytes)?;
+                        fs::write(&out_name, &bytes)?;
+                    }
+                } else {
+                    let cbor = program.to_hex()?;
+
+                    if print {
+                        println!("{}", &cbor);
+                    } else {
+                        let out_name = if let Some(out) = out {
+                            out
+                        } else {
+                            format!("{}.cbor", input.file_stem().unwrap().to_str().unwrap())
+                        };
+
+                        fs::write(&out_name, &cbor)?;
+                    }
                 }
             }
             UplcCommand::Fmt { input, print } => {
@@ -124,10 +145,24 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&input, pretty)?;
                 }
             }
-            UplcCommand::Unflat { input, print, out } => {
-                let bytes = std::fs::read(&input)?;
+            UplcCommand::Unflat {
+                input,
+                print,
+                out,
+                cbor_hex,
+            } => {
+                let program = if cbor_hex {
+                    let cbor = std::fs::read_to_string(&input)?;
 
-                let program = Program::<DeBruijn>::from_flat(&bytes)?;
+                    let mut cbor_buffer = Vec::new();
+                    let mut flat_buffer = Vec::new();
+
+                    Program::<DeBruijn>::from_hex(cbor.trim(), &mut cbor_buffer, &mut flat_buffer)?
+                } else {
+                    let bytes = std::fs::read(&input)?;
+
+                    Program::<DeBruijn>::from_flat(&bytes)?
+                };
 
                 let program: Program<Name> = program.try_into()?;
 
