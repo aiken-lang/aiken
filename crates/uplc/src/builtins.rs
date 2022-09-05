@@ -5,7 +5,7 @@ use flat_rs::de;
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum DefaultFunction {
     // Integer functions
     AddInteger = 0,
@@ -31,7 +31,7 @@ pub enum DefaultFunction {
     Sha2_256 = 18,
     Sha3_256 = 19,
     Blake2b_256 = 20,
-    VerifySignature = 21,
+    VerifyEd25519Signature = 21,
     VerifyEcdsaSecp256k1Signature = 52,
     VerifySchnorrSecp256k1Signature = 53,
     // String functions
@@ -134,8 +134,8 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Sha2_256 as u8 => Ok(DefaultFunction::Sha2_256),
             v if v == DefaultFunction::Sha3_256 as u8 => Ok(DefaultFunction::Sha3_256),
             v if v == DefaultFunction::Blake2b_256 as u8 => Ok(DefaultFunction::Blake2b_256),
-            v if v == DefaultFunction::VerifySignature as u8 => {
-                Ok(DefaultFunction::VerifySignature)
+            v if v == DefaultFunction::VerifyEd25519Signature as u8 => {
+                Ok(DefaultFunction::VerifyEd25519Signature)
             }
             v if v == DefaultFunction::VerifyEcdsaSecp256k1Signature as u8 => {
                 Ok(DefaultFunction::VerifyEcdsaSecp256k1Signature)
@@ -223,7 +223,7 @@ impl FromStr for DefaultFunction {
             "sha2_256" => Ok(Sha2_256),
             "sha3_256" => Ok(Sha3_256),
             "blake2b_256" => Ok(Blake2b_256),
-            "verifySignature" => Ok(VerifySignature),
+            "verifyEd25519Signature" => Ok(VerifyEd25519Signature),
             "verifyEcdsaSecp256k1Signature" => Ok(VerifyEcdsaSecp256k1Signature),
             "verifySchnorrSecp256k1Signature" => Ok(VerifySchnorrSecp256k1Signature),
             "appendString" => Ok(AppendString),
@@ -287,7 +287,7 @@ impl Display for DefaultFunction {
             Sha2_256 => write!(f, "sha2_256"),
             Sha3_256 => write!(f, "sha3_256"),
             Blake2b_256 => write!(f, "blake2b_256"),
-            VerifySignature => write!(f, "verifySignature"),
+            VerifyEd25519Signature => write!(f, "verifySignature"),
             VerifyEcdsaSecp256k1Signature => write!(f, "verifyEcdsaSecp256k1Signature"),
             VerifySchnorrSecp256k1Signature => write!(f, "verifySchnorrSecp256k1Signature"),
             AppendString => write!(f, "appendString"),

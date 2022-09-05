@@ -80,7 +80,7 @@ impl Encoder {
             return Err(Error::BufferNotByteAligned);
         }
 
-        self.write_blk(arr, &mut 0);
+        self.write_blk(arr);
 
         Ok(self)
     }
@@ -277,20 +277,13 @@ impl Encoder {
     /// Following that it writes the next 255 bytes from the array.
     /// After reaching the end of the buffer we write a 0 byte. Only write 0 if the byte array is empty.
     /// This is byte alignment agnostic.
-    fn write_blk(&mut self, arr: &[u8], src_ptr: &mut usize) {
-        let src_len = arr.len() - *src_ptr;
-        let blk_len = src_len.min(255);
+    fn write_blk(&mut self, arr: &[u8]) {
+        let chunks = arr.chunks(255);
 
-        self.buffer.push(blk_len as u8);
-
-        if blk_len == 0 {
-            return;
+        for chunk in chunks {
+            self.buffer.push(chunk.len() as u8);
+            self.buffer.extend(chunk);
         }
-
-        self.buffer.extend(&arr[*src_ptr..blk_len]);
-
-        *src_ptr += blk_len;
-
-        self.write_blk(arr, src_ptr);
+        self.buffer.push(0);
     }
 }

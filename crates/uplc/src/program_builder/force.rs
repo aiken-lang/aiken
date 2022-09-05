@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{Name, Term};
 use crate::program_builder::WithTerm;
 
@@ -9,7 +11,7 @@ impl<T: WithTerm> WithTerm for ForceBuilder<T> {
     type Next = T::Next;
 
     fn next(self, term: Term<Name>) -> Self::Next {
-        let term = Term::Force(Box::new(term));
+        let term = Term::Force(Rc::new(term));
         self.outer.next(term)
     }
 

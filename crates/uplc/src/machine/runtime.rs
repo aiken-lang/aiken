@@ -1,6 +1,12 @@
+use std::ops::Deref;
+
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
+
 use crate::{
     ast::{Constant, Type},
     builtins::DefaultFunction,
+    plutus_data_to_bytes,
 };
 
 use super::{
@@ -76,9 +82,9 @@ impl DefaultFunction {
             DefaultFunction::SubtractInteger => 2,
             DefaultFunction::MultiplyInteger => 2,
             DefaultFunction::DivideInteger => 2,
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => 2,
+            DefaultFunction::RemainderInteger => 2,
+            DefaultFunction::ModInteger => 2,
             DefaultFunction::EqualsInteger => 2,
             DefaultFunction::LessThanInteger => 2,
             DefaultFunction::LessThanEqualsInteger => 2,
@@ -93,7 +99,7 @@ impl DefaultFunction {
             DefaultFunction::Sha2_256 => 1,
             DefaultFunction::Sha3_256 => 1,
             DefaultFunction::Blake2b_256 => 1,
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => 3,
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => 2,
@@ -103,29 +109,29 @@ impl DefaultFunction {
             DefaultFunction::IfThenElse => 3,
             DefaultFunction::ChooseUnit => 2,
             DefaultFunction::Trace => 2,
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
-            DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
-            DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
-            DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
-            DefaultFunction::EqualsData => todo!(),
-            DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::FstPair => 1,
+            DefaultFunction::SndPair => 1,
+            DefaultFunction::ChooseList => 3,
+            DefaultFunction::MkCons => 2,
+            DefaultFunction::HeadList => 1,
+            DefaultFunction::TailList => 1,
+            DefaultFunction::NullList => 1,
+            DefaultFunction::ChooseData => 6,
+            DefaultFunction::ConstrData => 2,
+            DefaultFunction::MapData => 1,
+            DefaultFunction::ListData => 1,
+            DefaultFunction::IData => 1,
+            DefaultFunction::BData => 1,
+            DefaultFunction::UnConstrData => 1,
+            DefaultFunction::UnMapData => 1,
+            DefaultFunction::UnListData => 1,
+            DefaultFunction::UnIData => 1,
+            DefaultFunction::UnBData => 1,
+            DefaultFunction::EqualsData => 2,
+            DefaultFunction::SerialiseData => 1,
+            DefaultFunction::MkPairData => 2,
+            DefaultFunction::MkNilData => 1,
+            DefaultFunction::MkNilPairData => 1,
         }
     }
 
@@ -135,9 +141,9 @@ impl DefaultFunction {
             DefaultFunction::SubtractInteger => 0,
             DefaultFunction::MultiplyInteger => 0,
             DefaultFunction::DivideInteger => 0,
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => 0,
+            DefaultFunction::RemainderInteger => 0,
+            DefaultFunction::ModInteger => 0,
             DefaultFunction::EqualsInteger => 0,
             DefaultFunction::LessThanInteger => 0,
             DefaultFunction::LessThanEqualsInteger => 0,
@@ -152,7 +158,7 @@ impl DefaultFunction {
             DefaultFunction::Sha2_256 => 0,
             DefaultFunction::Sha3_256 => 0,
             DefaultFunction::Blake2b_256 => 0,
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => 0,
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => 0,
@@ -162,29 +168,29 @@ impl DefaultFunction {
             DefaultFunction::IfThenElse => 1,
             DefaultFunction::ChooseUnit => 1,
             DefaultFunction::Trace => 1,
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
-            DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
-            DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
-            DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
-            DefaultFunction::EqualsData => todo!(),
-            DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::FstPair => 2,
+            DefaultFunction::SndPair => 2,
+            DefaultFunction::ChooseList => 2,
+            DefaultFunction::MkCons => 1,
+            DefaultFunction::HeadList => 1,
+            DefaultFunction::TailList => 1,
+            DefaultFunction::NullList => 1,
+            DefaultFunction::ChooseData => 1,
+            DefaultFunction::ConstrData => 0,
+            DefaultFunction::MapData => 0,
+            DefaultFunction::ListData => 0,
+            DefaultFunction::IData => 0,
+            DefaultFunction::BData => 0,
+            DefaultFunction::UnConstrData => 0,
+            DefaultFunction::UnMapData => 0,
+            DefaultFunction::UnListData => 0,
+            DefaultFunction::UnIData => 0,
+            DefaultFunction::UnBData => 0,
+            DefaultFunction::EqualsData => 0,
+            DefaultFunction::SerialiseData => 0,
+            DefaultFunction::MkPairData => 0,
+            DefaultFunction::MkNilData => 0,
+            DefaultFunction::MkNilPairData => 0,
         }
     }
 
@@ -194,9 +200,9 @@ impl DefaultFunction {
             DefaultFunction::SubtractInteger => arg.expect_type(Type::Integer),
             DefaultFunction::MultiplyInteger => arg.expect_type(Type::Integer),
             DefaultFunction::DivideInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => arg.expect_type(Type::Integer),
+            DefaultFunction::RemainderInteger => arg.expect_type(Type::Integer),
+            DefaultFunction::ModInteger => arg.expect_type(Type::Integer),
             DefaultFunction::EqualsInteger => arg.expect_type(Type::Integer),
             DefaultFunction::LessThanInteger => arg.expect_type(Type::Integer),
             DefaultFunction::LessThanEqualsInteger => arg.expect_type(Type::Integer),
@@ -229,7 +235,7 @@ impl DefaultFunction {
             DefaultFunction::Sha2_256 => arg.expect_type(Type::ByteString),
             DefaultFunction::Sha3_256 => arg.expect_type(Type::ByteString),
             DefaultFunction::Blake2b_256 => arg.expect_type(Type::ByteString),
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => arg.expect_type(Type::ByteString),
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => arg.expect_type(Type::String),
@@ -257,29 +263,58 @@ impl DefaultFunction {
                     Ok(())
                 }
             }
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
-            DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
-            DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
-            DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
-            DefaultFunction::EqualsData => todo!(),
-            DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::FstPair => arg.expect_pair(),
+            DefaultFunction::SndPair => arg.expect_pair(),
+            DefaultFunction::ChooseList => {
+                if args.is_empty() {
+                    arg.expect_list()
+                } else {
+                    Ok(())
+                }
+            }
+            DefaultFunction::MkCons => {
+                if args.is_empty() {
+                    Ok(())
+                } else {
+                    let first = args[0].clone();
+
+                    arg.expect_type(Type::List(Box::new(first.try_into()?)))
+                }
+            }
+            DefaultFunction::HeadList => arg.expect_list(),
+            DefaultFunction::TailList => arg.expect_list(),
+            DefaultFunction::NullList => arg.expect_list(),
+            DefaultFunction::ChooseData => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Data)
+                } else {
+                    Ok(())
+                }
+            }
+            DefaultFunction::ConstrData => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Integer)
+                } else {
+                    arg.expect_type(Type::List(Box::new(Type::Data)))
+                }
+            }
+            DefaultFunction::MapData => arg.expect_type(Type::List(Box::new(Type::Pair(
+                Box::new(Type::Data),
+                Box::new(Type::Data),
+            )))),
+            DefaultFunction::ListData => arg.expect_type(Type::List(Box::new(Type::Data))),
+            DefaultFunction::IData => arg.expect_type(Type::Integer),
+            DefaultFunction::BData => arg.expect_type(Type::ByteString),
+            DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
+            DefaultFunction::UnMapData => arg.expect_type(Type::Data),
+            DefaultFunction::UnListData => arg.expect_type(Type::Data),
+            DefaultFunction::UnIData => arg.expect_type(Type::Data),
+            DefaultFunction::UnBData => arg.expect_type(Type::Data),
+            DefaultFunction::EqualsData => arg.expect_type(Type::Data),
+            DefaultFunction::SerialiseData => arg.expect_type(Type::Data),
+            DefaultFunction::MkPairData => arg.expect_type(Type::Data),
+            DefaultFunction::MkNilData => arg.expect_type(Type::Unit),
+            DefaultFunction::MkNilPairData => arg.expect_type(Type::Unit),
         }
     }
 
@@ -318,9 +353,44 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    if *arg2 != 0 {
+                        let ret = (*arg1 as f64) / (*arg2 as f64);
+
+                        let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
+
+                        Ok(Value::Con(Constant::Integer(ret as isize)))
+                    } else {
+                        Err(Error::DivideByZero(*arg1, *arg2))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::RemainderInteger => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    if *arg2 != 0 {
+                        let ret = arg1 % arg2;
+
+                        Ok(Value::Con(Constant::Integer(ret)))
+                    } else {
+                        Err(Error::DivideByZero(*arg1, *arg2))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::ModInteger => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    if *arg2 != 0 {
+                        let ret = arg1 % arg2;
+
+                        Ok(Value::Con(Constant::Integer(ret.abs())))
+                    } else {
+                        Err(Error::DivideByZero(*arg1, *arg2))
+                    }
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::EqualsInteger => match (&args[0], &args[1]) {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
                     Ok(Value::Con(Constant::Bool(arg1 == arg2)))
@@ -459,7 +529,30 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => match (&args[0], &args[1], &args[2]) {
+                (
+                    Value::Con(Constant::ByteString(public_key)),
+                    Value::Con(Constant::ByteString(message)),
+                    Value::Con(Constant::ByteString(signature)),
+                ) => {
+                    use cryptoxide::ed25519;
+
+                    let public_key: [u8; 32] = public_key
+                        .clone()
+                        .try_into()
+                        .map_err(|e: Vec<u8>| Error::UnexpectedEd25519PublicKeyLength(e.len()))?;
+
+                    let signature: [u8; 64] = signature
+                        .clone()
+                        .try_into()
+                        .map_err(|e: Vec<u8>| Error::UnexpectedEd25519SignatureLength(e.len()))?;
+
+                    let valid = ed25519::verify(message, &public_key, &signature);
+
+                    Ok(Value::Con(Constant::Bool(valid)))
+                }
+                _ => unreachable!(),
+            },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => match (&args[0], &args[1]) {
@@ -512,29 +605,259 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
-            DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
-            DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
-            DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
-            DefaultFunction::EqualsData => todo!(),
-            DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::FstPair => match &args[0] {
+                Value::Con(Constant::ProtoPair(_, _, first, _)) => Ok(Value::Con(*first.clone())),
+                _ => unreachable!(),
+            },
+            DefaultFunction::SndPair => match &args[0] {
+                Value::Con(Constant::ProtoPair(_, _, _, second)) => Ok(Value::Con(*second.clone())),
+                _ => unreachable!(),
+            },
+            DefaultFunction::ChooseList => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    if list.is_empty() {
+                        Ok(args[1].clone())
+                    } else {
+                        Ok(args[2].clone())
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::MkCons => match (&args[0], &args[1]) {
+                (Value::Con(item), Value::Con(Constant::ProtoList(r#type, list))) => {
+                    let mut ret = vec![item.clone()];
+                    ret.extend(list.clone());
+
+                    Ok(Value::Con(Constant::ProtoList(r#type.clone(), ret)))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::HeadList => match &args[0] {
+                c @ Value::Con(Constant::ProtoList(_, list)) => {
+                    if list.is_empty() {
+                        Err(Error::EmptyList(c.clone()))
+                    } else {
+                        Ok(Value::Con(list[0].clone()))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::TailList => match &args[0] {
+                c @ Value::Con(Constant::ProtoList(r#type, list)) => {
+                    if list.is_empty() {
+                        Err(Error::EmptyList(c.clone()))
+                    } else {
+                        Ok(Value::Con(Constant::ProtoList(
+                            r#type.clone(),
+                            list[1..].to_vec(),
+                        )))
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::NullList => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    Ok(Value::Con(Constant::Bool(list.is_empty())))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::ChooseData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Constr(_))) => Ok(args[1].clone()),
+                Value::Con(Constant::Data(PlutusData::Map(_))) => Ok(args[2].clone()),
+                Value::Con(Constant::Data(PlutusData::Array(_)))
+                | Value::Con(Constant::Data(PlutusData::ArrayIndef(_))) => Ok(args[3].clone()),
+                Value::Con(Constant::Data(PlutusData::BigInt(_))) => Ok(args[4].clone()),
+                Value::Con(Constant::Data(PlutusData::BoundedBytes(_))) => Ok(args[5].clone()),
+                _ => unreachable!(),
+            },
+            DefaultFunction::ConstrData => match (&args[0], &args[1]) {
+                (
+                    Value::Con(Constant::Integer(i)),
+                    Value::Con(Constant::ProtoList(Type::Data, l)),
+                ) => {
+                    let data_list: Vec<PlutusData> = l
+                        .iter()
+                        .map(|item| match item {
+                            Constant::Data(d) => d.clone(),
+                            _ => unreachable!(),
+                        })
+                        .collect();
+
+                    let constr_data = PlutusData::Constr(Constr {
+                        // TODO: handle other types of constructor tags
+                        tag: convert_constr_to_tag(*i as u64),
+                        any_constructor: None,
+                        fields: MaybeIndefArray::Indef(data_list),
+                    });
+                    Ok(Value::Con(Constant::Data(constr_data)))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::MapData => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    let data_list: Vec<(PlutusData, PlutusData)> = list
+                        .iter()
+                        .map(|item| match item {
+                            Constant::ProtoPair(Type::Data, Type::Data, left, right) => {
+                                match (*left.clone(), *right.clone()) {
+                                    (Constant::Data(key), Constant::Data(value)) => (key, value),
+                                    _ => unreachable!(),
+                                }
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect();
+                    Ok(Value::Con(Constant::Data(PlutusData::Map(
+                        KeyValuePairs::Def(data_list),
+                    ))))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::ListData => match &args[0] {
+                Value::Con(Constant::ProtoList(_, list)) => {
+                    let data_list: Vec<PlutusData> = list
+                        .iter()
+                        .map(|item| match item {
+                            Constant::Data(d) => d.clone(),
+                            _ => unreachable!(),
+                        })
+                        .collect();
+                    Ok(Value::Con(Constant::Data(PlutusData::ArrayIndef(
+                        MaybeIndefArray::Indef(data_list),
+                    ))))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::IData => match &args[0] {
+                Value::Con(Constant::Integer(i)) => Ok(Value::Con(Constant::Data(
+                    PlutusData::BigInt(BigInt::Int((*i as i64).try_into().unwrap())),
+                ))),
+                _ => unreachable!(),
+            },
+            DefaultFunction::BData => match &args[0] {
+                Value::Con(Constant::ByteString(b)) => Ok(Value::Con(Constant::Data(
+                    PlutusData::BoundedBytes(b.clone().try_into().unwrap()),
+                ))),
+                _ => unreachable!(),
+            },
+            DefaultFunction::UnConstrData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Constr(c))) => {
+                    Ok(Value::Con(Constant::ProtoPair(
+                        Type::Integer,
+                        Type::List(Box::new(Type::Data)),
+                        // TODO: handle other types of constructor tags
+                        Box::new(Constant::Integer(convert_tag_to_constr(c.tag as isize))),
+                        Box::new(Constant::ProtoList(
+                            Type::Data,
+                            c.fields
+                                .deref()
+                                .iter()
+                                .map(|d| Constant::Data(d.clone()))
+                                .collect(),
+                        )),
+                    )))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::UnMapData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Map(m))) => {
+                    Ok(Value::Con(Constant::ProtoList(
+                        Type::Pair(Box::new(Type::Data), Box::new(Type::Data)),
+                        m.deref()
+                            .iter()
+                            .map(|p| -> Constant {
+                                Constant::ProtoPair(
+                                    Type::Data,
+                                    Type::Data,
+                                    Box::new(Constant::Data(p.0.clone())),
+                                    Box::new(Constant::Data(p.1.clone())),
+                                )
+                            })
+                            .collect(),
+                    )))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::UnListData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::Array(l)))
+                | Value::Con(Constant::Data(PlutusData::ArrayIndef(l))) => {
+                    Ok(Value::Con(Constant::ProtoList(
+                        Type::Data,
+                        l.deref()
+                            .iter()
+                            .map(|d| Constant::Data(d.clone()))
+                            .collect(),
+                    )))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::UnIData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::BigInt(b))) => {
+                    if let BigInt::Int(i) = b {
+                        let x: i64 = (*i).try_into().unwrap();
+
+                        Ok(Value::Con(Constant::Integer(x as isize)))
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::UnBData => match &args[0] {
+                Value::Con(Constant::Data(PlutusData::BoundedBytes(b))) => {
+                    Ok(Value::Con(Constant::ByteString(b.to_vec())))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::EqualsData => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
+                    Ok(Value::Con(Constant::Bool(d1.eq(d2))))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::SerialiseData => match &args[0] {
+                Value::Con(Constant::Data(d)) => {
+                    let serialized_data = plutus_data_to_bytes(d).unwrap();
+                    Ok(Value::Con(Constant::ByteString(serialized_data)))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::MkPairData => match (&args[0], &args[1]) {
+                (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
+                    Ok(Value::Con(Constant::ProtoPair(
+                        Type::Data,
+                        Type::Data,
+                        Box::new(Constant::Data(d1.clone())),
+                        Box::new(Constant::Data(d2.clone())),
+                    )))
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::MkNilData => Ok(Value::Con(Constant::ProtoList(Type::Data, vec![]))),
+            DefaultFunction::MkNilPairData => Ok(Value::Con(Constant::ProtoList(
+                Type::Pair(Box::new(Type::Data), Box::new(Type::Data)),
+                vec![],
+            ))),
         }
+    }
+}
+
+fn convert_tag_to_constr(tag: isize) -> isize {
+    if tag < 128 {
+        tag - 121
+    } else if (1280..1401).contains(&tag) {
+        tag - 1280
+    } else {
+        todo!()
+    }
+}
+
+fn convert_constr_to_tag(constr: u64) -> u64 {
+    if constr < 7 {
+        constr + 121
+    } else if constr < 128 {
+        constr + 1280
+    } else {
+        todo!()
     }
 }

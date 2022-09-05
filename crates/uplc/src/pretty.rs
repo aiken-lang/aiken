@@ -1,11 +1,10 @@
 use pretty::RcDoc;
 
 use crate::{
-    ast::{Constant, Program, Term},
+    ast::{Constant, Program, Term, Type},
     flat::Binder,
+    plutus_data_to_bytes,
 };
-
-use pallas_primitives::{alonzo::PlutusData, Fragment};
 
 impl<'a, T> Program<T>
 where
@@ -172,14 +171,96 @@ impl Constant {
             Constant::Bool(b) => RcDoc::text("bool")
                 .append(RcDoc::line())
                 .append(RcDoc::text(if *b { "True" } else { "False" })),
-            Constant::ProtoList(_, _) => todo!(),
-            Constant::ProtoPair(_, _, _, _) => todo!(),
-            Constant::Data(d) => RcDoc::text("data")
+            Constant::ProtoList(r#type, items) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("list")
+                        .append(RcDoc::line())
+                        .append(r#type.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")"))
                 .append(RcDoc::line())
-                .append(RcDoc::text("#"))
-                .append(RcDoc::text(hex::encode(
-                    PlutusData::encode_fragment(d).unwrap(),
-                ))),
+                .append(RcDoc::text("["))
+                .append(RcDoc::intersperse(
+                    items.iter().map(|c| c.to_doc_list()),
+                    RcDoc::text(","),
+                ))
+                .append(RcDoc::text("]")),
+            Constant::ProtoPair(type1, type2, left, right) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("pair")
+                        .append(RcDoc::line())
+                        .append(type1.to_doc())
+                        .append(RcDoc::line())
+                        .append(type2.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")"))
+                .append(RcDoc::line())
+                .append(RcDoc::text("("))
+                .append(left.to_doc_list())
+                .append(RcDoc::text(","))
+                .append(right.to_doc_list())
+                .append(RcDoc::text(")")),
+            d @ Constant::Data(_) => RcDoc::text("data ").append(d.to_doc_list()),
+        }
+    }
+
+    fn to_doc_list(&self) -> RcDoc<()> {
+        match self {
+            Constant::Integer(i) => RcDoc::as_string(i),
+            Constant::ByteString(bs) => RcDoc::text("#").append(RcDoc::text(hex::encode(bs))),
+            Constant::String(s) => RcDoc::text("\"")
+                .append(RcDoc::text(s))
+                .append(RcDoc::text("\"")),
+            Constant::Unit => RcDoc::text("()"),
+            Constant::Bool(b) => RcDoc::text(if *b { "True" } else { "False" }),
+            Constant::ProtoList(_, items) => RcDoc::text("[")
+                .append(RcDoc::intersperse(
+                    items.iter().map(|c| c.to_doc_list()),
+                    RcDoc::text(","),
+                ))
+                .append(RcDoc::text("]")),
+            Constant::ProtoPair(_, _, left, right) => RcDoc::text("(")
+                .append((*left).to_doc_list())
+                .append(RcDoc::text(", "))
+                .append((*right).to_doc_list())
+                .append(RcDoc::text(")")),
+
+            Constant::Data(data) => RcDoc::text("#").append(RcDoc::text(hex::encode(
+                plutus_data_to_bytes(data).unwrap(),
+            ))),
+        }
+    }
+}
+
+impl Type {
+    fn to_doc(&self) -> RcDoc<()> {
+        match self {
+            Type::Bool => RcDoc::text("bool"),
+            Type::Integer => RcDoc::text("integer"),
+            Type::String => RcDoc::text("string"),
+            Type::ByteString => RcDoc::text("bytestring"),
+            Type::Unit => RcDoc::text("unit"),
+            Type::List(r#type) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("list")
+                        .append(RcDoc::line())
+                        .append(r#type.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")")),
+            Type::Pair(type1, type2) => RcDoc::text("(")
+                .append(
+                    RcDoc::text("list")
+                        .append(RcDoc::line())
+                        .append(type1.to_doc())
+                        .append(RcDoc::line())
+                        .append(type2.to_doc()),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")")),
+            Type::Data => RcDoc::text("data"),
         }
     }
 }

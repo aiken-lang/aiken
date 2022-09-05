@@ -1,3 +1,5 @@
+use std::{collections::VecDeque, ops::Deref, rc::Rc};
+
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
@@ -9,13 +11,14 @@ mod runtime;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
+use pallas_primitives::babbage::{BigInt, PlutusData};
 
 use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
 enum MachineStep {
-    Return(Context, Value),
-    Compute(Context, Vec<Value>, Term<NamedDeBruijn>),
-    Done(Term<NamedDeBruijn>),
+    Return(Rc<Context>, Value),
+    Compute(Rc<Context>, Rc<Vec<Value>>, Rc<Term<NamedDeBruijn>>),
+    Done(Rc<Term<NamedDeBruijn>>),
 }
 
 impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
@@ -23,7 +26,7 @@ impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
 
     fn try_from(value: Option<MachineStep>) -> Result<Self, Error> {
         match value {
-            Some(MachineStep::Done(term)) => Ok(term),
+            Some(MachineStep::Done(term)) => Ok(Rc::as_ref(&term).clone()),
             _ => Err(Error::MachineNeverReachedDone),
         }
     }
@@ -57,13 +60,16 @@ impl Machine {
 
         self.spend_budget(startup_budget)?;
 
-        self.stack
-            .push(Compute(Context::NoFrame, vec![], term.clone()));
+        self.stack.push(Compute(
+            Rc::new(Context::NoFrame),
+            Rc::new(vec![]),
+            Rc::new(term.clone()),
+        ));
 
         while let Some(step) = self.stack.pop() {
             match step {
                 Compute(context, env, t) => {
-                    self.compute(context, env, &t)?;
+                    self.compute(context, env, t)?;
                 }
                 Return(context, value) => {
                     self.return_compute(context, value)?;
@@ -81,15 +87,15 @@ impl Machine {
 
     fn compute(
         &mut self,
-        context: Context,
-        env: Vec<Value>,
-        term: &Term<NamedDeBruijn>,
+        context: Rc<Context>,
+        env: Rc<Vec<Value>>,
+        term: Rc<Term<NamedDeBruijn>>,
     ) -> Result<(), Error> {
-        match term {
+        match term.as_ref() {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
-                let val = self.lookup_var(name.clone(), env)?;
+                let val = self.lookup_var(name, env)?;
 
                 self.stack.push(MachineStep::Return(context, val));
             }
@@ -98,7 +104,7 @@ impl Machine {
 
                 self.stack.push(MachineStep::Return(
                     context,
-                    Value::Delay(*body.clone(), env),
+                    Value::Delay(Rc::clone(body), env),
                 ));
             }
             Term::Lambda {
@@ -111,7 +117,7 @@ impl Machine {
                     context,
                     Value::Lambda {
                         parameter_name: parameter_name.clone(),
-                        body: *body.clone(),
+                        body: Rc::clone(body),
                         env,
                     },
                 ));
@@ -120,9 +126,13 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameApplyArg(env.clone(), *argument.clone(), Box::new(context)),
+                    Rc::new(Context::FrameApplyArg(
+                        Rc::clone(&env),
+                        Rc::clone(argument),
+                        context,
+                    )),
                     env,
-                    *function.clone(),
+                    Rc::clone(function),
                 ));
             }
             Term::Constant(x) => {
@@ -135,9 +145,9 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameForce(Box::new(context)),
+                    Rc::new(Context::FrameForce(context)),
                     env,
-                    *body.clone(),
+                    Rc::clone(body),
                 ));
             }
             Term::Error => return Err(Error::EvaluationFailure),
@@ -150,7 +160,7 @@ impl Machine {
                     context,
                     Value::Builtin {
                         fun: *fun,
-                        term: term.clone(),
+                        term,
                         runtime,
                     },
                 ));
@@ -160,17 +170,19 @@ impl Machine {
         Ok(())
     }
 
-    fn return_compute(&mut self, context: Context, value: Value) -> Result<(), Error> {
-        match context {
-            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value)?,
+    fn return_compute(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
+        match context.as_ref() {
+            Context::FrameApplyFun(function, ctx) => {
+                self.apply_evaluate(ctx.to_owned(), function.to_owned(), value)?
+            }
             Context::FrameApplyArg(arg_var_env, arg, ctx) => {
                 self.stack.push(MachineStep::Compute(
-                    Context::FrameApplyFun(value, ctx),
-                    arg_var_env,
-                    arg,
+                    Rc::new(Context::FrameApplyFun(value, ctx.to_owned())),
+                    arg_var_env.to_owned(),
+                    Rc::clone(arg),
                 ));
             }
-            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value)?,
+            Context::FrameForce(ctx) => self.force_evaluate(ctx.to_owned(), value)?,
             Context::NoFrame => {
                 if self.unbudgeted_steps[7] > 0 {
                     self.spend_unbudgeted_steps()?;
@@ -185,71 +197,73 @@ impl Machine {
         Ok(())
     }
 
-    fn discharge_value(&mut self, value: Value) -> Term<NamedDeBruijn> {
+    fn discharge_value(&mut self, value: Value) -> Rc<Term<NamedDeBruijn>> {
         match value {
-            Value::Con(x) => Term::Constant(x),
+            Value::Con(x) => Rc::new(Term::Constant(x)),
             Value::Builtin { term, .. } => term,
-            Value::Delay(body, env) => self.discharge_value_env(env, Term::Delay(Box::new(body))),
+            Value::Delay(body, env) => self.discharge_value_env(env, Rc::new(Term::Delay(body))),
             Value::Lambda {
                 parameter_name,
                 body,
                 env,
             } => self.discharge_value_env(
                 env,
-                Term::Lambda {
+                Rc::new(Term::Lambda {
                     parameter_name: NamedDeBruijn {
                         text: parameter_name.text,
                         index: 0.into(),
                     },
-                    body: Box::new(body),
-                },
+                    body,
+                }),
             ),
         }
     }
 
     fn discharge_value_env(
         &mut self,
-        env: Vec<Value>,
-        term: Term<NamedDeBruijn>,
-    ) -> Term<NamedDeBruijn> {
+        env: Rc<Vec<Value>>,
+        term: Rc<Term<NamedDeBruijn>>,
+    ) -> Rc<Term<NamedDeBruijn>> {
         fn rec(
             lam_cnt: usize,
-            t: Term<NamedDeBruijn>,
+            t: Rc<Term<NamedDeBruijn>>,
             this: &mut Machine,
-            env: &[Value],
-        ) -> Term<NamedDeBruijn> {
-            match t {
+            env: Rc<Vec<Value>>,
+        ) -> Rc<Term<NamedDeBruijn>> {
+            match t.as_ref() {
                 Term::Var(name) => {
                     let index: usize = name.index.into();
                     if lam_cnt >= index {
-                        Term::Var(name)
+                        Rc::new(Term::Var(name.clone()))
                     } else {
                         env.get::<usize>(env.len() - (index - lam_cnt))
                             .cloned()
-                            .map_or(Term::Var(name), |v| this.discharge_value(v))
+                            .map_or(Rc::new(Term::Var(name.clone())), |v| {
+                                this.discharge_value(v)
+                            })
                     }
                 }
                 Term::Lambda {
                     parameter_name,
                     body,
-                } => Term::Lambda {
-                    parameter_name,
-                    body: Box::new(rec(lam_cnt + 1, *body, this, env)),
-                },
-                Term::Apply { function, argument } => Term::Apply {
-                    function: Box::new(rec(lam_cnt, *function, this, env)),
-                    argument: Box::new(rec(lam_cnt, *argument, this, env)),
-                },
+                } => Rc::new(Term::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: rec(lam_cnt + 1, Rc::clone(body), this, env),
+                }),
+                Term::Apply { function, argument } => Rc::new(Term::Apply {
+                    function: rec(lam_cnt, Rc::clone(function), this, Rc::clone(&env)),
+                    argument: rec(lam_cnt, Rc::clone(argument), this, env),
+                }),
 
-                Term::Delay(x) => Term::Delay(Box::new(rec(lam_cnt, *x, this, env))),
-                Term::Force(x) => Term::Force(Box::new(rec(lam_cnt, *x, this, env))),
-                rest => rest,
+                Term::Delay(x) => Rc::new(Term::Delay(rec(lam_cnt, Rc::clone(x), this, env))),
+                Term::Force(x) => Rc::new(Term::Force(rec(lam_cnt, Rc::clone(x), this, env))),
+                rest => Rc::new(rest.clone()),
             }
         }
-        rec(0, term, self, &env)
+        rec(0, term, self, env)
     }
 
-    fn force_evaluate(&mut self, context: Context, value: Value) -> Result<(), Error> {
+    fn force_evaluate(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
         match value {
             Value::Delay(body, env) => {
                 self.stack.push(MachineStep::Compute(context, env, body));
@@ -261,7 +275,7 @@ impl Machine {
                 term,
                 mut runtime,
             } => {
-                let force_term = Term::Force(Box::new(term));
+                let force_term = Rc::new(Term::Force(term));
 
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -272,7 +286,9 @@ impl Machine {
 
                     Ok(())
                 } else {
-                    Err(Error::BuiltinTermArgumentExpected(force_term))
+                    Err(Error::BuiltinTermArgumentExpected(
+                        force_term.as_ref().clone(),
+                    ))
                 }
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
@@ -281,17 +297,18 @@ impl Machine {
 
     fn apply_evaluate(
         &mut self,
-        context: Context,
+        context: Rc<Context>,
         function: Value,
         argument: Value,
     ) -> Result<(), Error> {
         match function {
-            Value::Lambda { body, env, .. } => {
-                let mut e = env;
+            Value::Lambda { body, mut env, .. } => {
+                let e = Rc::make_mut(&mut env);
 
                 e.push(argument);
 
-                self.stack.push(MachineStep::Compute(context, e, body));
+                self.stack
+                    .push(MachineStep::Compute(context, Rc::new(e.clone()), body));
 
                 Ok(())
             }
@@ -302,10 +319,10 @@ impl Machine {
             } => {
                 let arg_term = self.discharge_value(argument.clone());
 
-                let t = Term::<NamedDeBruijn>::Apply {
-                    function: Box::new(term),
-                    argument: Box::new(arg_term),
-                };
+                let t = Rc::new(Term::<NamedDeBruijn>::Apply {
+                    function: term,
+                    argument: arg_term,
+                });
 
                 if runtime.is_arrow() && !runtime.needs_force() {
                     runtime.push(argument)?;
@@ -316,7 +333,7 @@ impl Machine {
 
                     Ok(())
                 } else {
-                    Err(Error::UnexpectedBuiltinTermArgument(t))
+                    Err(Error::UnexpectedBuiltinTermArgument(t.as_ref().clone()))
                 }
             }
             rest => Err(Error::NonFunctionalApplication(rest)),
@@ -326,7 +343,7 @@ impl Machine {
     fn eval_builtin_app(
         &mut self,
         fun: DefaultFunction,
-        term: Term<NamedDeBruijn>,
+        term: Rc<Term<NamedDeBruijn>>,
         runtime: BuiltinRuntime,
     ) -> Result<Value, Error> {
         if runtime.is_ready() {
@@ -340,10 +357,10 @@ impl Machine {
         }
     }
 
-    fn lookup_var(&mut self, name: NamedDeBruijn, env: Vec<Value>) -> Result<Value, Error> {
+    fn lookup_var(&mut self, name: &NamedDeBruijn, env: Rc<Vec<Value>>) -> Result<Value, Error> {
         env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
-            .ok_or(Error::OpenTermEvaluated(Term::Var(name)))
+            .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone())))
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -389,24 +406,24 @@ impl Machine {
 
 #[derive(Clone)]
 enum Context {
-    FrameApplyFun(Value, Box<Context>),
-    FrameApplyArg(Vec<Value>, Term<NamedDeBruijn>, Box<Context>),
-    FrameForce(Box<Context>),
+    FrameApplyFun(Value, Rc<Context>),
+    FrameApplyArg(Rc<Vec<Value>>, Rc<Term<NamedDeBruijn>>, Rc<Context>),
+    FrameForce(Rc<Context>),
     NoFrame,
 }
 
 #[derive(Clone, Debug)]
 pub enum Value {
     Con(Constant),
-    Delay(Term<NamedDeBruijn>, Vec<Value>),
+    Delay(Rc<Term<NamedDeBruijn>>, Rc<Vec<Value>>),
     Lambda {
         parameter_name: NamedDeBruijn,
-        body: Term<NamedDeBruijn>,
-        env: Vec<Value>,
+        body: Rc<Term<NamedDeBruijn>>,
+        env: Rc<Vec<Value>>,
     },
     Builtin {
         fun: DefaultFunction,
-        term: Term<NamedDeBruijn>,
+        term: Rc<Term<NamedDeBruijn>>,
         runtime: BuiltinRuntime,
     },
 }
@@ -420,6 +437,7 @@ impl Value {
         matches!(self, Value::Con(Constant::Bool(_)))
     }
 
+    // TODO: Make this to_ex_mem not recursive.
     pub fn to_ex_mem(&self) -> i64 {
         match self {
             Value::Con(c) => match c {
@@ -434,9 +452,13 @@ impl Value {
                 Constant::String(s) => s.chars().count() as i64,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
-                Constant::ProtoList(_, _) => todo!(),
-                Constant::ProtoPair(_, _, _, _) => todo!(),
-                Constant::Data(_) => todo!(),
+                Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
+                    acc + Value::Con(constant.clone()).to_ex_mem()
+                }),
+                Constant::ProtoPair(_, _, l, r) => {
+                    Value::Con(*l.clone()).to_ex_mem() + Value::Con(*r.clone()).to_ex_mem()
+                }
+                Constant::Data(item) => self.data_to_ex_mem(item),
             },
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
@@ -444,18 +466,126 @@ impl Value {
         }
     }
 
-    pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
-        match self {
-            Value::Con(constant) => {
-                let constant_type = Type::from(constant);
-
-                if constant_type == r#type {
-                    Ok(())
-                } else {
-                    Err(Error::TypeMismatch(r#type, constant_type))
+    // I made data not recursive since data tends to be deeply nested
+    // thus causing a significant hit on performance
+    pub fn data_to_ex_mem(&self, data: &PlutusData) -> i64 {
+        let mut stack: VecDeque<&PlutusData> = VecDeque::new();
+        let mut total = 0;
+        stack.push_front(data);
+        while let Some(item) = stack.pop_front() {
+            // each time we deconstruct a data we add 4 memory units
+            total += 4;
+            match item {
+                PlutusData::Constr(c) => {
+                    // note currently tag is not factored into cost of memory
+                    // create new stack with of items from the list of data
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(c.fields.deref().iter());
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::Map(m) => {
+                    let mut new_stack: VecDeque<&PlutusData>;
+                    // create new stack with of items from the list of pairs of data
+                    new_stack = m.deref().iter().fold(VecDeque::new(), |mut acc, d| {
+                        acc.push_back(&d.0);
+                        acc.push_back(&d.1);
+                        acc
+                    });
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::BigInt(i) => {
+                    if let BigInt::Int(g) = i {
+                        let numb: i64 = (*g).try_into().unwrap();
+                        total += Value::Con(Constant::Integer(numb as isize)).to_ex_mem();
+                    } else {
+                        unreachable!()
+                    };
+                }
+                PlutusData::BoundedBytes(b) => {
+                    let byte_string: Vec<u8> = b.deref().clone();
+                    total += Value::Con(Constant::ByteString(byte_string)).to_ex_mem();
+                }
+                PlutusData::Array(a) => {
+                    // create new stack with of items from the list of data
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(a.deref().iter());
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
+                }
+                PlutusData::ArrayIndef(a) => {
+                    // create new stack with of items from the list of data
+                    let mut new_stack: VecDeque<&PlutusData> =
+                        VecDeque::from_iter(a.deref().iter());
+                    // Append old stack to the back of the new stack
+                    new_stack.append(&mut stack);
+                    stack = new_stack;
                 }
             }
-            rest => Err(Error::NotAConstant(rest.clone())),
+        }
+        total
+    }
+
+    pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
+        let constant: Constant = self.clone().try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        if constant_type == r#type {
+            Ok(())
+        } else {
+            Err(Error::TypeMismatch(r#type, constant_type))
+        }
+    }
+
+    pub fn expect_list(&self) -> Result<(), Error> {
+        let constant: Constant = self.clone().try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        if matches!(constant_type, Type::List(_)) {
+            Ok(())
+        } else {
+            Err(Error::ListTypeMismatch(constant_type))
+        }
+    }
+
+    pub fn expect_pair(&self) -> Result<(), Error> {
+        let constant: Constant = self.clone().try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        if matches!(constant_type, Type::Pair(_, _)) {
+            Ok(())
+        } else {
+            Err(Error::PairTypeMismatch(constant_type))
+        }
+    }
+}
+
+impl TryFrom<Value> for Type {
+    type Error = Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let constant: Constant = value.try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        Ok(constant_type)
+    }
+}
+
+impl TryFrom<Value> for Constant {
+    type Error = Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Con(constant) => Ok(constant),
+            rest => Err(Error::NotAConstant(rest)),
         }
     }
 }
@@ -472,7 +602,7 @@ impl From<&Constant> for Type {
             Constant::ProtoPair(t1, t2, _, _) => {
                 Type::Pair(Box::new(t1.clone()), Box::new(t2.clone()))
             }
-            Constant::Data(_) => todo!(),
+            Constant::Data(_) => Type::Data,
         }
     }
 }

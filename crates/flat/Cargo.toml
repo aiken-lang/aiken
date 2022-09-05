@@ -1,7 +1,7 @@
 [package]
 name = "flat-rs"
 description = "Flat codec"
-version = "0.0.7"
+version = "0.0.10"
 edition = "2021"
 repository = "https://github.com/txpipe/aiken/crates/flat"
 homepage = "https://github.com/txpipe/aiken"
@@ -13,3 +13,6 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 anyhow = "1.0.57"
 thiserror = "1.0.31"
+
+[dev-dependencies]
+proptest = "1.0.0"

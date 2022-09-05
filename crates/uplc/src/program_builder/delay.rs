@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{Name, Term};
 use crate::program_builder::WithTerm;
 
@@ -9,7 +11,7 @@ impl<T: WithTerm> WithTerm for DelayBuilder<T> {
     type Next = T::Next;
 
     fn next(self, term: Term<Name>) -> Self::Next {
-        let term = Term::Delay(Box::new(term));
+        let term = Term::Delay(Rc::new(term));
         self.outer.next(term)
     }
 

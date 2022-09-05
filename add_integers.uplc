@@ -1,5 +1,5 @@
 (program
   1.0.0
-  [ (builtin divideInteger) (con integer 5) (con integer 2) ]
+  [(force (force (builtin fstPair))) (con (pair integer bytestring) (22, #1122aabb))]
 )
 

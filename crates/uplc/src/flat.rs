@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 use flat_rs::{
     de::{self, Decode, Decoder},
@@ -164,18 +164,18 @@ where
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         match decode_term_tag(d)? {
             0 => Ok(Term::Var(T::decode(d)?)),
-            1 => Ok(Term::Delay(Box::new(Term::decode(d)?))),
+            1 => Ok(Term::Delay(Rc::new(Term::decode(d)?))),
             2 => Ok(Term::Lambda {
                 parameter_name: T::binder_decode(d)?,
-                body: Box::new(Term::decode(d)?),
+                body: Rc::new(Term::decode(d)?),
             }),
             3 => Ok(Term::Apply {
-                function: Box::new(Term::decode(d)?),
-                argument: Box::new(Term::decode(d)?),
+                function: Rc::new(Term::decode(d)?),
+                argument: Rc::new(Term::decode(d)?),
             }),
             // Need size limit for Constant
             4 => Ok(Term::Constant(Constant::decode(d)?)),
-            5 => Ok(Term::Force(Box::new(Term::decode(d)?))),
+            5 => Ok(Term::Force(Rc::new(Term::decode(d)?))),
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
             x => Err(de::Error::Message(format!(

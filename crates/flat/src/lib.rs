@@ -45,24 +45,3 @@ where
 
     Ok(value)
 }
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn encode_bool() {
-        let bytes = super::encode(&true).unwrap();
-
-        assert_eq!(bytes, vec![0b10000001]);
-
-        let bytes = super::encode(&false).unwrap();
-
-        assert_eq!(bytes, vec![0b00000001]);
-    }
-
-    #[test]
-    fn encode_u8() {
-        let bytes = super::encode(&3_u8).unwrap();
-
-        assert_eq!(bytes, vec![0b00000011, 0b00000001]);
-    }
-}

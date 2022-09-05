@@ -3,7 +3,7 @@ use crate::builtins::DefaultFunction;
 use super::Value;
 
 /// Can be negative
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ExBudget {
     pub mem: i64,
     pub cpu: i64,
@@ -277,12 +277,12 @@ impl Default for BuiltinCosts {
             },
             append_byte_string: CostingFun {
                 mem: TwoArguments::AddedSizes(AddedSizes {
-                    intercept: 1000,
-                    slope: 571,
-                }),
-                cpu: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 0,
                     slope: 1,
+                }),
+                cpu: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 1000,
+                    slope: 571,
                 }),
             },
             cons_byte_string: CostingFun {
@@ -359,8 +359,8 @@ impl Default for BuiltinCosts {
             verify_ed25519_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(10),
                 cpu: ThreeArguments::LinearInZ(LinearSize {
-                    intercept: 41047009,
-                    slope: 18816,
+                    intercept: 57996947,
+                    slope: 18975,
                 }),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
@@ -572,9 +572,36 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::QuotientInteger => todo!(),
-            DefaultFunction::RemainderInteger => todo!(),
-            DefaultFunction::ModInteger => todo!(),
+            DefaultFunction::QuotientInteger => ExBudget {
+                mem: self
+                    .quotient_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .quotient_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::RemainderInteger => ExBudget {
+                mem: self
+                    .remainder_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .remainder_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::ModInteger => ExBudget {
+                mem: self
+                    .mod_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .mod_integer
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
             DefaultFunction::EqualsInteger => ExBudget {
                 mem: self
                     .equals_integer
@@ -693,7 +720,18 @@ impl BuiltinCosts {
                 mem: self.blake2b_256.mem.cost(args[0].to_ex_mem()),
                 cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::VerifySignature => todo!(),
+            DefaultFunction::VerifyEd25519Signature => ExBudget {
+                mem: self.verify_ed25519_signature.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.verify_ed25519_signature.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => ExBudget {
@@ -756,29 +794,144 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
-            DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
-            DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
-            DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
-            DefaultFunction::EqualsData => todo!(),
-            DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
+            DefaultFunction::FstPair => ExBudget {
+                mem: self.fst_pair.mem.cost(args[0].to_ex_mem()),
+                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::SndPair => ExBudget {
+                mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
+                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ChooseList => ExBudget {
+                mem: self.choose_list.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.choose_list.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
+            DefaultFunction::MkCons => ExBudget {
+                mem: self
+                    .mk_cons
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .mk_cons
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::HeadList => ExBudget {
+                mem: self.head_list.mem.cost(args[0].to_ex_mem()),
+                cpu: self.head_list.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::TailList => ExBudget {
+                mem: self.tail_list.mem.cost(args[0].to_ex_mem()),
+                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::NullList => ExBudget {
+                mem: self.null_list.mem.cost(args[0].to_ex_mem()),
+                cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ChooseData => ExBudget {
+                mem: self.choose_data.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                    args[3].to_ex_mem(),
+                    args[4].to_ex_mem(),
+                    args[5].to_ex_mem(),
+                ),
+                cpu: self.choose_data.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                    args[3].to_ex_mem(),
+                    args[4].to_ex_mem(),
+                    args[5].to_ex_mem(),
+                ),
+            },
+            DefaultFunction::ConstrData => ExBudget {
+                mem: self
+                    .constr_data
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .constr_data
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::MapData => ExBudget {
+                mem: self.map_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.map_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ListData => ExBudget {
+                mem: self.list_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.list_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::IData => ExBudget {
+                mem: self.i_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.i_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::BData => ExBudget {
+                mem: self.b_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.b_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnConstrData => ExBudget {
+                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnMapData => ExBudget {
+                mem: self.un_map_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnListData => ExBudget {
+                mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnIData => ExBudget {
+                mem: self.un_i_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::UnBData => ExBudget {
+                mem: self.un_b_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::EqualsData => ExBudget {
+                mem: self
+                    .equals_data
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .equals_data
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::SerialiseData => ExBudget {
+                mem: self.serialise_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.serialise_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::MkPairData => ExBudget {
+                mem: self
+                    .mk_pair_data
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .mk_pair_data
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::MkNilData => ExBudget {
+                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::MkNilPairData => ExBudget {
+                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem()),
+                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem()),
+            },
         }
     }
 }
