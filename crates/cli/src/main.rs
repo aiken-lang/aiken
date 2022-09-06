@@ -97,7 +97,7 @@ fn main() -> anyhow::Result<()> {
                     Program::<NamedDeBruijn>::try_from(prog)?
                 };
 
-                let (term, cost, _logs) = program.eval();
+                let (term, cost, logs) = program.eval();
 
                 match term {
                     Ok(term) => {
@@ -121,6 +121,10 @@ fn main() -> anyhow::Result<()> {
                     "\nBudget\n------\ncpu: {}\nmemory: {}\n",
                     cost.cpu, cost.mem
                 );
+                println!(
+                    "\nLogs\n----\n{}",
+                    logs.join("\n")
+                )
             }
         },
     }
