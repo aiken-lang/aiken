@@ -121,10 +121,7 @@ fn main() -> anyhow::Result<()> {
                     "\nBudget\n------\ncpu: {}\nmemory: {}\n",
                     cost.cpu, cost.mem
                 );
-                println!(
-                    "\nLogs\n----\n{}",
-                    logs.join("\n")
-                )
+                println!("\nLogs\n----\n{}", logs.join("\n"))
             }
         },
     }
