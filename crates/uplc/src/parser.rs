@@ -25,6 +25,19 @@ pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {
     Ok(program)
 }
 
+pub fn term(src: &str) -> Result<Term<Name>, ParseError<LineCol>> {
+    // initialize the string interner to get unique name
+    let mut interner = Interner::new();
+
+    // run the generated parser
+    let mut term = uplc::term(src)?;
+
+    // assign proper unique ids in place
+    interner.term(&mut term);
+
+    Ok(term)
+}
+
 peg::parser! {
     grammar uplc() for str {
         pub rule program() -> Program<Name>
@@ -37,7 +50,7 @@ peg::parser! {
             (major as usize, minor as usize, patch as usize)
           }
 
-        rule term() -> Term<Name>
+        pub rule term() -> Term<Name>
           = constant()
           / builtin()
           / var()

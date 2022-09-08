@@ -82,20 +82,27 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&out_name, pretty)?;
                 }
             }
-            UplcCommand::Eval { input, flat } => {
-                let program = if flat {
-                    let bytes = std::fs::read(&input)?;
+
+            UplcCommand::Eval { script, flat, args } => {
+                let mut program = if flat {
+                    let bytes = std::fs::read(&script)?;
 
                     let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
 
                     prog.into()
                 } else {
-                    let code = std::fs::read_to_string(&input)?;
+                    let code = std::fs::read_to_string(&script)?;
 
                     let prog = parser::program(&code)?;
 
                     Program::<NamedDeBruijn>::try_from(prog)?
                 };
+
+                for arg in args {
+                    let term: Term<NamedDeBruijn> = parser::term(&arg)?.try_into()?;
+
+                    program = program.apply_term(&term);
+                }
 
                 let (term, cost, logs) = program.eval();
 
@@ -121,7 +128,10 @@ fn main() -> anyhow::Result<()> {
                     "\nBudget\n------\ncpu: {}\nmemory: {}\n",
                     cost.cpu, cost.mem
                 );
-                println!("\nLogs\n----\n{}", logs.join("\n"))
+
+                if !logs.is_empty() {
+                    println!("\nLogs\n----\n{}", logs.join("\n"))
+                }
             }
         },
     }

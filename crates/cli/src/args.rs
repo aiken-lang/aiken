@@ -39,9 +39,11 @@ pub enum UplcCommand {
     },
     /// Evaluate an Untyped Plutus Core program
     Eval {
-        input: PathBuf,
+        script: PathBuf,
         #[clap(short, long)]
         flat: bool,
+        /// Arguments to pass to the uplc program
+        args: Vec<String>,
     },
 }
 
