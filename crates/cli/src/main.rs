@@ -83,15 +83,15 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            UplcCommand::Eval { input, flat, args } => {
+            UplcCommand::Eval { script, flat, args } => {
                 let mut program = if flat {
-                    let bytes = std::fs::read(&input)?;
+                    let bytes = std::fs::read(&script)?;
 
                     let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
 
                     prog.into()
                 } else {
-                    let code = std::fs::read_to_string(&input)?;
+                    let code = std::fs::read_to_string(&script)?;
 
                     let prog = parser::program(&code)?;
 
