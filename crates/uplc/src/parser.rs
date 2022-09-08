@@ -6,6 +6,7 @@ use crate::{
 };
 
 use interner::Interner;
+use pallas_primitives::{alonzo::PlutusData, Fragment};
 use peg::{error::ParseError, str::LineCol};
 
 mod interner;
@@ -53,6 +54,7 @@ peg::parser! {
             / constant_string()
             / constant_unit()
             / constant_bool()
+            / constant_data()
             ) _* ")" {
             Term::Constant(con)
           }
@@ -109,6 +111,15 @@ peg::parser! {
 
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
+
+        rule constant_data() -> Constant
+          = "data" _+ "#" i:ident()* {
+            Constant::Data(
+              PlutusData::decode_fragment(
+                  hex::decode(String::from_iter(i)).unwrap().as_slice()
+              ).unwrap()
+            )
+          }
 
         rule name() -> Name
           = text:ident() { Name { text, unique: 0.into() } }
