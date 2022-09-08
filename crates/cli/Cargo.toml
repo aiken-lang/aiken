@@ -1,7 +1,7 @@
 [package]
 name = "aiken"
 description = "Cardano smart contract language and toolchain"
-version = "0.0.11"
+version = "0.0.12"
 edition = "2021"
 repository = "https://github.com/txpipe/aiken"
 homepage = "https://github.com/txpipe/aiken"
@@ -13,4 +13,4 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 anyhow = "1.0.57"
 clap = { version = "3.1.14", features = ["derive"] }
-uplc = { path = '../uplc', version = "0.0.11" }
+uplc = { path = '../uplc', version = "0.0.12" }
