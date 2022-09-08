@@ -39,6 +39,21 @@ where
             term: applied_term,
         }
     }
+
+    /// We use this to apply the validator to Datum,
+    /// then redeemer, then ScriptContext. If datum is
+    /// even necessary (i.e. minting policy).
+    pub fn apply_term(&self, term: &Term<T>) -> Self {
+        let applied_term = Term::Apply {
+            function: Rc::new(self.term.clone()),
+            argument: Rc::new(term.clone()),
+        };
+
+        Program {
+            version: self.version,
+            term: applied_term,
+        }
+    }
 }
 
 impl<'a, T> Display for Program<T>

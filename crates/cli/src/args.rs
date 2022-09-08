@@ -42,6 +42,8 @@ pub enum UplcCommand {
         input: PathBuf,
         #[clap(short, long)]
         flat: bool,
+        /// Arguments to pass to the uplc program
+        args: Vec<String>,
     },
 }
 
