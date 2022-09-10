@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
                         let reader = BufReader::new(file);
                         let resolved_inputs: Vec<ResolvedInput> = serde_json::from_reader(reader)?;
 
-                        let tx_in_info = utils::get_tx_in_info(&resolved_inputs)?;
+                        let tx_in_info = utils::get_tx_in_info_old(&resolved_inputs)?;
                     }
                 }
 

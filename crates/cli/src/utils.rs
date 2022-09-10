@@ -7,8 +7,8 @@ use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     babbage::{
         AddrKeyhash, AssetName, BigInt, Certificate, Constr, DatumHash, DatumOption, Mint,
-        PolicyId, Redeemer, RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput,
-        TransactionOutput, Value, Withdrawals,
+        PolicyId, Redeemer, Script, ScriptRef, StakeCredential, TransactionInput,
+        TransactionOutput, Tx, Value, Withdrawals,
     },
     ToHash,
 };
@@ -17,7 +17,7 @@ use uplc::PlutusData;
 
 use crate::args::ResolvedInput;
 
-pub fn get_tx_in_info(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<Vec<PlutusData>> {
+pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<Vec<PlutusData>> {
     let mut tx_in_info = Vec::new();
 
     for resolved_input in resolved_inputs {
@@ -204,7 +204,7 @@ impl ToPlutusData for ByteVec {
     }
 }
 
-impl<A: ToPlutusData> ToPlutusData for Vec<A> {
+impl<A: ToPlutusData> ToPlutusData for MaybeIndefArray<A> {
     fn to_plutus_data(&self) -> PlutusData {
         PlutusData::Array(MaybeIndefArray::Indef(
             self.iter().map(|p| p.to_plutus_data()).collect(),
@@ -584,15 +584,15 @@ pub enum ScriptPurpose {
 }
 
 pub struct TxInfo {
-    inputs: Vec<TxInInfo>,
-    reference_inputs: Vec<TxInInfo>,
-    outputs: Vec<TransactionOutput>,
+    inputs: MaybeIndefArray<TxInInfo>,
+    reference_inputs: MaybeIndefArray<TxInInfo>,
+    outputs: MaybeIndefArray<TransactionOutput>,
     fee: Value,
     mint: Mint,
-    dcert: Vec<Certificate>,
+    dcert: MaybeIndefArray<Certificate>,
     wdrl: Withdrawals,
     valid_range: TimeRange<PosixTime>,
-    signatories: Vec<AddrKeyhash>,
+    signatories: MaybeIndefArray<AddrKeyhash>,
     redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
     data: KeyValuePairs<DatumHash, PlutusData>,
     id: Hash<32>,
@@ -601,4 +601,105 @@ pub struct TxInfo {
 pub struct ScriptContext {
     tx_info: TxInfo,
     purpose: ScriptPurpose,
+}
+
+fn get_tx_in_info(
+    inputs: &MaybeIndefArray<TransactionInput>,
+    utxos: &Vec<(TransactionInput, TransactionOutput)>,
+) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
+    Ok(MaybeIndefArray::Indef(
+        inputs
+            .iter()
+            .map(|input| {
+                let utxo = utxos.iter().find(|utxo| utxo.0 == *input);
+                match utxo {
+                    Some(u) => TxInInfo {
+                        out_ref: input.clone(),
+                        resolved: u.1.clone(),
+                    },
+                    None => panic!(),
+                }
+            })
+            .collect(),
+    ))
+}
+
+fn get_script_purpose(redeemer: &Redeemer) -> anyhow::Result<ScriptPurpose> {
+    todo!()
+}
+
+fn get_tx_info(
+    tx: &Tx,
+    utxos: &Vec<(TransactionInput, TransactionOutput)>,
+    slot_config: &SlotConfig,
+) -> anyhow::Result<TxInfo> {
+    let body = tx.transaction_body.clone();
+
+    let inputs = get_tx_in_info(&body.inputs, &utxos)?;
+    let reference_inputs = get_tx_in_info(
+        &body
+            .reference_inputs
+            .unwrap_or(MaybeIndefArray::Indef(vec![])),
+        &utxos,
+    )?;
+    let outputs = body.outputs;
+    let fee = Value::Coin(AnyUInt::U64(body.fee));
+    let mint = body.mint.unwrap_or(KeyValuePairs::Indef(vec![]));
+    let dcert = body.certificates.unwrap_or(MaybeIndefArray::Indef(vec![]));
+    let wdrl = body.withdrawals.unwrap_or(KeyValuePairs::Indef(vec![]));
+    let valid_range = slot_range_to_posix_time_range(
+        TimeRange {
+            lower_bound: 0,
+            upper_bound: 0,
+        },
+        &slot_config,
+    ); // TODO
+    let signatories = body
+        .required_signers
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+    let redeemers = KeyValuePairs::Indef(
+        tx.transaction_witness_set
+            .redeemer
+            .as_ref()
+            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+            .iter()
+            .map(|r| (get_script_purpose(&r).unwrap(), r.clone()))
+            .collect(),
+    );
+    let data = KeyValuePairs::Indef(
+        tx.transaction_witness_set
+            .plutus_data
+            .as_ref()
+            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+            .iter()
+            .map(|d| (d.to_hash(), d.clone()))
+            .collect(),
+    );
+    let id = tx.transaction_body.to_hash();
+
+    Ok(TxInfo {
+        inputs,
+        reference_inputs,
+        outputs,
+        fee,
+        mint,
+        dcert,
+        wdrl,
+        valid_range,
+        signatories,
+        redeemers,
+        data,
+        id,
+    })
+}
+
+fn get_script_context(
+    tx: &Tx,
+    utxos: &Vec<(TransactionInput, TransactionOutput)>,
+    slot_config: &SlotConfig,
+    redeemer: &Redeemer,
+) -> anyhow::Result<ScriptContext> {
+    let tx_info = get_tx_info(tx, utxos, slot_config)?;
+    let purpose = get_script_purpose(redeemer)?;
+    Ok(ScriptContext { tx_info, purpose })
 }
