@@ -1,4 +1,4 @@
-use pallas_addresses::{Address, StakePayload};
+use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
 use pallas_codec::{
     minicbor::{bytes::ByteVec, data::Int},
     utils::{AnyUInt, KeyValuePairs, MaybeIndefArray},
@@ -22,7 +22,7 @@ pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<V
 
     for resolved_input in resolved_inputs {
         let tx_out_ref = TransactionInput {
-            transaction_id: Hash::from_str(resolved_input.input.tx_hash.as_str())?, // Not sure if this is the best approach?
+            transaction_id: Hash::from_str(resolved_input.input.tx_hash.as_str())?,
             index: resolved_input.input.index,
         }
         .to_plutus_data();
@@ -89,63 +89,75 @@ pub trait ToPlutusData {
 
 impl ToPlutusData for Address {
     fn to_plutus_data(&self) -> PlutusData {
-        //TOD: Byron address and reward address
-
-        let payment_tag = match self.typeid() % 2 {
-            0 => 0,
-            1 => 1,
-            _ => unreachable!(),
-        };
-        let stake_tag = match self.typeid() {
-            0 | 1 => Some(0),
-            2 | 3 => Some(1),
-            _ => None,
-        };
-
-        let (payment_part, stake_part) = match self {
-            Address::Shelley(s) => (s.payment().to_vec(), s.delegation().to_vec()),
-            _ => unreachable!(),
-        };
-
-        PlutusData::Constr(Constr {
-            tag: 0,
-            any_constructor: None,
-            fields: MaybeIndefArray::Indef(vec![
-                // addressCredential
+        match self {
+            Address::Byron(byron_address) => {
                 PlutusData::Constr(Constr {
-                    tag: payment_tag,
+                    tag: 0,
                     any_constructor: None,
-                    fields: MaybeIndefArray::Indef(vec![PlutusData::BoundedBytes(
-                        payment_part.into(),
-                    )]),
-                }),
-                // addressStakingCredential
-                PlutusData::Constr(Constr {
-                    tag: if stake_tag.is_some() { 0 } else { 1 },
-                    any_constructor: None,
-                    fields: MaybeIndefArray::Indef(match stake_tag {
-                        Some(stake_tag) => vec![
-                            // StakingCredential
-                            PlutusData::Constr(Constr {
-                                tag: 0,
-                                any_constructor: None,
-                                fields: MaybeIndefArray::Indef(vec![
-                                    // StakingHash
-                                    PlutusData::Constr(Constr {
-                                        tag: stake_tag,
-                                        any_constructor: None,
-                                        fields: MaybeIndefArray::Indef(vec![
-                                            PlutusData::BoundedBytes(stake_part.into()),
-                                        ]),
-                                    }),
-                                ]),
-                            }),
-                        ],
-                        None => vec![],
+                    fields: MaybeIndefArray::Indef(vec![
+                        //addressCredential
+                        PlutusData::Constr(Constr {
+                            tag: 0,
+                            any_constructor: None,
+                            fields: MaybeIndefArray::Indef(vec![byron_address
+                                .decode()
+                                .unwrap()
+                                .root
+                                .to_plutus_data()]),
+                        }),
+                        //addressStakeCredential
+                        None::<StakeCredential>.to_plutus_data(),
+                    ]),
+                })
+            }
+            Address::Shelley(shelley_address) => {
+                let payment_part = shelley_address.payment();
+                let stake_part = shelley_address.delegation();
+
+                let payment_part_plutus_data = match payment_part {
+                    ShelleyPaymentPart::Key(payment_keyhash) => PlutusData::Constr(Constr {
+                        tag: 0,
+                        any_constructor: None,
+                        fields: MaybeIndefArray::Indef(vec![payment_keyhash.to_plutus_data()]),
                     }),
-                }),
-            ]),
-        })
+                    ShelleyPaymentPart::Script(script_hash) => PlutusData::Constr(Constr {
+                        tag: 1,
+                        any_constructor: None,
+                        fields: MaybeIndefArray::Indef(vec![script_hash.to_plutus_data()]),
+                    }),
+                };
+
+                let stake_part_plutus_data = match stake_part {
+                    ShelleyDelegationPart::Key(stake_keyhash) => {
+                        Some(StakeCredential::AddrKeyhash(stake_keyhash.clone())).to_plutus_data()
+                    }
+                    ShelleyDelegationPart::Script(script_hash) => {
+                        Some(StakeCredential::Scripthash(script_hash.clone())).to_plutus_data()
+                    }
+                    ShelleyDelegationPart::Pointer(pointer) => Some(PlutusData::Constr(Constr {
+                        tag: 1,
+                        any_constructor: None,
+                        fields: MaybeIndefArray::Indef(vec![
+                            pointer.slot().to_plutus_data(),
+                            pointer.tx_idx().to_plutus_data(),
+                            pointer.cert_idx().to_plutus_data(),
+                        ]),
+                    }))
+                    .to_plutus_data(),
+                    ShelleyDelegationPart::Null => None::<Address>.to_plutus_data(),
+                };
+
+                PlutusData::Constr(Constr {
+                    tag: 0,
+                    any_constructor: None,
+                    fields: MaybeIndefArray::Indef(vec![
+                        payment_part_plutus_data,
+                        stake_part_plutus_data,
+                    ]),
+                })
+            }
+            Address::Stake(_) => unreachable!(),
+        }
     }
 }
 
@@ -351,17 +363,28 @@ impl ToPlutusData for TransactionOutput {
 }
 
 impl ToPlutusData for StakeCredential {
+    // Stake Credential needs to be wrapped inside another Constr, because we could have either a StakingHash or a StakingPtr
+    // The current implementation of StakeCredential doesn't capture the credential of a Pointer address.
+    // So a StakeCredential for a Pointer address needs to be converted separately
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             StakeCredential::AddrKeyhash(addr_keyhas) => PlutusData::Constr(Constr {
                 tag: 0,
                 any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![addr_keyhas.to_plutus_data()]),
+                fields: MaybeIndefArray::Indef(vec![PlutusData::Constr(Constr {
+                    tag: 0,
+                    any_constructor: None,
+                    fields: MaybeIndefArray::Indef(vec![addr_keyhas.to_plutus_data()]),
+                })]),
             }),
             StakeCredential::Scripthash(script_hash) => PlutusData::Constr(Constr {
-                tag: 1,
+                tag: 0,
                 any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![script_hash.to_plutus_data()]),
+                fields: MaybeIndefArray::Indef(vec![PlutusData::Constr(Constr {
+                    tag: 1,
+                    any_constructor: None,
+                    fields: MaybeIndefArray::Indef(vec![script_hash.to_plutus_data()]),
+                })]),
             }),
         }
     }
