@@ -6,13 +6,13 @@ use pallas_codec::{
 use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     babbage::{
-        AddrKeyhash, AssetName, BigInt, Certificate, Constr, DatumHash, DatumOption, PolicyId,
-        PostAlonzoTransactionOutput, Redeemer, RewardAccount, Script, ScriptRef, StakeCredential,
-        TransactionInput, TransactionOutput, Value, Withdrawals,
+        AddrKeyhash, AssetName, BigInt, Certificate, Constr, DatumHash, DatumOption, Mint,
+        PolicyId, Redeemer, RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput,
+        TransactionOutput, Value, Withdrawals,
     },
     ToHash,
 };
-use std::str::FromStr;
+use std::{str::FromStr, vec};
 use uplc::PlutusData;
 
 use crate::args::ResolvedInput;
@@ -86,8 +86,10 @@ pub fn get_tx_in_info(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<Vec<P
 type Slot = u64;
 type PosixTime = u64; // in milliseconds
 
-type SlotRange = (Slot, Slot);
-type PosixTimeRange = (PosixTime, PosixTime);
+struct TimeRange<A> {
+    lower_bound: A,
+    upper_bound: A,
+}
 
 struct SlotConfig {
     slot_length: u64,
@@ -99,11 +101,14 @@ fn slot_to_begin_posix_time(slot: Slot, sc: &SlotConfig) -> PosixTime {
     sc.zero_time + ms_after_begin
 }
 
-fn slot_range_to_posix_time_range(slot_range: SlotRange, sc: &SlotConfig) -> PosixTimeRange {
-    (
-        slot_to_begin_posix_time(slot_range.0, sc),
-        slot_to_begin_posix_time(slot_range.1, sc),
-    )
+fn slot_range_to_posix_time_range(
+    slot_range: TimeRange<Slot>,
+    sc: &SlotConfig,
+) -> TimeRange<PosixTime> {
+    TimeRange {
+        lower_bound: slot_to_begin_posix_time(slot_range.lower_bound, sc),
+        upper_bound: slot_to_begin_posix_time(slot_range.upper_bound, sc),
+    }
 }
 
 // ---------------
@@ -207,6 +212,16 @@ impl<A: ToPlutusData> ToPlutusData for Vec<A> {
     }
 }
 
+impl<K: ToPlutusData, V: ToPlutusData> ToPlutusData for KeyValuePairs<K, V> {
+    fn to_plutus_data(&self) -> PlutusData {
+        let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![];
+        for (key, value) in self.iter() {
+            data_vec.push((key.to_plutus_data(), value.to_plutus_data()))
+        }
+        PlutusData::Map(KeyValuePairs::Def(data_vec))
+    }
+}
+
 impl<A: ToPlutusData> ToPlutusData for Option<A> {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
@@ -251,6 +266,30 @@ impl ToPlutusData for AnyUInt {
             AnyUInt::U64(u64) => PlutusData::BigInt(BigInt::Int(Int::from(*u64))),
             AnyUInt::MajorByte(u8) => PlutusData::BigInt(BigInt::Int(Int::from(*u8))), // is this correct? I don't know exactly what is does
         }
+    }
+}
+
+impl ToPlutusData for Int {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BigInt(BigInt::Int(self.clone()))
+    }
+}
+
+impl ToPlutusData for BigInt {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BigInt(self.clone())
+    }
+}
+
+impl ToPlutusData for i64 {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BigInt(BigInt::Int(Int::from(*self)))
+    }
+}
+
+impl ToPlutusData for u64 {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BigInt(BigInt::Int(Int::from(*self)))
     }
 }
 
@@ -341,6 +380,119 @@ impl ToPlutusData for TransactionOutput {
     }
 }
 
+impl ToPlutusData for StakeCredential {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            StakeCredential::AddrKeyhash(addr_keyhas) => PlutusData::Constr(Constr {
+                tag: 0,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![addr_keyhas.to_plutus_data()]),
+            }),
+            StakeCredential::Scripthash(script_hash) => PlutusData::Constr(Constr {
+                tag: 1,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![script_hash.to_plutus_data()]),
+            }),
+        }
+    }
+}
+
+impl ToPlutusData for Certificate {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            Certificate::StakeRegistration(stake_credential) => PlutusData::Constr(Constr {
+                tag: 0,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![stake_credential.to_plutus_data()]),
+            }),
+            Certificate::StakeDeregistration(stake_credential) => PlutusData::Constr(Constr {
+                tag: 1,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![stake_credential.to_plutus_data()]),
+            }),
+            Certificate::StakeDelegation(stake_credential, pool_keyhash) => {
+                PlutusData::Constr(Constr {
+                    tag: 2,
+                    any_constructor: None,
+                    fields: MaybeIndefArray::Indef(vec![
+                        stake_credential.to_plutus_data(),
+                        pool_keyhash.to_plutus_data(),
+                    ]),
+                })
+            }
+            Certificate::PoolRegistration {
+                operator,
+                vrf_keyhash,
+                pledge: _,
+                cost: _,
+                margin: _,
+                reward_account: _,
+                pool_owners: _,
+                relays: _,
+                pool_metadata: _,
+            } => PlutusData::Constr(Constr {
+                tag: 3,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![
+                    operator.to_plutus_data(),
+                    vrf_keyhash.to_plutus_data(),
+                ]),
+            }),
+            Certificate::PoolRetirement(pool_keyhash, epoch) => PlutusData::Constr(Constr {
+                tag: 4,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![
+                    pool_keyhash.to_plutus_data(),
+                    epoch.to_plutus_data(),
+                ]),
+            }),
+            Certificate::GenesisKeyDelegation(_, _, _) => PlutusData::Constr(Constr {
+                tag: 5,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![]),
+            }),
+            Certificate::MoveInstantaneousRewardsCert(_) => PlutusData::Constr(Constr {
+                tag: 6,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![]),
+            }),
+        }
+    }
+}
+
+impl ToPlutusData for Redeemer {
+    fn to_plutus_data(&self) -> PlutusData {
+        self.data.clone()
+    }
+}
+
+impl ToPlutusData for PlutusData {
+    fn to_plutus_data(&self) -> PlutusData {
+        self.clone()
+    }
+}
+
+impl ToPlutusData for TimeRange<u64> {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::Constr(Constr {
+            tag: 0,
+            any_constructor: None,
+            fields: MaybeIndefArray::Indef(vec![
+                PlutusData::Constr(Constr {
+                    tag: 0,
+                    any_constructor: None,
+                    fields: MaybeIndefArray::Indef(vec![self.lower_bound.to_plutus_data()]),
+                }),
+                PlutusData::Constr(Constr {
+                    tag: 1,
+                    any_constructor: None,
+                    fields: MaybeIndefArray::Indef(vec![self.upper_bound.to_plutus_data()]),
+                }),
+            ]),
+        })
+    }
+}
+
 impl ToPlutusData for TxInInfo {
     fn to_plutus_data(&self) -> PlutusData {
         PlutusData::Constr(Constr {
@@ -349,6 +501,69 @@ impl ToPlutusData for TxInInfo {
             fields: MaybeIndefArray::Indef(vec![
                 self.out_ref.to_plutus_data(),
                 self.resolved.to_plutus_data(),
+            ]),
+        })
+    }
+}
+
+impl ToPlutusData for ScriptPurpose {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            ScriptPurpose::Minting(policy_id) => PlutusData::Constr(Constr {
+                tag: 0,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![policy_id.to_plutus_data()]),
+            }),
+            ScriptPurpose::Spending(out_ref) => PlutusData::Constr(Constr {
+                tag: 1,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![out_ref.to_plutus_data()]),
+            }),
+            ScriptPurpose::Rewarding(stake_credential) => PlutusData::Constr(Constr {
+                tag: 3,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![stake_credential.to_plutus_data()]),
+            }),
+            ScriptPurpose::Certifying(dcert) => PlutusData::Constr(Constr {
+                tag: 4,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![dcert.to_plutus_data()]),
+            }),
+        }
+    }
+}
+
+impl ToPlutusData for TxInfo {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::Constr(Constr {
+            tag: 0,
+            any_constructor: None,
+            fields: MaybeIndefArray::Indef(vec![
+                self.inputs.to_plutus_data(),
+                self.reference_inputs.to_plutus_data(),
+                self.outputs.to_plutus_data(),
+                self.fee.to_plutus_data(),
+                self.mint.to_plutus_data(),
+                self.dcert.to_plutus_data(),
+                self.wdrl.to_plutus_data(),
+                self.valid_range.to_plutus_data(),
+                self.signatories.to_plutus_data(),
+                self.redeemers.to_plutus_data(),
+                self.data.to_plutus_data(),
+                self.id.to_plutus_data(),
+            ]),
+        })
+    }
+}
+
+impl ToPlutusData for ScriptContext {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::Constr(Constr {
+            tag: 0,
+            any_constructor: None,
+            fields: MaybeIndefArray::Indef(vec![
+                self.tx_info.to_plutus_data(),
+                self.purpose.to_plutus_data(),
             ]),
         })
     }
@@ -364,7 +579,7 @@ pub struct TxInInfo {
 pub enum ScriptPurpose {
     Minting(PolicyId),
     Spending(TransactionInput),
-    Reward(StakeCredential),
+    Rewarding(StakeCredential),
     Certifying(Certificate),
 }
 
@@ -373,10 +588,10 @@ pub struct TxInfo {
     reference_inputs: Vec<TxInInfo>,
     outputs: Vec<TransactionOutput>,
     fee: Value,
-    mint: Value,
+    mint: Mint,
     dcert: Vec<Certificate>,
     wdrl: Withdrawals,
-    valid_range: PosixTimeRange,
+    valid_range: TimeRange<PosixTime>,
     signatories: Vec<AddrKeyhash>,
     redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
     data: KeyValuePairs<DatumHash, PlutusData>,
