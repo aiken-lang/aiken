@@ -1,4 +1,4 @@
-use pallas_addresses::Address;
+use pallas_addresses::{Address, StakePayload};
 use pallas_codec::{
     minicbor::{bytes::ByteVec, data::Int},
     utils::{AnyUInt, KeyValuePairs, MaybeIndefArray},
@@ -7,8 +7,8 @@ use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     babbage::{
         AddrKeyhash, AssetName, BigInt, Certificate, Constr, DatumHash, DatumOption, Mint,
-        PolicyId, Redeemer, Script, ScriptRef, StakeCredential, TransactionInput,
-        TransactionOutput, Tx, Value, Withdrawals,
+        PolicyId, Redeemer, RedeemerTag, RewardAccount, Script, ScriptRef, StakeCredential,
+        TransactionInput, TransactionOutput, Tx, Value, Withdrawals,
     },
     ToHash,
 };
@@ -624,8 +624,68 @@ fn get_tx_in_info(
     ))
 }
 
-fn get_script_purpose(redeemer: &Redeemer) -> anyhow::Result<ScriptPurpose> {
-    todo!()
+fn get_script_purpose(
+    redeemer: &Redeemer,
+    inputs: &MaybeIndefArray<TxInInfo>,
+    mint: &Mint,
+    dcert: &MaybeIndefArray<Certificate>,
+    wdrl: &Withdrawals,
+) -> anyhow::Result<ScriptPurpose> {
+    // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
+    let tag = redeemer.tag.clone();
+    let index = redeemer.index;
+    match tag {
+        RedeemerTag::Mint => {
+            // sort lexical by policy id
+            let mut policy_ids = mint
+                .iter()
+                .map(|(policy_id, _)| policy_id)
+                .collect::<Vec<&ByteVec>>()
+                .clone();
+            policy_ids.sort();
+            let policy_id = policy_ids[index as usize].clone();
+            Ok(ScriptPurpose::Minting(policy_id))
+        }
+        RedeemerTag::Spend => {
+            // sort lexical by tx_hash and index
+            let mut inputs = inputs
+                .iter()
+                .map(|input| input.out_ref.clone())
+                .collect::<Vec<TransactionInput>>()
+                .clone();
+            // inputs.sort(); // TODO!!!!!!!!!;
+            let input = inputs[index as usize].clone();
+            Ok(ScriptPurpose::Spending(input))
+        }
+        RedeemerTag::Reward => {
+            // sort lexical by reward account
+            let mut reward_accounts = wdrl
+                .iter()
+                .map(|(policy_id, _)| policy_id)
+                .collect::<Vec<&RewardAccount>>()
+                .clone();
+            reward_accounts.sort();
+            let reward_account = reward_accounts[index as usize];
+            let addresss = Address::from_bytes(&reward_account)?;
+            let credential = match addresss {
+                Address::Stake(stake_address) => match stake_address.payload() {
+                    StakePayload::Stake(stake_keyhash) => {
+                        StakeCredential::AddrKeyhash(stake_keyhash.clone())
+                    }
+                    StakePayload::Script(script_hash) => {
+                        StakeCredential::Scripthash(script_hash.clone())
+                    }
+                },
+                _ => panic!(),
+            };
+            Ok(ScriptPurpose::Rewarding(credential))
+        }
+        RedeemerTag::Cert => {
+            // sort by order given in the tx (just take it as it is basically)
+            let cert = dcert[index as usize].clone();
+            Ok(ScriptPurpose::Certifying(cert.clone()))
+        }
+    }
 }
 
 fn get_tx_info(
@@ -653,7 +713,7 @@ fn get_tx_info(
             upper_bound: 0,
         },
         &slot_config,
-    ); // TODO
+    ); // TODO!!!!
     let signatories = body
         .required_signers
         .unwrap_or(MaybeIndefArray::Indef(vec![]));
@@ -663,7 +723,12 @@ fn get_tx_info(
             .as_ref()
             .unwrap_or(&MaybeIndefArray::Indef(vec![]))
             .iter()
-            .map(|r| (get_script_purpose(&r).unwrap(), r.clone()))
+            .map(|r| {
+                (
+                    get_script_purpose(&r, &inputs, &mint, &dcert, &wdrl).unwrap(),
+                    r.clone(),
+                )
+            })
             .collect(),
     );
     let data = KeyValuePairs::Indef(
@@ -700,6 +765,12 @@ fn get_script_context(
     redeemer: &Redeemer,
 ) -> anyhow::Result<ScriptContext> {
     let tx_info = get_tx_info(tx, utxos, slot_config)?;
-    let purpose = get_script_purpose(redeemer)?;
+    let purpose = get_script_purpose(
+        redeemer,
+        &tx_info.inputs,
+        &tx_info.mint,
+        &tx_info.dcert,
+        &tx_info.wdrl,
+    )?;
     Ok(ScriptContext { tx_info, purpose })
 }
