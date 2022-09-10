@@ -1,11 +1,17 @@
-use pallas_addresses::{Address, PaymentKeyHash};
-use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
-use pallas_crypto::hash::Hash;
-use pallas_primitives::babbage::{
-    BigInt, Certificate, Constr, DatumHash, PolicyId, PostAlonzoTransactionOutput, Redeemer,
-    StakeCredential, TransactionInput, Value, Withdrawals,
+use pallas_addresses::Address;
+use pallas_codec::{
+    minicbor::{bytes::ByteVec, data::Int},
+    utils::{AnyUInt, KeyValuePairs, MaybeIndefArray},
 };
-use pallas_traverse::OutputRef;
+use pallas_crypto::hash::Hash;
+use pallas_primitives::{
+    babbage::{
+        AddrKeyhash, AssetName, BigInt, Certificate, Constr, DatumHash, DatumOption, PolicyId,
+        PostAlonzoTransactionOutput, Redeemer, RewardAccount, Script, ScriptRef, StakeCredential,
+        TransactionInput, TransactionOutput, Value, Withdrawals,
+    },
+    ToHash,
+};
 use std::str::FromStr;
 use uplc::PlutusData;
 
@@ -174,30 +180,190 @@ impl ToPlutusData for TransactionInput {
             tag: 0,
             any_constructor: None,
             fields: MaybeIndefArray::Indef(vec![
-                PlutusData::BoundedBytes(hex::decode(self.transaction_id.clone()).unwrap().into()),
+                self.transaction_id.to_plutus_data(),
                 PlutusData::BigInt(BigInt::Int(self.index.into())),
             ]),
         })
     }
 }
 
-// impl ToPlutusData for LegacyTransactionOutput {
-//     fn to_plutus_data(&self) -> PlutusData {}
-// }
-
-// impl ToPlutusData for PostAlonzoTransactionOutput {
-//     fn to_plutus_data(&self) -> PlutusData {}
-// }
-
-pub struct TxInInfo {
-    out_ref: OutputRef,
-    resolved: PostAlonzoTransactionOutput,
+impl<const BYTES: usize> ToPlutusData for Hash<BYTES> {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BoundedBytes(self.to_vec().into())
+    }
 }
 
-// Plutus V2
+impl ToPlutusData for ByteVec {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BoundedBytes(self.clone())
+    }
+}
+
+impl<A: ToPlutusData> ToPlutusData for Vec<A> {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::Array(MaybeIndefArray::Indef(
+            self.iter().map(|p| p.to_plutus_data()).collect(),
+        ))
+    }
+}
+
+impl<A: ToPlutusData> ToPlutusData for Option<A> {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            None => PlutusData::Constr(Constr {
+                tag: 1,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![]),
+            }),
+            Some(data) => PlutusData::Constr(Constr {
+                tag: 0,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![data.to_plutus_data()]),
+            }),
+        }
+    }
+}
+
+impl ToPlutusData for DatumOption {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            // tag : 0 is NoOutputDatum. Determined after unwrapping Option which is wrapped around DatumOption
+            DatumOption::Hash(hash) => PlutusData::Constr(Constr {
+                tag: 1,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![hash.to_plutus_data()]),
+            }),
+            DatumOption::Data(data) => PlutusData::Constr(Constr {
+                tag: 2,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![data.0.clone()]), // does data need an extra wrapper constructor?
+            }),
+        }
+    }
+}
+
+impl ToPlutusData for AnyUInt {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            AnyUInt::U8(u8) => PlutusData::BigInt(BigInt::Int(Int::from(*u8))),
+            AnyUInt::U16(u16) => PlutusData::BigInt(BigInt::Int(Int::from(*u16))),
+            AnyUInt::U32(u32) => PlutusData::BigInt(BigInt::Int(Int::from(*u32))),
+            AnyUInt::U64(u64) => PlutusData::BigInt(BigInt::Int(Int::from(*u64))),
+            AnyUInt::MajorByte(u8) => PlutusData::BigInt(BigInt::Int(Int::from(*u8))), // is this correct? I don't know exactly what is does
+        }
+    }
+}
+
+impl ToPlutusData for Value {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            Value::Coin(coin) => PlutusData::Map(KeyValuePairs::Def(vec![(
+                PolicyId::from(vec![]).to_plutus_data(),
+                PlutusData::Map(KeyValuePairs::Def(vec![(
+                    AssetName::from(vec![]).to_plutus_data(),
+                    coin.to_plutus_data(),
+                )])),
+            )])),
+            Value::Multiasset(coin, multiassets) => {
+                let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![(
+                    PolicyId::from(vec![]).to_plutus_data(),
+                    PlutusData::Map(KeyValuePairs::Def(vec![(
+                        AssetName::from(vec![]).to_plutus_data(),
+                        coin.to_plutus_data(),
+                    )])),
+                )];
+
+                for (policy_id, assets) in multiassets.iter() {
+                    let mut assets_vec = vec![];
+                    for (asset, amount) in assets.iter() {
+                        assets_vec.push((asset.to_plutus_data(), amount.to_plutus_data()));
+                    }
+                    data_vec.push((
+                        policy_id.to_plutus_data(),
+                        PlutusData::Map(KeyValuePairs::Def(assets_vec)),
+                    ));
+                }
+
+                PlutusData::Map(KeyValuePairs::Def(data_vec))
+            }
+        }
+    }
+}
+
+impl ToPlutusData for ScriptRef {
+    fn to_plutus_data(&self) -> PlutusData {
+        match &self.0 {
+            Script::NativeScript(native_script) => native_script.to_hash().to_plutus_data(),
+            Script::PlutusV1Script(plutus_v1) => plutus_v1.to_hash().to_plutus_data(),
+            Script::PlutusV2Script(plutus_v2) => plutus_v2.to_hash().to_plutus_data(),
+        }
+    }
+}
+
+impl ToPlutusData for TransactionOutput {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            TransactionOutput::Legacy(legacy_output) => PlutusData::Constr(Constr {
+                tag: 0,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![
+                    Address::from_bytes(&legacy_output.address)
+                        .unwrap()
+                        .to_plutus_data(),
+                    legacy_output.amount.to_plutus_data(),
+                    None::<DatumOption>.to_plutus_data(),
+                    None::<ScriptRef>.to_plutus_data(),
+                ]),
+            }),
+            TransactionOutput::PostAlonzo(post_alonzo_output) => PlutusData::Constr(Constr {
+                tag: 0,
+                any_constructor: None,
+                fields: MaybeIndefArray::Indef(vec![
+                    Address::from_bytes(&post_alonzo_output.address)
+                        .unwrap()
+                        .to_plutus_data(),
+                    post_alonzo_output.value.to_plutus_data(),
+                    // DatumOption needs to be handled differently a bit. In Haskell it's NoOutputDatum | OutputDatumHash DatumHash | OutputDatum Datum
+                    // So we unwrap first to check if it's someting. If it is then turn the unwrapped data to PlutusData, otherwise have None and turn that into PlutusData
+                    if post_alonzo_output.datum_option.is_some() {
+                        post_alonzo_output
+                            .datum_option
+                            .clone()
+                            .unwrap()
+                            .to_plutus_data()
+                    } else {
+                        None::<DatumOption>.to_plutus_data()
+                    },
+                    post_alonzo_output.script_ref.to_plutus_data(),
+                ]),
+            }),
+        }
+    }
+}
+
+impl ToPlutusData for TxInInfo {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::Constr(Constr {
+            tag: 0,
+            any_constructor: None,
+            fields: MaybeIndefArray::Indef(vec![
+                self.out_ref.to_plutus_data(),
+                self.resolved.to_plutus_data(),
+            ]),
+        })
+    }
+}
+
+// Plutus V2 only for now
+
+pub struct TxInInfo {
+    out_ref: TransactionInput,
+    resolved: TransactionOutput,
+}
+
 pub enum ScriptPurpose {
     Minting(PolicyId),
-    Spending(OutputRef),
+    Spending(TransactionInput),
     Reward(StakeCredential),
     Certifying(Certificate),
 }
@@ -205,14 +371,19 @@ pub enum ScriptPurpose {
 pub struct TxInfo {
     inputs: Vec<TxInInfo>,
     reference_inputs: Vec<TxInInfo>,
-    outputs: Vec<PostAlonzoTransactionOutput>,
+    outputs: Vec<TransactionOutput>,
     fee: Value,
     mint: Value,
     dcert: Vec<Certificate>,
     wdrl: Withdrawals,
     valid_range: PosixTimeRange,
-    signatories: Vec<PaymentKeyHash>,
+    signatories: Vec<AddrKeyhash>,
     redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
     data: KeyValuePairs<DatumHash, PlutusData>,
     id: Hash<32>,
+}
+
+pub struct ScriptContext {
+    tx_info: TxInfo,
+    purpose: ScriptPurpose,
 }
