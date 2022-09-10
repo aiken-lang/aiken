@@ -6,12 +6,13 @@ use pallas_codec::{
 use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     babbage::{
-        AddrKeyhash, AssetName, BigInt, Certificate, Constr, DatumHash, DatumOption, Mint,
-        PolicyId, Redeemer, RedeemerTag, RewardAccount, Script, ScriptRef, StakeCredential,
-        TransactionInput, TransactionOutput, Tx, Value, Withdrawals,
+        AddrKeyhash, AssetName, BigInt, Certificate, Constr, CostModel, DatumHash, DatumOption,
+        Language, Mint, PolicyId, Redeemer, RedeemerTag, RewardAccount, Script, ScriptRef,
+        StakeCredential, TransactionInput, TransactionOutput, Tx, Value, Withdrawals,
     },
     ToHash,
 };
+use pallas_traverse::{Era, MultiEraTx};
 use std::{str::FromStr, vec};
 use uplc::PlutusData;
 
@@ -144,7 +145,7 @@ impl ToPlutusData for Address {
                         ]),
                     }))
                     .to_plutus_data(),
-                    ShelleyDelegationPart::Null => None::<Address>.to_plutus_data(),
+                    ShelleyDelegationPart::Null => None::<StakeCredential>.to_plutus_data(),
                 };
 
                 PlutusData::Constr(Constr {
@@ -977,3 +978,29 @@ fn get_script_context(
 }
 
 // TODO: Maybe make ToPlutusData dependent on a Plutus Language so it works for V1 and V2?
+
+// fn eval_single_redeemer(
+//     redeemer: &Redeemer,
+//     tx: &Tx,
+//     utxos: &Vec<(TransactionInput, TransactionOutput)>,
+//     cost_model: &CostModel,
+//     slot_config: &SlotConfig,
+//     language: &Language,
+// ) -> anyhow::Result<Redeemer> {
+// }
+
+// fn eval_tx(
+//     tx_bytes: &Vec<u8>,
+//     utxos: &Vec<(Vec<u8>, Vec<u8>)>,
+//     cost_model: &Vec<u8>,
+//     zero_time: u64,
+//     slot_length: u64,
+// ) -> anyhow::Result<bool> {
+//     let multi_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+//         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+//         .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
+
+//     let tx = multi_tx.as_babbage().unwrap();
+
+//     Ok(true)
+// }
