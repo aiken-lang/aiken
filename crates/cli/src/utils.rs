@@ -24,6 +24,7 @@ use std::{
 };
 use uplc::{
     ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    machine::cost_model::ExBudget,
     PlutusData,
 };
 
@@ -1102,8 +1103,8 @@ fn eval_redeemer(
                     index: redeemer.index,
                     data: redeemer.data.clone(),
                     ex_units: ExUnits {
-                        mem: result.1.mem as u32,
-                        steps: result.1.cpu as u64,
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
                     },
                 };
 
