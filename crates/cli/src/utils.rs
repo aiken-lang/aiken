@@ -5,13 +5,13 @@ use pallas_codec::{
     minicbor::{bytes::ByteVec, data::Int},
     utils::{AnyUInt, KeyValuePairs, MaybeIndefArray},
 };
-use pallas_crypto::hash::Hash;
+use pallas_crypto::hash::{Hash, Hasher};
 use pallas_primitives::{
     babbage::{
         AddrKeyhash, AssetName, BigInt, Certificate, Constr, CostModel, DatumHash, DatumOption,
-        ExUnits, Language, Mint, PlutusV1Script, PlutusV2Script, PolicyId, Redeemer, RedeemerTag,
-        RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Tx,
-        Value, Withdrawals,
+        ExUnits, Language, Mint, MintedTx, PlutusV1Script, PlutusV2Script, PolicyId, Redeemer,
+        RedeemerTag, RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput,
+        TransactionOutput, Tx, Value, Withdrawals,
     },
     ToHash,
 };
@@ -812,7 +812,7 @@ fn get_script_purpose(
 }
 
 fn get_tx_info(
-    tx: &Tx,
+    tx: &MintedTx,
     utxos: &MaybeIndefArray<TxInInfo>,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<TxInfo> {
@@ -822,14 +822,21 @@ fn get_tx_info(
     let reference_inputs = get_tx_in_info(
         &body
             .reference_inputs
+            .clone()
             .unwrap_or(MaybeIndefArray::Indef(vec![])),
         &utxos,
     )?;
-    let outputs = body.outputs;
+    let outputs = body.outputs.clone();
     let fee = Value::Coin(AnyUInt::U64(body.fee));
-    let mint = body.mint.unwrap_or(KeyValuePairs::Indef(vec![]));
-    let dcert = body.certificates.unwrap_or(MaybeIndefArray::Indef(vec![]));
-    let wdrl = body.withdrawals.unwrap_or(KeyValuePairs::Indef(vec![]));
+    let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
+    let dcert = body
+        .certificates
+        .clone()
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+    let wdrl = body
+        .withdrawals
+        .clone()
+        .unwrap_or(KeyValuePairs::Indef(vec![]));
     let valid_range = slot_range_to_posix_time_range(
         TimeRange {
             lower_bound: body.validity_interval_start,
@@ -839,6 +846,7 @@ fn get_tx_info(
     );
     let signatories = body
         .required_signers
+        .clone()
         .unwrap_or(MaybeIndefArray::Indef(vec![]));
     let redeemers = KeyValuePairs::Indef(
         tx.transaction_witness_set
@@ -913,6 +921,18 @@ fn get_execution_purpose(
                                 .get(&shelley_address.payment().as_hash())
                                 .unwrap();
 
+                            // let arr: [u8; 28] = hex::decode(
+                            //     "8f1d2219046d3f8ff710f0976160b0de191321ef76f7655e9644b59a",
+                            // )
+                            // .unwrap()
+                            // .to_vec()
+                            // .try_into()
+                            // .unwrap();
+
+                            // let hash = Hash::from(arr);
+
+                            // let script = lookup_table.scripts.get(&hash).unwrap();
+
                             let datum =
                                 lookup_table.datum.get(&output.datum_hash.unwrap()).unwrap();
                             ExecutionPurpose::WithDatum(script.clone(), datum.clone())
@@ -954,15 +974,6 @@ fn get_execution_purpose(
         }
         ScriptPurpose::Certifying(cert) => match cert {
             // StakeRegistration doesn't require a witness from a stake key/script. So I assume it doesn't need to be handled in Plutus either?
-
-            // Certificate::StakeRegistration(stake_credential) => {
-            //     let script_hash = match stake_credential {
-            //         StakeCredential::Scripthash(hash) => hash.clone(),
-            //         _ => unreachable!(),
-            //     };
-            //     let script = lookup_table.scripts.get(&script_hash).unwrap();
-            //     ExecutionPurpose::NoDatum(script.clone())
-            // }
             Certificate::StakeDeregistration(stake_credential) => {
                 let script_hash = match stake_credential {
                     StakeCredential::Scripthash(hash) => hash.clone(),
@@ -985,7 +996,7 @@ fn get_execution_purpose(
 }
 
 fn get_script_and_datum_lookup_table(
-    tx: &Tx,
+    tx: &MintedTx,
     utxos: &MaybeIndefArray<TxInInfo>,
 ) -> DataLookupTable {
     let mut datum = HashMap::new();
@@ -1047,7 +1058,7 @@ fn get_script_and_datum_lookup_table(
 }
 
 fn eval_redeemer(
-    tx: &Tx,
+    tx: &MintedTx,
     utxos: &MaybeIndefArray<TxInInfo>,
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
@@ -1137,7 +1148,7 @@ fn eval_redeemer(
 }
 
 fn eval_tx(
-    tx: &Tx,
+    tx: &MintedTx,
     utxos: &MaybeIndefArray<TxInInfo>,
     //TODO: costMdls
     slot_config: &SlotConfig,
@@ -1164,4 +1175,60 @@ fn eval_tx(
     }
 }
 
-// TODO: Maybe make ToPlutusData dependent on a Plutus Language so it works for V1 and V2?
+#[cfg(test)]
+mod tests {
+    use pallas_codec::utils::MaybeIndefArray;
+    use pallas_primitives::{
+        babbage::{
+            LegacyTransactionOutput, TransactionBody, TransactionInput, TransactionOutput, Tx,
+        },
+        Fragment,
+    };
+    use pallas_traverse::{Era, MultiEraTx};
+
+    use super::{eval_tx, SlotConfig, TxInInfo};
+
+    #[test]
+    fn test_eval() {
+        // Plutus Core (Haskell): (1100, 230100) Ex Units
+        // What does the script look like:
+        // validate :: () -> () -> () -> Bool
+        // validate = True
+
+        let tx_bytes = hex::decode("84a70082825820ee9ae4e9102e5e8a725ca5e0bd8ee1f4e9d7d8a86195cb180334c15a6265a3ad00825820975c17a4fed0051be622328efa548e206657d2b65a19224bf6ff8132571e6a5002018182581d60b6c8794e9a7a26599440a4d0fd79cd07644d15917ff13694f1f672351a00acd8c6021a0002a11a0b582010f5361f3d433170f55a62bc6c3b423b00c65dea95204c985b865b995f0b921f0d818258206c732139de33e916342707de2aebef2252c781640326ff37b86ec99d97f1ba8d011082581d60b6c8794e9a7a26599440a4d0fd79cd07644d15917ff13694f1f672351b00000001af10c70d111a0003f1a7a4008182582031ae74f8058527afb305d7495b10a99422d9337fc199e1f28044f2c477a0f94658402e38452ee99c0a080e5804156a7be45ef83b0eb361486a9f8eedeb07e499ccd0865f56620db297f831ab60b93490ee1426e0b7d42417ecb0b793c9f915c58c01049fd87980ff0581840001d879808219044c1a000382d4068149480100002221200101f5f6").unwrap();
+
+        let raw_inputs = hex::decode("86825820ee9ae4e9102e5e8a725ca5e0bd8ee1f4e9d7d8a86195cb180334c15a6265a3ad00825820d64cb7f6e13b0f9539d5505d368210034b8a3a2df8086382bd66dfb3a6e6a78601825820b16778c9cf065d9efeefe37ec269b4fc5107ecdbd0dd6bf3274b224165c2edd9008258206c732139de33e916342707de2aebef2252c781640326ff37b86ec99d97f1ba8d01825820b810e77e706ccaebf7284f6c3d41e2a1eb4af5fabae452618f4175ad1b2aaded02825820975c17a4fed0051be622328efa548e206657d2b65a19224bf6ff8132571e6a5002").unwrap();
+        let raw_outputs = hex::decode("8683581d703a888d65f16790950a72daee1f63aa05add6d268434107cfa5b677121a0016e3605820923918e403bf43c34b4ef6b48eb2ee04babed17320d8d1b9ff9ad086e86f44eca400581d703a888d65f16790950a72daee1f63aa05add6d268434107cfa5b67712011a0010b4540282005820923918e403bf43c34b4ef6b48eb2ee04babed17320d8d1b9ff9ad086e86f44ec03d8184c82024948010000222120010182581d60b6c8794e9a7a26599440a4d0fd79cd07644d15917ff13694f1f67235821a000f8548a1581c15be994a64bdb79dde7fe080d8e7ff81b33a9e4860e9ee0d857a8e85a144576177610182581d60b6c8794e9a7a26599440a4d0fd79cd07644d15917ff13694f1f672351b00000001af14b8b482581d60b6c8794e9a7a26599440a4d0fd79cd07644d15917ff13694f1f672351a0098968082581d60b6c8794e9a7a26599440a4d0fd79cd07644d15917ff13694f1f672351a00989680").unwrap();
+
+        let inputs = MaybeIndefArray::<TransactionInput>::decode_fragment(&raw_inputs).unwrap();
+        let outputs = MaybeIndefArray::<TransactionOutput>::decode_fragment(&raw_outputs).unwrap();
+
+        let utxos: MaybeIndefArray<TxInInfo> = MaybeIndefArray::Indef(
+            inputs
+                .iter()
+                .zip(outputs.iter())
+                .map(|(input, output)| TxInInfo {
+                    out_ref: input.clone(),
+                    resolved: output.clone(),
+                })
+                .collect(),
+        );
+
+        let slot_config = SlotConfig {
+            zero_time: 1660003200000, // Preview network
+            slot_length: 1000,
+        };
+
+        let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+            .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+            .unwrap();
+        match multi_era_tx {
+            MultiEraTx::Babbage(tx) => {
+                let redeemers = eval_tx(&tx, &utxos, &slot_config).unwrap();
+
+                println!("{:?}", redeemers.len());
+            }
+            _ => unreachable!(),
+        };
+    }
+}
