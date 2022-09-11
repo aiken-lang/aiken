@@ -84,6 +84,22 @@ pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<V
 
 // ---------------
 
+fn wrap_with_constr(tag: u64, data: PlutusData) -> PlutusData {
+    PlutusData::Constr(Constr {
+        tag,
+        any_constructor: None,
+        fields: MaybeIndefArray::Indef(vec![data]),
+    })
+}
+
+fn empty_constr(tag: u64) -> PlutusData {
+    PlutusData::Constr(Constr {
+        tag,
+        any_constructor: None,
+        fields: MaybeIndefArray::Indef(vec![]),
+    })
+}
+
 pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
 }
@@ -97,15 +113,7 @@ impl ToPlutusData for Address {
                     any_constructor: None,
                     fields: MaybeIndefArray::Indef(vec![
                         //addressCredential
-                        PlutusData::Constr(Constr {
-                            tag: 0,
-                            any_constructor: None,
-                            fields: MaybeIndefArray::Indef(vec![byron_address
-                                .decode()
-                                .unwrap()
-                                .root
-                                .to_plutus_data()]),
-                        }),
+                        wrap_with_constr(0, byron_address.decode().unwrap().root.to_plutus_data()),
                         //addressStakeCredential
                         None::<StakeCredential>.to_plutus_data(),
                     ]),
@@ -116,16 +124,12 @@ impl ToPlutusData for Address {
                 let stake_part = shelley_address.delegation();
 
                 let payment_part_plutus_data = match payment_part {
-                    ShelleyPaymentPart::Key(payment_keyhash) => PlutusData::Constr(Constr {
-                        tag: 0,
-                        any_constructor: None,
-                        fields: MaybeIndefArray::Indef(vec![payment_keyhash.to_plutus_data()]),
-                    }),
-                    ShelleyPaymentPart::Script(script_hash) => PlutusData::Constr(Constr {
-                        tag: 1,
-                        any_constructor: None,
-                        fields: MaybeIndefArray::Indef(vec![script_hash.to_plutus_data()]),
-                    }),
+                    ShelleyPaymentPart::Key(payment_keyhash) => {
+                        wrap_with_constr(0, payment_keyhash.to_plutus_data())
+                    }
+                    ShelleyPaymentPart::Script(script_hash) => {
+                        wrap_with_constr(1, script_hash.to_plutus_data())
+                    }
                 };
 
                 let stake_part_plutus_data = match stake_part {
@@ -168,7 +172,7 @@ impl ToPlutusData for TransactionInput {
             tag: 0,
             any_constructor: None,
             fields: MaybeIndefArray::Indef(vec![
-                self.transaction_id.to_plutus_data(),
+                wrap_with_constr(0, self.transaction_id.to_plutus_data()),
                 PlutusData::BigInt(BigInt::Int(self.index.into())),
             ]),
         })
@@ -213,29 +217,21 @@ impl<A: ToPlutusData> ToPlutusData for Option<A> {
                 any_constructor: None,
                 fields: MaybeIndefArray::Indef(vec![]),
             }),
-            Some(data) => PlutusData::Constr(Constr {
-                tag: 0,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![data.to_plutus_data()]),
-            }),
+            Some(data) => wrap_with_constr(0, data.to_plutus_data()),
         }
     }
 }
 
-impl ToPlutusData for DatumOption {
+// Does this here surely overwrite Option from above for DatumOption?
+impl ToPlutusData for Option<DatumOption> {
+    // NoOutputDatum = 0 | OutputDatumHash = 1 | OutputDatum = 2
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            // tag : 0 is NoOutputDatum. Determined after unwrapping Option which is wrapped around DatumOption
-            DatumOption::Hash(hash) => PlutusData::Constr(Constr {
-                tag: 1,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![hash.to_plutus_data()]),
-            }),
-            DatumOption::Data(data) => PlutusData::Constr(Constr {
-                tag: 2,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![data.0.clone()]), // does data need an extra wrapper constructor?
-            }),
+            None => empty_constr(0),
+            Some(option) => match option {
+                DatumOption::Hash(hash) => wrap_with_constr(1, hash.to_plutus_data()),
+                DatumOption::Data(data) => wrap_with_constr(2, data.0.clone()),
+            },
         }
     }
 }
@@ -347,15 +343,7 @@ impl ToPlutusData for TransactionOutput {
                     post_alonzo_output.value.to_plutus_data(),
                     // DatumOption needs to be handled differently a bit. In Haskell it's NoOutputDatum | OutputDatumHash DatumHash | OutputDatum Datum
                     // So we unwrap first to check if it's someting. If it is then turn the unwrapped data to PlutusData, otherwise have None and turn that into PlutusData
-                    if post_alonzo_output.datum_option.is_some() {
-                        post_alonzo_output
-                            .datum_option
-                            .clone()
-                            .unwrap()
-                            .to_plutus_data()
-                    } else {
-                        None::<DatumOption>.to_plutus_data()
-                    },
+                    post_alonzo_output.datum_option.to_plutus_data(),
                     post_alonzo_output.script_ref.to_plutus_data(),
                 ]),
             }),
@@ -369,24 +357,12 @@ impl ToPlutusData for StakeCredential {
     // So a StakeCredential for a Pointer address needs to be converted separately
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            StakeCredential::AddrKeyhash(addr_keyhas) => PlutusData::Constr(Constr {
-                tag: 0,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![PlutusData::Constr(Constr {
-                    tag: 0,
-                    any_constructor: None,
-                    fields: MaybeIndefArray::Indef(vec![addr_keyhas.to_plutus_data()]),
-                })]),
-            }),
-            StakeCredential::Scripthash(script_hash) => PlutusData::Constr(Constr {
-                tag: 0,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![PlutusData::Constr(Constr {
-                    tag: 1,
-                    any_constructor: None,
-                    fields: MaybeIndefArray::Indef(vec![script_hash.to_plutus_data()]),
-                })]),
-            }),
+            StakeCredential::AddrKeyhash(addr_keyhas) => {
+                wrap_with_constr(0, wrap_with_constr(0, addr_keyhas.to_plutus_data()))
+            }
+            StakeCredential::Scripthash(script_hash) => {
+                wrap_with_constr(0, wrap_with_constr(1, script_hash.to_plutus_data()))
+            }
         }
     }
 }
@@ -483,13 +459,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // Finite
-                                PlutusData::Constr(Constr {
-                                    tag: 1,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        lower_bound.to_plutus_data()
-                                    ]),
-                                }),
+                                wrap_with_constr(1, lower_bound.to_plutus_data()),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -499,11 +469,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // PosInf
-                                PlutusData::Constr(Constr {
-                                    tag: 2,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![]),
-                                }),
+                                empty_constr(2),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -525,11 +491,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // NegInf
-                                PlutusData::Constr(Constr {
-                                    tag: 0,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![]),
-                                }),
+                                empty_constr(0),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -539,13 +501,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // Finite
-                                PlutusData::Constr(Constr {
-                                    tag: 1,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        upper_bound.to_plutus_data()
-                                    ]),
-                                }),
+                                wrap_with_constr(1, upper_bound.to_plutus_data()),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -567,13 +523,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // Finite
-                                PlutusData::Constr(Constr {
-                                    tag: 1,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        lower_bound.to_plutus_data()
-                                    ]),
-                                }),
+                                wrap_with_constr(1, lower_bound.to_plutus_data()),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -583,13 +533,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // Finite
-                                PlutusData::Constr(Constr {
-                                    tag: 1,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![
-                                        upper_bound.to_plutus_data()
-                                    ]),
-                                }),
+                                wrap_with_constr(1, upper_bound.to_plutus_data()),
                                 // Closure
                                 false.to_plutus_data(),
                             ]),
@@ -611,11 +555,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // NegInf
-                                PlutusData::Constr(Constr {
-                                    tag: 0,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![]),
-                                }),
+                                empty_constr(0),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -625,11 +565,7 @@ impl ToPlutusData for TimeRange {
                             any_constructor: None,
                             fields: MaybeIndefArray::Indef(vec![
                                 // PosInf
-                                PlutusData::Constr(Constr {
-                                    tag: 2,
-                                    any_constructor: None,
-                                    fields: MaybeIndefArray::Indef(vec![]),
-                                }),
+                                empty_constr(2),
                                 // Closure
                                 true.to_plutus_data(),
                             ]),
@@ -657,26 +593,12 @@ impl ToPlutusData for TxInInfo {
 impl ToPlutusData for ScriptPurpose {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            ScriptPurpose::Minting(policy_id) => PlutusData::Constr(Constr {
-                tag: 0,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![policy_id.to_plutus_data()]),
-            }),
-            ScriptPurpose::Spending(out_ref) => PlutusData::Constr(Constr {
-                tag: 1,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![out_ref.to_plutus_data()]),
-            }),
-            ScriptPurpose::Rewarding(stake_credential) => PlutusData::Constr(Constr {
-                tag: 2,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![stake_credential.to_plutus_data()]),
-            }),
-            ScriptPurpose::Certifying(dcert) => PlutusData::Constr(Constr {
-                tag: 3,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![dcert.to_plutus_data()]),
-            }),
+            ScriptPurpose::Minting(policy_id) => wrap_with_constr(0, policy_id.to_plutus_data()),
+            ScriptPurpose::Spending(out_ref) => wrap_with_constr(1, out_ref.to_plutus_data()),
+            ScriptPurpose::Rewarding(stake_credential) => {
+                wrap_with_constr(2, stake_credential.to_plutus_data())
+            }
+            ScriptPurpose::Certifying(dcert) => wrap_with_constr(3, dcert.to_plutus_data()),
         }
     }
 }
@@ -720,16 +642,8 @@ impl ToPlutusData for ScriptContext {
 impl ToPlutusData for bool {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            false => PlutusData::Constr(Constr {
-                tag: 0,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![]),
-            }),
-            true => PlutusData::Constr(Constr {
-                tag: 1,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![]),
-            }),
+            false => empty_constr(0),
+            true => empty_constr(1),
         }
     }
 }
@@ -881,7 +795,7 @@ fn get_script_purpose(
         RedeemerTag::Cert => {
             // sort by order given in the tx (just take it as it is basically)
             let cert = dcert[index as usize].clone();
-            Ok(ScriptPurpose::Certifying(cert.clone()))
+            Ok(ScriptPurpose::Certifying(cert))
         }
     }
 }
@@ -985,18 +899,18 @@ fn get_script_context(
 // ) -> anyhow::Result<Redeemer> {
 // }
 
-// fn eval_tx(
-//     tx_bytes: &Vec<u8>,
-//     utxos: &Vec<(Vec<u8>, Vec<u8>)>,
-//     cost_model: &Vec<u8>,
-//     zero_time: u64,
-//     slot_length: u64,
-// ) -> anyhow::Result<bool> {
-//     let multi_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
-//         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
-//         .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
+fn eval_tx(
+    tx_bytes: &Vec<u8>,
+    utxos: &Vec<(Vec<u8>, Vec<u8>)>,
+    cost_model: &Vec<u8>,
+    zero_time: u64,
+    slot_length: u64,
+) -> anyhow::Result<bool> {
+    let multi_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+        .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
 
-//     let tx = multi_tx.as_babbage().unwrap();
+    let tx = multi_tx.as_babbage().unwrap();
 
-//     Ok(true)
-// }
+    Ok(true)
+}
