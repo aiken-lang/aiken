@@ -698,6 +698,12 @@ fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> Tim
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+enum ExecutionPurpose {
+    WithDatum(Language, PlutusData), // Spending
+    NoDatum(Language),               // Minting, Wdrl, DCert
+}
+
 fn get_tx_in_info(
     inputs: &MaybeIndefArray<TransactionInput>,
     utxos: &MaybeIndefArray<TxInInfo>,
@@ -713,10 +719,10 @@ fn get_tx_in_info(
 
 fn get_script_purpose(
     redeemer: &Redeemer,
-    inputs: &MaybeIndefArray<TxInInfo>,
-    mint: &Mint,
-    dcert: &MaybeIndefArray<Certificate>,
-    wdrl: &Withdrawals,
+    inputs: &MaybeIndefArray<TransactionInput>,
+    mint: &Option<Mint>,
+    dcert: &Option<MaybeIndefArray<Certificate>>,
+    wdrl: &Option<Withdrawals>,
 ) -> anyhow::Result<ScriptPurpose> {
     // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
     let tag = redeemer.tag.clone();
@@ -725,10 +731,11 @@ fn get_script_purpose(
         RedeemerTag::Mint => {
             // sort lexical by policy id
             let mut policy_ids = mint
+                .as_ref()
+                .unwrap()
                 .iter()
-                .map(|(policy_id, _)| policy_id)
-                .collect::<Vec<&ByteVec>>()
-                .clone();
+                .map(|(policy_id, _)| policy_id.clone())
+                .collect::<Vec<ByteVec>>();
             policy_ids.sort();
             let policy_id = policy_ids[index as usize].clone();
             Ok(ScriptPurpose::Minting(policy_id))
@@ -737,9 +744,8 @@ fn get_script_purpose(
             // sort lexical by tx_hash and index
             let mut inputs = inputs
                 .iter()
-                .map(|input| input.out_ref.clone())
-                .collect::<Vec<TransactionInput>>()
-                .clone();
+                .map(|input| input.clone())
+                .collect::<Vec<TransactionInput>>();
             // is this correct? Does this sort lexical from low to high? maybe get Ordering into pallas for TransactionInput?
             inputs.sort_by(
                 |i_a, i_b| match i_a.transaction_id.cmp(&i_b.transaction_id) {
@@ -754,12 +760,13 @@ fn get_script_purpose(
         RedeemerTag::Reward => {
             // sort lexical by reward account
             let mut reward_accounts = wdrl
+                .as_ref()
+                .unwrap()
                 .iter()
-                .map(|(policy_id, _)| policy_id)
-                .collect::<Vec<&RewardAccount>>()
-                .clone();
+                .map(|(policy_id, _)| policy_id.clone())
+                .collect::<Vec<RewardAccount>>();
             reward_accounts.sort();
-            let reward_account = reward_accounts[index as usize];
+            let reward_account = reward_accounts[index as usize].clone();
             let addresss = Address::from_bytes(&reward_account)?;
             let credential = match addresss {
                 Address::Stake(stake_address) => match stake_address.payload() {
@@ -776,7 +783,7 @@ fn get_script_purpose(
         }
         RedeemerTag::Cert => {
             // sort by order given in the tx (just take it as it is basically)
-            let cert = dcert[index as usize].clone();
+            let cert = dcert.as_ref().unwrap()[index as usize].clone();
             Ok(ScriptPurpose::Certifying(cert))
         }
     }
@@ -819,7 +826,14 @@ fn get_tx_info(
             .iter()
             .map(|r| {
                 (
-                    get_script_purpose(&r, &inputs, &mint, &dcert, &wdrl).unwrap(),
+                    get_script_purpose(
+                        &r,
+                        &tx.transaction_body.inputs,
+                        &tx.transaction_body.mint,
+                        &tx.transaction_body.certificates,
+                        &tx.transaction_body.withdrawals,
+                    )
+                    .unwrap(),
                     r.clone(),
                 )
             })
@@ -852,47 +866,70 @@ fn get_tx_info(
     })
 }
 
-fn get_script_context(
+fn get_execution_purpose(
+    tx: &Tx,
+    utxos: &MaybeIndefArray<TxInInfo>,
+    script_purpose: &ScriptPurpose,
+) -> ExecutionPurpose {
+    todo!()
+}
+
+fn eval_redeemer(
     tx: &Tx,
     utxos: &MaybeIndefArray<TxInInfo>,
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
-) -> anyhow::Result<ScriptContext> {
-    let tx_info = get_tx_info(tx, utxos, slot_config)?;
+) -> anyhow::Result<Redeemer> {
     let purpose = get_script_purpose(
         redeemer,
-        &tx_info.inputs,
-        &tx_info.mint,
-        &tx_info.dcert,
-        &tx_info.wdrl,
+        &tx.transaction_body.inputs,
+        &tx.transaction_body.mint,
+        &tx.transaction_body.certificates,
+        &tx.transaction_body.withdrawals,
     )?;
-    Ok(ScriptContext { tx_info, purpose })
+
+    let execution_purpose: ExecutionPurpose = get_execution_purpose(&tx, &utxos, &purpose);
+
+    match execution_purpose {
+        ExecutionPurpose::WithDatum(language, datum) => match language {
+            Language::PlutusV1 => todo!(),
+            Language::PlutusV2 => {
+                let tx_info = get_tx_info(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                // TODO: eval programm
+
+                Ok(redeemer.clone())
+            }
+        },
+        ExecutionPurpose::NoDatum(language) => match language {
+            Language::PlutusV1 => todo!(),
+            Language::PlutusV2 => {
+                let tx_info = get_tx_info(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                // TODO: eval programm
+
+                Ok(redeemer.clone())
+            }
+        },
+    }
 }
 
 // TODO: Maybe make ToPlutusData dependent on a Plutus Language so it works for V1 and V2?
 
-// fn eval_single_redeemer(
-//     redeemer: &Redeemer,
-//     tx: &Tx,
-//     utxos: &Vec<(TransactionInput, TransactionOutput)>,
-//     cost_model: &CostModel,
-//     slot_config: &SlotConfig,
-//     language: &Language,
-// ) -> anyhow::Result<Redeemer> {
+// fn eval_tx(
+//     tx_bytes: &Vec<u8>,
+//     utxos: &Vec<(Vec<u8>, Vec<u8>)>,
+//     cost_model: &Vec<u8>,
+//     zero_time: u64,
+//     slot_length: u64,
+// ) -> anyhow::Result<bool> {
+//     let multi_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+//         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+//         .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
+
+//     let tx = multi_tx.as_babbage().unwrap();
+
+//     Ok(true)
 // }
-
-fn eval_tx(
-    tx_bytes: &Vec<u8>,
-    utxos: &Vec<(Vec<u8>, Vec<u8>)>,
-    cost_model: &Vec<u8>,
-    zero_time: u64,
-    slot_length: u64,
-) -> anyhow::Result<bool> {
-    let multi_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
-        .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
-        .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
-
-    let tx = multi_tx.as_babbage().unwrap();
-
-    Ok(true)
-}
