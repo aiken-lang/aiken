@@ -212,11 +212,7 @@ impl<K: ToPlutusData, V: ToPlutusData> ToPlutusData for KeyValuePairs<K, V> {
 impl<A: ToPlutusData> ToPlutusData for Option<A> {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            None => PlutusData::Constr(Constr {
-                tag: 1,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![]),
-            }),
+            None => empty_constr(1),
             Some(data) => wrap_with_constr(0, data.to_plutus_data()),
         }
     }
@@ -341,8 +337,6 @@ impl ToPlutusData for TransactionOutput {
                         .unwrap()
                         .to_plutus_data(),
                     post_alonzo_output.value.to_plutus_data(),
-                    // DatumOption needs to be handled differently a bit. In Haskell it's NoOutputDatum | OutputDatumHash DatumHash | OutputDatum Datum
-                    // So we unwrap first to check if it's someting. If it is then turn the unwrapped data to PlutusData, otherwise have None and turn that into PlutusData
                     post_alonzo_output.datum_option.to_plutus_data(),
                     post_alonzo_output.script_ref.to_plutus_data(),
                 ]),
@@ -370,16 +364,12 @@ impl ToPlutusData for StakeCredential {
 impl ToPlutusData for Certificate {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            Certificate::StakeRegistration(stake_credential) => PlutusData::Constr(Constr {
-                tag: 0,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![stake_credential.to_plutus_data()]),
-            }),
-            Certificate::StakeDeregistration(stake_credential) => PlutusData::Constr(Constr {
-                tag: 1,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![stake_credential.to_plutus_data()]),
-            }),
+            Certificate::StakeRegistration(stake_credential) => {
+                wrap_with_constr(0, stake_credential.to_plutus_data())
+            }
+            Certificate::StakeDeregistration(stake_credential) => {
+                wrap_with_constr(1, stake_credential.to_plutus_data())
+            }
             Certificate::StakeDelegation(stake_credential, pool_keyhash) => {
                 PlutusData::Constr(Constr {
                     tag: 2,
@@ -416,16 +406,8 @@ impl ToPlutusData for Certificate {
                     epoch.to_plutus_data(),
                 ]),
             }),
-            Certificate::GenesisKeyDelegation(_, _, _) => PlutusData::Constr(Constr {
-                tag: 5,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![]),
-            }),
-            Certificate::MoveInstantaneousRewardsCert(_) => PlutusData::Constr(Constr {
-                tag: 6,
-                any_constructor: None,
-                fields: MaybeIndefArray::Indef(vec![]),
-            }),
+            Certificate::GenesisKeyDelegation(_, _, _) => empty_constr(5),
+            Certificate::MoveInstantaneousRewardsCert(_) => empty_constr(6),
         }
     }
 }
