@@ -602,7 +602,7 @@ impl ToPlutusData for TxInfo {
                 self.signatories.to_plutus_data(),
                 self.redeemers.to_plutus_data(),
                 self.data.to_plutus_data(),
-                self.id.to_plutus_data(),
+                wrap_with_constr(0, self.id.to_plutus_data()),
             ]),
         })
     }
