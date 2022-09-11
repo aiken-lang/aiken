@@ -1,4 +1,6 @@
-use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
+use pallas_addresses::{
+    Address, ScriptHash, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload,
+};
 use pallas_codec::{
     minicbor::{bytes::ByteVec, data::Int},
     utils::{AnyUInt, KeyValuePairs, MaybeIndefArray},
@@ -7,14 +9,23 @@ use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     babbage::{
         AddrKeyhash, AssetName, BigInt, Certificate, Constr, CostModel, DatumHash, DatumOption,
-        Language, Mint, PolicyId, Redeemer, RedeemerTag, RewardAccount, Script, ScriptRef,
-        StakeCredential, TransactionInput, TransactionOutput, Tx, Value, Withdrawals,
+        ExUnits, Language, Mint, PlutusV1Script, PlutusV2Script, PolicyId, Redeemer, RedeemerTag,
+        RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Tx,
+        Value, Withdrawals,
     },
     ToHash,
 };
 use pallas_traverse::{Era, MultiEraTx};
-use std::{str::FromStr, vec};
-use uplc::PlutusData;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+    vec,
+};
+use uplc::{
+    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    PlutusData,
+};
 
 use crate::args::ResolvedInput;
 
@@ -699,9 +710,20 @@ fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> Tim
 }
 
 #[derive(Debug, PartialEq, Clone)]
+enum ScriptVersion {
+    PlutusV1(PlutusV1Script),
+    PlutusV2(PlutusV2Script),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 enum ExecutionPurpose {
-    WithDatum(Language, PlutusData), // Spending
-    NoDatum(Language),               // Minting, Wdrl, DCert
+    WithDatum(ScriptVersion, PlutusData), // Spending
+    NoDatum(ScriptVersion),               // Minting, Wdrl, DCert
+}
+
+struct DataLookupTable {
+    datum: HashMap<DatumHash, PlutusData>,
+    scripts: HashMap<ScriptHash, ScriptVersion>,
 }
 
 fn get_tx_in_info(
@@ -867,11 +889,161 @@ fn get_tx_info(
 }
 
 fn get_execution_purpose(
-    tx: &Tx,
     utxos: &MaybeIndefArray<TxInInfo>,
     script_purpose: &ScriptPurpose,
+    lookup_table: &DataLookupTable,
 ) -> ExecutionPurpose {
-    todo!()
+    match script_purpose {
+        ScriptPurpose::Minting(policy_id) => {
+            let policy_id_array: [u8; 28] = policy_id.to_vec().try_into().unwrap();
+            let hash = Hash::from(policy_id_array);
+
+            let script = lookup_table.scripts.get(&hash).unwrap();
+            ExecutionPurpose::NoDatum(script.clone())
+        }
+        ScriptPurpose::Spending(out_ref) => {
+            let utxo = utxos.iter().find(|utxo| utxo.out_ref == *out_ref).unwrap();
+            match &utxo.resolved {
+                TransactionOutput::Legacy(output) => {
+                    let address = Address::from_bytes(&output.address).unwrap();
+                    match address {
+                        Address::Shelley(shelley_address) => {
+                            let script = lookup_table
+                                .scripts
+                                .get(&shelley_address.payment().as_hash())
+                                .unwrap();
+
+                            let datum =
+                                lookup_table.datum.get(&output.datum_hash.unwrap()).unwrap();
+                            ExecutionPurpose::WithDatum(script.clone(), datum.clone())
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                TransactionOutput::PostAlonzo(output) => {
+                    let address = Address::from_bytes(&output.address).unwrap();
+                    match address {
+                        Address::Shelley(shelley_address) => {
+                            let script = lookup_table
+                                .scripts
+                                .get(&shelley_address.payment().as_hash())
+                                .unwrap();
+
+                            let datum = match &output.datum_option {
+                                Some(DatumOption::Hash(hash)) => {
+                                    lookup_table.datum.get(&hash).unwrap().clone()
+                                }
+                                Some(DatumOption::Data(data)) => data.0.clone(),
+                                _ => unreachable!(),
+                            };
+
+                            ExecutionPurpose::WithDatum(script.clone(), datum)
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+        ScriptPurpose::Rewarding(stake_credential) => {
+            let script_hash = match stake_credential {
+                StakeCredential::Scripthash(hash) => hash.clone(),
+                _ => unreachable!(),
+            };
+            let script = lookup_table.scripts.get(&script_hash).unwrap();
+            ExecutionPurpose::NoDatum(script.clone())
+        }
+        ScriptPurpose::Certifying(cert) => match cert {
+            // StakeRegistration doesn't require a witness from a stake key/script. So I assume it doesn't need to be handled in Plutus either?
+
+            // Certificate::StakeRegistration(stake_credential) => {
+            //     let script_hash = match stake_credential {
+            //         StakeCredential::Scripthash(hash) => hash.clone(),
+            //         _ => unreachable!(),
+            //     };
+            //     let script = lookup_table.scripts.get(&script_hash).unwrap();
+            //     ExecutionPurpose::NoDatum(script.clone())
+            // }
+            Certificate::StakeDeregistration(stake_credential) => {
+                let script_hash = match stake_credential {
+                    StakeCredential::Scripthash(hash) => hash.clone(),
+                    _ => unreachable!(),
+                };
+                let script = lookup_table.scripts.get(&script_hash).unwrap();
+                ExecutionPurpose::NoDatum(script.clone())
+            }
+            Certificate::StakeDelegation(stake_credential, _) => {
+                let script_hash = match stake_credential {
+                    StakeCredential::Scripthash(hash) => hash.clone(),
+                    _ => unreachable!(),
+                };
+                let script = lookup_table.scripts.get(&script_hash).unwrap();
+                ExecutionPurpose::NoDatum(script.clone())
+            }
+            _ => unreachable!(),
+        },
+    }
+}
+
+fn get_script_and_datum_lookup_table(
+    tx: &Tx,
+    utxos: &MaybeIndefArray<TxInInfo>,
+) -> DataLookupTable {
+    let mut datum = HashMap::new();
+    let mut scripts = HashMap::new();
+
+    // discovery in witness set
+
+    let plutus_data_witnesses = tx
+        .transaction_witness_set
+        .plutus_data
+        .clone()
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+
+    let scripts_v1_witnesses = tx
+        .transaction_witness_set
+        .plutus_v1_script
+        .clone()
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+
+    let scripts_v2_witnesses = tx
+        .transaction_witness_set
+        .plutus_v2_script
+        .clone()
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+
+    for plutus_data in plutus_data_witnesses.iter() {
+        datum.insert(plutus_data.to_hash(), plutus_data.clone());
+    }
+
+    for script in scripts_v1_witnesses.iter() {
+        scripts.insert(script.to_hash(), ScriptVersion::PlutusV1(script.clone()));
+    }
+
+    for script in scripts_v2_witnesses.iter() {
+        scripts.insert(script.to_hash(), ScriptVersion::PlutusV2(script.clone()));
+    }
+
+    // discovery in utxos (script ref)
+
+    for utxo in utxos.iter() {
+        match &utxo.resolved {
+            TransactionOutput::Legacy(_) => {}
+            TransactionOutput::PostAlonzo(output) => match &output.script_ref {
+                Some(script) => match &script.0 {
+                    Script::PlutusV1Script(v1) => {
+                        scripts.insert(v1.to_hash(), ScriptVersion::PlutusV1(v1.clone()));
+                    }
+                    Script::PlutusV2Script(v2) => {
+                        scripts.insert(v2.to_hash(), ScriptVersion::PlutusV2(v2.clone()));
+                    }
+                    _ => {}
+                },
+                _ => {}
+            },
+        }
+    }
+
+    DataLookupTable { datum, scripts }
 }
 
 fn eval_redeemer(
@@ -879,6 +1051,7 @@ fn eval_redeemer(
     utxos: &MaybeIndefArray<TxInInfo>,
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
+    lookup_table: &DataLookupTable,
 ) -> anyhow::Result<Redeemer> {
     let purpose = get_script_purpose(
         redeemer,
@@ -888,48 +1061,107 @@ fn eval_redeemer(
         &tx.transaction_body.withdrawals,
     )?;
 
-    let execution_purpose: ExecutionPurpose = get_execution_purpose(&tx, &utxos, &purpose);
+    let execution_purpose: ExecutionPurpose = get_execution_purpose(utxos, &purpose, lookup_table);
 
     match execution_purpose {
-        ExecutionPurpose::WithDatum(language, datum) => match language {
-            Language::PlutusV1 => todo!(),
-            Language::PlutusV2 => {
+        ExecutionPurpose::WithDatum(script_version, datum) => match script_version {
+            ScriptVersion::PlutusV1(script) => todo!(),
+            ScriptVersion::PlutusV2(script) => {
                 let tx_info = get_tx_info(tx, utxos, slot_config)?;
                 let script_context = ScriptContext { tx_info, purpose };
 
-                // TODO: eval programm
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
 
-                Ok(redeemer.clone())
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(datum.clone())
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                result.0.unwrap();
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: result.1.mem as u32,
+                        steps: result.1.cpu as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
             }
         },
-        ExecutionPurpose::NoDatum(language) => match language {
-            Language::PlutusV1 => todo!(),
-            Language::PlutusV2 => {
+        ExecutionPurpose::NoDatum(script_version) => match script_version {
+            ScriptVersion::PlutusV1(script) => todo!(),
+            ScriptVersion::PlutusV2(script) => {
                 let tx_info = get_tx_info(tx, utxos, slot_config)?;
                 let script_context = ScriptContext { tx_info, purpose };
 
-                // TODO: eval programm
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
 
-                Ok(redeemer.clone())
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                result.0.unwrap();
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: result.1.mem as u32,
+                        steps: result.1.cpu as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
             }
         },
     }
 }
 
+fn eval_tx(
+    tx: &Tx,
+    utxos: &MaybeIndefArray<TxInInfo>,
+    //TODO: costMdls
+    slot_config: &SlotConfig,
+) -> anyhow::Result<MaybeIndefArray<Redeemer>> {
+    let redeemers = tx.transaction_witness_set.redeemer.as_ref();
+
+    let lookup_table = get_script_and_datum_lookup_table(tx, utxos);
+
+    match redeemers {
+        Some(rs) => {
+            let mut collected_redeemers = vec![];
+            for redeemer in rs.iter() {
+                collected_redeemers.push(eval_redeemer(
+                    tx,
+                    utxos,
+                    slot_config,
+                    &redeemer,
+                    &lookup_table,
+                )?)
+            }
+            Ok(MaybeIndefArray::Indef(collected_redeemers))
+        }
+        None => Ok(MaybeIndefArray::Indef(vec![])),
+    }
+}
+
 // TODO: Maybe make ToPlutusData dependent on a Plutus Language so it works for V1 and V2?
-
-// fn eval_tx(
-//     tx_bytes: &Vec<u8>,
-//     utxos: &Vec<(Vec<u8>, Vec<u8>)>,
-//     cost_model: &Vec<u8>,
-//     zero_time: u64,
-//     slot_length: u64,
-// ) -> anyhow::Result<bool> {
-//     let multi_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
-//         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
-//         .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
-
-//     let tx = multi_tx.as_babbage().unwrap();
-
-//     Ok(true)
-// }
