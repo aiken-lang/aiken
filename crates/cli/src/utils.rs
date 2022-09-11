@@ -736,11 +736,13 @@ impl ToPlutusData for bool {
 
 // Plutus V2 only for now
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct TxInInfo {
     out_ref: TransactionInput,
     resolved: TransactionOutput,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum ScriptPurpose {
     Minting(PolicyId),
     Spending(TransactionInput),
@@ -748,6 +750,7 @@ pub enum ScriptPurpose {
     Certifying(Certificate),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct TxInfo {
     inputs: MaybeIndefArray<TxInInfo>,
     reference_inputs: MaybeIndefArray<TxInInfo>,
@@ -763,13 +766,14 @@ pub struct TxInfo {
     id: Hash<32>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct ScriptContext {
     tx_info: TxInfo,
     purpose: ScriptPurpose,
 }
 
 //---- Time conversion: slot range => posix time range
-
+#[derive(Debug, PartialEq, Clone)]
 struct TimeRange {
     lower_bound: Option<u64>,
     upper_bound: Option<u64>,
@@ -800,22 +804,14 @@ fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> Tim
 
 fn get_tx_in_info(
     inputs: &MaybeIndefArray<TransactionInput>,
-    utxos: &Vec<(TransactionInput, TransactionOutput)>,
+    utxos: &MaybeIndefArray<TxInInfo>,
 ) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
     Ok(MaybeIndefArray::Indef(
-        inputs
+        utxos
             .iter()
-            .map(|input| {
-                let utxo = utxos.iter().find(|utxo| utxo.0 == *input);
-                match utxo {
-                    Some(u) => TxInInfo {
-                        out_ref: input.clone(),
-                        resolved: u.1.clone(),
-                    },
-                    None => panic!(),
-                }
-            })
-            .collect(),
+            .filter(|utxo| inputs.contains(&utxo.out_ref))
+            .map(|utxo| utxo.clone())
+            .collect::<Vec<TxInInfo>>(),
     ))
 }
 
@@ -892,7 +888,7 @@ fn get_script_purpose(
 
 fn get_tx_info(
     tx: &Tx,
-    utxos: &Vec<(TransactionInput, TransactionOutput)>,
+    utxos: &MaybeIndefArray<TxInInfo>,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<TxInfo> {
     let body = tx.transaction_body.clone();
@@ -962,7 +958,7 @@ fn get_tx_info(
 
 fn get_script_context(
     tx: &Tx,
-    utxos: &Vec<(TransactionInput, TransactionOutput)>,
+    utxos: &MaybeIndefArray<TxInInfo>,
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
 ) -> anyhow::Result<ScriptContext> {
