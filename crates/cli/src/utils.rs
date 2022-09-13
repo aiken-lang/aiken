@@ -1115,7 +1115,10 @@ fn get_execution_purpose(
             let policy_id_array: [u8; 28] = policy_id.to_vec().try_into().unwrap();
             let hash = Hash::from(policy_id_array);
 
-            let script = lookup_table.scripts.get(&hash).unwrap();
+            let script = match lookup_table.scripts.get(&hash) {
+                Some(s) => s.clone(),
+                None => unreachable!("Missing required scripts.")
+            };
             ExecutionPurpose::NoDatum(script.clone())
         }
         ScriptPurpose::Spending(out_ref) => {
@@ -1125,13 +1128,20 @@ fn get_execution_purpose(
                     let address = Address::from_bytes(&output.address).unwrap();
                     match address {
                         Address::Shelley(shelley_address) => {
-                            let script = lookup_table
-                                .scripts
-                                .get(&shelley_address.payment().as_hash())
-                                .unwrap();
 
-                            let datum =
-                                lookup_table.datum.get(&output.datum_hash.unwrap()).unwrap();
+                            let script = match lookup_table
+                            .scripts
+                            .get(&shelley_address.payment().as_hash()) {
+                                Some(s) => s.clone(),
+                                None => unreachable!("Missing required scripts.")
+                            };
+                            
+                           
+
+                            let datum = match lookup_table.datum.get(&output.datum_hash.unwrap_or_else(|| unreachable!("Missing datum hash in input."))) {
+                                Some(d) => d.clone(),
+                                None => unreachable!("Missing datum in witness set.")
+                            };
 
                             ExecutionPurpose::WithDatum(script.clone(), datum.clone())
                         }
@@ -1144,17 +1154,21 @@ fn get_execution_purpose(
                     let address = Address::from_bytes(&output.address).unwrap();
                     match address {
                         Address::Shelley(shelley_address) => {
-                            let script = lookup_table
-                                .scripts
-                                .get(&shelley_address.payment().as_hash())
-                                .unwrap();
+
+                            let script = match lookup_table
+                            .scripts
+                            .get(&shelley_address.payment().as_hash()) {
+                                Some(s) => s.clone(),
+                                None => unreachable!("Missing required scripts.")
+                            };
+
 
                             let datum = match &output.datum_option {
                                 Some(DatumOption::Hash(hash)) => {
                                     lookup_table.datum.get(&hash).unwrap().clone()
                                 }
                                 Some(DatumOption::Data(data)) => data.0.clone(),
-                                _ => unreachable!( "This is impossible. The script UTxO needs to contain an inline datum or datum hash in order to spend it."),
+                                _ => unreachable!( "Missing datum hash or inline datum in input."),
                             };
 
                             ExecutionPurpose::WithDatum(script.clone(), datum)
@@ -1171,8 +1185,13 @@ fn get_execution_purpose(
                 StakeCredential::Scripthash(hash) => hash.clone(),
                 _ => unreachable!("This is impossible. A key hash cannot be the hash of a script."),
             };
-            let script = lookup_table.scripts.get(&script_hash).unwrap();
-            ExecutionPurpose::NoDatum(script.clone())
+
+            let script = match lookup_table.scripts.get(&script_hash) {
+                Some(s) => s.clone(),
+                None => unreachable!("Missing required scripts.")
+            };
+
+            ExecutionPurpose::NoDatum(script)
         }
         ScriptPurpose::Certifying(cert) => match cert {
             // StakeRegistration doesn't require a witness from a stake key/script. So I assume it doesn't need to be handled in Plutus either?
@@ -1183,8 +1202,13 @@ fn get_execution_purpose(
                         "This is impossible. A key hash cannot be the hash of a script."
                     ),
                 };
-                let script = lookup_table.scripts.get(&script_hash).unwrap();
-                ExecutionPurpose::NoDatum(script.clone())
+
+                let script = match lookup_table.scripts.get(&script_hash) {
+                    Some(s) => s.clone(),
+                    None => unreachable!("Missing required scripts.")
+                };
+
+                ExecutionPurpose::NoDatum(script)
             }
             Certificate::StakeDelegation(stake_credential, _) => {
                 let script_hash = match stake_credential {
@@ -1193,8 +1217,13 @@ fn get_execution_purpose(
                         "This is impossible. A key hash cannot be the hash of a script."
                     ),
                 };
-                let script = lookup_table.scripts.get(&script_hash).unwrap();
-                ExecutionPurpose::NoDatum(script.clone())
+
+                let script = match lookup_table.scripts.get(&script_hash) {
+                    Some(s) => s.clone(),
+                    None => unreachable!("Missing required scripts.")
+                };
+
+                ExecutionPurpose::NoDatum(script)
             }
             _ => unreachable!("This is impossible. Only stake deregistration and stake delegation are valid script purposes."),
         },
