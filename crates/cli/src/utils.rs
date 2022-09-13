@@ -8,9 +8,9 @@ use pallas_codec::{
 use pallas_crypto::hash::{Hash, Hasher};
 use pallas_primitives::{
     babbage::{
-        AddrKeyhash, AssetName, BigInt, Certificate, Constr, CostModel, DatumHash, DatumOption,
-        ExUnits, Language, Mint, MintedTx, PlutusV1Script, PlutusV2Script, PolicyId, Redeemer,
-        RedeemerTag, RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput,
+        AddrKeyhash, AssetName, BigInt, Certificate, Coin, Constr, CostModel, DatumHash,
+        DatumOption, ExUnits, Language, Mint, MintedTx, PlutusV1Script, PlutusV2Script, PolicyId,
+        Redeemer, RedeemerTag, RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput,
         TransactionOutput, Tx, Value, Withdrawals,
     },
     Fragment, ToHash,
@@ -19,6 +19,7 @@ use pallas_traverse::{Era, MultiEraTx};
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
+    ops::Deref,
     str::FromStr,
     vec,
 };
@@ -28,9 +29,9 @@ use uplc::{
     PlutusData,
 };
 
-use crate::args::ResolvedInput;
+use crate::args::ResolvedInputOld;
 
-pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInput]) -> anyhow::Result<Vec<PlutusData>> {
+pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInputOld]) -> anyhow::Result<Vec<PlutusData>> {
     let mut tx_in_info = Vec::new();
 
     for resolved_input in resolved_inputs {
@@ -120,7 +121,7 @@ fn empty_constr(index: u64) -> PlutusData {
     })
 }
 
-/// Translate constructor index to cbor tag
+/// Translate constructor index to cbor tag.
 fn constr_index(index: u64) -> u64 {
     121 + index
 }
@@ -132,17 +133,6 @@ pub trait ToPlutusData {
 impl ToPlutusData for Address {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            Address::Byron(byron_address) => {
-                wrap_multiple_with_constr(
-                    0,
-                    vec![
-                        //addressCredential
-                        wrap_with_constr(0, byron_address.decode().unwrap().root.to_plutus_data()),
-                        //addressStakeCredential
-                        None::<StakeCredential>.to_plutus_data(),
-                    ],
-                )
-            }
             Address::Shelley(shelley_address) => {
                 let payment_part = shelley_address.payment();
                 let stake_part = shelley_address.delegation();
@@ -177,7 +167,7 @@ impl ToPlutusData for Address {
 
                 wrap_multiple_with_constr(0, vec![payment_part_plutus_data, stake_part_plutus_data])
             }
-            Address::Stake(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 }
@@ -203,6 +193,12 @@ impl<const BYTES: usize> ToPlutusData for Hash<BYTES> {
 impl ToPlutusData for ByteVec {
     fn to_plutus_data(&self) -> PlutusData {
         PlutusData::BoundedBytes(self.clone())
+    }
+}
+
+impl<K: ToPlutusData, V: ToPlutusData> ToPlutusData for (K, V) {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_multiple_with_constr(0, vec![self.0.to_plutus_data(), self.1.to_plutus_data()])
     }
 }
 
@@ -329,31 +325,61 @@ impl ToPlutusData for ScriptRef {
     }
 }
 
-impl ToPlutusData for TransactionOutput {
+impl ToPlutusData for TxOut {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
-                0,
-                vec![
-                    Address::from_bytes(&legacy_output.address)
-                        .unwrap()
-                        .to_plutus_data(),
-                    legacy_output.amount.to_plutus_data(),
-                    None::<DatumOption>.to_plutus_data(),
-                    None::<ScriptRef>.to_plutus_data(),
-                ],
-            ),
-            TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
-                0,
-                vec![
-                    Address::from_bytes(&post_alonzo_output.address)
-                        .unwrap()
-                        .to_plutus_data(),
-                    post_alonzo_output.value.to_plutus_data(),
-                    post_alonzo_output.datum_option.to_plutus_data(),
-                    post_alonzo_output.script_ref.to_plutus_data(),
-                ],
-            ),
+            TxOut::V1(output) => match output {
+                TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
+                    0,
+                    vec![
+                        Address::from_bytes(&legacy_output.address)
+                            .unwrap()
+                            .to_plutus_data(),
+                        legacy_output.amount.to_plutus_data(),
+                        legacy_output.datum_hash.to_plutus_data(),
+                    ],
+                ),
+                TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
+                    0,
+                    vec![
+                        Address::from_bytes(&post_alonzo_output.address)
+                            .unwrap()
+                            .to_plutus_data(),
+                        post_alonzo_output.value.to_plutus_data(),
+                        match post_alonzo_output.datum_option {
+                            Some(DatumOption::Hash(hash)) => Some(hash).to_plutus_data(),
+                            _ => None::<DatumOption>.to_plutus_data(),
+                        },
+                    ],
+                ),
+            },
+            TxOut::V2(output) => match output {
+                TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
+                    0,
+                    vec![
+                        Address::from_bytes(&legacy_output.address)
+                            .unwrap()
+                            .to_plutus_data(),
+                        legacy_output.amount.to_plutus_data(),
+                        match legacy_output.datum_hash {
+                            Some(hash) => wrap_with_constr(1, hash.to_plutus_data()),
+                            _ => empty_constr(0),
+                        },
+                        None::<ScriptRef>.to_plutus_data(),
+                    ],
+                ),
+                TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
+                    0,
+                    vec![
+                        Address::from_bytes(&post_alonzo_output.address)
+                            .unwrap()
+                            .to_plutus_data(),
+                        post_alonzo_output.value.to_plutus_data(),
+                        post_alonzo_output.datum_option.to_plutus_data(),
+                        post_alonzo_output.script_ref.to_plutus_data(),
+                    ],
+                ),
+            },
         }
     }
 }
@@ -581,23 +607,40 @@ impl ToPlutusData for ScriptPurpose {
 
 impl ToPlutusData for TxInfo {
     fn to_plutus_data(&self) -> PlutusData {
-        wrap_multiple_with_constr(
-            0,
-            vec![
-                self.inputs.to_plutus_data(),
-                self.reference_inputs.to_plutus_data(),
-                self.outputs.to_plutus_data(),
-                self.fee.to_plutus_data(),
-                self.mint.to_plutus_data(),
-                self.dcert.to_plutus_data(),
-                self.wdrl.to_plutus_data(),
-                self.valid_range.to_plutus_data(),
-                self.signatories.to_plutus_data(),
-                self.redeemers.to_plutus_data(),
-                self.data.to_plutus_data(),
-                wrap_with_constr(0, self.id.to_plutus_data()),
-            ],
-        )
+        match self {
+            TxInfo::V1(tx_info) => wrap_multiple_with_constr(
+                0,
+                vec![
+                    tx_info.inputs.to_plutus_data(),
+                    tx_info.outputs.to_plutus_data(),
+                    tx_info.fee.to_plutus_data(),
+                    tx_info.mint.to_plutus_data(),
+                    tx_info.dcert.to_plutus_data(),
+                    tx_info.wdrl.to_plutus_data(),
+                    tx_info.valid_range.to_plutus_data(),
+                    tx_info.signatories.to_plutus_data(),
+                    tx_info.data.to_plutus_data(),
+                    wrap_with_constr(0, tx_info.id.to_plutus_data()),
+                ],
+            ),
+            TxInfo::V2(tx_info) => wrap_multiple_with_constr(
+                0,
+                vec![
+                    tx_info.inputs.to_plutus_data(),
+                    tx_info.reference_inputs.to_plutus_data(),
+                    tx_info.outputs.to_plutus_data(),
+                    tx_info.fee.to_plutus_data(),
+                    tx_info.mint.to_plutus_data(),
+                    tx_info.dcert.to_plutus_data(),
+                    tx_info.wdrl.to_plutus_data(),
+                    tx_info.valid_range.to_plutus_data(),
+                    tx_info.signatories.to_plutus_data(),
+                    tx_info.redeemers.to_plutus_data(),
+                    tx_info.data.to_plutus_data(),
+                    wrap_with_constr(0, tx_info.id.to_plutus_data()),
+                ],
+            ),
+        }
     }
 }
 
@@ -619,12 +662,21 @@ impl ToPlutusData for bool {
     }
 }
 
-// Plutus V2 only for now
+#[derive(Debug, PartialEq, Clone)]
+pub struct ResolvedInput {
+    input: TransactionInput,
+    output: TransactionOutput,
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TxInInfo {
     out_ref: TransactionInput,
-    resolved: TransactionOutput,
+    resolved: TxOut,
+}
+#[derive(Debug, PartialEq, Clone)]
+pub enum TxOut {
+    V1(TransactionOutput),
+    V2(TransactionOutput),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -636,10 +688,24 @@ pub enum ScriptPurpose {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TxInfo {
+pub struct TxInfoV1 {
+    inputs: MaybeIndefArray<TxInInfo>,
+    outputs: MaybeIndefArray<TxOut>,
+    fee: Value,
+    mint: Mint,
+    dcert: MaybeIndefArray<Certificate>,
+    wdrl: MaybeIndefArray<(RewardAccount, Coin)>,
+    valid_range: TimeRange,
+    signatories: MaybeIndefArray<AddrKeyhash>,
+    data: MaybeIndefArray<(DatumHash, PlutusData)>,
+    id: Hash<32>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TxInfoV2 {
     inputs: MaybeIndefArray<TxInInfo>,
     reference_inputs: MaybeIndefArray<TxInInfo>,
-    outputs: MaybeIndefArray<TransactionOutput>,
+    outputs: MaybeIndefArray<TxOut>,
     fee: Value,
     mint: Mint,
     dcert: MaybeIndefArray<Certificate>,
@@ -649,6 +715,12 @@ pub struct TxInfo {
     redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
     data: KeyValuePairs<DatumHash, PlutusData>,
     id: Hash<32>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TxInfo {
+    V1(TxInfoV1),
+    V2(TxInfoV2),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -689,8 +761,8 @@ fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> Tim
 
 #[derive(Debug, PartialEq, Clone)]
 enum ScriptVersion {
-    PlutusV1(PlutusV1Script),
-    PlutusV2(PlutusV2Script),
+    V1(PlutusV1Script),
+    V2(PlutusV2Script),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -704,15 +776,34 @@ struct DataLookupTable {
     scripts: HashMap<ScriptHash, ScriptVersion>,
 }
 
-fn get_tx_in_info(
+fn get_tx_in_info_v1(
     inputs: &MaybeIndefArray<TransactionInput>,
-    utxos: &MaybeIndefArray<TxInInfo>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
 ) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
     Ok(MaybeIndefArray::Indef(
         utxos
             .iter()
-            .filter(|utxo| inputs.contains(&utxo.out_ref))
-            .map(|utxo| utxo.clone())
+            .filter(|utxo| inputs.contains(&utxo.input))
+            .map(|utxo| TxInInfo {
+                out_ref: utxo.input.clone(),
+                resolved: TxOut::V1(utxo.output.clone()),
+            })
+            .collect::<Vec<TxInInfo>>(),
+    ))
+}
+
+fn get_tx_in_info_v2(
+    inputs: &MaybeIndefArray<TransactionInput>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
+) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
+    Ok(MaybeIndefArray::Indef(
+        utxos
+            .iter()
+            .filter(|utxo| inputs.contains(&utxo.input))
+            .map(|utxo| TxInInfo {
+                out_ref: utxo.input.clone(),
+                resolved: TxOut::V2(utxo.output.clone()),
+            })
             .collect::<Vec<TxInInfo>>(),
     ))
 }
@@ -770,14 +861,14 @@ fn get_script_purpose(
             let addresss = Address::from_bytes(&reward_account)?;
             let credential = match addresss {
                 Address::Stake(stake_address) => match stake_address.payload() {
-                    StakePayload::Stake(stake_keyhash) => {
-                        StakeCredential::AddrKeyhash(stake_keyhash.clone())
-                    }
                     StakePayload::Script(script_hash) => {
                         StakeCredential::Scripthash(script_hash.clone())
                     }
+                    StakePayload::Stake(_) => {
+                        unreachable!();
+                    }
                 },
-                _ => panic!(),
+                _ => unreachable!(),
             };
             Ok(ScriptPurpose::Rewarding(credential))
         }
@@ -789,22 +880,94 @@ fn get_script_purpose(
     }
 }
 
-fn get_tx_info(
+fn get_tx_info_v1(
     tx: &MintedTx,
-    utxos: &MaybeIndefArray<TxInInfo>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<TxInfo> {
+    // Check if outputs do not contain ref scripts or inline datums or byron addresses in outputs
+
     let body = tx.transaction_body.clone();
 
-    let inputs = get_tx_in_info(&body.inputs, &utxos)?;
-    let reference_inputs = get_tx_in_info(
+    let inputs = get_tx_in_info_v1(&body.inputs, &utxos)?;
+    let outputs = MaybeIndefArray::Indef(
+        body.outputs
+            .iter()
+            .map(|output| TxOut::V1(output.clone()))
+            .collect(),
+    );
+    let fee = Value::Coin(AnyUInt::U64(body.fee));
+    let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
+    let dcert = body
+        .certificates
+        .clone()
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+    let wdrl = MaybeIndefArray::Indef(
+        body.withdrawals
+            .clone()
+            .unwrap_or(KeyValuePairs::Indef(vec![]))
+            .deref()
+            .clone(),
+    );
+    let valid_range = slot_range_to_posix_time_range(
+        TimeRange {
+            lower_bound: body.validity_interval_start,
+            upper_bound: body.ttl,
+        },
+        &slot_config,
+    );
+    let signatories = body
+        .required_signers
+        .clone()
+        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+    let data = MaybeIndefArray::Indef(
+        tx.transaction_witness_set
+            .plutus_data
+            .as_ref()
+            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+            .iter()
+            .map(|d| (d.to_hash(), d.clone()))
+            .collect(),
+    );
+    let id = tx.transaction_body.to_hash();
+
+    Ok(TxInfo::V1(TxInfoV1 {
+        inputs,
+        outputs,
+        fee,
+        mint,
+        dcert,
+        wdrl,
+        valid_range,
+        signatories,
+        data,
+        id,
+    }))
+}
+
+fn get_tx_info_v2(
+    tx: &MintedTx,
+    utxos: &MaybeIndefArray<ResolvedInput>,
+    slot_config: &SlotConfig,
+) -> anyhow::Result<TxInfo> {
+    //TODO: Check if no byron addresses in outputs
+
+    let body = tx.transaction_body.clone();
+
+    let inputs = get_tx_in_info_v2(&body.inputs, &utxos)?;
+    let reference_inputs = get_tx_in_info_v2(
         &body
             .reference_inputs
             .clone()
             .unwrap_or(MaybeIndefArray::Indef(vec![])),
         &utxos,
     )?;
-    let outputs = body.outputs.clone();
+    let outputs = MaybeIndefArray::Indef(
+        body.outputs
+            .iter()
+            .map(|output| TxOut::V2(output.clone()))
+            .collect(),
+    );
     let fee = Value::Coin(AnyUInt::U64(body.fee));
     let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
     let dcert = body
@@ -858,7 +1021,7 @@ fn get_tx_info(
     );
     let id = tx.transaction_body.to_hash();
 
-    Ok(TxInfo {
+    Ok(TxInfo::V2(TxInfoV2 {
         inputs,
         reference_inputs,
         outputs,
@@ -871,11 +1034,11 @@ fn get_tx_info(
         redeemers,
         data,
         id,
-    })
+    }))
 }
 
 fn get_execution_purpose(
-    utxos: &MaybeIndefArray<TxInInfo>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
     script_purpose: &ScriptPurpose,
     lookup_table: &DataLookupTable,
 ) -> ExecutionPurpose {
@@ -888,8 +1051,8 @@ fn get_execution_purpose(
             ExecutionPurpose::NoDatum(script.clone())
         }
         ScriptPurpose::Spending(out_ref) => {
-            let utxo = utxos.iter().find(|utxo| utxo.out_ref == *out_ref).unwrap();
-            match &utxo.resolved {
+            let utxo = utxos.iter().find(|utxo| utxo.input == *out_ref).unwrap();
+            match &utxo.output {
                 TransactionOutput::Legacy(output) => {
                     let address = Address::from_bytes(&output.address).unwrap();
                     match address {
@@ -902,9 +1065,6 @@ fn get_execution_purpose(
                             let datum =
                                 lookup_table.datum.get(&output.datum_hash.unwrap()).unwrap();
 
-                            let a = hex::encode(datum.encode_fragment().unwrap());
-
-                            println!("{:?}", a);
                             ExecutionPurpose::WithDatum(script.clone(), datum.clone())
                         }
                         _ => unreachable!(),
@@ -967,7 +1127,7 @@ fn get_execution_purpose(
 
 fn get_script_and_datum_lookup_table(
     tx: &MintedTx,
-    utxos: &MaybeIndefArray<TxInInfo>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
 ) -> DataLookupTable {
     let mut datum = HashMap::new();
     let mut scripts = HashMap::new();
@@ -1003,7 +1163,7 @@ fn get_script_and_datum_lookup_table(
         prefixed_script.extend(script.0.iter());
 
         let hash = Hasher::<224>::hash(&prefixed_script);
-        scripts.insert(hash, ScriptVersion::PlutusV1(script.clone()));
+        scripts.insert(hash, ScriptVersion::V1(script.clone()));
     }
 
     for script in scripts_v2_witnesses.iter() {
@@ -1013,13 +1173,13 @@ fn get_script_and_datum_lookup_table(
         prefixed_script.extend(script.0.iter());
 
         let hash = Hasher::<224>::hash(&prefixed_script);
-        scripts.insert(hash, ScriptVersion::PlutusV2(script.clone()));
+        scripts.insert(hash, ScriptVersion::V2(script.clone()));
     }
 
     // discovery in utxos (script ref)
 
     for utxo in utxos.iter() {
-        match &utxo.resolved {
+        match &utxo.output {
             TransactionOutput::Legacy(_) => {}
             TransactionOutput::PostAlonzo(output) => match &output.script_ref {
                 Some(script) => match &script.0 {
@@ -1029,7 +1189,7 @@ fn get_script_and_datum_lookup_table(
                         prefixed_script.extend(v1.0.iter());
 
                         let hash = Hasher::<224>::hash(&prefixed_script);
-                        scripts.insert(hash, ScriptVersion::PlutusV1(v1.clone()));
+                        scripts.insert(hash, ScriptVersion::V1(v1.clone()));
                     }
                     Script::PlutusV2Script(v2) => {
                         // scripts.insert(v2.to_hash(), ScriptVersion::PlutusV2(v2.clone())); // TODO: fix hashing bug in pallas
@@ -1038,7 +1198,7 @@ fn get_script_and_datum_lookup_table(
                         prefixed_script.extend(v2.0.iter());
 
                         let hash = Hasher::<224>::hash(&prefixed_script);
-                        scripts.insert(hash, ScriptVersion::PlutusV2(v2.clone()));
+                        scripts.insert(hash, ScriptVersion::V2(v2.clone()));
                     }
                     _ => {}
                 },
@@ -1052,7 +1212,7 @@ fn get_script_and_datum_lookup_table(
 
 fn eval_redeemer(
     tx: &MintedTx,
-    utxos: &MaybeIndefArray<TxInInfo>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
     lookup_table: &DataLookupTable,
@@ -1069,9 +1229,40 @@ fn eval_redeemer(
 
     match execution_purpose {
         ExecutionPurpose::WithDatum(script_version, datum) => match script_version {
-            ScriptVersion::PlutusV1(script) => todo!(),
-            ScriptVersion::PlutusV2(script) => {
-                let tx_info = get_tx_info(tx, utxos, slot_config)?;
+            ScriptVersion::V1(script) => {
+                let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(datum.clone())
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                result.0.unwrap();
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
+            }
+            ScriptVersion::V2(script) => {
+                let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
                 let script_context = ScriptContext { tx_info, purpose };
 
                 let program: Program<NamedDeBruijn> = {
@@ -1104,9 +1295,39 @@ fn eval_redeemer(
             }
         },
         ExecutionPurpose::NoDatum(script_version) => match script_version {
-            ScriptVersion::PlutusV1(script) => todo!(),
-            ScriptVersion::PlutusV2(script) => {
-                let tx_info = get_tx_info(tx, utxos, slot_config)?;
+            ScriptVersion::V1(script) => {
+                let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                result.0.unwrap();
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
+            }
+            ScriptVersion::V2(script) => {
+                let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
                 let script_context = ScriptContext { tx_info, purpose };
 
                 let program: Program<NamedDeBruijn> = {
@@ -1154,7 +1375,7 @@ fn eval_redeemer(
 
 fn eval_tx(
     tx: &MintedTx,
-    utxos: &MaybeIndefArray<TxInInfo>,
+    utxos: &MaybeIndefArray<ResolvedInput>,
     //TODO: costMdls
     slot_config: &SlotConfig,
 ) -> anyhow::Result<MaybeIndefArray<Redeemer>> {
@@ -1190,11 +1411,14 @@ mod tests {
     use pallas_traverse::{Era, MultiEraTx};
     use uplc::PlutusData;
 
-    use super::{eval_tx, SlotConfig, TxInInfo};
+    use super::{eval_tx, ResolvedInput, SlotConfig, TxInInfo};
 
     #[test]
     fn test_eval() {
         /*
+
+        PlutusV2
+
         {-# INLINEABLE mintTestValidator #-}
         mintTestValidator :: () -> Api.ScriptContext -> Bool
         mintTestValidator _ ctx = Api.txInfoFee txInfo == Api.txInfoFee txInfo && (case Api.txInfoSignatories txInfo of [] -> True)
@@ -1211,13 +1435,13 @@ mod tests {
         let inputs = MaybeIndefArray::<TransactionInput>::decode_fragment(&raw_inputs).unwrap();
         let outputs = MaybeIndefArray::<TransactionOutput>::decode_fragment(&raw_outputs).unwrap();
 
-        let utxos: MaybeIndefArray<TxInInfo> = MaybeIndefArray::Indef(
+        let utxos: MaybeIndefArray<ResolvedInput> = MaybeIndefArray::Indef(
             inputs
                 .iter()
                 .zip(outputs.iter())
-                .map(|(input, output)| TxInInfo {
-                    out_ref: input.clone(),
-                    resolved: output.clone(),
+                .map(|(input, output)| ResolvedInput {
+                    input: input.clone(),
+                    output: output.clone(),
                 })
                 .collect(),
         );
@@ -1243,6 +1467,9 @@ mod tests {
     #[test]
     fn test_eval_1() {
         /*
+
+        PlutusV2
+
         {-# INLINEABLE mintTestValidator #-}
         mintTestValidator :: () -> Api.ScriptContext -> Bool
         mintTestValidator _ ctx = Api.txInfoFee txInfo == Api.txInfoFee txInfo
@@ -1259,13 +1486,13 @@ mod tests {
         let inputs = MaybeIndefArray::<TransactionInput>::decode_fragment(&raw_inputs).unwrap();
         let outputs = MaybeIndefArray::<TransactionOutput>::decode_fragment(&raw_outputs).unwrap();
 
-        let utxos: MaybeIndefArray<TxInInfo> = MaybeIndefArray::Indef(
+        let utxos: MaybeIndefArray<ResolvedInput> = MaybeIndefArray::Indef(
             inputs
                 .iter()
                 .zip(outputs.iter())
-                .map(|(input, output)| TxInInfo {
-                    out_ref: input.clone(),
-                    resolved: output.clone(),
+                .map(|(input, output)| ResolvedInput {
+                    input: input.clone(),
+                    output: output.clone(),
                 })
                 .collect(),
         );

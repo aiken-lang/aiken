@@ -30,7 +30,7 @@ pub enum TxCommand {
 }
 
 #[derive(Deserialize)]
-pub struct ResolvedInput {
+pub struct ResolvedInputOld {
     pub input: Input,
     pub output: Output,
 }
