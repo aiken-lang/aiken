@@ -736,7 +736,7 @@ struct TimeRange {
     upper_bound: Option<u64>,
 }
 
-struct SlotConfig {
+pub struct SlotConfig {
     slot_length: u64,
     zero_time: u64,
 }
@@ -780,32 +780,83 @@ fn get_tx_in_info_v1(
     inputs: &MaybeIndefArray<TransactionInput>,
     utxos: &MaybeIndefArray<ResolvedInput>,
 ) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
-    Ok(MaybeIndefArray::Indef(
-        utxos
-            .iter()
-            .filter(|utxo| inputs.contains(&utxo.input))
-            .map(|utxo| TxInInfo {
+    let result = inputs
+        .iter()
+        .map(|input| {
+            let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
+                Some(u) => u,
+                None => unreachable!("Resolved input not found."),
+            };
+            let address = Address::from_bytes(match &utxo.output {
+                TransactionOutput::Legacy(output) => output.address.as_ref(),
+                TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
+            })
+            .unwrap();
+
+            match address {
+                Address::Byron(_) => unreachable!("Byron addresses not supported in Plutus."),
+                Address::Stake(_) => {
+                    unreachable!("This is impossible. A stake address cannot lock a UTxO.")
+                }
+                _ => {}
+            }
+
+            match &utxo.output {
+                TransactionOutput::Legacy(_) => {}
+                TransactionOutput::PostAlonzo(output) => {
+                    match output.datum_option {
+                        Some(DatumOption::Data(_)) => {
+                            unreachable!("Inline datum not allowed in PlutusV1.")
+                        }
+                        _ => {}
+                    };
+                    if output.script_ref.is_some() {
+                        unreachable!("Reference scripts not allowed in PlutusV1.")
+                    }
+                }
+            }
+
+            TxInInfo {
                 out_ref: utxo.input.clone(),
                 resolved: TxOut::V1(utxo.output.clone()),
-            })
-            .collect::<Vec<TxInInfo>>(),
-    ))
+            }
+        })
+        .collect::<Vec<TxInInfo>>();
+    Ok(MaybeIndefArray::Indef(result))
 }
 
 fn get_tx_in_info_v2(
     inputs: &MaybeIndefArray<TransactionInput>,
     utxos: &MaybeIndefArray<ResolvedInput>,
 ) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
-    Ok(MaybeIndefArray::Indef(
-        utxos
-            .iter()
-            .filter(|utxo| inputs.contains(&utxo.input))
-            .map(|utxo| TxInInfo {
+    let result = inputs
+        .iter()
+        .map(|input| {
+            let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
+                Some(u) => u,
+                None => unreachable!("Resolved input not found."),
+            };
+            let address = Address::from_bytes(match &utxo.output {
+                TransactionOutput::Legacy(output) => output.address.as_ref(),
+                TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
+            })
+            .unwrap();
+
+            match address {
+                Address::Byron(_) => unreachable!("Byron addresses not supported in Plutus."),
+                Address::Stake(_) => {
+                    unreachable!("This is impossible. A stake address cannot lock a UTxO.")
+                }
+                _ => {}
+            }
+
+            TxInInfo {
                 out_ref: utxo.input.clone(),
                 resolved: TxOut::V2(utxo.output.clone()),
-            })
-            .collect::<Vec<TxInInfo>>(),
-    ))
+            }
+        })
+        .collect::<Vec<TxInInfo>>();
+    Ok(MaybeIndefArray::Indef(result))
 }
 
 fn get_script_purpose(
@@ -865,10 +916,14 @@ fn get_script_purpose(
                         StakeCredential::Scripthash(script_hash.clone())
                     }
                     StakePayload::Stake(_) => {
-                        unreachable!();
+                        unreachable!(
+                            "This is impossible. A key hash cannot be the hash of a script."
+                        );
                     }
                 },
-                _ => unreachable!(),
+                _ => unreachable!(
+                    "This is impossible. Only shelley reward addresses can be a part of withdrawals."
+                ),
             };
             Ok(ScriptPurpose::Rewarding(credential))
         }
@@ -885,9 +940,11 @@ fn get_tx_info_v1(
     utxos: &MaybeIndefArray<ResolvedInput>,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<TxInfo> {
-    // Check if outputs do not contain ref scripts or inline datums or byron addresses in outputs
-
     let body = tx.transaction_body.clone();
+
+    if body.reference_inputs.is_some() {
+        unreachable!("Reference inputs not allowed in PlutusV1.")
+    }
 
     let inputs = get_tx_in_info_v1(&body.inputs, &utxos)?;
     let outputs = MaybeIndefArray::Indef(
@@ -950,8 +1007,6 @@ fn get_tx_info_v2(
     utxos: &MaybeIndefArray<ResolvedInput>,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<TxInfo> {
-    //TODO: Check if no byron addresses in outputs
-
     let body = tx.transaction_body.clone();
 
     let inputs = get_tx_in_info_v2(&body.inputs, &utxos)?;
@@ -1067,7 +1122,9 @@ fn get_execution_purpose(
 
                             ExecutionPurpose::WithDatum(script.clone(), datum.clone())
                         }
-                        _ => unreachable!(),
+                        _ => unreachable!(
+                            "This is impossible. Only shelley addresses can contain a script hash."
+                        ),
                     }
                 }
                 TransactionOutput::PostAlonzo(output) => {
@@ -1084,12 +1141,14 @@ fn get_execution_purpose(
                                     lookup_table.datum.get(&hash).unwrap().clone()
                                 }
                                 Some(DatumOption::Data(data)) => data.0.clone(),
-                                _ => unreachable!(),
+                                _ => unreachable!( "This is impossible. The script UTxO needs to contain an inline datum or datum hash in order to spend it."),
                             };
 
                             ExecutionPurpose::WithDatum(script.clone(), datum)
                         }
-                        _ => unreachable!(),
+                        _ => unreachable!(
+                            "This is impossible. Only shelley addresses can contain a script hash."
+                        ),
                     }
                 }
             }
@@ -1097,7 +1156,7 @@ fn get_execution_purpose(
         ScriptPurpose::Rewarding(stake_credential) => {
             let script_hash = match stake_credential {
                 StakeCredential::Scripthash(hash) => hash.clone(),
-                _ => unreachable!(),
+                _ => unreachable!("This is impossible. A key hash cannot be the hash of a script."),
             };
             let script = lookup_table.scripts.get(&script_hash).unwrap();
             ExecutionPurpose::NoDatum(script.clone())
@@ -1107,7 +1166,9 @@ fn get_execution_purpose(
             Certificate::StakeDeregistration(stake_credential) => {
                 let script_hash = match stake_credential {
                     StakeCredential::Scripthash(hash) => hash.clone(),
-                    _ => unreachable!(),
+                    _ => unreachable!(
+                        "This is impossible. A key hash cannot be the hash of a script."
+                    ),
                 };
                 let script = lookup_table.scripts.get(&script_hash).unwrap();
                 ExecutionPurpose::NoDatum(script.clone())
@@ -1115,12 +1176,14 @@ fn get_execution_purpose(
             Certificate::StakeDelegation(stake_credential, _) => {
                 let script_hash = match stake_credential {
                     StakeCredential::Scripthash(hash) => hash.clone(),
-                    _ => unreachable!(),
+                    _ => unreachable!(
+                        "This is impossible. A key hash cannot be the hash of a script."
+                    ),
                 };
                 let script = lookup_table.scripts.get(&script_hash).unwrap();
                 ExecutionPurpose::NoDatum(script.clone())
             }
-            _ => unreachable!(),
+            _ => unreachable!("This is impossible. Only stake deregistration and stake delegation are valid a script purposes."),
         },
     }
 }
@@ -1519,7 +1582,7 @@ mod tests {
     fn test_eval_2() {
         /*
 
-        PlutusV1
+        Plutus V1
 
         {-# INLINEABLE mintTestValidator #-}
         mintTestValidator :: () -> Api.ScriptContext -> Bool
