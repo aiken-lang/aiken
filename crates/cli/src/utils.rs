@@ -1196,7 +1196,7 @@ fn get_execution_purpose(
                 let script = lookup_table.scripts.get(&script_hash).unwrap();
                 ExecutionPurpose::NoDatum(script.clone())
             }
-            _ => unreachable!("This is impossible. Only stake deregistration and stake delegation are valid a script purposes."),
+            _ => unreachable!("This is impossible. Only stake deregistration and stake delegation are valid script purposes."),
         },
     }
 }
