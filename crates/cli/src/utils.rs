@@ -874,13 +874,15 @@ fn get_script_purpose(
             // sort lexical by policy id
             let mut policy_ids = mint
                 .as_ref()
-                .unwrap()
+                .unwrap_or(&KeyValuePairs::Indef(vec![]))
                 .iter()
                 .map(|(policy_id, _)| policy_id.clone())
                 .collect::<Vec<ByteVec>>();
             policy_ids.sort();
-            let policy_id = policy_ids[index as usize].clone();
-            Ok(ScriptPurpose::Minting(policy_id))
+            match policy_ids.get(index as usize) {
+                Some(policy_id) => Ok(ScriptPurpose::Minting(policy_id.clone())),
+                None => unreachable!("Script purpose not found for redeemer."),
+            }
         }
         RedeemerTag::Spend => {
             // sort lexical by tx_hash and index
@@ -896,19 +898,24 @@ fn get_script_purpose(
                     std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
                 },
             );
-            let input = inputs[index as usize].clone();
-            Ok(ScriptPurpose::Spending(input))
+            match inputs.get(index as usize) {
+                Some(input) => Ok(ScriptPurpose::Spending(input.clone())),
+                None => unreachable!("Script purpose not found for redeemer."),
+            }
         }
         RedeemerTag::Reward => {
             // sort lexical by reward account
             let mut reward_accounts = wdrl
                 .as_ref()
-                .unwrap()
+                .unwrap_or(&KeyValuePairs::Indef(vec![]))
                 .iter()
                 .map(|(policy_id, _)| policy_id.clone())
                 .collect::<Vec<RewardAccount>>();
             reward_accounts.sort();
-            let reward_account = reward_accounts[index as usize].clone();
+            let reward_account = match reward_accounts.get(index as usize) {
+                Some(ra) => ra.clone(),
+                None => unreachable!("Script purpose not found for redeemer."),
+            };
             let addresss = Address::from_bytes(&reward_account)?;
             let credential = match addresss {
                 Address::Stake(stake_address) => match stake_address.payload() {
@@ -929,8 +936,14 @@ fn get_script_purpose(
         }
         RedeemerTag::Cert => {
             // sort by order given in the tx (just take it as it is basically)
-            let cert = dcert.as_ref().unwrap()[index as usize].clone();
-            Ok(ScriptPurpose::Certifying(cert))
+            match dcert
+                .as_ref()
+                .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+                .get(index as usize)
+            {
+                Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
+                None => unreachable!("Script purpose not found for redeemer."),
+            }
         }
     }
 }
