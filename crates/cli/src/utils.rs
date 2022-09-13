@@ -1323,7 +1323,10 @@ fn eval_redeemer(
                     .apply_data(script_context.to_plutus_data())
                     .eval();
 
-                result.0.unwrap();
+                match result.0 {
+                    Ok(_) => {}
+                    Err(err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
@@ -1355,7 +1358,10 @@ fn eval_redeemer(
                     .apply_data(script_context.to_plutus_data())
                     .eval();
 
-                result.0.unwrap();
+                match result.0 {
+                    Ok(_) => {}
+                    Err(err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
@@ -1388,7 +1394,10 @@ fn eval_redeemer(
                     .apply_data(script_context.to_plutus_data())
                     .eval();
 
-                result.0.unwrap();
+                match result.0 {
+                    Ok(_) => {}
+                    Err(err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
@@ -1420,18 +1429,9 @@ fn eval_redeemer(
                     .eval();
 
                 match result.0 {
-                    Ok(_) => {
-                        println!("SUCCESS")
-                    }
-                    Err(err) => {
-                        println!("ERROR: {:?}", err.to_string())
-                    }
+                    Ok(_) => {}
+                    Err(err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
                 }
-
-                println!("MEM: {:?}", ExBudget::default().mem - result.1.mem);
-                println!("STEP: {:?}", ExBudget::default().cpu - result.1.cpu);
-
-                // result.0.unwrap();
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
