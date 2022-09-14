@@ -488,9 +488,9 @@ impl Value {
                 PlutusData::Map(m) => {
                     let mut new_stack: VecDeque<&PlutusData>;
                     // create new stack with of items from the list of pairs of data
-                    new_stack = m.deref().iter().fold(VecDeque::new(), |mut acc, d| {
-                        acc.push_back(&d.0);
-                        acc.push_back(&d.1);
+                    new_stack = m.iter().fold(VecDeque::new(), |mut acc, d| {
+                        acc.push_back(d.0);
+                        acc.push_back(d.1);
                         acc
                     });
                     // Append old stack to the back of the new stack
@@ -499,7 +499,7 @@ impl Value {
                 }
                 PlutusData::BigInt(i) => {
                     if let BigInt::Int(g) = i {
-                        let numb: i64 = (*g).try_into().unwrap();
+                        let numb: i128 = (*g).try_into().unwrap();
                         total += Value::Con(Constant::Integer(numb as isize)).to_ex_mem();
                     } else {
                         unreachable!()
@@ -510,14 +510,6 @@ impl Value {
                     total += Value::Con(Constant::ByteString(byte_string)).to_ex_mem();
                 }
                 PlutusData::Array(a) => {
-                    // create new stack with of items from the list of data
-                    let mut new_stack: VecDeque<&PlutusData> =
-                        VecDeque::from_iter(a.deref().iter());
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
-                }
-                PlutusData::ArrayIndef(a) => {
                     // create new stack with of items from the list of data
                     let mut new_stack: VecDeque<&PlutusData> =
                         VecDeque::from_iter(a.deref().iter());

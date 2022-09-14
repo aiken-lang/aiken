@@ -1,6 +1,5 @@
-use std::ops::Deref;
+use std::{collections::BTreeMap, ops::Deref};
 
-use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
 use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
 
 use crate::{
@@ -664,8 +663,7 @@ impl DefaultFunction {
             DefaultFunction::ChooseData => match &args[0] {
                 Value::Con(Constant::Data(PlutusData::Constr(_))) => Ok(args[1].clone()),
                 Value::Con(Constant::Data(PlutusData::Map(_))) => Ok(args[2].clone()),
-                Value::Con(Constant::Data(PlutusData::Array(_)))
-                | Value::Con(Constant::Data(PlutusData::ArrayIndef(_))) => Ok(args[3].clone()),
+                Value::Con(Constant::Data(PlutusData::Array(_))) => Ok(args[3].clone()),
                 Value::Con(Constant::Data(PlutusData::BigInt(_))) => Ok(args[4].clone()),
                 Value::Con(Constant::Data(PlutusData::BoundedBytes(_))) => Ok(args[5].clone()),
                 _ => unreachable!(),
@@ -687,7 +685,7 @@ impl DefaultFunction {
                         // TODO: handle other types of constructor tags
                         tag: convert_constr_to_tag(*i as u64),
                         any_constructor: None,
-                        fields: MaybeIndefArray::Indef(data_list),
+                        fields: data_list,
                     });
                     Ok(Value::Con(Constant::Data(constr_data)))
                 }
@@ -695,21 +693,23 @@ impl DefaultFunction {
             },
             DefaultFunction::MapData => match &args[0] {
                 Value::Con(Constant::ProtoList(_, list)) => {
-                    let data_list: Vec<(PlutusData, PlutusData)> = list
-                        .iter()
-                        .map(|item| match item {
+                    let mut map = BTreeMap::new();
+
+                    for item in list {
+                        match item {
                             Constant::ProtoPair(Type::Data, Type::Data, left, right) => {
                                 match (*left.clone(), *right.clone()) {
-                                    (Constant::Data(key), Constant::Data(value)) => (key, value),
+                                    (Constant::Data(key), Constant::Data(value)) => {
+                                        map.insert(key, value);
+                                    }
                                     _ => unreachable!(),
                                 }
                             }
                             _ => unreachable!(),
-                        })
-                        .collect();
-                    Ok(Value::Con(Constant::Data(PlutusData::Map(
-                        KeyValuePairs::Def(data_list),
-                    ))))
+                        }
+                    }
+
+                    Ok(Value::Con(Constant::Data(PlutusData::Map(map))))
                 }
                 _ => unreachable!(),
             },
@@ -722,9 +722,8 @@ impl DefaultFunction {
                             _ => unreachable!(),
                         })
                         .collect();
-                    Ok(Value::Con(Constant::Data(PlutusData::ArrayIndef(
-                        MaybeIndefArray::Indef(data_list),
-                    ))))
+
+                    Ok(Value::Con(Constant::Data(PlutusData::Array(data_list))))
                 }
                 _ => unreachable!(),
             },
@@ -779,8 +778,7 @@ impl DefaultFunction {
                 _ => unreachable!(),
             },
             DefaultFunction::UnListData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::Array(l)))
-                | Value::Con(Constant::Data(PlutusData::ArrayIndef(l))) => {
+                Value::Con(Constant::Data(PlutusData::Array(l))) => {
                     Ok(Value::Con(Constant::ProtoList(
                         Type::Data,
                         l.deref()
@@ -794,7 +792,7 @@ impl DefaultFunction {
             DefaultFunction::UnIData => match &args[0] {
                 Value::Con(Constant::Data(PlutusData::BigInt(b))) => {
                     if let BigInt::Int(i) = b {
-                        let x: i64 = (*i).try_into().unwrap();
+                        let x: i128 = (*i).try_into().unwrap();
 
                         Ok(Value::Con(Constant::Integer(x as isize)))
                     } else {
