@@ -36,46 +36,10 @@ fn main() -> anyhow::Result<()> {
                     hex::decode(cbor_hex.trim())?
                 };
 
-                let tx = MultiEraTx::decode(Era::Alonzo, &tx_bytes)
-                    .or_else(|_| MultiEraTx::decode(Era::Byron, &tx_bytes))?;
+                let tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+                    .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))?;
 
                 println!("Simulating: {}", tx.hash());
-
-                let witnesses = tx.witnesses();
-
-                if let Some(((datums, redeemers), scripts)) = witnesses
-                    .plutus_data()
-                    .zip(witnesses.redeemer())
-                    .zip(witnesses.plutus_v1_script())
-                {
-                    for ((datum, redeemer), script) in
-                        datums.iter().zip(redeemers.iter()).zip(scripts.iter())
-                    {
-                        let program: Program<NamedDeBruijn> = {
-                            let mut buffer = Vec::new();
-
-                            let prog =
-                                Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
-
-                            prog.into()
-                        };
-
-                        program
-                            .apply_data(datum.clone())
-                            .apply_data(redeemer.data.clone());
-
-                        let file = File::open(&resolved_inputs)?;
-                        let reader = BufReader::new(file);
-                        let resolved_inputs: Vec<ResolvedInputOld> =
-                            serde_json::from_reader(reader)?;
-
-                        let tx_in_info = utils::get_tx_in_info_old(&resolved_inputs)?;
-                    }
-                }
-
-                println!("\nPlutus V2 Script:");
-
-                println!("{:#?}", tx.witnesses().plutus_v2_script());
             }
         },
         Args::Uplc(uplc_cmd) => match uplc_cmd {
