@@ -2,8 +2,8 @@ use pallas_addresses::{
     Address, ScriptHash, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload,
 };
 use pallas_codec::{
-    minicbor::{bytes::ByteVec, data::Int},
-    utils::{AnyUInt, KeyValuePairs, MaybeIndefArray},
+    minicbor::{bytes::ByteVec},
+    utils::{AnyUInt, KeyValuePairs, MaybeIndefArray, Bytes, Int},
 };
 use pallas_crypto::hash::{Hash, Hasher};
 use pallas_primitives::{
@@ -13,9 +13,9 @@ use pallas_primitives::{
         Redeemer, RedeemerTag, RewardAccount, Script, ScriptRef, StakeCredential, TransactionInput,
         TransactionOutput, Tx, Value, Withdrawals,
     },
-    Fragment, ToHash,
+    Fragment, 
 };
-use pallas_traverse::{Era, MultiEraTx};
+use pallas_traverse::{Era, MultiEraTx, OriginalHash, ComputeHash};
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -55,7 +55,7 @@ pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInputOld]) -> anyhow::Resul
         let tx_out = PlutusData::Constr(Constr {
             tag: 0,
             any_constructor: None,
-            fields: MaybeIndefArray::Indef(vec![
+            fields: vec![
                 // txOutAddress
                 address.to_plutus_data(),
                 // txOutValue
@@ -73,7 +73,7 @@ pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInputOld]) -> anyhow::Resul
                                             PlutusData::BoundedBytes(
                                                 token.0.as_bytes().to_vec().into(),
                                             ),
-                                            PlutusData::BigInt(BigInt::Int((*token.1).into())),
+                                            PlutusData::BigInt(BigInt::Int((*token.1 as i64).into())),
                                         )
                                     })
                                     .collect(),
@@ -82,13 +82,13 @@ pub fn get_tx_in_info_old(resolved_inputs: &[ResolvedInputOld]) -> anyhow::Resul
                         })
                         .collect(),
                 )),
-            ]),
+            ],
         });
 
         tx_in_info.push(PlutusData::Constr(Constr {
             tag: 0,
             any_constructor: None,
-            fields: MaybeIndefArray::Indef(vec![tx_out_ref, tx_out]),
+            fields: vec![tx_out_ref, tx_out],
         }));
     }
 
@@ -101,7 +101,7 @@ fn wrap_with_constr(index: u64, data: PlutusData) -> PlutusData {
     PlutusData::Constr(Constr {
         tag: constr_index(index),
         any_constructor: None,
-        fields: MaybeIndefArray::Indef(vec![data]),
+        fields: vec![data],
     })
 }
 
@@ -109,7 +109,7 @@ fn wrap_multiple_with_constr(index: u64, data: Vec<PlutusData>) -> PlutusData {
     PlutusData::Constr(Constr {
         tag: constr_index(index),
         any_constructor: None,
-        fields: MaybeIndefArray::Indef(data),
+        fields: data,
     })
 }
 
@@ -117,7 +117,7 @@ fn empty_constr(index: u64) -> PlutusData {
     PlutusData::Constr(Constr {
         tag: constr_index(index),
         any_constructor: None,
-        fields: MaybeIndefArray::Indef(vec![]),
+        fields: vec![],
     })
 }
 
@@ -178,7 +178,7 @@ impl ToPlutusData for TransactionInput {
             0,
             vec![
                 wrap_with_constr(0, self.transaction_id.to_plutus_data()),
-                PlutusData::BigInt(BigInt::Int(self.index.into())),
+                PlutusData::BigInt(BigInt::Int((self.index as i64).into())),
             ],
         )
     }
@@ -190,7 +190,7 @@ impl<const BYTES: usize> ToPlutusData for Hash<BYTES> {
     }
 }
 
-impl ToPlutusData for ByteVec {
+impl ToPlutusData for Bytes {
     fn to_plutus_data(&self) -> PlutusData {
         PlutusData::BoundedBytes(self.clone())
     }
@@ -202,15 +202,15 @@ impl<K: ToPlutusData, V: ToPlutusData> ToPlutusData for (K, V) {
     }
 }
 
-impl<A: ToPlutusData> ToPlutusData for MaybeIndefArray<A> {
+impl<A> ToPlutusData for Vec<A> where A: ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::Array(MaybeIndefArray::Indef(
+        PlutusData::Array(
             self.iter().map(|p| p.to_plutus_data()).collect(),
-        ))
+        )
     }
 }
 
-impl<K: ToPlutusData, V: ToPlutusData> ToPlutusData for KeyValuePairs<K, V> {
+impl<K, V> ToPlutusData for KeyValuePairs<K, V> where K: ToPlutusData + Clone, V: ToPlutusData + Clone {
     fn to_plutus_data(&self) -> PlutusData {
         let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![];
         for (key, value) in self.iter() {
@@ -246,11 +246,11 @@ impl ToPlutusData for Option<DatumOption> {
 impl ToPlutusData for AnyUInt {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            AnyUInt::U8(u8) => PlutusData::BigInt(BigInt::Int(Int::from(*u8))),
-            AnyUInt::U16(u16) => PlutusData::BigInt(BigInt::Int(Int::from(*u16))),
-            AnyUInt::U32(u32) => PlutusData::BigInt(BigInt::Int(Int::from(*u32))),
-            AnyUInt::U64(u64) => PlutusData::BigInt(BigInt::Int(Int::from(*u64))),
-            AnyUInt::MajorByte(u8) => PlutusData::BigInt(BigInt::Int(Int::from(*u8))), // is this correct? I don't know exactly what is does
+            AnyUInt::U8(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
+            AnyUInt::U16(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
+            AnyUInt::U32(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
+            AnyUInt::U64(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
+            AnyUInt::MajorByte(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))), // is this correct? I don't know exactly what is does
         }
     }
 }
@@ -275,7 +275,7 @@ impl ToPlutusData for i64 {
 
 impl ToPlutusData for u64 {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::BigInt(BigInt::Int(Int::from(*self)))
+        PlutusData::BigInt(BigInt::Int(Int::from(*self as i64)))
     }
 }
 
@@ -283,7 +283,7 @@ impl ToPlutusData for Value {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             Value::Coin(coin) => PlutusData::Map(KeyValuePairs::Def(vec![(
-                PolicyId::from(vec![]).to_plutus_data(),
+                PolicyId::from([0; 28]).to_plutus_data(),
                 PlutusData::Map(KeyValuePairs::Def(vec![(
                     AssetName::from(vec![]).to_plutus_data(),
                     coin.to_plutus_data(),
@@ -291,7 +291,7 @@ impl ToPlutusData for Value {
             )])),
             Value::Multiasset(coin, multiassets) => {
                 let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![(
-                    PolicyId::from(vec![]).to_plutus_data(),
+                    PolicyId::from([0; 28]).to_plutus_data(),
                     PlutusData::Map(KeyValuePairs::Def(vec![(
                         AssetName::from(vec![]).to_plutus_data(),
                         coin.to_plutus_data(),
@@ -318,9 +318,9 @@ impl ToPlutusData for Value {
 impl ToPlutusData for ScriptRef {
     fn to_plutus_data(&self) -> PlutusData {
         match &self.0 {
-            Script::NativeScript(native_script) => native_script.to_hash().to_plutus_data(),
-            Script::PlutusV1Script(plutus_v1) => plutus_v1.to_hash().to_plutus_data(),
-            Script::PlutusV2Script(plutus_v2) => plutus_v2.to_hash().to_plutus_data(),
+            Script::NativeScript(native_script) => native_script.compute_hash().to_plutus_data(),
+            Script::PlutusV1Script(plutus_v1) => plutus_v1.compute_hash().to_plutus_data(),
+            Script::PlutusV2Script(plutus_v2) => plutus_v2.compute_hash().to_plutus_data(),
         }
     }
 }
@@ -689,29 +689,29 @@ pub enum ScriptPurpose {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TxInfoV1 {
-    inputs: MaybeIndefArray<TxInInfo>,
-    outputs: MaybeIndefArray<TxOut>,
+    inputs: Vec<TxInInfo>,
+    outputs: Vec<TxOut>,
     fee: Value,
     mint: Mint,
-    dcert: MaybeIndefArray<Certificate>,
-    wdrl: MaybeIndefArray<(RewardAccount, Coin)>,
+    dcert: Vec<Certificate>,
+    wdrl: Vec<(RewardAccount, Coin)>,
     valid_range: TimeRange,
-    signatories: MaybeIndefArray<AddrKeyhash>,
-    data: MaybeIndefArray<(DatumHash, PlutusData)>,
+    signatories: Vec<AddrKeyhash>,
+    data: Vec<(DatumHash, PlutusData)>,
     id: Hash<32>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TxInfoV2 {
-    inputs: MaybeIndefArray<TxInInfo>,
-    reference_inputs: MaybeIndefArray<TxInInfo>,
-    outputs: MaybeIndefArray<TxOut>,
+    inputs: Vec<TxInInfo>,
+    reference_inputs: Vec<TxInInfo>,
+    outputs: Vec<TxOut>,
     fee: Value,
     mint: Mint,
-    dcert: MaybeIndefArray<Certificate>,
+    dcert: Vec<Certificate>,
     wdrl: Withdrawals,
     valid_range: TimeRange,
-    signatories: MaybeIndefArray<AddrKeyhash>,
+    signatories: Vec<AddrKeyhash>,
     redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
     data: KeyValuePairs<DatumHash, PlutusData>,
     id: Hash<32>,
@@ -777,9 +777,9 @@ struct DataLookupTable {
 }
 
 fn get_tx_in_info_v1(
-    inputs: &MaybeIndefArray<TransactionInput>,
-    utxos: &MaybeIndefArray<ResolvedInput>,
-) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
+    inputs: &[TransactionInput],
+    utxos: &[ResolvedInput],
+) -> anyhow::Result<Vec<TxInInfo>> {
     let result = inputs
         .iter()
         .map(|input| {
@@ -822,13 +822,13 @@ fn get_tx_in_info_v1(
             }
         })
         .collect::<Vec<TxInInfo>>();
-    Ok(MaybeIndefArray::Indef(result))
+    Ok(result)
 }
 
 fn get_tx_in_info_v2(
-    inputs: &MaybeIndefArray<TransactionInput>,
-    utxos: &MaybeIndefArray<ResolvedInput>,
-) -> anyhow::Result<MaybeIndefArray<TxInInfo>> {
+    inputs: &[TransactionInput],
+    utxos: &[ResolvedInput],
+) -> anyhow::Result<Vec<TxInInfo>> {
     let result = inputs
         .iter()
         .map(|input| {
@@ -856,14 +856,14 @@ fn get_tx_in_info_v2(
             }
         })
         .collect::<Vec<TxInInfo>>();
-    Ok(MaybeIndefArray::Indef(result))
+    Ok(result)
 }
 
 fn get_script_purpose(
     redeemer: &Redeemer,
-    inputs: &MaybeIndefArray<TransactionInput>,
+    inputs: &[TransactionInput],
     mint: &Option<Mint>,
-    dcert: &Option<MaybeIndefArray<Certificate>>,
+    dcert: &Option<Vec<Certificate>>,
     wdrl: &Option<Withdrawals>,
 ) -> anyhow::Result<ScriptPurpose> {
     // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
@@ -877,7 +877,7 @@ fn get_script_purpose(
                 .unwrap_or(&KeyValuePairs::Indef(vec![]))
                 .iter()
                 .map(|(policy_id, _)| policy_id.clone())
-                .collect::<Vec<ByteVec>>();
+                .collect::<Vec<PolicyId>>();
             policy_ids.sort();
             match policy_ids.get(index as usize) {
                 Some(policy_id) => Ok(ScriptPurpose::Minting(policy_id.clone())),
@@ -960,25 +960,26 @@ fn get_tx_info_v1(
     }
 
     let inputs = get_tx_in_info_v1(&body.inputs, &utxos)?;
-    let outputs = MaybeIndefArray::Indef(
+
+    let outputs = 
         body.outputs
             .iter()
             .map(|output| TxOut::V1(output.clone()))
-            .collect(),
-    );
-    let fee = Value::Coin(AnyUInt::U64(body.fee));
+            .collect();
+
+    let fee = Value::Coin(body.fee);
     let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
     let dcert = body
         .certificates
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
-    let wdrl = MaybeIndefArray::Indef(
+        .unwrap_or(vec![]);
+    let wdrl = 
         body.withdrawals
             .clone()
             .unwrap_or(KeyValuePairs::Indef(vec![]))
             .deref()
-            .clone(),
-    );
+            .clone();
+
     let valid_range = slot_range_to_posix_time_range(
         TimeRange {
             lower_bound: body.validity_interval_start,
@@ -989,17 +990,18 @@ fn get_tx_info_v1(
     let signatories = body
         .required_signers
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
-    let data = MaybeIndefArray::Indef(
+        .unwrap_or(vec![]);
+
+    let data = 
         tx.transaction_witness_set
             .plutus_data
             .as_ref()
-            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+            .unwrap_or(&vec![])
             .iter()
-            .map(|d| (d.to_hash(), d.clone()))
-            .collect(),
-    );
-    let id = tx.transaction_body.to_hash();
+            .map(|d| (d.original_hash(), d.unwrap()))
+            .collect();
+
+    let id = tx.transaction_body.compute_hash();
 
     Ok(TxInfo::V1(TxInfoV1 {
         inputs,
@@ -1027,21 +1029,20 @@ fn get_tx_info_v2(
         &body
             .reference_inputs
             .clone()
-            .unwrap_or(MaybeIndefArray::Indef(vec![])),
+            .unwrap_or(vec![]),
         &utxos,
     )?;
-    let outputs = MaybeIndefArray::Indef(
+    let outputs = 
         body.outputs
             .iter()
             .map(|output| TxOut::V2(output.clone()))
-            .collect(),
-    );
-    let fee = Value::Coin(AnyUInt::U64(body.fee));
+            .collect();
+    let fee = Value::Coin(body.fee);
     let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
     let dcert = body
         .certificates
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+        .unwrap_or(vec![]);
     let wdrl = body
         .withdrawals
         .clone()
@@ -1056,7 +1057,7 @@ fn get_tx_info_v2(
     let signatories = body
         .required_signers
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+        .unwrap_or(vec![]);
     let redeemers = KeyValuePairs::Indef(
         tx.transaction_witness_set
             .redeemer
@@ -1082,12 +1083,12 @@ fn get_tx_info_v2(
         tx.transaction_witness_set
             .plutus_data
             .as_ref()
-            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+            .unwrap_or(&vec![])
             .iter()
-            .map(|d| (d.to_hash(), d.clone()))
+            .map(|d| (d.original_hash(), d.unwrap()))
             .collect(),
     );
-    let id = tx.transaction_body.to_hash();
+    let id = tx.transaction_body.compute_hash();
 
     Ok(TxInfo::V2(TxInfoV2 {
         inputs,
@@ -1243,42 +1244,30 @@ fn get_script_and_datum_lookup_table(
         .transaction_witness_set
         .plutus_data
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+        .unwrap_or(vec![]);
 
     let scripts_v1_witnesses = tx
         .transaction_witness_set
         .plutus_v1_script
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+        .unwrap_or(vec![]);
 
     let scripts_v2_witnesses = tx
         .transaction_witness_set
         .plutus_v2_script
         .clone()
-        .unwrap_or(MaybeIndefArray::Indef(vec![]));
+        .unwrap_or(vec![]);
 
     for plutus_data in plutus_data_witnesses.iter() {
-        datum.insert(plutus_data.to_hash(), plutus_data.clone());
+        datum.insert(plutus_data.original_hash(), plutus_data.clone());
     }
 
     for script in scripts_v1_witnesses.iter() {
-        // scripts.insert(script.to_hash(), ScriptVersion::PlutusV1(script.clone())); // TODO: fix hashing bug in pallas
-
-        let mut prefixed_script: Vec<u8> = vec![0x01];
-        prefixed_script.extend(script.0.iter());
-
-        let hash = Hasher::<224>::hash(&prefixed_script);
-        scripts.insert(hash, ScriptVersion::V1(script.clone()));
+        scripts.insert(script.compute_hash(), ScriptVersion::V1(script.clone())); // TODO: fix hashing bug in pallas
     }
 
     for script in scripts_v2_witnesses.iter() {
-        // scripts.insert(script.to_hash(), ScriptVersion::PlutusV2(script.clone())); // TODO: fix hashing bug in pallas
-
-        let mut prefixed_script: Vec<u8> = vec![0x02];
-        prefixed_script.extend(script.0.iter());
-
-        let hash = Hasher::<224>::hash(&prefixed_script);
-        scripts.insert(hash, ScriptVersion::V2(script.clone()));
+        scripts.insert(script.compute_hash(), ScriptVersion::V2(script.clone())); // TODO: fix hashing bug in pallas
     }
 
     // discovery in utxos (script ref)

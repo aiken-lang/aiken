@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, ops::Deref};
+use std::ops::Deref;
 
 use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
 
@@ -693,14 +693,14 @@ impl DefaultFunction {
             },
             DefaultFunction::MapData => match &args[0] {
                 Value::Con(Constant::ProtoList(_, list)) => {
-                    let mut map = BTreeMap::new();
+                    let mut map = Vec::new();
 
                     for item in list {
                         match item {
                             Constant::ProtoPair(Type::Data, Type::Data, left, right) => {
                                 match (*left.clone(), *right.clone()) {
                                     (Constant::Data(key), Constant::Data(value)) => {
-                                        map.insert(key, value);
+                                        map.push((key, value));
                                     }
                                     _ => unreachable!(),
                                 }
@@ -709,7 +709,7 @@ impl DefaultFunction {
                         }
                     }
 
-                    Ok(Value::Con(Constant::Data(PlutusData::Map(map))))
+                    Ok(Value::Con(Constant::Data(PlutusData::Map(map.into()))))
                 }
                 _ => unreachable!(),
             },

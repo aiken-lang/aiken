@@ -291,8 +291,7 @@ checksum = "029d8d0b2f198229de29dca79676f2738ff952edf3fde542eb8bf94d8c21b435"
 [[package]]
 name = "pallas-addresses"
 version = "0.14.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5caad3c874e1b6235c3a27a7e25497289392eabbd977e006863caf8ef3652e57"
+source = "git+https://github.com/txpipe/pallas#ac25b48797572925ba48ccb0a8f4603410613a75"
 dependencies = [
  "base58",
  "bech32",
@@ -305,8 +304,7 @@ dependencies = [
 [[package]]
 name = "pallas-codec"
 version = "0.14.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ac4f8895300b80ef2e624373f6421a9cb81523508bc48400f15db7876ec52ea"
+source = "git+https://github.com/txpipe/pallas#ac25b48797572925ba48ccb0a8f4603410613a75"
 dependencies = [
  "hex",
  "minicbor",
@@ -316,8 +314,7 @@ dependencies = [
 [[package]]
 name = "pallas-crypto"
 version = "0.14.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c0a5b31037a97528e10feca6d208a21022f1c6d7837017915a43fae57be99dc"
+source = "git+https://github.com/txpipe/pallas#ac25b48797572925ba48ccb0a8f4603410613a75"
 dependencies = [
  "cryptoxide",
  "hex",
@@ -330,8 +327,7 @@ dependencies = [
 [[package]]
 name = "pallas-primitives"
 version = "0.14.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8d2f217857eeccd37ad9fad3cdfc8288d8d2bc41e5c93e7f5f6b3c688873068"
+source = "git+https://github.com/txpipe/pallas#ac25b48797572925ba48ccb0a8f4603410613a75"
 dependencies = [
  "base58",
  "bech32",
@@ -346,8 +342,7 @@ dependencies = [
 [[package]]
 name = "pallas-traverse"
 version = "0.14.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4d32519a431ecc6c02507608cee4b75e06518a1cfdfcdd1b13cb7d0b07f638a"
+source = "git+https://github.com/txpipe/pallas#ac25b48797572925ba48ccb0a8f4603410613a75"
 dependencies = [
  "hex",
  "pallas-addresses",
@@ -679,7 +674,6 @@ dependencies = [
  "cryptoxide",
  "flat-rs",
  "hex",
- "minicbor",
  "pallas-codec",
  "pallas-primitives",
  "peg",

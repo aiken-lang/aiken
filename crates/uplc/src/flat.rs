@@ -31,7 +31,7 @@ where
     T: Binder<'b> + Debug,
 {
     pub fn from_cbor(bytes: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<Self, de::Error> {
-        let mut cbor_decoder = minicbor::Decoder::new(bytes);
+        let mut cbor_decoder = pallas_codec::minicbor::Decoder::new(bytes);
 
         let flat_bytes = cbor_decoder
             .bytes()
@@ -63,7 +63,7 @@ where
 
         let mut bytes = Vec::new();
 
-        let mut cbor_encoder = minicbor::Encoder::new(&mut bytes);
+        let mut cbor_encoder = pallas_codec::minicbor::Encoder::new(&mut bytes);
 
         cbor_encoder
             .bytes(&flat_bytes)

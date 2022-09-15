@@ -489,8 +489,8 @@ impl Value {
                     let mut new_stack: VecDeque<&PlutusData>;
                     // create new stack with of items from the list of pairs of data
                     new_stack = m.iter().fold(VecDeque::new(), |mut acc, d| {
-                        acc.push_back(d.0);
-                        acc.push_back(d.1);
+                        acc.push_back(&d.0);
+                        acc.push_back(&d.1);
                         acc
                     });
                     // Append old stack to the back of the new stack
