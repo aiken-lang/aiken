@@ -2,9 +2,9 @@ use pallas_primitives::babbage::{MintedTx, Redeemer};
 
 use self::script_context::{ResolvedInput, SlotConfig};
 
-mod script_context;
+mod eval;
+pub mod script_context;
 mod to_plutus_data;
-mod utils;
 
 pub fn eval_tx(
     tx: &MintedTx,
@@ -14,13 +14,13 @@ pub fn eval_tx(
 ) -> anyhow::Result<Vec<Redeemer>> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
-    let lookup_table = utils::get_script_and_datum_lookup_table(tx, utxos);
+    let lookup_table = eval::get_script_and_datum_lookup_table(tx, utxos);
 
     match redeemers {
         Some(rs) => {
             let mut collected_redeemers = vec![];
             for redeemer in rs.iter() {
-                collected_redeemers.push(utils::eval_redeemer(
+                collected_redeemers.push(eval::eval_redeemer(
                     tx,
                     utxos,
                     slot_config,

@@ -688,6 +688,7 @@ dependencies = [
  "peg",
  "pretty",
  "proptest",
+ "serde",
  "serde_json",
  "thiserror",
 ]

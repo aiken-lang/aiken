@@ -4,8 +4,9 @@ use pallas_primitives::babbage::{
     AddrKeyhash, Certificate, Coin, DatumHash, Mint, PlutusData, PolicyId, Redeemer, RewardAccount,
     StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
 };
+use serde::Deserialize;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct ResolvedInput {
     pub input: TransactionInput,
     pub output: TransactionOutput,
@@ -82,4 +83,13 @@ pub struct TimeRange {
 pub struct SlotConfig {
     pub slot_length: u64,
     pub zero_time: u64,
+}
+
+impl Default for SlotConfig {
+    fn default() -> Self {
+        Self {
+            slot_length: 1000,
+            zero_time: 1596491091,
+        }
+    }
 }

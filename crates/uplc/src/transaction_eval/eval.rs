@@ -7,9 +7,9 @@ use pallas_addresses::{Address, ScriptHash, StakePayload};
 use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
-    Certificate, DatumHash, DatumOption, ExUnits, Mint, MintedTx,
-    PlutusV1Script, PlutusV2Script, PolicyId, Redeemer, RedeemerTag, RewardAccount, Script,
-    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
+    Certificate, DatumHash, DatumOption, ExUnits, Mint, MintedTx, PlutusV1Script, PlutusV2Script,
+    PolicyId, Redeemer, RedeemerTag, RewardAccount, Script, StakeCredential, TransactionInput,
+    TransactionOutput, Value, Withdrawals,
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
 use std::{collections::HashMap, convert::TryInto, ops::Deref, vec};
@@ -712,4 +712,3 @@ pub fn eval_redeemer(
         },
     }
 }
-

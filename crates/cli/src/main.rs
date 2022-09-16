@@ -1,6 +1,7 @@
 use std::{
     fmt::Write as _,
-    fs::{self},
+    fs::{self, File},
+    io::BufReader,
 };
 
 use pallas_traverse::{Era, MultiEraTx};
@@ -8,6 +9,8 @@ use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
     parser,
+    transaction_eval::eval_tx,
+    transaction_eval::script_context::{ResolvedInput, SlotConfig},
 };
 
 mod args;
@@ -22,7 +25,9 @@ fn main() -> anyhow::Result<()> {
             TxCommand::Simulate {
                 input,
                 cbor,
-                resolved_inputs: _,
+                resolved_inputs,
+                slot_length,
+                zero_time,
             } => {
                 let tx_bytes = if cbor {
                     fs::read(input)?
@@ -37,7 +42,18 @@ fn main() -> anyhow::Result<()> {
 
                 println!("Simulating: {}", tx.hash());
 
-                
+                if let Some(tx_babbage) = tx.as_babbage() {
+                    let file = File::open(&resolved_inputs)?;
+                    let reader = BufReader::new(file);
+                    let resolved_inputs: Vec<ResolvedInput> = serde_json::from_reader(reader)?;
+
+                    let slot_config = SlotConfig {
+                        zero_time,
+                        slot_length,
+                    };
+
+                    eval_tx(tx_babbage, &resolved_inputs, &slot_config)?;
+                }
             }
         },
         Args::Uplc(uplc_cmd) => match uplc_cmd {

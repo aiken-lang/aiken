@@ -1,7 +1,6 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use serde::Deserialize;
 
 /// Cardano smart contract toolchain
 #[derive(Parser)]
@@ -26,34 +25,11 @@ pub enum TxCommand {
         cbor: bool,
         #[clap(short, long)]
         resolved_inputs: PathBuf,
+        #[clap(short, long)]
+        slot_length: u64,
+        #[clap(short, long)]
+        zero_time: u64,
     },
-}
-
-#[derive(Deserialize)]
-pub struct ResolvedInputOld {
-    pub input: Input,
-    pub output: Output,
-}
-
-#[derive(Deserialize)]
-pub struct Input {
-    pub tx_hash: String,
-    pub index: u64,
-}
-
-#[derive(Deserialize)]
-pub struct Output {
-    pub address: String,
-    pub value: (u64, HashMap<String, HashMap<String, u64>>),
-    pub datum: Option<OutputDatum>,
-    pub script: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OutputDatum {
-    DatumHash(String),
-    Datum(String),
 }
 
 /// Commands for working with Untyped Plutus Core
