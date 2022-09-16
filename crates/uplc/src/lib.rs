@@ -6,6 +6,7 @@ pub mod machine;
 pub mod parser;
 mod pretty;
 pub mod program_builder;
+pub mod transaction_eval;
 
 pub use pallas_primitives::alonzo::PlutusData;
 pub type Error = Box<dyn std::error::Error>;

@@ -1,0 +1,715 @@
+use crate::{
+    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    machine::cost_model::ExBudget,
+    PlutusData,
+};
+use pallas_addresses::{Address, ScriptHash, StakePayload};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_crypto::hash::Hash;
+use pallas_primitives::babbage::{
+    Certificate, DatumHash, DatumOption, ExUnits, Mint, MintedTx,
+    PlutusV1Script, PlutusV2Script, PolicyId, Redeemer, RedeemerTag, RewardAccount, Script,
+    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
+};
+use pallas_traverse::{ComputeHash, OriginalHash};
+use std::{collections::HashMap, convert::TryInto, ops::Deref, vec};
+
+use super::{
+    script_context::{
+        ResolvedInput, ScriptContext, ScriptPurpose, SlotConfig, TimeRange, TxInInfo, TxInfo,
+        TxInfoV1, TxInfoV2, TxOut,
+    },
+    to_plutus_data::ToPlutusData,
+};
+
+fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
+    let ms_after_begin = slot * sc.slot_length;
+    sc.zero_time + ms_after_begin
+}
+
+fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> TimeRange {
+    TimeRange {
+        lower_bound: slot_range
+            .lower_bound
+            .map(|lower_bound| slot_to_begin_posix_time(lower_bound, sc)),
+        upper_bound: slot_range
+            .upper_bound
+            .map(|upper_bound| slot_to_begin_posix_time(upper_bound, sc)),
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum ScriptVersion {
+    V1(PlutusV1Script),
+    V2(PlutusV2Script),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum ExecutionPurpose {
+    WithDatum(ScriptVersion, PlutusData), // Spending
+    NoDatum(ScriptVersion),               // Minting, Wdrl, DCert
+}
+
+pub struct DataLookupTable {
+    datum: HashMap<DatumHash, PlutusData>,
+    scripts: HashMap<ScriptHash, ScriptVersion>,
+}
+
+pub fn get_tx_in_info_v1(
+    inputs: &[TransactionInput],
+    utxos: &[ResolvedInput],
+) -> anyhow::Result<Vec<TxInInfo>> {
+    let result = inputs
+        .iter()
+        .map(|input| {
+            let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
+                Some(u) => u,
+                None => unreachable!("Resolved input not found."),
+            };
+            let address = Address::from_bytes(match &utxo.output {
+                TransactionOutput::Legacy(output) => output.address.as_ref(),
+                TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
+            })
+            .unwrap();
+
+            match address {
+                Address::Byron(_) => unreachable!("Byron addresses not supported in Plutus."),
+                Address::Stake(_) => {
+                    unreachable!("This is impossible. A stake address cannot lock a UTxO.")
+                }
+                _ => {}
+            }
+
+            match &utxo.output {
+                TransactionOutput::Legacy(_) => {}
+                TransactionOutput::PostAlonzo(output) => {
+                    if let Some(DatumOption::Data(_)) = output.datum_option {
+                        unreachable!("Inline datum not allowed in PlutusV1.")
+                    }
+
+                    if output.script_ref.is_some() {
+                        unreachable!("Reference scripts not allowed in PlutusV1.")
+                    }
+                }
+            }
+
+            TxInInfo {
+                out_ref: utxo.input.clone(),
+                resolved: TxOut::V1(utxo.output.clone()),
+            }
+        })
+        .collect::<Vec<TxInInfo>>();
+    Ok(result)
+}
+
+fn get_tx_in_info_v2(
+    inputs: &[TransactionInput],
+    utxos: &[ResolvedInput],
+) -> anyhow::Result<Vec<TxInInfo>> {
+    let result = inputs
+        .iter()
+        .map(|input| {
+            let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
+                Some(u) => u,
+                None => unreachable!("Resolved input not found."),
+            };
+            let address = Address::from_bytes(match &utxo.output {
+                TransactionOutput::Legacy(output) => output.address.as_ref(),
+                TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
+            })
+            .unwrap();
+
+            match address {
+                Address::Byron(_) => unreachable!("Byron addresses not supported in Plutus."),
+                Address::Stake(_) => {
+                    unreachable!("This is impossible. A stake address cannot lock a UTxO.")
+                }
+                _ => {}
+            }
+
+            TxInInfo {
+                out_ref: utxo.input.clone(),
+                resolved: TxOut::V2(utxo.output.clone()),
+            }
+        })
+        .collect::<Vec<TxInInfo>>();
+    Ok(result)
+}
+
+fn get_script_purpose(
+    redeemer: &Redeemer,
+    inputs: &[TransactionInput],
+    mint: &Option<Mint>,
+    dcert: &Option<Vec<Certificate>>,
+    wdrl: &Option<Withdrawals>,
+) -> anyhow::Result<ScriptPurpose> {
+    // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
+    let tag = redeemer.tag.clone();
+    let index = redeemer.index;
+    match tag {
+        RedeemerTag::Mint => {
+            // sort lexical by policy id
+            let mut policy_ids = mint
+                .as_ref()
+                .unwrap_or(&KeyValuePairs::Indef(vec![]))
+                .iter()
+                .map(|(policy_id, _)| *policy_id)
+                .collect::<Vec<PolicyId>>();
+            policy_ids.sort();
+            match policy_ids.get(index as usize) {
+                Some(policy_id) => Ok(ScriptPurpose::Minting(*policy_id)),
+                None => unreachable!("Script purpose not found for redeemer."),
+            }
+        }
+        RedeemerTag::Spend => {
+            // sort lexical by tx_hash and index
+            let mut inputs = inputs.to_vec();
+            // is this correct? Does this sort lexical from low to high? maybe get Ordering into pallas for TransactionInput?
+            inputs.sort_by(
+                |i_a, i_b| match i_a.transaction_id.cmp(&i_b.transaction_id) {
+                    std::cmp::Ordering::Less => std::cmp::Ordering::Less,
+                    std::cmp::Ordering::Equal => i_a.index.cmp(&i_b.index),
+                    std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+                },
+            );
+            match inputs.get(index as usize) {
+                Some(input) => Ok(ScriptPurpose::Spending(input.clone())),
+                None => unreachable!("Script purpose not found for redeemer."),
+            }
+        }
+        RedeemerTag::Reward => {
+            // sort lexical by reward account
+            let mut reward_accounts = wdrl
+                .as_ref()
+                .unwrap_or(&KeyValuePairs::Indef(vec![]))
+                .iter()
+                .map(|(policy_id, _)| policy_id.clone())
+                .collect::<Vec<RewardAccount>>();
+            reward_accounts.sort();
+            let reward_account = match reward_accounts.get(index as usize) {
+                Some(ra) => ra.clone(),
+                None => unreachable!("Script purpose not found for redeemer."),
+            };
+            let addresss = Address::from_bytes(&reward_account)?;
+            let credential = match addresss {
+                Address::Stake(stake_address) => match stake_address.payload() {
+                    StakePayload::Script(script_hash) => {
+                        StakeCredential::Scripthash(*script_hash)
+                    }
+                    StakePayload::Stake(_) => {
+                        unreachable!(
+                            "This is impossible. A key hash cannot be the hash of a script."
+                        );
+                    }
+                },
+                _ => unreachable!(
+                    "This is impossible. Only shelley reward addresses can be a part of withdrawals."
+                ),
+            };
+            Ok(ScriptPurpose::Rewarding(credential))
+        }
+        RedeemerTag::Cert => {
+            // sort by order given in the tx (just take it as it is basically)
+            match dcert
+                .as_ref()
+                .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+                .get(index as usize)
+            {
+                Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
+                None => unreachable!("Script purpose not found for redeemer."),
+            }
+        }
+    }
+}
+
+fn get_tx_info_v1(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    slot_config: &SlotConfig,
+) -> anyhow::Result<TxInfo> {
+    let body = tx.transaction_body.clone();
+
+    if body.reference_inputs.is_some() {
+        unreachable!("Reference inputs not allowed in PlutusV1.")
+    }
+
+    let inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
+
+    let outputs = body
+        .outputs
+        .iter()
+        .map(|output| TxOut::V1(output.clone()))
+        .collect();
+
+    let fee = Value::Coin(body.fee);
+    let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
+    let dcert = body.certificates.clone().unwrap_or_default();
+    let wdrl = body
+        .withdrawals
+        .clone()
+        .unwrap_or(KeyValuePairs::Indef(vec![]))
+        .deref()
+        .clone();
+
+    let valid_range = slot_range_to_posix_time_range(
+        TimeRange {
+            lower_bound: body.validity_interval_start,
+            upper_bound: body.ttl,
+        },
+        slot_config,
+    );
+    let signatories = body.required_signers.clone().unwrap_or_default();
+
+    let data = tx
+        .transaction_witness_set
+        .plutus_data
+        .as_ref()
+        .unwrap_or(&vec![])
+        .iter()
+        .map(|d| (d.original_hash(), d.clone().unwrap()))
+        .collect();
+
+    let id = tx.transaction_body.compute_hash();
+
+    Ok(TxInfo::V1(TxInfoV1 {
+        inputs,
+        outputs,
+        fee,
+        mint,
+        dcert,
+        wdrl,
+        valid_range,
+        signatories,
+        data,
+        id,
+    }))
+}
+
+fn get_tx_info_v2(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    slot_config: &SlotConfig,
+) -> anyhow::Result<TxInfo> {
+    let body = tx.transaction_body.clone();
+
+    let inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
+    let reference_inputs =
+        get_tx_in_info_v2(&body.reference_inputs.clone().unwrap_or_default(), utxos)?;
+    let outputs = body
+        .outputs
+        .iter()
+        .map(|output| TxOut::V2(output.clone()))
+        .collect();
+    let fee = Value::Coin(body.fee);
+    let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
+    let dcert = body.certificates.clone().unwrap_or_default();
+    let wdrl = body
+        .withdrawals
+        .clone()
+        .unwrap_or(KeyValuePairs::Indef(vec![]));
+    let valid_range = slot_range_to_posix_time_range(
+        TimeRange {
+            lower_bound: body.validity_interval_start,
+            upper_bound: body.ttl,
+        },
+        slot_config,
+    );
+    let signatories = body.required_signers.clone().unwrap_or_default();
+    let redeemers = KeyValuePairs::Indef(
+        tx.transaction_witness_set
+            .redeemer
+            .as_ref()
+            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
+            .iter()
+            .map(|r| {
+                (
+                    get_script_purpose(
+                        r,
+                        &tx.transaction_body.inputs,
+                        &tx.transaction_body.mint,
+                        &tx.transaction_body.certificates,
+                        &tx.transaction_body.withdrawals,
+                    )
+                    .unwrap(),
+                    r.clone(),
+                )
+            })
+            .collect(),
+    );
+    let data = KeyValuePairs::Indef(
+        tx.transaction_witness_set
+            .plutus_data
+            .as_ref()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|d| (d.original_hash(), d.clone().unwrap()))
+            .collect(),
+    );
+    let id = tx.transaction_body.compute_hash();
+
+    Ok(TxInfo::V2(TxInfoV2 {
+        inputs,
+        reference_inputs,
+        outputs,
+        fee,
+        mint,
+        dcert,
+        wdrl,
+        valid_range,
+        signatories,
+        redeemers,
+        data,
+        id,
+    }))
+}
+
+fn get_execution_purpose(
+    utxos: &[ResolvedInput],
+    script_purpose: &ScriptPurpose,
+    lookup_table: &DataLookupTable,
+) -> ExecutionPurpose {
+    match script_purpose {
+        ScriptPurpose::Minting(policy_id) => {
+            let policy_id_array: [u8; 28] = policy_id.to_vec().try_into().unwrap();
+            let hash = Hash::from(policy_id_array);
+
+            let script = match lookup_table.scripts.get(&hash) {
+                Some(s) => s.clone(),
+                None => unreachable!("Missing required scripts.")
+            };
+            ExecutionPurpose::NoDatum(script)
+        }
+        ScriptPurpose::Spending(out_ref) => {
+            let utxo = utxos.iter().find(|utxo| utxo.input == *out_ref).unwrap();
+            match &utxo.output {
+                TransactionOutput::Legacy(output) => {
+                    let address = Address::from_bytes(&output.address).unwrap();
+                    match address {
+                        Address::Shelley(shelley_address) => {
+                            let script = match lookup_table
+                            .scripts
+                            .get(shelley_address.payment().as_hash()) {
+                                Some(s) => s.clone(),
+                                None => unreachable!("Missing required scripts.")
+                            };
+
+                            let datum = match lookup_table.datum.get(&output.datum_hash.unwrap_or_else(|| unreachable!("Missing datum hash in input."))) {
+                                Some(d) => d.clone(),
+                                None => unreachable!("Missing datum in witness set.")
+                            };
+
+                            ExecutionPurpose::WithDatum(script, datum)
+                        }
+                        _ => unreachable!(
+                            "This is impossible. Only shelley addresses can contain a script hash."
+                        ),
+                    }
+                }
+                TransactionOutput::PostAlonzo(output) => {
+                    let address = Address::from_bytes(&output.address).unwrap();
+                    match address {
+                        Address::Shelley(shelley_address) => {
+
+                            let script = match lookup_table
+                            .scripts
+                            .get(shelley_address.payment().as_hash()) {
+                                Some(s) => s.clone(),
+                                None => unreachable!("Missing required scripts.")
+                            };
+
+
+                            let datum = match &output.datum_option {
+                                Some(DatumOption::Hash(hash)) => {
+                                    lookup_table.datum.get(hash).unwrap().clone()
+                                }
+                                Some(DatumOption::Data(data)) => data.0.clone(),
+                                _ => unreachable!( "Missing datum hash or inline datum in input."),
+                            };
+
+                            ExecutionPurpose::WithDatum(script, datum)
+                        }
+                        _ => unreachable!(
+                            "This is impossible. Only shelley addresses can contain a script hash."
+                        ),
+                    }
+                }
+            }
+        }
+        ScriptPurpose::Rewarding(stake_credential) => {
+            let script_hash = match stake_credential {
+                StakeCredential::Scripthash(hash) => *hash,
+                _ => unreachable!("This is impossible. A key hash cannot be the hash of a script."),
+            };
+
+            let script = match lookup_table.scripts.get(&script_hash) {
+                Some(s) => s.clone(),
+                None => unreachable!("Missing required scripts.")
+            };
+
+            ExecutionPurpose::NoDatum(script)
+        }
+        ScriptPurpose::Certifying(cert) => match cert {
+            // StakeRegistration doesn't require a witness from a stake key/script. So I assume it doesn't need to be handled in Plutus either?
+            Certificate::StakeDeregistration(stake_credential) => {
+                let script_hash = match stake_credential {
+                    StakeCredential::Scripthash(hash) => *hash,
+                    _ => unreachable!(
+                        "This is impossible. A key hash cannot be the hash of a script."
+                    ),
+                };
+
+                let script = match lookup_table.scripts.get(&script_hash) {
+                    Some(s) => s.clone(),
+                    None => unreachable!("Missing required scripts.")
+                };
+
+                ExecutionPurpose::NoDatum(script)
+            }
+            Certificate::StakeDelegation(stake_credential, _) => {
+                let script_hash = match stake_credential {
+                    StakeCredential::Scripthash(hash) => *hash,
+                    _ => unreachable!(
+                        "This is impossible. A key hash cannot be the hash of a script."
+                    ),
+                };
+
+                let script = match lookup_table.scripts.get(&script_hash) {
+                    Some(s) => s.clone(),
+                    None => unreachable!("Missing required scripts.")
+                };
+
+                ExecutionPurpose::NoDatum(script)
+            }
+            _ => unreachable!("This is impossible. Only stake deregistration and stake delegation are valid script purposes."),
+        },
+    }
+}
+
+pub fn get_script_and_datum_lookup_table(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+) -> DataLookupTable {
+    let mut datum = HashMap::new();
+    let mut scripts = HashMap::new();
+
+    // discovery in witness set
+
+    let plutus_data_witnesses = tx
+        .transaction_witness_set
+        .plutus_data
+        .clone()
+        .unwrap_or_default();
+
+    let scripts_v1_witnesses = tx
+        .transaction_witness_set
+        .plutus_v1_script
+        .clone()
+        .unwrap_or_default();
+
+    let scripts_v2_witnesses = tx
+        .transaction_witness_set
+        .plutus_v2_script
+        .clone()
+        .unwrap_or_default();
+
+    for plutus_data in plutus_data_witnesses.iter() {
+        datum.insert(plutus_data.original_hash(), plutus_data.clone().unwrap());
+    }
+
+    for script in scripts_v1_witnesses.iter() {
+        scripts.insert(script.compute_hash(), ScriptVersion::V1(script.clone()));
+        // TODO: fix hashing bug in pallas
+    }
+
+    for script in scripts_v2_witnesses.iter() {
+        scripts.insert(script.compute_hash(), ScriptVersion::V2(script.clone()));
+        // TODO: fix hashing bug in pallas
+    }
+
+    // discovery in utxos (script ref)
+
+    for utxo in utxos.iter() {
+        match &utxo.output {
+            TransactionOutput::Legacy(_) => {}
+            TransactionOutput::PostAlonzo(output) => {
+                if let Some(script) = &output.script_ref {
+                    match &script.0 {
+                        Script::PlutusV1Script(v1) => {
+                            scripts.insert(v1.compute_hash(), ScriptVersion::V1(v1.clone()));
+                        }
+                        Script::PlutusV2Script(v2) => {
+                            scripts.insert(v2.compute_hash(), ScriptVersion::V2(v2.clone()));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    DataLookupTable { datum, scripts }
+}
+
+pub fn eval_redeemer(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    slot_config: &SlotConfig,
+    redeemer: &Redeemer,
+    lookup_table: &DataLookupTable,
+) -> anyhow::Result<Redeemer> {
+    let purpose = get_script_purpose(
+        redeemer,
+        &tx.transaction_body.inputs,
+        &tx.transaction_body.mint,
+        &tx.transaction_body.certificates,
+        &tx.transaction_body.withdrawals,
+    )?;
+
+    let execution_purpose: ExecutionPurpose = get_execution_purpose(utxos, &purpose, lookup_table);
+
+    match execution_purpose {
+        ExecutionPurpose::WithDatum(script_version, datum) => match script_version {
+            ScriptVersion::V1(script) => {
+                let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(datum)
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                match result.0 {
+                    Ok(_) => {}
+                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
+            }
+            ScriptVersion::V2(script) => {
+                let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(datum)
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                match result.0 {
+                    Ok(_) => {}
+                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
+            }
+        },
+        ExecutionPurpose::NoDatum(script_version) => match script_version {
+            ScriptVersion::V1(script) => {
+                let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                match result.0 {
+                    Ok(_) => {}
+                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
+            }
+            ScriptVersion::V2(script) => {
+                let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
+                let script_context = ScriptContext { tx_info, purpose };
+
+                let program: Program<NamedDeBruijn> = {
+                    let mut buffer = Vec::new();
+
+                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                    prog.into()
+                };
+
+                let result = program
+                    .apply_data(redeemer.data.clone())
+                    .apply_data(script_context.to_plutus_data())
+                    .eval();
+
+                match result.0 {
+                    Ok(_) => {}
+                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
+                }
+
+                let new_redeemer = Redeemer {
+                    tag: redeemer.tag.clone(),
+                    index: redeemer.index,
+                    data: redeemer.data.clone(),
+                    ex_units: ExUnits {
+                        mem: (ExBudget::default().mem - result.1.mem) as u32,
+                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                    },
+                };
+
+                Ok(new_redeemer)
+            }
+        },
+    }
+}
+

@@ -676,14 +676,19 @@ checksum = "7e8820f5d777f6224dc4be3632222971ac30164d4a258d595640799554ebfd99"
 name = "uplc"
 version = "0.0.12"
 dependencies = [
+ "anyhow",
  "cryptoxide",
  "flat-rs",
  "hex",
+ "pallas-addresses",
  "pallas-codec",
+ "pallas-crypto",
  "pallas-primitives",
+ "pallas-traverse",
  "peg",
  "pretty",
  "proptest",
+ "serde_json",
  "thiserror",
 ]
 

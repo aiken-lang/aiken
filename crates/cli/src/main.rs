@@ -1,7 +1,6 @@
 use std::{
     fmt::Write as _,
-    fs::{self, File},
-    io::BufReader,
+    fs::{self},
 };
 
 use pallas_traverse::{Era, MultiEraTx};
@@ -12,11 +11,8 @@ use uplc::{
 };
 
 mod args;
-mod utils;
 
 use args::{Args, TxCommand, UplcCommand};
-
-use crate::args::ResolvedInputOld;
 
 fn main() -> anyhow::Result<()> {
     let args = Args::default();
@@ -26,7 +22,7 @@ fn main() -> anyhow::Result<()> {
             TxCommand::Simulate {
                 input,
                 cbor,
-                resolved_inputs,
+                resolved_inputs: _,
             } => {
                 let tx_bytes = if cbor {
                     fs::read(input)?
@@ -40,6 +36,8 @@ fn main() -> anyhow::Result<()> {
                     .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))?;
 
                 println!("Simulating: {}", tx.hash());
+
+                
             }
         },
         Args::Uplc(uplc_cmd) => match uplc_cmd {
