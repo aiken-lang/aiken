@@ -1,4 +1,8 @@
-use pallas_primitives::babbage::{MintedTx, Redeemer};
+use pallas_primitives::{
+    babbage::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
+    Fragment,
+};
+use pallas_traverse::{Era, MultiEraTx};
 
 use self::script_context::{ResolvedInput, SlotConfig};
 
@@ -31,6 +35,51 @@ pub fn eval_tx(
             Ok(collected_redeemers)
         }
         None => Ok(vec![]),
+    }
+}
+
+pub fn eval_tx_raw(
+    tx_bytes: &Vec<u8>,
+    utxos_bytes: &Vec<(Vec<u8>, Vec<u8>)>,
+    cost_mdls_bytes: &Vec<u8>,
+    slot_config: (u64, u64),
+) -> Result<Vec<Vec<u8>>, ()> {
+    let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+        .or_else(|_| Err(()))?; // TODO: proper error message
+
+    let cost_mdls = CostMdls::decode_fragment(&cost_mdls_bytes).or_else(|_| Err(()))?; // TODO: proper error message
+
+    let utxos: Vec<ResolvedInput> = utxos_bytes
+        .iter()
+        .map(|(input, output)| ResolvedInput {
+            input: TransactionInput::decode_fragment(input).unwrap(),
+            output: TransactionOutput::decode_fragment(input).unwrap(),
+        })
+        .collect();
+
+    let sc = SlotConfig {
+        zero_time: slot_config.0,
+        slot_length: slot_config.1,
+    };
+
+    match multi_era_tx {
+        MultiEraTx::Babbage(tx) => match eval_tx(&tx, &utxos, &sc) {
+            Ok(redeemers) => Ok(redeemers
+                .iter()
+                .map(|r| r.encode_fragment().unwrap())
+                .collect()),
+            Err(_) => Err(()),
+        },
+        // MultiEraTx::AlonzoCompatible(tx, _) => match eval_tx(&tx, &utxos, &sc) {
+        //     Ok(redeemers) => Ok(redeemers
+        //         .iter()
+        //         .map(|r| r.encode_fragment().unwrap())
+        //         .collect()),
+        //     Err(_) => Err(()),
+        // },
+        // TODO: I probably did a mistake here with using MintedTx which is only compatible with Babbage tx.
+        _ => Err(()),
     }
 }
 
