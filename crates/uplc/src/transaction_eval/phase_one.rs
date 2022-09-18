@@ -15,6 +15,49 @@ struct RedeemerPtr {
 
 type AlonzoScriptsNeeded = Vec<(ScriptPurpose, ScriptHash)>;
 
+pub fn validate_missing_scripts(
+    needed: AlonzoScriptsNeeded,
+    txscripts: HashMap<ScriptHash, ScriptVersion>,
+) -> anyhow::Result<()> {
+    let received_hashes = txscripts
+        .keys()
+        .map(|x| *x)
+        .collect::<Vec<ScriptHash>>();
+
+    let needed_hashes = needed
+        .iter()
+        .map(|x| x.1)
+        .collect::<Vec<ScriptHash>>();
+
+    let missing: Vec<_> = needed_hashes
+        .clone()
+        .into_iter()
+        .filter(|x| !received_hashes.contains(x))
+        .map(|x| format!(
+            "[Missing (sh: {})]",
+            x
+        ))
+        .collect();
+
+    let extra: Vec<_> = received_hashes
+        .into_iter()
+        .filter(|x| !needed_hashes.contains(x))
+        .map(|x| format!(
+            "[Extraneous (sh: {:?})]",
+            x
+        ))
+        .collect();
+
+    if missing.len() > 0 || extra.len() > 0 {
+        let missing_errors = missing.join(" ");
+        let extra_errors = extra.join(" ");
+
+        panic!("Mismatch in required scripts: {} {}", missing_errors, extra_errors);
+    }
+
+    Ok(())
+}
+
 fn scripts_needed(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
@@ -103,7 +146,7 @@ fn scripts_needed(
 }
 
 /// hasExactSetOfRedeemers in Ledger Spec, but we pass `txscripts` directly
-fn has_exact_set_of_redeemers(
+pub fn has_exact_set_of_redeemers(
     tx: &MintedTx,
     needed: AlonzoScriptsNeeded,
     txscripts: HashMap<ScriptHash, ScriptVersion>,
@@ -146,7 +189,7 @@ fn has_exact_set_of_redeemers(
         .into_iter()
         .filter(|x| !wits_rdptrs.contains(&x.0))
         .map(|x| format!(
-            "[Missing redeemer: rp: {:?}, sp: {:?}, sh: {}]",
+            "[Missing (rp: {:?}, sp: {:?}, sh: {})]",
             x.0,
             x.1,
             x.2.to_string(),
@@ -157,7 +200,7 @@ fn has_exact_set_of_redeemers(
         .into_iter()
         .filter(|x| !needed_rdptrs.contains(x))
         .map(|x| format!(
-            "[Extra redeemer: rp: {:?}]",
+            "[Extraneous (rp: {:?})]",
             x
         ))
         .collect();
