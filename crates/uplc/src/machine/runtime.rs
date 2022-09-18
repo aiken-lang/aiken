@@ -63,8 +63,12 @@ impl BuiltinRuntime {
         Ok(())
     }
 
-    pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> ExBudget {
-        costs.to_ex_budget(self.fun, &self.args)
+    pub fn to_ex_budget_v2(&self, costs: &BuiltinCosts) -> ExBudget {
+        costs.to_ex_budget_v2(self.fun, &self.args)
+    }
+
+    pub fn to_ex_budget_v1(&self, costs: &BuiltinCosts) -> ExBudget {
+        costs.to_ex_budget_v1(self.fun, &self.args)
     }
 }
 

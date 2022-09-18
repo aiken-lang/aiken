@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
                         slot_length,
                     };
 
-                    eval_tx(tx_babbage, &resolved_inputs, &slot_config)?;
+                    // eval_tx(tx_babbage, &resolved_inputs, &slot_config)?;
                 }
             }
         },

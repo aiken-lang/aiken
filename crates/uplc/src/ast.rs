@@ -1,13 +1,13 @@
 use std::{fmt::Display, rc::Rc};
 
-use pallas_primitives::alonzo::PlutusData;
+use pallas_primitives::{alonzo::PlutusData, babbage::Language};
 
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
     flat::Binder,
     machine::{
-        cost_model::{CostModel, ExBudget},
+        cost_model::{initialize_cost_model, CostModel, ExBudget},
         Machine,
     },
 };
@@ -488,7 +488,33 @@ impl Program<NamedDeBruijn> {
         ExBudget,
         Vec<String>,
     ) {
-        let mut machine = Machine::new(CostModel::default(), ExBudget::default(), 200);
+        let mut machine = Machine::new(
+            Language::PlutusV2,
+            CostModel::default(),
+            ExBudget::default(),
+            200,
+        );
+
+        let term = machine.run(&self.term);
+
+        (term, machine.ex_budget, machine.logs)
+    }
+
+    pub fn eval_with_params(
+        &self,
+        version: &Language,
+        costs: &[i64],
+    ) -> (
+        Result<Term<NamedDeBruijn>, crate::machine::Error>,
+        ExBudget,
+        Vec<String>,
+    ) {
+        let mut machine = Machine::new(
+            version.clone(),
+            initialize_cost_model(version, costs),
+            ExBudget::default(),
+            200, //slippage
+        );
 
         let term = machine.run(&self.term);
 

@@ -11,7 +11,7 @@ mod runtime;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
-use pallas_primitives::babbage::{BigInt, PlutusData};
+use pallas_primitives::babbage::{BigInt, Language, PlutusData};
 
 use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
@@ -39,10 +39,16 @@ pub struct Machine {
     unbudgeted_steps: [u32; 8],
     pub logs: Vec<String>,
     stack: Vec<MachineStep>,
+    version: Language,
 }
 
 impl Machine {
-    pub fn new(costs: CostModel, initial_budget: ExBudget, slippage: u32) -> Machine {
+    pub fn new(
+        version: Language,
+        costs: CostModel,
+        initial_budget: ExBudget,
+        slippage: u32,
+    ) -> Machine {
         Machine {
             costs,
             ex_budget: initial_budget,
@@ -50,6 +56,7 @@ impl Machine {
             unbudgeted_steps: [0; 8],
             logs: vec![],
             stack: vec![],
+            version,
         }
     }
 
@@ -347,8 +354,10 @@ impl Machine {
         runtime: BuiltinRuntime,
     ) -> Result<Value, Error> {
         if runtime.is_ready() {
-            let cost = runtime.to_ex_budget(&self.costs.builtin_costs);
-
+            let cost = match self.version {
+                Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
+                Language::PlutusV2 => runtime.to_ex_budget_v2(&self.costs.builtin_costs),
+            };
             self.spend_budget(cost)?;
 
             runtime.call(&mut self.logs)
