@@ -1,12 +1,10 @@
 use std::string::FromUtf8Error;
 
-use thiserror::Error;
-
 use crate::ast::{NamedDeBruijn, Term, Type};
 
 use super::{ExBudget, Value};
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Over budget mem: {} & cpu: {}", .0.mem, .0.cpu)]
     OutOfExError(ExBudget),

@@ -20,6 +20,7 @@ use super::{
         TxInfoV1, TxInfoV2, TxOut,
     },
     to_plutus_data::ToPlutusData,
+    Error,
 };
 
 fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
@@ -58,7 +59,7 @@ pub struct DataLookupTable {
 pub fn get_tx_in_info_v1(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],
-) -> anyhow::Result<Vec<TxInInfo>> {
+) -> Result<Vec<TxInInfo>, Error> {
     let result = inputs
         .iter()
         .map(|input| {
@@ -105,7 +106,7 @@ pub fn get_tx_in_info_v1(
 fn get_tx_in_info_v2(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],
-) -> anyhow::Result<Vec<TxInInfo>> {
+) -> Result<Vec<TxInInfo>, Error> {
     let result = inputs
         .iter()
         .map(|input| {
@@ -142,7 +143,7 @@ fn get_script_purpose(
     mint: &Option<Mint>,
     dcert: &Option<Vec<Certificate>>,
     wdrl: &Option<Withdrawals>,
-) -> anyhow::Result<ScriptPurpose> {
+) -> Result<ScriptPurpose, Error> {
     // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
     let tag = redeemer.tag.clone();
     let index = redeemer.index;
@@ -226,7 +227,7 @@ fn get_tx_info_v1(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
-) -> anyhow::Result<TxInfo> {
+) -> Result<TxInfo, Error> {
     let body = tx.transaction_body.clone();
 
     if body.reference_inputs.is_some() {
@@ -289,7 +290,7 @@ fn get_tx_info_v2(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
-) -> anyhow::Result<TxInfo> {
+) -> Result<TxInfo, Error> {
     let body = tx.transaction_body.clone();
 
     let inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
@@ -557,7 +558,7 @@ pub fn eval_redeemer(
     redeemer: &Redeemer,
     lookup_table: &DataLookupTable,
     cost_mdls_opt: Option<&CostMdls>,
-) -> anyhow::Result<Redeemer> {
+) -> Result<Redeemer, Error> {
     let purpose = get_script_purpose(
         redeemer,
         &tx.transaction_body.inputs,
