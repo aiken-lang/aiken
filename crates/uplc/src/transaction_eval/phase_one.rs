@@ -4,7 +4,7 @@ use pallas_addresses::{ScriptHash, Address, ShelleyPaymentPart, StakePayload};
 use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
 use pallas_primitives::babbage::{MintedTx, TransactionOutput, StakeCredential, Certificate, RedeemerTag, RewardAccount, PolicyId};
 
-use super::{script_context::{ScriptPurpose, ResolvedInput}, eval::ScriptVersion};
+use super::{script_context::{ScriptPurpose, ResolvedInput}, eval::{ScriptVersion, DataLookupTable}};
 
 // TODO: include in pallas eventually?
 #[derive(Debug, PartialEq, Clone)]
@@ -15,8 +15,23 @@ struct RedeemerPtr {
 
 type AlonzoScriptsNeeded = Vec<(ScriptPurpose, ScriptHash)>;
 
+// subset of phase-1 ledger checks related to scripts
+pub fn eval_phase_one(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    lookup_table: &DataLookupTable,
+) -> anyhow::Result<()> {
+    let scripts_needed = scripts_needed(tx, utxos);
+
+    validate_missing_scripts(&scripts_needed, lookup_table.scripts())?;
+
+    has_exact_set_of_redeemers(tx, &scripts_needed, lookup_table.scripts())?;
+
+    Ok(())
+}
+
 pub fn validate_missing_scripts(
-    needed: AlonzoScriptsNeeded,
+    needed: &AlonzoScriptsNeeded,
     txscripts: HashMap<ScriptHash, ScriptVersion>,
 ) -> anyhow::Result<()> {
     let received_hashes = txscripts
@@ -58,10 +73,10 @@ pub fn validate_missing_scripts(
     Ok(())
 }
 
-fn scripts_needed(
+pub fn scripts_needed(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
-) -> anyhow::Result<AlonzoScriptsNeeded> {
+) -> AlonzoScriptsNeeded {
     let mut needed = Vec::new();
 
     let txb = tx.transaction_body.clone();
@@ -142,13 +157,13 @@ fn scripts_needed(
     needed.append(&mut cert);
     needed.append(&mut mint);
 
-    Ok(needed)
+    needed
 }
 
 /// hasExactSetOfRedeemers in Ledger Spec, but we pass `txscripts` directly
 pub fn has_exact_set_of_redeemers(
     tx: &MintedTx,
-    needed: AlonzoScriptsNeeded,
+    needed: &AlonzoScriptsNeeded,
     txscripts: HashMap<ScriptHash, ScriptVersion>,
 ) -> anyhow::Result<()> {
     let redeemers_needed = needed

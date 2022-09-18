@@ -56,6 +56,12 @@ pub struct DataLookupTable {
     scripts: HashMap<ScriptHash, ScriptVersion>,
 }
 
+impl DataLookupTable {
+    pub fn scripts(&self) -> HashMap<ScriptHash, ScriptVersion> {
+        self.scripts.clone()
+    }
+}
+
 pub fn get_tx_in_info_v1(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],

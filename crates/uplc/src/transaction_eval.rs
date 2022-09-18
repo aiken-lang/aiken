@@ -6,7 +6,7 @@ use pallas_traverse::{Era, MultiEraTx};
 
 use crate::Error;
 
-use self::script_context::{ResolvedInput, SlotConfig};
+use self::{script_context::{ResolvedInput, SlotConfig}, phase_one::eval_phase_one};
 
 mod eval;
 pub mod script_context;
@@ -22,6 +22,9 @@ pub fn eval_tx(
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
     let lookup_table = eval::get_script_and_datum_lookup_table(tx, utxos);
+
+    // subset of phase 1 check on redeemers and scripts
+    eval_phase_one(tx, utxos, &lookup_table)?;
 
     match redeemers {
         Some(rs) => {
