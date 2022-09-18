@@ -67,7 +67,7 @@ pub fn validate_missing_scripts(
         let missing_errors = missing.join(" ");
         let extra_errors = extra.join(" ");
 
-        panic!("Mismatch in required scripts: {} {}", missing_errors, extra_errors);
+        unreachable!("Mismatch in required scripts: {} {}", missing_errors, extra_errors);
     }
 
     Ok(())
@@ -224,7 +224,7 @@ pub fn has_exact_set_of_redeemers(
         let missing_errors = missing.join(" ");
         let extra_errors = extra.join(" ");
 
-        panic!("Mismatch in required redeemers: {} {}", missing_errors, extra_errors);
+        unreachable!("Mismatch in required redeemers: {} {}", missing_errors, extra_errors);
     }
 
     Ok(())

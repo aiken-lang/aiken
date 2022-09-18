@@ -637,4 +637,124 @@ mod tests {
             _ => unreachable!(),
         };
     }
+
+    #[test]
+    fn eval_missing_redeemer() {
+        let tx_bytes = hex::decode("84a30082825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c5000825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c50010181825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02cf47c8021a00028d89a1068149480100002221200101f5f6").unwrap();
+
+        let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+            .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+            .unwrap();
+
+        let inputs = multi_era_tx.as_babbage().unwrap().transaction_body.inputs.clone();
+
+        let raw_outputs = hex::decode("82825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02b3603082581d703a888d65f16790950a72daee1f63aa05add6d268434107cfa5b677121a001e8480").unwrap();
+
+        let outputs = MaybeIndefArray::<TransactionOutput>::decode_fragment(&raw_outputs).unwrap();
+
+        let utxos: MaybeIndefArray<ResolvedInput> = MaybeIndefArray::Indef(
+            inputs
+                .iter()
+                .zip(outputs.iter())
+                .map(|(input, output)| ResolvedInput {
+                    input: input.clone(),
+                    output: output.clone(),
+                })
+                .collect(),
+        );
+
+        let slot_config = SlotConfig {
+            zero_time: 1660003200000, // Preview network
+            slot_length: 1000,
+        };
+
+        let costs: Vec<i64> = vec![
+            205665, 812, 1, 1, 1000, 571, 0, 1, 1000, 24177, 4, 1, 1000, 32, 117366, 10475, 4,
+            23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 100, 100,
+            23000, 100, 19537, 32, 175354, 32, 46417, 4, 221973, 511, 0, 1, 89141, 32, 497525,
+            14068, 4, 2, 196500, 453240, 220, 0, 1, 1, 1000, 28662, 4, 2, 245000, 216773, 62, 1,
+            1060367, 12586, 1, 208512, 421, 1, 187000, 1000, 52998, 1, 80436, 32, 43249, 32, 1000,
+            32, 80556, 1, 57667, 4, 1000, 10, 197145, 156, 1, 197145, 156, 1, 204924, 473, 1,
+            208896, 511, 1, 52467, 32, 64832, 32, 65493, 32, 22558, 32, 16563, 32, 76511, 32,
+            196500, 453240, 220, 0, 1, 1, 69522, 11687, 0, 1, 60091, 32, 196500, 453240, 220, 0, 1,
+            1, 196500, 453240, 220, 0, 1, 1, 806990, 30482, 4, 1927926, 82523, 4, 265318, 0, 4, 0,
+            85931, 32, 205665, 812, 1, 1, 41182, 32, 212342, 32, 31220, 32, 32696, 32, 43357, 32,
+            32247, 32, 38314, 32, 9462713, 1021, 10,
+        ];
+
+        let cost_mdl = CostMdls {
+            plutus_v1: Some(costs),
+            plutus_v2: None,
+        };
+
+        let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+            .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+            .unwrap();
+        match multi_era_tx {
+            MultiEraTx::Babbage(tx) => {
+                eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+            }
+            _ => unreachable!(),
+        };
+    }
+
+    #[test]
+    fn eval_extraneous_redeemer() {
+        let tx_bytes = hex::decode("84a70082825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c5000825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c50010181825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02cf2b47021a0002aa0a0b5820fc54f302cff3a8a1cb374f5e4979e18a1d3627dcf4539637b03f5959eb8565bf0d81825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c500110825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02af51c2111a0003ff0fa40081825820065dd553fbe4e240a8f819bb9e333a7483de4a22b65c7fb6a95ce9450f84dff758402c26125a057a696079d08f2c8c9d2b8ccda9fe7cf7360c1a86712b85a91db82a3b80996b30ba6f4b2f969c93eb50694e0f6ea0bcf129080dcc07ecd9e605f00a049fd87980ff0582840000d879808219044c1a000382d48401001864821903e81903e8068149480100002221200101f5f6").unwrap();
+
+        let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+            .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+            .unwrap();
+
+        let inputs = multi_era_tx.as_babbage().unwrap().transaction_body.inputs.clone();
+
+        let raw_outputs = hex::decode("82825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02b3603082581d703a888d65f16790950a72daee1f63aa05add6d268434107cfa5b677121a001e8480").unwrap();
+
+        let outputs = MaybeIndefArray::<TransactionOutput>::decode_fragment(&raw_outputs).unwrap();
+
+        let utxos: MaybeIndefArray<ResolvedInput> = MaybeIndefArray::Indef(
+            inputs
+                .iter()
+                .zip(outputs.iter())
+                .map(|(input, output)| ResolvedInput {
+                    input: input.clone(),
+                    output: output.clone(),
+                })
+                .collect(),
+        );
+
+        let slot_config = SlotConfig {
+            zero_time: 1660003200000, // Preview network
+            slot_length: 1000,
+        };
+
+        let costs: Vec<i64> = vec![
+            205665, 812, 1, 1, 1000, 571, 0, 1, 1000, 24177, 4, 1, 1000, 32, 117366, 10475, 4,
+            23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 100, 100,
+            23000, 100, 19537, 32, 175354, 32, 46417, 4, 221973, 511, 0, 1, 89141, 32, 497525,
+            14068, 4, 2, 196500, 453240, 220, 0, 1, 1, 1000, 28662, 4, 2, 245000, 216773, 62, 1,
+            1060367, 12586, 1, 208512, 421, 1, 187000, 1000, 52998, 1, 80436, 32, 43249, 32, 1000,
+            32, 80556, 1, 57667, 4, 1000, 10, 197145, 156, 1, 197145, 156, 1, 204924, 473, 1,
+            208896, 511, 1, 52467, 32, 64832, 32, 65493, 32, 22558, 32, 16563, 32, 76511, 32,
+            196500, 453240, 220, 0, 1, 1, 69522, 11687, 0, 1, 60091, 32, 196500, 453240, 220, 0, 1,
+            1, 196500, 453240, 220, 0, 1, 1, 806990, 30482, 4, 1927926, 82523, 4, 265318, 0, 4, 0,
+            85931, 32, 205665, 812, 1, 1, 41182, 32, 212342, 32, 31220, 32, 32696, 32, 43357, 32,
+            32247, 32, 38314, 32, 9462713, 1021, 10,
+        ];
+
+        let cost_mdl = CostMdls {
+            plutus_v1: Some(costs),
+            plutus_v2: None,
+        };
+
+        let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+            .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+            .unwrap();
+        match multi_era_tx {
+            MultiEraTx::Babbage(tx) => {
+                eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+            }
+            _ => unreachable!(),
+        };
+    }
 }
