@@ -74,7 +74,7 @@ pub struct ScriptContext {
 }
 
 //---- Time conversion: slot range => posix time range
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TimeRange {
     pub lower_bound: Option<u64>,
     pub upper_bound: Option<u64>,

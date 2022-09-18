@@ -15,7 +15,7 @@ mod to_plutus_data;
 pub fn eval_tx(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
-    cost_mdls: &CostMdls,
+    cost_mdls: Option<&CostMdls>,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<Vec<Redeemer>> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
@@ -68,7 +68,7 @@ pub fn eval_tx_raw(
     };
 
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => match eval_tx(&tx, &utxos, &cost_mdls, &sc) {
+        MultiEraTx::Babbage(tx) => match eval_tx(&tx, &utxos, Some(&cost_mdls), &sc) {
             Ok(redeemers) => Ok(redeemers
                 .iter()
                 .map(|r| r.encode_fragment().unwrap())
@@ -322,7 +322,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                let redeemers = eval_tx(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
 
                 assert_eq!(redeemers.len(), 1)
             }
@@ -556,7 +556,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                let redeemers = eval_tx(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
 
                 println!("{:?}", redeemers.len());
             }
@@ -626,7 +626,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                let redeemers = eval_tx(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
 
                 println!("{:?}", redeemers.len());
             }
