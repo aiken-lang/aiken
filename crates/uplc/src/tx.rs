@@ -8,17 +8,18 @@ use crate::Error;
 
 use self::{script_context::{ResolvedInput, SlotConfig}, phase_one::eval_phase_one};
 
+mod error;
 mod eval;
 pub mod script_context;
 mod to_plutus_data;
 mod phase_one;
 
-pub fn eval_tx(
+pub fn eval(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
-    cost_mdls: &CostMdls,
+    cost_mdls: Option<&CostMdls>,
     slot_config: &SlotConfig,
-) -> anyhow::Result<Vec<Redeemer>> {
+) -> Result<Vec<Redeemer>, Error> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
     let lookup_table = eval::get_script_and_datum_lookup_table(tx, utxos);
@@ -45,7 +46,7 @@ pub fn eval_tx(
     }
 }
 
-pub fn eval_tx_raw(
+pub fn eval_raw(
     tx_bytes: &[u8],
     utxos_bytes: &[(Vec<u8>, Vec<u8>)],
     cost_mdls_bytes: &[u8],
@@ -72,7 +73,7 @@ pub fn eval_tx_raw(
     };
 
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => match eval_tx(&tx, &utxos, &cost_mdls, &sc) {
+        MultiEraTx::Babbage(tx) => match eval(&tx, &utxos, Some(&cost_mdls), &sc) {
             Ok(redeemers) => Ok(redeemers
                 .iter()
                 .map(|r| r.encode_fragment().unwrap())
@@ -100,7 +101,7 @@ mod tests {
     };
     use pallas_traverse::{Era, MultiEraTx};
 
-    use super::{eval_tx, ResolvedInput, SlotConfig};
+    use super::{eval, ResolvedInput, SlotConfig};
 
     #[test]
     fn test_eval() {
@@ -326,7 +327,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                let redeemers = eval(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
 
                 assert_eq!(redeemers.len(), 1)
             }
@@ -560,7 +561,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                let redeemers = eval(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
 
                 println!("{:?}", redeemers.len());
             }
@@ -630,7 +631,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                let redeemers = eval(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
 
                 println!("{:?}", redeemers.len());
             }
@@ -692,7 +693,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                eval(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
             }
             _ => unreachable!(),
         };
@@ -752,7 +753,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
+                eval(&tx, &utxos, Some(&cost_mdl), &slot_config).unwrap();
             }
             _ => unreachable!(),
         };

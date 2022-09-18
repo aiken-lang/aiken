@@ -6,11 +6,11 @@ pub mod machine;
 pub mod parser;
 mod pretty;
 pub mod program_builder;
-pub mod transaction_eval;
+pub mod tx;
 
 pub use pallas_primitives::alonzo::PlutusData;
-pub type Error = Box<dyn std::error::Error>;
-use pallas_primitives::Fragment;
+
+use pallas_primitives::{Error, Fragment};
 
 pub fn plutus_data(bytes: &[u8]) -> Result<PlutusData, Error> {
     PlutusData::decode_fragment(bytes)

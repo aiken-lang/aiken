@@ -20,6 +20,7 @@ use super::{
         TxInfoV1, TxInfoV2, TxOut,
     },
     to_plutus_data::ToPlutusData,
+    Error,
 };
 
 fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
@@ -65,7 +66,7 @@ impl DataLookupTable {
 pub fn get_tx_in_info_v1(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],
-) -> anyhow::Result<Vec<TxInInfo>> {
+) -> Result<Vec<TxInInfo>, Error> {
     let result = inputs
         .iter()
         .map(|input| {
@@ -112,7 +113,7 @@ pub fn get_tx_in_info_v1(
 fn get_tx_in_info_v2(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],
-) -> anyhow::Result<Vec<TxInInfo>> {
+) -> Result<Vec<TxInInfo>, Error> {
     let result = inputs
         .iter()
         .map(|input| {
@@ -149,7 +150,7 @@ fn get_script_purpose(
     mint: &Option<Mint>,
     dcert: &Option<Vec<Certificate>>,
     wdrl: &Option<Withdrawals>,
-) -> anyhow::Result<ScriptPurpose> {
+) -> Result<ScriptPurpose, Error> {
     // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
     let tag = redeemer.tag.clone();
     let index = redeemer.index;
@@ -233,7 +234,7 @@ fn get_tx_info_v1(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
-) -> anyhow::Result<TxInfo> {
+) -> Result<TxInfo, Error> {
     let body = tx.transaction_body.clone();
 
     if body.reference_inputs.is_some() {
@@ -296,7 +297,7 @@ fn get_tx_info_v2(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     slot_config: &SlotConfig,
-) -> anyhow::Result<TxInfo> {
+) -> Result<TxInfo, Error> {
     let body = tx.transaction_body.clone();
 
     let inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
@@ -574,8 +575,8 @@ pub fn eval_redeemer(
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
     lookup_table: &DataLookupTable,
-    cost_mdls: &CostMdls,
-) -> anyhow::Result<Redeemer> {
+    cost_mdls_opt: Option<&CostMdls>,
+) -> Result<Redeemer, Error> {
     let purpose = get_script_purpose(
         redeemer,
         &tx.transaction_body.inputs,
@@ -600,17 +601,22 @@ pub fn eval_redeemer(
                     prog.into()
                 };
 
-                let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
-                    costs
-                } else {
-                    return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
-                };
-
-                let result = program
+                let program = program
                     .apply_data(datum)
                     .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data())
-                    .eval_with_params(&Language::PlutusV1, &costs);
+                    .apply_data(script_context.to_plutus_data());
+
+                let result = if let Some(cost_mdls) = cost_mdls_opt {
+                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                        costs
+                    } else {
+                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                    };
+
+                    program.eval_as(&Language::PlutusV1, costs)
+                } else {
+                    program.eval_v1()
+                };
 
                 match result.0 {
                     Ok(_) => {}
@@ -641,17 +647,22 @@ pub fn eval_redeemer(
                     prog.into()
                 };
 
-                let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
-                    costs
-                } else {
-                    return Err(anyhow::Error::msg("PlutusV2 cost model not found."));
-                };
-
-                let result = program
+                let program = program
                     .apply_data(datum)
                     .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data())
-                    .eval_with_params(&Language::PlutusV2, &costs);
+                    .apply_data(script_context.to_plutus_data());
+
+                let result = if let Some(cost_mdls) = cost_mdls_opt {
+                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                        costs
+                    } else {
+                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                    };
+
+                    program.eval_as(&Language::PlutusV2, costs)
+                } else {
+                    program.eval()
+                };
 
                 match result.0 {
                     Ok(_) => {}
@@ -685,16 +696,21 @@ pub fn eval_redeemer(
                     prog.into()
                 };
 
-                let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
-                    costs
-                } else {
-                    return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
-                };
-
-                let result = program
+                let program = program
                     .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data())
-                    .eval_with_params(&Language::PlutusV1, &costs);
+                    .apply_data(script_context.to_plutus_data());
+
+                let result = if let Some(cost_mdls) = cost_mdls_opt {
+                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                        costs
+                    } else {
+                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                    };
+
+                    program.eval_as(&Language::PlutusV1, costs)
+                } else {
+                    program.eval_v1()
+                };
 
                 match result.0 {
                     Ok(_) => {}
@@ -725,16 +741,21 @@ pub fn eval_redeemer(
                     prog.into()
                 };
 
-                let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
-                    costs
-                } else {
-                    return Err(anyhow::Error::msg("PlutusV2 cost model not found."));
-                };
-
-                let result = program
+                let program = program
                     .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data())
-                    .eval_with_params(&Language::PlutusV2, &costs);
+                    .apply_data(script_context.to_plutus_data());
+
+                let result = if let Some(cost_mdls) = cost_mdls_opt {
+                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                        costs
+                    } else {
+                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                    };
+
+                    program.eval_as(&Language::PlutusV2, costs)
+                } else {
+                    program.eval()
+                };
 
                 match result.0 {
                     Ok(_) => {}

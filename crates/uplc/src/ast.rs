@@ -500,7 +500,22 @@ impl Program<NamedDeBruijn> {
         (term, machine.ex_budget, machine.logs)
     }
 
-    pub fn eval_with_params(
+    /// Evaluate a Program as PlutusV1
+    pub fn eval_v1(
+        &self,
+    ) -> (
+        Result<Term<NamedDeBruijn>, crate::machine::Error>,
+        ExBudget,
+        Vec<String>,
+    ) {
+        let mut machine = Machine::new(Language::PlutusV1, CostModel::v1(), ExBudget::v1(), 200);
+
+        let term = machine.run(&self.term);
+
+        (term, machine.ex_budget, machine.logs)
+    }
+
+    pub fn eval_as(
         &self,
         version: &Language,
         costs: &[i64],

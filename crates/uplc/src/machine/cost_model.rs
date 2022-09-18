@@ -29,6 +29,14 @@ impl ExBudget {
         self.mem *= n;
         self.cpu *= n;
     }
+
+    // TODO: actually fill in the v1 numbers
+    pub fn v1() -> Self {
+        ExBudget {
+            mem: 14000000,
+            cpu: 10000000000,
+        }
+    }
 }
 
 impl Default for ExBudget {
@@ -44,6 +52,15 @@ impl Default for ExBudget {
 pub struct CostModel {
     pub machine_costs: MachineCosts,
     pub builtin_costs: BuiltinCosts,
+}
+
+impl CostModel {
+    pub fn v1() -> Self {
+        Self {
+            machine_costs: MachineCosts::v1(),
+            builtin_costs: BuiltinCosts::v1(),
+        }
+    }
 }
 
 /// There's no entry for Error since we'll be exiting anyway; also, what would
@@ -74,9 +91,45 @@ impl MachineCosts {
             StepKind::StartUp => self.startup,
         }
     }
+
+    // TODO: actually fill in the v1 numbers
+    pub fn v1() -> Self {
+        Self {
+            startup: ExBudget { mem: 100, cpu: 100 },
+            var: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+            constant: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+            lambda: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+            delay: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+            force: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+            apply: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+            builtin: ExBudget {
+                mem: 100,
+                cpu: 23000,
+            },
+        }
+    }
 }
 
 impl Default for MachineCosts {
+    /// Default is V2
     fn default() -> Self {
         Self {
             startup: ExBudget { mem: 100, cpu: 100 },
@@ -179,7 +232,374 @@ pub struct BuiltinCosts {
     pub serialise_data: CostingFun<OneArgument>,
 }
 
+impl BuiltinCosts {
+    // TODO: actually fill in the v1 numbers
+    pub fn v1() -> Self {
+        Self {
+            add_integer: CostingFun {
+                mem: TwoArguments::MaxSize(MaxSize {
+                    intercept: 1,
+                    slope: 1,
+                }),
+                cpu: TwoArguments::MaxSize(MaxSize {
+                    intercept: 205665,
+                    slope: 812,
+                }),
+            },
+            subtract_integer: CostingFun {
+                mem: TwoArguments::MaxSize(MaxSize {
+                    intercept: 1,
+                    slope: 1,
+                }),
+                cpu: TwoArguments::MaxSize(MaxSize {
+                    intercept: 205665,
+                    slope: 812,
+                }),
+            },
+            multiply_integer: CostingFun {
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 0,
+                    slope: 1,
+                }),
+
+                cpu: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 69522,
+                    slope: 11687,
+                }),
+            },
+            divide_integer: CostingFun {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
+                    intercept: 0,
+                    slope: 1,
+                    minimum: 1,
+                }),
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: 196500,
+                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: 453240,
+                        slope: 220,
+                    })),
+                }),
+            },
+            quotient_integer: CostingFun {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
+                    intercept: 0,
+                    slope: 1,
+                    minimum: 1,
+                }),
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: 196500,
+                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: 453240,
+                        slope: 220,
+                    })),
+                }),
+            },
+            remainder_integer: CostingFun {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
+                    intercept: 0,
+                    slope: 1,
+                    minimum: 1,
+                }),
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: 196500,
+                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: 453240,
+                        slope: 220,
+                    })),
+                }),
+            },
+            mod_integer: CostingFun {
+                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
+                    intercept: 0,
+                    slope: 1,
+                    minimum: 1,
+                }),
+                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                    constant: 196500,
+                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: 453240,
+                        slope: 220,
+                    })),
+                }),
+            },
+            equals_integer: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 208512,
+                    slope: 421,
+                }),
+            },
+            less_than_integer: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 208896,
+                    slope: 511,
+                }),
+            },
+            less_than_equals_integer: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 204924,
+                    slope: 473,
+                }),
+            },
+            append_byte_string: CostingFun {
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 0,
+                    slope: 1,
+                }),
+                cpu: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 1000,
+                    slope: 571,
+                }),
+            },
+            cons_byte_string: CostingFun {
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 0,
+                    slope: 1,
+                }),
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 221973,
+                    slope: 511,
+                }),
+            },
+            slice_byte_string: CostingFun {
+                mem: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: 4,
+                    slope: 0,
+                }),
+                cpu: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: 265318,
+                    slope: 0,
+                }),
+            },
+            length_of_byte_string: CostingFun {
+                mem: OneArgument::ConstantCost(10),
+                cpu: OneArgument::ConstantCost(1000),
+            },
+            index_byte_string: CostingFun {
+                mem: TwoArguments::ConstantCost(4),
+                cpu: TwoArguments::ConstantCost(57667),
+            },
+            equals_byte_string: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::LinearOnDiagonal(ConstantOrLinear {
+                    constant: 245000,
+                    intercept: 216773,
+                    slope: 62,
+                }),
+            },
+            less_than_byte_string: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 197145,
+                    slope: 156,
+                }),
+            },
+            less_than_equals_byte_string: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 197145,
+                    slope: 156,
+                }),
+            },
+            sha2_256: CostingFun {
+                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 806990,
+                    slope: 30482,
+                }),
+            },
+            sha3_256: CostingFun {
+                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1927926,
+                    slope: 82523,
+                }),
+            },
+            blake2b_256: CostingFun {
+                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 117366,
+                    slope: 10475,
+                }),
+            },
+            verify_ed25519_signature: CostingFun {
+                mem: ThreeArguments::ConstantCost(10),
+                cpu: ThreeArguments::LinearInZ(LinearSize {
+                    intercept: 57996947,
+                    slope: 18975,
+                }),
+            },
+            verify_ecdsa_secp256k1_signature: CostingFun {
+                mem: ThreeArguments::ConstantCost(20000000000),
+                cpu: ThreeArguments::ConstantCost(20000000000),
+            },
+            verify_schnorr_secp256k1_signature: CostingFun {
+                mem: ThreeArguments::ConstantCost(20000000000),
+                cpu: ThreeArguments::LinearInY(LinearSize {
+                    intercept: 20000000000,
+                    slope: 0,
+                }),
+            },
+            append_string: CostingFun {
+                mem: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 4,
+                    slope: 1,
+                }),
+                cpu: TwoArguments::AddedSizes(AddedSizes {
+                    intercept: 1000,
+                    slope: 24177,
+                }),
+            },
+            equals_string: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::LinearOnDiagonal(ConstantOrLinear {
+                    constant: 187000,
+                    intercept: 1000,
+                    slope: 52998,
+                }),
+            },
+            encode_utf8: CostingFun {
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 4,
+                    slope: 2,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1000,
+                    slope: 28662,
+                }),
+            },
+            decode_utf8: CostingFun {
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 4,
+                    slope: 2,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 497525,
+                    slope: 14068,
+                }),
+            },
+            if_then_else: CostingFun {
+                mem: ThreeArguments::ConstantCost(1),
+                cpu: ThreeArguments::ConstantCost(80556),
+            },
+            choose_unit: CostingFun {
+                mem: TwoArguments::ConstantCost(4),
+                cpu: TwoArguments::ConstantCost(46417),
+            },
+            trace: CostingFun {
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(212342),
+            },
+            fst_pair: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(80436),
+            },
+            snd_pair: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(85931),
+            },
+            choose_list: CostingFun {
+                mem: ThreeArguments::ConstantCost(32),
+                cpu: ThreeArguments::ConstantCost(175354),
+            },
+            mk_cons: CostingFun {
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(65493),
+            },
+            head_list: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(43249),
+            },
+            tail_list: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(41182),
+            },
+            null_list: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(60091),
+            },
+            choose_data: CostingFun {
+                mem: SixArguments::ConstantCost(32),
+                cpu: SixArguments::ConstantCost(19537),
+            },
+            constr_data: CostingFun {
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(89141),
+            },
+            map_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(64832),
+            },
+            list_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(52467),
+            },
+            i_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(1000),
+            },
+            b_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(1000),
+            },
+            un_constr_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(32696),
+            },
+            un_map_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(38314),
+            },
+            un_list_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(32247),
+            },
+            un_i_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(43357),
+            },
+            un_b_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(31220),
+            },
+            equals_data: CostingFun {
+                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::MinSize(MinSize {
+                    intercept: 1060367,
+                    slope: 12586,
+                }),
+            },
+            mk_pair_data: CostingFun {
+                mem: TwoArguments::ConstantCost(32),
+                cpu: TwoArguments::ConstantCost(76511),
+            },
+            mk_nil_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(22558),
+            },
+            mk_nil_pair_data: CostingFun {
+                mem: OneArgument::ConstantCost(32),
+                cpu: OneArgument::ConstantCost(16563),
+            },
+            serialise_data: CostingFun {
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 0,
+                    slope: 2,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1159724,
+                    slope: 392670,
+                }),
+            },
+        }
+    }
+}
+
 impl Default for BuiltinCosts {
+    /// Default is V2
     fn default() -> Self {
         Self {
             add_integer: CostingFun {

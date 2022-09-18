@@ -9,8 +9,10 @@ use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
     parser,
-    transaction_eval::eval_tx,
-    transaction_eval::script_context::{ResolvedInput, SlotConfig},
+    tx::{
+        self,
+        script_context::{ResolvedInput, SlotConfig},
+    },
 };
 
 mod args;
@@ -52,7 +54,7 @@ fn main() -> anyhow::Result<()> {
                         slot_length,
                     };
 
-                    // eval_tx(tx_babbage, &resolved_inputs, &slot_config)?;
+                    tx::eval(tx_babbage, &resolved_inputs, None, &slot_config)?;
                 }
             }
         },
