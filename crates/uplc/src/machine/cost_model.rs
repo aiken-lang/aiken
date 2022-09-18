@@ -1709,66 +1709,66 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
         machine_costs: MachineCosts {
             startup: ExBudget {
                 mem: *cost_map
-                    .get("cek_startup_cost-exBudgetCPU")
+                    .get("cek_startup_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_startup_cost-exBudgetmem")
+                    .get("cek_startup_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             var: ExBudget {
                 mem: *cost_map
-                    .get("cek_var_cost-exBudgetCPU")
+                    .get("cek_var_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_var_cost-exBudgetmem")
+                    .get("cek_var_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             constant: ExBudget {
                 mem: *cost_map
-                    .get("cek_const_cost-exBudgetCPU")
+                    .get("cek_const_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_const_cost-exBudgetmem")
+                    .get("cek_const_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             lambda: ExBudget {
                 mem: *cost_map
-                    .get("cek_lam_cost-exBudgetCPU")
+                    .get("cek_lam_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_lam_cost-exBudgetmem")
+                    .get("cek_lam_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             delay: ExBudget {
                 mem: *cost_map
-                    .get("cek_delay_cost-exBudgetCPU")
+                    .get("cek_delay_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_delay_cost-exBudgetmem")
+                    .get("cek_delay_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             force: ExBudget {
                 mem: *cost_map
-                    .get("cek_force_cost-exBudgetCPU")
+                    .get("cek_force_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_force_cost-exBudgetmem")
+                    .get("cek_force_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             apply: ExBudget {
                 mem: *cost_map
-                    .get("cek_apply_cost-exBudgetCPU")
+                    .get("cek_apply_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_apply_cost-exBudgetmem")
+                    .get("cek_apply_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
             builtin: ExBudget {
                 mem: *cost_map
-                    .get("cek_builtin_cost-exBudgetCPU")
+                    .get("cek_builtin_cost-exBudgetmem")
                     .unwrap_or(&30000000000),
                 cpu: *cost_map
-                    .get("cek_builtin_cost-exBudgetmem")
+                    .get("cek_builtin_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
         },
