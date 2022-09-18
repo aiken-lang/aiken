@@ -11,6 +11,7 @@ use self::script_context::{ResolvedInput, SlotConfig};
 mod eval;
 pub mod script_context;
 mod to_plutus_data;
+mod phase_one;
 
 pub fn eval_tx(
     tx: &MintedTx,
