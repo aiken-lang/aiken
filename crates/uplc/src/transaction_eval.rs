@@ -1,5 +1,5 @@
 use pallas_primitives::{
-    babbage::{CostMdls, Language, MintedTx, Redeemer, TransactionInput, TransactionOutput},
+    babbage::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
@@ -16,42 +16,28 @@ pub fn eval_tx(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     cost_mdls: &CostMdls,
-    version: &Language,
     slot_config: &SlotConfig,
 ) -> anyhow::Result<Vec<Redeemer>> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
     let lookup_table = eval::get_script_and_datum_lookup_table(tx, utxos);
 
-    let costs_maybe = match version {
-        Language::PlutusV1 => cost_mdls.plutus_v1.as_ref(),
-        Language::PlutusV2 => cost_mdls.plutus_v2.as_ref(),
-    };
-
-    if let Some(costs) = costs_maybe {
-        match redeemers {
-            Some(rs) => {
-                let mut collected_redeemers = vec![];
-                for redeemer in rs.iter() {
-                    collected_redeemers.push(eval::eval_redeemer(
-                        tx,
-                        utxos,
-                        slot_config,
-                        redeemer,
-                        &lookup_table,
-                        version,
-                        costs,
-                    )?)
-                }
-                Ok(collected_redeemers)
+    match redeemers {
+        Some(rs) => {
+            let mut collected_redeemers = vec![];
+            for redeemer in rs.iter() {
+                collected_redeemers.push(eval::eval_redeemer(
+                    tx,
+                    utxos,
+                    slot_config,
+                    redeemer,
+                    &lookup_table,
+                    cost_mdls,
+                )?)
             }
-            None => Ok(vec![]),
+            Ok(collected_redeemers)
         }
-    } else {
-        Err(anyhow::Error::msg(format!(
-            "Missing cost model for version: {:?}",
-            version
-        )))
+        None => Ok(vec![]),
     }
 }
 
@@ -59,7 +45,6 @@ pub fn eval_tx_raw(
     tx_bytes: &[u8],
     utxos_bytes: &[(Vec<u8>, Vec<u8>)],
     cost_mdls_bytes: &[u8],
-    version_bytes: u32,
     slot_config: (u64, u64),
 ) -> Result<Vec<Vec<u8>>, Error> {
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, tx_bytes)
@@ -82,14 +67,8 @@ pub fn eval_tx_raw(
         slot_length: slot_config.1,
     };
 
-    let version = match version_bytes {
-        1 => Language::PlutusV1,
-        2 => Language::PlutusV2,
-        _ => unreachable!(),
-    };
-
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => match eval_tx(&tx, &utxos, &cost_mdls, &version, &sc) {
+        MultiEraTx::Babbage(tx) => match eval_tx(&tx, &utxos, &cost_mdls, &sc) {
             Ok(redeemers) => Ok(redeemers
                 .iter()
                 .map(|r| r.encode_fragment().unwrap())
@@ -112,7 +91,7 @@ pub fn eval_tx_raw(
 mod tests {
     use pallas_codec::utils::MaybeIndefArray;
     use pallas_primitives::{
-        babbage::{CostMdls, Language, TransactionInput, TransactionOutput},
+        babbage::{CostMdls, TransactionInput, TransactionOutput},
         Fragment,
     };
     use pallas_traverse::{Era, MultiEraTx};
@@ -343,8 +322,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers =
-                    eval_tx(&tx, &utxos, &cost_mdl, &Language::PlutusV2, &slot_config).unwrap();
+                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
 
                 assert_eq!(redeemers.len(), 1)
             }
@@ -578,8 +556,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers =
-                    eval_tx(&tx, &utxos, &cost_mdl, &Language::PlutusV2, &slot_config).unwrap();
+                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
 
                 println!("{:?}", redeemers.len());
             }
@@ -649,8 +626,7 @@ mod tests {
             .unwrap();
         match multi_era_tx {
             MultiEraTx::Babbage(tx) => {
-                let redeemers =
-                    eval_tx(&tx, &utxos, &cost_mdl, &Language::PlutusV1, &slot_config).unwrap();
+                let redeemers = eval_tx(&tx, &utxos, &cost_mdl, &slot_config).unwrap();
 
                 println!("{:?}", redeemers.len());
             }
