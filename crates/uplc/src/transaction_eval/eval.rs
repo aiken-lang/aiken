@@ -184,15 +184,15 @@ fn get_script_purpose(
                 .as_ref()
                 .unwrap_or(&KeyValuePairs::Indef(vec![]))
                 .iter()
-                .map(|(policy_id, _)| policy_id.clone())
+                .map(|(racnt, _)| racnt.clone())
                 .collect::<Vec<RewardAccount>>();
             reward_accounts.sort();
             let reward_account = match reward_accounts.get(index as usize) {
                 Some(ra) => ra.clone(),
                 None => unreachable!("Script purpose not found for redeemer."),
             };
-            let addresss = Address::from_bytes(&reward_account)?;
-            let credential = match addresss {
+            let address = Address::from_bytes(&reward_account)?;
+            let credential = match address {
                 Address::Stake(stake_address) => match stake_address.payload() {
                     StakePayload::Script(script_hash) => {
                         StakeCredential::Scripthash(*script_hash)
