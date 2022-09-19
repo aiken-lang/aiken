@@ -1,14 +1,9 @@
-use crate::{
-    ast::{NamedDeBruijn, Term},
-    machine::{self, cost_model::ExBudget},
-};
+use crate::machine::{self, cost_model::ExBudget};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("{0}")]
     Address(#[from] pallas_addresses::Error),
-    #[error("{}\n\n{:#?}\n\n{}", .0, .1, .2.join("\n"))]
-    BadTerm(Term<NamedDeBruijn>, ExBudget, Vec<String>),
     #[error("Only shelley reward addresses can be a part of withdrawals")]
     BadWithdrawalAddress,
     #[error("{0}")]

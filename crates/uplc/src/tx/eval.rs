@@ -652,11 +652,7 @@ pub fn eval_redeemer(
                 };
 
                 match result {
-                    Ok(term) => {
-                        if !term.is_valid_script_result() {
-                            return Err(Error::BadTerm(term, budget, logs));
-                        }
-                    }
+                    Ok(_) => (),
                     Err(err) => return Err(Error::Machine(err, budget, logs)),
                 }
 
@@ -707,11 +703,7 @@ pub fn eval_redeemer(
                 };
 
                 match result {
-                    Ok(term) => {
-                        if !term.is_valid_script_result() {
-                            return Err(Error::BadTerm(term, budget, logs));
-                        }
-                    }
+                    Ok(_) => (),
                     Err(err) => return Err(Error::Machine(err, budget, logs)),
                 }
 
@@ -764,11 +756,7 @@ pub fn eval_redeemer(
                 };
 
                 match result {
-                    Ok(term) => {
-                        if !term.is_valid_script_result() {
-                            return Err(Error::BadTerm(term, budget, logs));
-                        }
-                    }
+                    Ok(_) => (),
                     Err(err) => return Err(Error::Machine(err, budget, logs)),
                 }
 
@@ -818,11 +806,7 @@ pub fn eval_redeemer(
                 };
 
                 match result {
-                    Ok(term) => {
-                        if !term.is_valid_script_result() {
-                            return Err(Error::BadTerm(term, budget, logs));
-                        }
-                    }
+                    Ok(_) => (),
                     Err(err) => return Err(Error::Machine(err, budget, logs)),
                 }
 
