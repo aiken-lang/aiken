@@ -9,7 +9,7 @@ use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
     Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Language, Mint, MintedTx,
     PlutusV1Script, PlutusV2Script, PolicyId, Redeemer, RedeemerTag, RewardAccount, Script,
-    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
+    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals, NativeScript,
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
 use std::{collections::HashMap, convert::TryInto, ops::Deref, vec};
@@ -40,7 +40,8 @@ fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> Tim
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum ScriptVersion {
+pub enum ScriptVersion {
+    Native(NativeScript),
     V1(PlutusV1Script),
     V2(PlutusV2Script),
 }
@@ -54,6 +55,12 @@ enum ExecutionPurpose {
 pub struct DataLookupTable {
     datum: HashMap<DatumHash, PlutusData>,
     scripts: HashMap<ScriptHash, ScriptVersion>,
+}
+
+impl DataLookupTable {
+    pub fn scripts(&self) -> HashMap<ScriptHash, ScriptVersion> {
+        self.scripts.clone()
+    }
 }
 
 pub fn get_tx_in_info_v1(
@@ -184,15 +191,15 @@ fn get_script_purpose(
                 .as_ref()
                 .unwrap_or(&KeyValuePairs::Indef(vec![]))
                 .iter()
-                .map(|(policy_id, _)| policy_id.clone())
+                .map(|(racnt, _)| racnt.clone())
                 .collect::<Vec<RewardAccount>>();
             reward_accounts.sort();
             let reward_account = match reward_accounts.get(index as usize) {
                 Some(ra) => ra.clone(),
                 None => unreachable!("Script purpose not found for redeemer."),
             };
-            let addresss = Address::from_bytes(&reward_account)?;
-            let credential = match addresss {
+            let address = Address::from_bytes(&reward_account)?;
+            let credential = match address {
                 Address::Stake(stake_address) => match stake_address.payload() {
                     StakePayload::Script(script_hash) => {
                         StakeCredential::Scripthash(*script_hash)
@@ -501,6 +508,12 @@ pub fn get_script_and_datum_lookup_table(
         .clone()
         .unwrap_or_default();
 
+    let scripts_native_witnesses = tx
+        .transaction_witness_set
+        .native_script
+        .clone()
+        .unwrap_or_default();
+
     let scripts_v1_witnesses = tx
         .transaction_witness_set
         .plutus_v1_script
@@ -517,14 +530,17 @@ pub fn get_script_and_datum_lookup_table(
         datum.insert(plutus_data.original_hash(), plutus_data.clone().unwrap());
     }
 
+    for script in scripts_native_witnesses.iter() {
+        scripts.insert(script.compute_hash(), ScriptVersion::Native(script.clone()));
+        // TODO: implement `original_hash` for native scripts in pallas
+    }
+
     for script in scripts_v1_witnesses.iter() {
         scripts.insert(script.compute_hash(), ScriptVersion::V1(script.clone()));
-        // TODO: fix hashing bug in pallas
     }
 
     for script in scripts_v2_witnesses.iter() {
         scripts.insert(script.compute_hash(), ScriptVersion::V2(script.clone()));
-        // TODO: fix hashing bug in pallas
     }
 
     // discovery in utxos (script ref)
@@ -535,13 +551,15 @@ pub fn get_script_and_datum_lookup_table(
             TransactionOutput::PostAlonzo(output) => {
                 if let Some(script) = &output.script_ref {
                     match &script.0 {
+                        Script::NativeScript(ns) => {
+                            scripts.insert(ns.compute_hash(), ScriptVersion::Native(ns.clone()));
+                        }
                         Script::PlutusV1Script(v1) => {
                             scripts.insert(v1.compute_hash(), ScriptVersion::V1(v1.clone()));
                         }
                         Script::PlutusV2Script(v2) => {
                             scripts.insert(v2.compute_hash(), ScriptVersion::V2(v2.clone()));
                         }
-                        _ => {}
                     }
                 }
             }
@@ -663,6 +681,7 @@ pub fn eval_redeemer(
 
                 Ok(new_redeemer)
             }
+            ScriptVersion::Native(_) => unreachable!("Native script can't be executed in phase-two.")
         },
         ExecutionPurpose::NoDatum(script_version) => match script_version {
             ScriptVersion::V1(script) => {
@@ -755,6 +774,7 @@ pub fn eval_redeemer(
 
                 Ok(new_redeemer)
             }
+            ScriptVersion::Native(_) => unreachable!("Native script can't be executed in phase-two.")
         },
     }
 }
