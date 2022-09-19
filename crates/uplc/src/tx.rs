@@ -77,10 +77,10 @@ pub fn eval_phase_two_raw(
 
     let mut utxos = Vec::new();
 
-    for (input, _output) in utxos_bytes {
+    for (input, output) in utxos_bytes {
         utxos.push(ResolvedInput {
             input: TransactionInput::decode_fragment(input)?,
-            output: TransactionOutput::decode_fragment(input)?,
+            output: TransactionOutput::decode_fragment(output)?,
         });
     }
 
