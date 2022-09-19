@@ -168,12 +168,10 @@ fn get_script_purpose(
             policy_ids.sort();
             match policy_ids.get(index as usize) {
                 Some(policy_id) => Ok(ScriptPurpose::Minting(*policy_id)),
-                None => {
-                    return Err(Error::ExtraneousRedeemer {
-                        tag: "Mint".to_string(),
-                        index,
-                    })
-                }
+                None => Err(Error::ExtraneousRedeemer {
+                    tag: "Mint".to_string(),
+                    index,
+                }),
             }
         }
         RedeemerTag::Spend => {
@@ -182,12 +180,10 @@ fn get_script_purpose(
             inputs.sort();
             match inputs.get(index as usize) {
                 Some(input) => Ok(ScriptPurpose::Spending(input.clone())),
-                None => {
-                    return Err(Error::ExtraneousRedeemer {
-                        tag: "Spend".to_string(),
-                        index,
-                    })
-                }
+                None => Err(Error::ExtraneousRedeemer {
+                    tag: "Spend".to_string(),
+                    index,
+                }),
             }
         }
         RedeemerTag::Reward => {
@@ -228,12 +224,10 @@ fn get_script_purpose(
                 .get(index as usize)
             {
                 Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
-                None => {
-                    return Err(Error::ExtraneousRedeemer {
-                        tag: "Cert".to_string(),
-                        index,
-                    })
-                }
+                None => Err(Error::ExtraneousRedeemer {
+                    tag: "Cert".to_string(),
+                    index,
+                }),
             }
         }
     }
@@ -436,7 +430,7 @@ fn get_execution_purpose(
 
                             Ok(ExecutionPurpose::WithDatum(script, datum))
                         }
-                        _ => return Err(Error::ScriptKeyHash),
+                        _ => Err(Error::ScriptKeyHash),
                     }
                 }
                 TransactionOutput::PostAlonzo(output) => {
@@ -470,7 +464,7 @@ fn get_execution_purpose(
 
                             Ok(ExecutionPurpose::WithDatum(script, datum))
                         }
-                        _ => return Err(Error::ScriptKeyHash),
+                        _ => Err(Error::ScriptKeyHash),
                     }
                 }
             }
@@ -527,7 +521,7 @@ fn get_execution_purpose(
 
                 Ok(ExecutionPurpose::NoDatum(script))
             }
-            _ => return Err(Error::OnlyStakeDeregAndDelegAllowed),
+            _ => Err(Error::OnlyStakeDeregAndDelegAllowed),
         },
     }
 }
@@ -645,7 +639,7 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
+                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                         costs
                     } else {
@@ -657,11 +651,17 @@ pub fn eval_redeemer(
                     program.eval_v1()
                 };
 
-                // TODO: do we want the logs in the error?
-                result?;
+                match result {
+                    Ok(term) => {
+                        if !term.is_valid_script_result() {
+                            return Err(Error::BadTerm(term, budget, logs));
+                        }
+                    }
+                    Err(err) => return Err(Error::Machine(err, budget, logs)),
+                }
 
                 let initial_budget = match initial_budget {
-                    Some(b) => b.clone(),
+                    Some(b) => *b,
                     None => ExBudget::default(),
                 };
 
@@ -694,7 +694,7 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
+                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                         costs
                     } else {
@@ -706,11 +706,17 @@ pub fn eval_redeemer(
                     program.eval()
                 };
 
-                // TODO: do we want the logs in the error?
-                result?;
+                match result {
+                    Ok(term) => {
+                        if !term.is_valid_script_result() {
+                            return Err(Error::BadTerm(term, budget, logs));
+                        }
+                    }
+                    Err(err) => return Err(Error::Machine(err, budget, logs)),
+                }
 
                 let initial_budget = match initial_budget {
-                    Some(b) => b.clone(),
+                    Some(b) => *b,
                     None => ExBudget::default(),
                 };
 
@@ -745,7 +751,7 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
+                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                         costs
                     } else {
@@ -757,11 +763,17 @@ pub fn eval_redeemer(
                     program.eval_v1()
                 };
 
-                // TODO: do we want the logs in the error?
-                result?;
+                match result {
+                    Ok(term) => {
+                        if !term.is_valid_script_result() {
+                            return Err(Error::BadTerm(term, budget, logs));
+                        }
+                    }
+                    Err(err) => return Err(Error::Machine(err, budget, logs)),
+                }
 
                 let initial_budget = match initial_budget {
-                    Some(b) => b.clone(),
+                    Some(b) => *b,
                     None => ExBudget::default(),
                 };
 
@@ -793,7 +805,7 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
+                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                         costs
                     } else {
@@ -805,11 +817,17 @@ pub fn eval_redeemer(
                     program.eval()
                 };
 
-                // TODO: do we want the logs in the error?
-                result?;
+                match result {
+                    Ok(term) => {
+                        if !term.is_valid_script_result() {
+                            return Err(Error::BadTerm(term, budget, logs));
+                        }
+                    }
+                    Err(err) => return Err(Error::Machine(err, budget, logs)),
+                }
 
                 let initial_budget = match initial_budget {
-                    Some(b) => b.clone(),
+                    Some(b) => *b,
                     None => ExBudget::default(),
                 };
 

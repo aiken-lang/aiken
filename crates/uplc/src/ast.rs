@@ -526,7 +526,7 @@ impl Program<NamedDeBruijn> {
         Vec<String>,
     ) {
         let budget = match initial_budget {
-            Some(b) => b.clone(),
+            Some(b) => *b,
             None => ExBudget::default(),
         };
 
@@ -554,5 +554,11 @@ impl Program<DeBruijn> {
         let program: Program<NamedDeBruijn> = self.clone().into();
 
         program.eval()
+    }
+}
+
+impl Term<NamedDeBruijn> {
+    pub fn is_valid_script_result(&self) -> bool {
+        matches!(self, Term::Constant(Constant::Unit))
     }
 }

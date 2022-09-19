@@ -1,17 +1,22 @@
-use crate::machine;
+use crate::{
+    ast::{NamedDeBruijn, Term},
+    machine::{self, cost_model::ExBudget},
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("{0}")]
     Address(#[from] pallas_addresses::Error),
+    #[error("{}\n\n{:#?}\n\n{}", .0, .1, .2.join("\n"))]
+    BadTerm(Term<NamedDeBruijn>, ExBudget, Vec<String>),
     #[error("Only shelley reward addresses can be a part of withdrawals")]
     BadWithdrawalAddress,
     #[error("{0}")]
     FlatDecode(#[from] flat_rs::de::Error),
     #[error("{0}")]
     FragmentDecode(#[from] pallas_primitives::Error),
-    #[error("{0}")]
-    Machine(#[from] machine::Error),
+    #[error("{}\n\n{:#?}\n\n{}", .0, .1, .2.join("\n"))]
+    Machine(machine::Error, ExBudget, Vec<String>),
     #[error("Native script can't be executed in phase-two")]
     NativeScriptPhaseTwo,
     #[error("Can't eval without redeemers")]

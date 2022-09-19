@@ -54,7 +54,27 @@ fn main() -> anyhow::Result<()> {
                         slot_length,
                     };
 
-                    tx::eval_phase_two(tx_babbage, &resolved_inputs, None, &slot_config, true)?;
+                    let result = tx::eval_phase_two(
+                        tx_babbage,
+                        &resolved_inputs,
+                        None,
+                        None,
+                        &slot_config,
+                        true,
+                    );
+
+                    match result {
+                        Ok(redeemers) => {
+                            println!("\nResult\n------\n\n");
+
+                            for redeemer in redeemers {
+                                println!("{:#?}", redeemer)
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("\nError\n-----\n\n{}\n", err);
+                        }
+                    }
                 }
             }
         },
