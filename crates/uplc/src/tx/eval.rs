@@ -660,7 +660,10 @@ pub fn eval_redeemer(
                 // TODO: do we want the logs in the error?
                 result?;
 
-                let initial_budget = ExBudget::default();
+                let initial_budget = match initial_budget {
+                    Some(b) => b.clone(),
+                    None => ExBudget::default(),
+                };
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
@@ -706,7 +709,10 @@ pub fn eval_redeemer(
                 // TODO: do we want the logs in the error?
                 result?;
 
-                let initial_budget = ExBudget::default();
+                let initial_budget = match initial_budget {
+                    Some(b) => b.clone(),
+                    None => ExBudget::default(),
+                };
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
@@ -754,7 +760,10 @@ pub fn eval_redeemer(
                 // TODO: do we want the logs in the error?
                 result?;
 
-                let initial_budget = ExBudget::default();
+                let initial_budget = match initial_budget {
+                    Some(b) => b.clone(),
+                    None => ExBudget::default(),
+                };
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
@@ -799,7 +808,10 @@ pub fn eval_redeemer(
                 // TODO: do we want the logs in the error?
                 result?;
 
-                let initial_budget = ExBudget::default();
+                let initial_budget = match initial_budget {
+                    Some(b) => b.clone(),
+                    None => ExBudget::default(),
+                };
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
