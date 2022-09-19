@@ -190,8 +190,10 @@ where
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
             x => Err(de::Error::Message(format!(
-                "Unknown term constructor tag: {}",
-                x
+                "Unknown term constructor tag: {} and buffer position is {} and buffer length is {}",
+                x,
+                d.buffer.len() - d.pos,
+                d.buffer.len()
             ))),
         }
     }
