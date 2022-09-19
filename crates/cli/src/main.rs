@@ -54,7 +54,7 @@ fn main() -> anyhow::Result<()> {
                         slot_length,
                     };
 
-                    tx::eval(tx_babbage, &resolved_inputs, None, &slot_config)?;
+                    tx::eval_phase_two(tx_babbage, &resolved_inputs, None, &slot_config, true)?;
                 }
             }
         },

@@ -7,9 +7,9 @@ use pallas_addresses::{Address, ScriptHash, StakePayload};
 use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
-    Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Language, Mint, MintedTx,
+    Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Language, Mint, MintedTx, NativeScript,
     PlutusV1Script, PlutusV2Script, PolicyId, Redeemer, RedeemerTag, RewardAccount, Script,
-    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals, NativeScript,
+    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
 use std::{collections::HashMap, convert::TryInto, ops::Deref, vec};
@@ -606,11 +606,11 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let result = if let Some(cost_mdls) = cost_mdls_opt {
+                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                         costs
                     } else {
-                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                        return Err(Error::V1CostModelNotFound);
                     };
 
                     program.eval_as(&Language::PlutusV1, costs)
@@ -618,18 +618,18 @@ pub fn eval_redeemer(
                     program.eval_v1()
                 };
 
-                match result.0 {
-                    Ok(_) => {}
-                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
-                }
+                // TODO: do we want the logs in the error?
+                result?;
+
+                let initial_budget = ExBudget::default();
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
                     index: redeemer.index,
                     data: redeemer.data.clone(),
                     ex_units: ExUnits {
-                        mem: (ExBudget::default().mem - result.1.mem) as u32,
-                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                        mem: (initial_budget.mem - budget.mem) as u32,
+                        steps: (initial_budget.cpu - budget.cpu) as u64,
                     },
                 };
 
@@ -652,11 +652,11 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let result = if let Some(cost_mdls) = cost_mdls_opt {
-                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
+                    let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                         costs
                     } else {
-                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                        return Err(Error::V2CostModelNotFound);
                     };
 
                     program.eval_as(&Language::PlutusV2, costs)
@@ -664,24 +664,24 @@ pub fn eval_redeemer(
                     program.eval()
                 };
 
-                match result.0 {
-                    Ok(_) => {}
-                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
-                }
+                // TODO: do we want the logs in the error?
+                result?;
+
+                let initial_budget = ExBudget::default();
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
                     index: redeemer.index,
                     data: redeemer.data.clone(),
                     ex_units: ExUnits {
-                        mem: (ExBudget::default().mem - result.1.mem) as u32,
-                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                        mem: (initial_budget.mem - budget.mem) as u32,
+                        steps: (initial_budget.cpu - budget.cpu) as u64,
                     },
                 };
 
                 Ok(new_redeemer)
             }
-            ScriptVersion::Native(_) => unreachable!("Native script can't be executed in phase-two.")
+            ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
         },
         ExecutionPurpose::NoDatum(script_version) => match script_version {
             ScriptVersion::V1(script) => {
@@ -700,11 +700,11 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let result = if let Some(cost_mdls) = cost_mdls_opt {
+                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                         costs
                     } else {
-                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                        return Err(Error::V1CostModelNotFound);
                     };
 
                     program.eval_as(&Language::PlutusV1, costs)
@@ -712,18 +712,18 @@ pub fn eval_redeemer(
                     program.eval_v1()
                 };
 
-                match result.0 {
-                    Ok(_) => {}
-                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
-                }
+                // TODO: do we want the logs in the error?
+                result?;
+
+                let initial_budget = ExBudget::default();
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
                     index: redeemer.index,
                     data: redeemer.data.clone(),
                     ex_units: ExUnits {
-                        mem: (ExBudget::default().mem - result.1.mem) as u32,
-                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                        mem: (initial_budget.mem - budget.mem) as u32,
+                        steps: (initial_budget.cpu - budget.cpu) as u64,
                     },
                 };
 
@@ -745,11 +745,11 @@ pub fn eval_redeemer(
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
 
-                let result = if let Some(cost_mdls) = cost_mdls_opt {
-                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                let (result, budget, _) = if let Some(cost_mdls) = cost_mdls_opt {
+                    let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                         costs
                     } else {
-                        return Err(anyhow::Error::msg("PlutusV1 cost model not found."));
+                        return Err(Error::V2CostModelNotFound);
                     };
 
                     program.eval_as(&Language::PlutusV2, costs)
@@ -757,24 +757,24 @@ pub fn eval_redeemer(
                     program.eval()
                 };
 
-                match result.0 {
-                    Ok(_) => {}
-                    Err(_err) => unreachable!("Error in Plutus core."), // TODO: Add the actual error message
-                }
+                // TODO: do we want the logs in the error?
+                result?;
+
+                let initial_budget = ExBudget::default();
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
                     index: redeemer.index,
                     data: redeemer.data.clone(),
                     ex_units: ExUnits {
-                        mem: (ExBudget::default().mem - result.1.mem) as u32,
-                        steps: (ExBudget::default().cpu - result.1.cpu) as u64,
+                        mem: (initial_budget.mem - budget.mem) as u32,
+                        steps: (initial_budget.cpu - budget.cpu) as u64,
                     },
                 };
 
                 Ok(new_redeemer)
             }
-            ScriptVersion::Native(_) => unreachable!("Native script can't be executed in phase-two.")
+            ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
         },
     }
 }

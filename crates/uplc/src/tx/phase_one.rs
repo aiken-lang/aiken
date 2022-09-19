@@ -40,7 +40,7 @@ pub fn validate_missing_scripts(
     needed: &AlonzoScriptsNeeded,
     txscripts: HashMap<ScriptHash, ScriptVersion>,
 ) -> Result<(), Error> {
-    let received_hashes = txscripts.keys().map(|x| *x).collect::<Vec<ScriptHash>>();
+    let received_hashes = txscripts.keys().copied().collect::<Vec<ScriptHash>>();
 
     let needed_hashes = needed.iter().map(|x| x.1).collect::<Vec<ScriptHash>>();
 
@@ -57,7 +57,7 @@ pub fn validate_missing_scripts(
         .map(|x| format!("[Extraneous (sh: {:?})]", x))
         .collect();
 
-    if missing.len() > 0 || extra.len() > 0 {
+    if !missing.is_empty() || !extra.is_empty() {
         let missing_errors = missing.join(" ");
         let extra_errors = extra.join(" ");
 
@@ -80,8 +80,8 @@ pub fn scripts_needed(
 
     let mut spend = Vec::new();
 
-    for input in txb.inputs {
-        let utxo = match utxos.iter().find(|utxo| utxo.input == input) {
+    for input in txb.inputs.iter() {
+        let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
             Some(u) => u,
             None => return Err(Error::ResolvedInputNotFound),
         };
@@ -164,7 +164,7 @@ pub fn has_exact_set_of_redeemers(
 
     for (script_purpose, script_hash) in needed {
         let redeemer_ptr = build_redeemer_ptr(tx, script_purpose)?;
-        let script = tx_scripts.get(&script_hash);
+        let script = tx_scripts.get(script_hash);
 
         if let (Some(ptr), Some(script)) = (redeemer_ptr, script) {
             match script {
@@ -200,9 +200,7 @@ pub fn has_exact_set_of_redeemers(
         .map(|x| {
             format!(
                 "[Missing (redeemer_ptr: {:?}, script_purpose: {:?}, script_hash: {})]",
-                x.0,
-                x.1,
-                x.2.to_string(),
+                x.0, x.1, x.2,
             )
         })
         .collect();
@@ -213,10 +211,7 @@ pub fn has_exact_set_of_redeemers(
         .map(|x| format!("[Extraneous (redeemer_ptr: {:?})]", x))
         .collect();
 
-    if missing.len() > 0 || extra.len() > 0 {
-        let missing_errors = missing.join(" ");
-        let extra_errors = extra.join(" ");
-
+    if !missing.is_empty() || !extra.is_empty() {
         Err(Error::RequiredRedeemersMismatch { missing, extra })
     } else {
         Ok(())
