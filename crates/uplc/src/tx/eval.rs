@@ -532,7 +532,6 @@ pub fn get_script_and_datum_lookup_table(
 
     for script in scripts_native_witnesses.iter() {
         scripts.insert(script.compute_hash(), ScriptVersion::Native(script.clone()));
-        // TODO: implement `original_hash` for native scripts in pallas
     }
 
     for script in scripts_v1_witnesses.iter() {
