@@ -103,7 +103,7 @@ pub fn scripts_needed(
         .as_ref()
         .unwrap_or(&KeyValuePairs::Indef(vec![]))
         .iter()
-        .map(|(acnt, _)| {
+        .filter_map(|(acnt, _)| {
             let address = Address::from_bytes(acnt).unwrap();
 
             if let Address::Stake(a) = address {
@@ -115,7 +115,6 @@ pub fn scripts_needed(
 
             None
         })
-        .flatten()
         .collect::<AlonzoScriptsNeeded>();
 
     let mut cert = txb
@@ -123,7 +122,7 @@ pub fn scripts_needed(
         .clone()
         .unwrap_or_default()
         .iter()
-        .map(|cert| {
+        .filter_map(|cert| {
             // only Dereg and Deleg certs can require scripts
             match cert {
                 Certificate::StakeDeregistration(StakeCredential::Scripthash(h)) => {
@@ -135,7 +134,6 @@ pub fn scripts_needed(
                 _ => None,
             }
         })
-        .flatten()
         .collect::<AlonzoScriptsNeeded>();
 
     let mut mint = txb
