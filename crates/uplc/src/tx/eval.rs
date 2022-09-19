@@ -71,7 +71,7 @@ pub fn get_tx_in_info_v1(
         .iter()
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
-                Some(u) => u,
+                Some(resolved) => resolved,
                 None => return Err(Error::ResolvedInputNotFound),
             };
             let address = Address::from_bytes(match &utxo.output {
@@ -119,7 +119,7 @@ fn get_tx_in_info_v2(
         .iter()
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
-                Some(u) => u,
+                Some(resolved) => resolved,
                 None => return Err(Error::ResolvedInputNotFound),
             };
             let address = Address::from_bytes(match &utxo.output {
@@ -169,7 +169,7 @@ fn get_script_purpose(
             match policy_ids.get(index as usize) {
                 Some(policy_id) => Ok(ScriptPurpose::Minting(*policy_id)),
                 None => {
-                    return Err(Error::ExtranousRedeemer {
+                    return Err(Error::ExtraneousRedeemer {
                         tag: "Mint".to_string(),
                         index,
                     })
@@ -183,7 +183,7 @@ fn get_script_purpose(
             match inputs.get(index as usize) {
                 Some(input) => Ok(ScriptPurpose::Spending(input.clone())),
                 None => {
-                    return Err(Error::ExtranousRedeemer {
+                    return Err(Error::ExtraneousRedeemer {
                         tag: "Spend".to_string(),
                         index,
                     })
@@ -202,7 +202,7 @@ fn get_script_purpose(
             let reward_account = match reward_accounts.get(index as usize) {
                 Some(ra) => ra.clone(),
                 None => {
-                    return Err(Error::ExtranousRedeemer {
+                    return Err(Error::ExtraneousRedeemer {
                         tag: "Reward".to_string(),
                         index,
                     })
@@ -229,7 +229,7 @@ fn get_script_purpose(
             {
                 Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
                 None => {
-                    return Err(Error::ExtranousRedeemer {
+                    return Err(Error::ExtraneousRedeemer {
                         tag: "Cert".to_string(),
                         index,
                     })

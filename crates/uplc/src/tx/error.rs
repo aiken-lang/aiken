@@ -21,8 +21,8 @@ pub enum Error {
         missing: Vec<String>,
         extra: Vec<String>,
     },
-    #[error("Extranous redeemer found: Tag {:?}, Index {}", tag, index)]
-    ExtranousRedeemer { tag: String, index: u32 },
+    #[error("Extraneous redeemer found: Tag {:?}, Index {}", tag, index)]
+    ExtraneousRedeemer { tag: String, index: u32 },
     #[error("Resolved Input not found")]
     ResolvedInputNotFound,
     #[error("A key hash cannot be the hash of a script")]
