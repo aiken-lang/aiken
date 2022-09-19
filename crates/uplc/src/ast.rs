@@ -559,6 +559,6 @@ impl Program<DeBruijn> {
 
 impl Term<NamedDeBruijn> {
     pub fn is_valid_script_result(&self) -> bool {
-        matches!(self, Term::Constant(Constant::Unit))
+        !matches!(self, Term::Error)
     }
 }
