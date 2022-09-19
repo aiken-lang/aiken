@@ -9,6 +9,8 @@ pub use eval::get_script_and_datum_lookup_table;
 pub use phase_one::eval_phase_one;
 use script_context::{ResolvedInput, SlotConfig};
 
+use crate::machine::cost_model::ExBudget;
+
 pub mod error;
 mod eval;
 mod phase_one;
@@ -26,6 +28,7 @@ pub fn eval_phase_two(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     cost_mdls: Option<&CostMdls>,
+    initial_budget: Option<&ExBudget>,
     slot_config: &SlotConfig,
     run_phase_one: bool,
 ) -> Result<Vec<Redeemer>, Error> {
@@ -50,6 +53,7 @@ pub fn eval_phase_two(
                     redeemer,
                     &lookup_table,
                     cost_mdls,
+                    initial_budget,
                 )?;
 
                 collected_redeemers.push(redeemer)
@@ -63,10 +67,12 @@ pub fn eval_phase_two(
 
 /// This function is the same as [`eval_phase_two`]
 /// but the inputs are raw bytes.
+/// initial_budget expects (cpu, mem).
 pub fn eval_phase_two_raw(
     tx_bytes: &[u8],
     utxos_bytes: &[(Vec<u8>, Vec<u8>)],
     cost_mdls_bytes: &[u8],
+    initial_budget: (u64, u64),
     slot_config: (u64, u64),
     run_phase_one: bool,
 ) -> Result<Vec<Vec<u8>>, Error> {
@@ -74,6 +80,11 @@ pub fn eval_phase_two_raw(
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, tx_bytes))?;
 
     let cost_mdls = CostMdls::decode_fragment(cost_mdls_bytes)?;
+
+    let budget = ExBudget {
+        cpu: initial_budget.0 as i64,
+        mem: initial_budget.1 as i64,
+    };
 
     let mut utxos = Vec::new();
 
@@ -91,7 +102,14 @@ pub fn eval_phase_two_raw(
 
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            match eval_phase_two(&tx, &utxos, Some(&cost_mdls), &sc, run_phase_one) {
+            match eval_phase_two(
+                &tx,
+                &utxos,
+                Some(&cost_mdls),
+                Some(&budget),
+                &sc,
+                run_phase_one,
+            ) {
                 Ok(redeemers) => Ok(redeemers
                     .iter()
                     .map(|r| r.encode_fragment().unwrap())

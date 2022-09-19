@@ -519,15 +519,21 @@ impl Program<NamedDeBruijn> {
         &self,
         version: &Language,
         costs: &[i64],
+        initial_budget: Option<&ExBudget>,
     ) -> (
         Result<Term<NamedDeBruijn>, crate::machine::Error>,
         ExBudget,
         Vec<String>,
     ) {
+        let budget = match initial_budget {
+            Some(b) => b.clone(),
+            None => ExBudget::default(),
+        };
+
         let mut machine = Machine::new(
             version.clone(),
             initialize_cost_model(version, costs),
-            ExBudget::default(),
+            budget,
             200, //slippage
         );
 

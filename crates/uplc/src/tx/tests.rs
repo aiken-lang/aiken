@@ -5,6 +5,8 @@ use pallas_primitives::{
 };
 use pallas_traverse::{Era, MultiEraTx};
 
+use crate::machine::cost_model::ExBudget;
+
 use super::{eval_phase_two, ResolvedInput, SlotConfig};
 
 #[test]
@@ -226,13 +228,25 @@ fn test_eval() {
         plutus_v2: Some(costs),
     };
 
+    let initial_budget = ExBudget {
+        cpu: 10000000000,
+        mem: 14000000,
+    };
+
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            let redeemers =
-                eval_phase_two(&tx, &utxos, Some(&cost_mdl), &slot_config, false).unwrap();
+            let redeemers = eval_phase_two(
+                &tx,
+                &utxos,
+                Some(&cost_mdl),
+                Some(&initial_budget),
+                &slot_config,
+                false,
+            )
+            .unwrap();
 
             assert_eq!(redeemers.len(), 1)
         }
@@ -461,13 +475,25 @@ fn test_eval_1() {
         plutus_v2: Some(costs),
     };
 
+    let initial_budget = ExBudget {
+        cpu: 10000000000,
+        mem: 14000000,
+    };
+
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            let redeemers =
-                eval_phase_two(&tx, &utxos, Some(&cost_mdl), &slot_config, false).unwrap();
+            let redeemers = eval_phase_two(
+                &tx,
+                &utxos,
+                Some(&cost_mdl),
+                Some(&initial_budget),
+                &slot_config,
+                false,
+            )
+            .unwrap();
 
             println!("{:?}", redeemers.len());
         }
@@ -531,13 +557,25 @@ fn test_eval_2() {
         plutus_v2: None,
     };
 
+    let initial_budget = ExBudget {
+        cpu: 10000000000,
+        mem: 14000000,
+    };
+
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            let redeemers =
-                eval_phase_two(&tx, &utxos, Some(&cost_mdl), &slot_config, false).unwrap();
+            let redeemers = eval_phase_two(
+                &tx,
+                &utxos,
+                Some(&cost_mdl),
+                Some(&initial_budget),
+                &slot_config,
+                false,
+            )
+            .unwrap();
 
             println!("{:?}", redeemers.len());
         }
@@ -598,13 +636,26 @@ fn eval_missing_redeemer() {
         plutus_v2: None,
     };
 
+    let initial_budget = ExBudget {
+        cpu: 10000000000,
+        mem: 14000000,
+    };
+
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .unwrap();
 
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            eval_phase_two(&tx, &utxos, Some(&cost_mdl), &slot_config, false).unwrap();
+            eval_phase_two(
+                &tx,
+                &utxos,
+                Some(&cost_mdl),
+                Some(&initial_budget),
+                &slot_config,
+                false,
+            )
+            .unwrap();
         }
         _ => unreachable!(),
     };
@@ -663,13 +714,26 @@ fn eval_extraneous_redeemer() {
         plutus_v2: None,
     };
 
+    let initial_budget = ExBudget {
+        cpu: 10000000000,
+        mem: 14000000,
+    };
+
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .unwrap();
 
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            eval_phase_two(&tx, &utxos, Some(&cost_mdl), &slot_config, false).unwrap();
+            eval_phase_two(
+                &tx,
+                &utxos,
+                Some(&cost_mdl),
+                Some(&initial_budget),
+                &slot_config,
+                false,
+            )
+            .unwrap();
         }
         _ => unreachable!(),
     };
