@@ -258,6 +258,9 @@ fn test_eval() {
 fn test_eval_1() {
     /*
 
+    Haskell PLC: (738928, 215316271)
+    Aiken PLC: (721484, 210171376)
+
     PlutusV2
 
     {-# INLINEABLE mintTestValidator #-}
@@ -504,6 +507,9 @@ fn test_eval_1() {
 #[test]
 fn test_eval_2() {
     /*
+
+    Haskell PLC: (655782, 188449458)
+    Aiken PLC: (638338, 183304563)
 
     Plutus V1
 
@@ -910,6 +916,9 @@ fn test_eval_4() {
 #[test]
 fn test_eval_5() {
     /*
+
+    Haskell PLC: (114126, 40098159)
+    Aiken PLC: (114126,40211433)
 
     Plutus V1
 

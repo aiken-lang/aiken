@@ -831,6 +831,12 @@ pub fn eval_redeemer(
                     None => ExBudget::default(),
                 };
 
+                println!(
+                    "({},{})",
+                    initial_budget.mem - budget.mem,
+                    initial_budget.cpu - budget.cpu
+                );
+
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
                     index: redeemer.index,
