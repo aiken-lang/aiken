@@ -725,7 +725,7 @@ fn eval_extraneous_redeemer() {
 
     match multi_era_tx {
         MultiEraTx::Babbage(tx) => {
-            eval_phase_two(
+            assert!(eval_phase_two(
                 &tx,
                 &utxos,
                 Some(&cost_mdl),
@@ -733,7 +733,7 @@ fn eval_extraneous_redeemer() {
                 &slot_config,
                 false,
             )
-            .unwrap();
+            .is_err());
         }
         _ => unreachable!(),
     };
