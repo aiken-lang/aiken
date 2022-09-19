@@ -67,12 +67,12 @@ pub fn get_tx_in_info_v1(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],
 ) -> Result<Vec<TxInInfo>, Error> {
-    let result = inputs
+    inputs
         .iter()
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
                 Some(u) => u,
-                None => unreachable!("Resolved input not found."),
+                None => return Err(Error::ResolvedInputNotFound),
             };
             let address = Address::from_bytes(match &utxo.output {
                 TransactionOutput::Legacy(output) => output.address.as_ref(),
@@ -81,45 +81,46 @@ pub fn get_tx_in_info_v1(
             .unwrap();
 
             match address {
-                Address::Byron(_) => unreachable!("Byron addresses not supported in Plutus."),
+                Address::Byron(_) => {
+                    return Err(Error::ByronAddressNotAllowed);
+                }
                 Address::Stake(_) => {
-                    unreachable!("This is impossible. A stake address cannot lock a UTxO.")
+                    return Err(Error::NoPaymentCredential);
                 }
                 _ => {}
-            }
+            };
 
             match &utxo.output {
                 TransactionOutput::Legacy(_) => {}
                 TransactionOutput::PostAlonzo(output) => {
                     if let Some(DatumOption::Data(_)) = output.datum_option {
-                        unreachable!("Inline datum not allowed in PlutusV1.")
+                        return Err(Error::InlineDatumNotAllowed);
                     }
 
                     if output.script_ref.is_some() {
-                        unreachable!("Reference scripts not allowed in PlutusV1.")
+                        return Err(Error::ScriptAndInputRefNotAllowed);
                     }
                 }
             }
 
-            TxInInfo {
+            Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
                 resolved: TxOut::V1(utxo.output.clone()),
-            }
+            })
         })
-        .collect::<Vec<TxInInfo>>();
-    Ok(result)
+        .collect()
 }
 
 fn get_tx_in_info_v2(
     inputs: &[TransactionInput],
     utxos: &[ResolvedInput],
 ) -> Result<Vec<TxInInfo>, Error> {
-    let result = inputs
+    inputs
         .iter()
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
                 Some(u) => u,
-                None => unreachable!("Resolved input not found."),
+                None => return Err(Error::ResolvedInputNotFound),
             };
             let address = Address::from_bytes(match &utxo.output {
                 TransactionOutput::Legacy(output) => output.address.as_ref(),
@@ -128,20 +129,21 @@ fn get_tx_in_info_v2(
             .unwrap();
 
             match address {
-                Address::Byron(_) => unreachable!("Byron addresses not supported in Plutus."),
+                Address::Byron(_) => {
+                    return Err(Error::ByronAddressNotAllowed);
+                }
                 Address::Stake(_) => {
-                    unreachable!("This is impossible. A stake address cannot lock a UTxO.")
+                    return Err(Error::NoPaymentCredential);
                 }
                 _ => {}
-            }
+            };
 
-            TxInInfo {
+            Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
                 resolved: TxOut::V2(utxo.output.clone()),
-            }
+            })
         })
-        .collect::<Vec<TxInInfo>>();
-    Ok(result)
+        .collect()
 }
 
 fn get_script_purpose(
@@ -166,23 +168,26 @@ fn get_script_purpose(
             policy_ids.sort();
             match policy_ids.get(index as usize) {
                 Some(policy_id) => Ok(ScriptPurpose::Minting(*policy_id)),
-                None => unreachable!("Script purpose not found for redeemer."),
+                None => {
+                    return Err(Error::ExtranousRedeemer {
+                        tag: "Mint".to_string(),
+                        index,
+                    })
+                }
             }
         }
         RedeemerTag::Spend => {
             // sort lexical by tx_hash and index
             let mut inputs = inputs.to_vec();
-            // is this correct? Does this sort lexical from low to high? maybe get Ordering into pallas for TransactionInput?
-            inputs.sort_by(
-                |i_a, i_b| match i_a.transaction_id.cmp(&i_b.transaction_id) {
-                    std::cmp::Ordering::Less => std::cmp::Ordering::Less,
-                    std::cmp::Ordering::Equal => i_a.index.cmp(&i_b.index),
-                    std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
-                },
-            );
+            inputs.sort();
             match inputs.get(index as usize) {
                 Some(input) => Ok(ScriptPurpose::Spending(input.clone())),
-                None => unreachable!("Script purpose not found for redeemer."),
+                None => {
+                    return Err(Error::ExtranousRedeemer {
+                        tag: "Spend".to_string(),
+                        index,
+                    })
+                }
             }
         }
         RedeemerTag::Reward => {
@@ -196,23 +201,22 @@ fn get_script_purpose(
             reward_accounts.sort();
             let reward_account = match reward_accounts.get(index as usize) {
                 Some(ra) => ra.clone(),
-                None => unreachable!("Script purpose not found for redeemer."),
+                None => {
+                    return Err(Error::ExtranousRedeemer {
+                        tag: "Reward".to_string(),
+                        index,
+                    })
+                }
             };
             let address = Address::from_bytes(&reward_account)?;
             let credential = match address {
                 Address::Stake(stake_address) => match stake_address.payload() {
-                    StakePayload::Script(script_hash) => {
-                        StakeCredential::Scripthash(*script_hash)
-                    }
+                    StakePayload::Script(script_hash) => StakeCredential::Scripthash(*script_hash),
                     StakePayload::Stake(_) => {
-                        unreachable!(
-                            "This is impossible. A key hash cannot be the hash of a script."
-                        );
+                        return Err(Error::ScriptKeyHash);
                     }
                 },
-                _ => unreachable!(
-                    "This is impossible. Only shelley reward addresses can be a part of withdrawals."
-                ),
+                _ => return Err(Error::BadWithdrawalAddress),
             };
             Ok(ScriptPurpose::Rewarding(credential))
         }
@@ -224,7 +228,12 @@ fn get_script_purpose(
                 .get(index as usize)
             {
                 Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
-                None => unreachable!("Script purpose not found for redeemer."),
+                None => {
+                    return Err(Error::ExtranousRedeemer {
+                        tag: "Cert".to_string(),
+                        index,
+                    })
+                }
             }
         }
     }
@@ -238,7 +247,7 @@ fn get_tx_info_v1(
     let body = tx.transaction_body.clone();
 
     if body.reference_inputs.is_some() {
-        unreachable!("Reference inputs not allowed in PlutusV1.")
+        return Err(Error::ScriptAndInputRefNotAllowed);
     }
 
     let inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
@@ -375,7 +384,7 @@ fn get_execution_purpose(
     utxos: &[ResolvedInput],
     script_purpose: &ScriptPurpose,
     lookup_table: &DataLookupTable,
-) -> ExecutionPurpose {
+) -> Result<ExecutionPurpose, Error> {
     match script_purpose {
         ScriptPurpose::Minting(policy_id) => {
             let policy_id_array: [u8; 28] = policy_id.to_vec().try_into().unwrap();
@@ -383,62 +392,85 @@ fn get_execution_purpose(
 
             let script = match lookup_table.scripts.get(&hash) {
                 Some(s) => s.clone(),
-                None => unreachable!("Missing required scripts.")
+                None => {
+                    return Err(Error::MissingRequiredScript {
+                        hash: hash.to_string(),
+                    })
+                }
             };
-            ExecutionPurpose::NoDatum(script)
+            Ok(ExecutionPurpose::NoDatum(script))
         }
         ScriptPurpose::Spending(out_ref) => {
-            let utxo = utxos.iter().find(|utxo| utxo.input == *out_ref).unwrap();
+            let utxo = match utxos.iter().find(|utxo| utxo.input == *out_ref) {
+                Some(resolved) => resolved,
+                None => return Err(Error::ResolvedInputNotFound),
+            };
             match &utxo.output {
                 TransactionOutput::Legacy(output) => {
                     let address = Address::from_bytes(&output.address).unwrap();
                     match address {
                         Address::Shelley(shelley_address) => {
-                            let script = match lookup_table
-                            .scripts
-                            .get(shelley_address.payment().as_hash()) {
+                            let hash = shelley_address.payment().as_hash();
+                            let script = match lookup_table.scripts.get(hash) {
                                 Some(s) => s.clone(),
-                                None => unreachable!("Missing required scripts.")
+                                None => {
+                                    return Err(Error::MissingRequiredScript {
+                                        hash: hash.to_string(),
+                                    })
+                                }
                             };
 
-                            let datum = match lookup_table.datum.get(&output.datum_hash.unwrap_or_else(|| unreachable!("Missing datum hash in input."))) {
+                            let datum_hash = match &output.datum_hash {
+                                Some(hash) => hash,
+                                None => return Err(Error::MissingRequiredInlineDatumOrHash),
+                            };
+
+                            let datum = match lookup_table.datum.get(datum_hash) {
                                 Some(d) => d.clone(),
-                                None => unreachable!("Missing datum in witness set.")
+                                None => {
+                                    return Err(Error::MissingRequiredDatum {
+                                        hash: datum_hash.to_string(),
+                                    })
+                                }
                             };
 
-                            ExecutionPurpose::WithDatum(script, datum)
+                            Ok(ExecutionPurpose::WithDatum(script, datum))
                         }
-                        _ => unreachable!(
-                            "This is impossible. Only shelley addresses can contain a script hash."
-                        ),
+                        _ => return Err(Error::ScriptKeyHash),
                     }
                 }
                 TransactionOutput::PostAlonzo(output) => {
                     let address = Address::from_bytes(&output.address).unwrap();
                     match address {
                         Address::Shelley(shelley_address) => {
-
-                            let script = match lookup_table
-                            .scripts
-                            .get(shelley_address.payment().as_hash()) {
+                            let hash = shelley_address.payment().as_hash();
+                            let script = match lookup_table.scripts.get(hash) {
                                 Some(s) => s.clone(),
-                                None => unreachable!("Missing required scripts.")
+                                None => {
+                                    return Err(Error::MissingRequiredScript {
+                                        hash: hash.to_string(),
+                                    })
+                                }
                             };
-
 
                             let datum = match &output.datum_option {
                                 Some(DatumOption::Hash(hash)) => {
-                                    lookup_table.datum.get(hash).unwrap().clone()
+                                    match lookup_table.datum.get(hash) {
+                                        Some(d) => d.clone(),
+                                        None => {
+                                            return Err(Error::MissingRequiredDatum {
+                                                hash: hash.to_string(),
+                                            })
+                                        }
+                                    }
                                 }
                                 Some(DatumOption::Data(data)) => data.0.clone(),
-                                _ => unreachable!( "Missing datum hash or inline datum in input."),
+                                _ => return Err(Error::MissingRequiredInlineDatumOrHash),
                             };
 
-                            ExecutionPurpose::WithDatum(script, datum)
+                            Ok(ExecutionPurpose::WithDatum(script, datum))
                         }
-                        _ => unreachable!(
-                            "This is impossible. Only shelley addresses can contain a script hash."
-                        ),
+                        _ => return Err(Error::ScriptKeyHash),
                     }
                 }
             }
@@ -446,49 +478,56 @@ fn get_execution_purpose(
         ScriptPurpose::Rewarding(stake_credential) => {
             let script_hash = match stake_credential {
                 StakeCredential::Scripthash(hash) => *hash,
-                _ => unreachable!("This is impossible. A key hash cannot be the hash of a script."),
+                _ => return Err(Error::ScriptKeyHash),
             };
 
             let script = match lookup_table.scripts.get(&script_hash) {
                 Some(s) => s.clone(),
-                None => unreachable!("Missing required scripts.")
+                None => {
+                    return Err(Error::MissingRequiredScript {
+                        hash: script_hash.to_string(),
+                    })
+                }
             };
 
-            ExecutionPurpose::NoDatum(script)
+            Ok(ExecutionPurpose::NoDatum(script))
         }
         ScriptPurpose::Certifying(cert) => match cert {
-            // StakeRegistration doesn't require a witness from a stake key/script. So I assume it doesn't need to be handled in Plutus either?
             Certificate::StakeDeregistration(stake_credential) => {
                 let script_hash = match stake_credential {
                     StakeCredential::Scripthash(hash) => *hash,
-                    _ => unreachable!(
-                        "This is impossible. A key hash cannot be the hash of a script."
-                    ),
+                    _ => return Err(Error::ScriptKeyHash),
                 };
 
                 let script = match lookup_table.scripts.get(&script_hash) {
                     Some(s) => s.clone(),
-                    None => unreachable!("Missing required scripts.")
+                    None => {
+                        return Err(Error::MissingRequiredScript {
+                            hash: script_hash.to_string(),
+                        })
+                    }
                 };
 
-                ExecutionPurpose::NoDatum(script)
+                Ok(ExecutionPurpose::NoDatum(script))
             }
             Certificate::StakeDelegation(stake_credential, _) => {
                 let script_hash = match stake_credential {
                     StakeCredential::Scripthash(hash) => *hash,
-                    _ => unreachable!(
-                        "This is impossible. A key hash cannot be the hash of a script."
-                    ),
+                    _ => return Err(Error::ScriptKeyHash),
                 };
 
                 let script = match lookup_table.scripts.get(&script_hash) {
                     Some(s) => s.clone(),
-                    None => unreachable!("Missing required scripts.")
+                    None => {
+                        return Err(Error::MissingRequiredScript {
+                            hash: script_hash.to_string(),
+                        })
+                    }
                 };
 
-                ExecutionPurpose::NoDatum(script)
+                Ok(ExecutionPurpose::NoDatum(script))
             }
-            _ => unreachable!("This is impossible. Only stake deregistration and stake delegation are valid script purposes."),
+            _ => return Err(Error::OnlyStakeDeregAndDelegAllowed),
         },
     }
 }
@@ -585,7 +624,7 @@ pub fn eval_redeemer(
         &tx.transaction_body.withdrawals,
     )?;
 
-    let execution_purpose: ExecutionPurpose = get_execution_purpose(utxos, &purpose, lookup_table);
+    let execution_purpose: ExecutionPurpose = get_execution_purpose(utxos, &purpose, lookup_table)?;
 
     match execution_purpose {
         ExecutionPurpose::WithDatum(script_version, datum) => match script_version {

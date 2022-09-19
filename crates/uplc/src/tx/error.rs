@@ -21,6 +21,8 @@ pub enum Error {
         missing: Vec<String>,
         extra: Vec<String>,
     },
+    #[error("Extranous redeemer found: Tag {:?}, Index {}", tag, index)]
+    ExtranousRedeemer { tag: String, index: u32 },
     #[error("Resolved Input not found")]
     ResolvedInputNotFound,
     #[error("A key hash cannot be the hash of a script")]
@@ -31,4 +33,20 @@ pub enum Error {
     V2CostModelNotFound,
     #[error("Wrong era, Please use Babbage or Alonzo: {0}")]
     WrongEra(#[from] pallas_codec::minicbor::decode::Error),
+    #[error("Byron address not allowed in Plutus.")]
+    ByronAddressNotAllowed,
+    #[error("Inline datum not allowed in PlutusV1.")]
+    InlineDatumNotAllowed,
+    #[error("Script and input reference not allowed in PlutusV1.")]
+    ScriptAndInputRefNotAllowed,
+    #[error("Address doesn't contain a payment credential.")]
+    NoPaymentCredential,
+    #[error("Missing required datum in witness set. Datum hash: {}", hash)]
+    MissingRequiredDatum { hash: String },
+    #[error("Missing required script. Script hash: {}", hash)]
+    MissingRequiredScript { hash: String },
+    #[error("Missing required inline datum or datum hash in script input.")]
+    MissingRequiredInlineDatumOrHash,
+    #[error("Only stake deregistration and delegation are valid certificate script purposes.")]
+    OnlyStakeDeregAndDelegAllowed,
 }
