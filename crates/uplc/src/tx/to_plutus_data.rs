@@ -1,16 +1,14 @@
 use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart};
-use pallas_primitives::babbage::{AssetName, BigInt, Constr, PlutusData, ScriptRef};
-
 use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
 use pallas_crypto::hash::Hash;
+use pallas_primitives::babbage::{AssetName, BigInt, Constr, PlutusData, ScriptRef};
 use pallas_primitives::babbage::{
     Certificate, DatumOption, PolicyId, Redeemer, Script, StakeCredential, TransactionInput,
     TransactionOutput, Value,
 };
 use pallas_traverse::ComputeHash;
-use std::vec;
 
-use super::script_context::{TxOut, TimeRange, TxInInfo, ScriptPurpose, TxInfo, ScriptContext};
+use super::script_context::{ScriptContext, ScriptPurpose, TimeRange, TxInInfo, TxInfo, TxOut};
 
 fn wrap_with_constr(index: u64, data: PlutusData) -> PlutusData {
     PlutusData::Constr(Constr {
