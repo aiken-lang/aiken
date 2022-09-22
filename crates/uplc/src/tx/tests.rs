@@ -499,6 +499,25 @@ fn test_eval_1() {
             .unwrap();
 
             println!("{:?}", redeemers.len());
+
+            let total_budget_used =
+                redeemers
+                    .iter()
+                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
+                        mem: accum.mem + curr.ex_units.mem as i64,
+                        cpu: accum.cpu + curr.ex_units.steps as i64,
+                    });
+
+            println!("{:?}", total_budget_used);
+
+            assert_eq!(
+                total_budget_used,
+                // Numbers came uplc evaluate
+                ExBudget {
+                    cpu: 210171376,
+                    mem: 721484
+                }
+            );
         }
         _ => unreachable!(),
     };
@@ -584,6 +603,25 @@ fn test_eval_2() {
             .unwrap();
 
             println!("{:?}", redeemers.len());
+
+            let total_budget_used =
+                redeemers
+                    .iter()
+                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
+                        mem: accum.mem + curr.ex_units.mem as i64,
+                        cpu: accum.cpu + curr.ex_units.steps as i64,
+                    });
+
+            println!("{:?}", total_budget_used);
+
+            assert_eq!(
+                total_budget_used,
+                // Numbers came uplc evaluate
+                ExBudget {
+                    cpu: 183304563,
+                    mem: 638338
+                }
+            );
         }
         _ => unreachable!(),
     };
@@ -828,6 +866,25 @@ fn test_eval_3() {
             .unwrap();
 
             println!("{:?}", redeemers.len());
+
+            let total_budget_used =
+                redeemers
+                    .iter()
+                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
+                        mem: accum.mem + curr.ex_units.mem as i64,
+                        cpu: accum.cpu + curr.ex_units.steps as i64,
+                    });
+
+            println!("{:?}", total_budget_used);
+
+            assert_eq!(
+                total_budget_used,
+                // Numbers came uplc evaluate
+                ExBudget {
+                    cpu: 177894084,
+                    mem: 566628
+                }
+            );
         }
         _ => unreachable!(),
     };
@@ -991,6 +1048,25 @@ fn test_eval_5() {
             .unwrap();
 
             println!("{:?}", redeemers.len());
+
+            let total_budget_used =
+                redeemers
+                    .iter()
+                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
+                        mem: accum.mem + curr.ex_units.mem as i64,
+                        cpu: accum.cpu + curr.ex_units.steps as i64,
+                    });
+
+            println!("{:?}", total_budget_used);
+
+            assert_eq!(
+                total_budget_used,
+                // Numbers came uplc evaluate
+                ExBudget {
+                    cpu: 40211433,
+                    mem: 114126
+                }
+            );
         }
         _ => unreachable!(),
     };
