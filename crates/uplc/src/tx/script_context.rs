@@ -6,6 +6,8 @@ use pallas_primitives::babbage::{
 };
 use serde::Deserialize;
 
+use super::to_plutus_data::MintValue;
+
 #[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct ResolvedInput {
     pub input: TransactionInput,
@@ -36,7 +38,7 @@ pub struct TxInfoV1 {
     pub inputs: Vec<TxInInfo>,
     pub outputs: Vec<TxOut>,
     pub fee: Value,
-    pub mint: Mint,
+    pub mint: MintValue,
     pub dcert: Vec<Certificate>,
     pub wdrl: Vec<(RewardAccount, Coin)>,
     pub valid_range: TimeRange,
@@ -51,7 +53,7 @@ pub struct TxInfoV2 {
     pub reference_inputs: Vec<TxInInfo>,
     pub outputs: Vec<TxOut>,
     pub fee: Value,
-    pub mint: Mint,
+    pub mint: MintValue,
     pub dcert: Vec<Certificate>,
     pub wdrl: Withdrawals,
     pub valid_range: TimeRange,

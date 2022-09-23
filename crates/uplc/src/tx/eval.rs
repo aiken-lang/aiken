@@ -1,5 +1,5 @@
 use crate::{
-    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    ast::{DeBruijn, FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
     PlutusData,
 };
@@ -19,7 +19,7 @@ use super::{
         ResolvedInput, ScriptContext, ScriptPurpose, SlotConfig, TimeRange, TxInInfo, TxInfo,
         TxInfoV1, TxInfoV2, TxOut,
     },
-    to_plutus_data::ToPlutusData,
+    to_plutus_data::{MintValue, ToPlutusData},
     Error,
 };
 
@@ -286,7 +286,7 @@ fn get_tx_info_v1(
         inputs,
         outputs,
         fee,
-        mint,
+        mint: MintValue { mint_value: mint },
         dcert,
         wdrl,
         valid_range,
@@ -363,7 +363,7 @@ fn get_tx_info_v2(
         reference_inputs,
         outputs,
         fee,
-        mint,
+        mint: MintValue { mint_value: mint },
         dcert,
         wdrl,
         valid_range,

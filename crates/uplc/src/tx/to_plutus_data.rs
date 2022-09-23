@@ -1,7 +1,7 @@
 use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart};
 use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
 use pallas_crypto::hash::Hash;
-use pallas_primitives::babbage::{AssetName, BigInt, Constr, PlutusData, ScriptRef};
+use pallas_primitives::babbage::{AssetName, BigInt, Constr, Mint, PlutusData, ScriptRef};
 use pallas_primitives::babbage::{
     Certificate, DatumOption, PolicyId, Redeemer, Script, StakeCredential, TransactionInput,
     TransactionOutput, Value,
@@ -41,6 +41,11 @@ fn constr_index(index: u64) -> u64 {
 
 pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MintValue {
+    pub mint_value: Mint,
 }
 
 impl ToPlutusData for Address {
@@ -230,6 +235,25 @@ impl ToPlutusData for Value {
                 PlutusData::Map(KeyValuePairs::Def(data_vec))
             }
         }
+    }
+}
+
+impl ToPlutusData for MintValue {
+    fn to_plutus_data(&self) -> PlutusData {
+        let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![];
+
+        for (policy_id, assets) in self.mint_value.iter() {
+            let mut assets_vec = vec![];
+            for (asset, amount) in assets.iter() {
+                assets_vec.push((asset.to_plutus_data(), amount.to_plutus_data()));
+            }
+            data_vec.push((
+                policy_id.to_plutus_data(),
+                PlutusData::Map(KeyValuePairs::Def(assets_vec)),
+            ));
+        }
+
+        PlutusData::Map(KeyValuePairs::Def(data_vec))
     }
 }
 
