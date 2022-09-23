@@ -457,7 +457,13 @@ impl Value {
                         ((i.abs() as f64).log2().floor() as i64 / 64) + 1
                     }
                 }
-                Constant::ByteString(b) => (((b.len() as i64 - 1) / 8) + 1),
+                Constant::ByteString(b) => {
+                    if b.is_empty() {
+                        0
+                    } else {
+                        ((b.len() as i64 - 1) / 8) + 1
+                    }
+                }
                 Constant::String(s) => s.chars().count() as i64,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
