@@ -1,5 +1,5 @@
 use crate::{
-    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    ast::{DeBruijn, FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
     PlutusData,
 };
@@ -739,9 +739,14 @@ pub fn eval_redeemer(
                     prog.into()
                 };
 
+                let program_flat: Program<DeBruijn> = program.clone().into();
+                println!("{}", hex::encode(program_flat.to_cbor().unwrap()));
+
                 let program = program
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
+
+                println!("{:#?}", script_context.to_plutus_data());
 
                 let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
