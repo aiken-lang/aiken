@@ -19,7 +19,7 @@ use super::{
         ResolvedInput, ScriptContext, ScriptPurpose, SlotConfig, TimeRange, TxInInfo, TxInfo,
         TxInfoV1, TxInfoV2, TxOut,
     },
-    to_plutus_data::ToPlutusData,
+    to_plutus_data::{MintValue, ToPlutusData},
     Error,
 };
 
@@ -286,7 +286,7 @@ fn get_tx_info_v1(
         inputs,
         outputs,
         fee,
-        mint,
+        mint: MintValue { mint_value: mint },
         dcert,
         wdrl,
         valid_range,
@@ -363,7 +363,7 @@ fn get_tx_info_v2(
         reference_inputs,
         outputs,
         fee,
-        mint,
+        mint: MintValue { mint_value: mint },
         dcert,
         wdrl,
         valid_range,
@@ -739,14 +739,9 @@ pub fn eval_redeemer(
                     prog.into()
                 };
 
-                let program_flat: Program<DeBruijn> = program.clone().into();
-                println!("{}", hex::encode(program_flat.to_cbor().unwrap()));
-
                 let program = program
                     .apply_data(redeemer.data.clone())
                     .apply_data(script_context.to_plutus_data());
-
-                println!("{:#?}", script_context.to_plutus_data());
 
                 let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
                     let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
@@ -819,12 +814,6 @@ pub fn eval_redeemer(
                     Some(b) => *b,
                     None => ExBudget::default(),
                 };
-
-                println!(
-                    "({},{})",
-                    initial_budget.mem - budget.mem,
-                    initial_budget.cpu - budget.cpu
-                );
 
                 let new_redeemer = Redeemer {
                     tag: redeemer.tag.clone(),
