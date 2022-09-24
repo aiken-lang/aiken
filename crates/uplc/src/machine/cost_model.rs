@@ -30,7 +30,6 @@ impl ExBudget {
         self.cpu *= n;
     }
 
-    // TODO: actually fill in the v1 numbers
     pub fn v1() -> Self {
         ExBudget {
             mem: 14000000,
@@ -92,7 +91,6 @@ impl MachineCosts {
         }
     }
 
-    // TODO: actually fill in the v1 numbers
     pub fn v1() -> Self {
         Self {
             startup: ExBudget { mem: 100, cpu: 100 },
@@ -233,7 +231,6 @@ pub struct BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    // TODO: actually fill in the v1 numbers
     pub fn v1() -> Self {
         Self {
             add_integer: CostingFun {
@@ -586,7 +583,7 @@ impl BuiltinCosts {
             },
             serialise_data: CostingFun {
                 mem: OneArgument::LinearCost(LinearSize {
-                    intercept: 0,
+                    intercept: 30000000000,
                     slope: 2,
                 }),
                 cpu: OneArgument::LinearCost(LinearSize {
