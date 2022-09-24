@@ -249,7 +249,26 @@ fn test_eval() {
             )
             .unwrap();
 
-            assert_eq!(redeemers.len(), 1)
+            assert_eq!(redeemers.len(), 1);
+
+            let total_budget_used =
+                redeemers
+                    .iter()
+                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
+                        mem: accum.mem + curr.ex_units.mem as i64,
+                        cpu: accum.cpu + curr.ex_units.steps as i64,
+                    });
+
+            println!("{:?}", total_budget_used);
+
+            assert_eq!(
+                total_budget_used,
+                // Numbers came uplc evaluate
+                ExBudget {
+                    cpu: 217294271,
+                    mem: 747528
+                }
+            );
         }
         _ => unreachable!(),
     };
@@ -500,7 +519,7 @@ fn test_eval_1() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -516,8 +535,8 @@ fn test_eval_1() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 210171376,
-                    mem: 721484
+                    cpu: 215316271,
+                    mem: 738928
                 }
             );
         }
@@ -605,7 +624,7 @@ fn test_eval_2() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -621,8 +640,8 @@ fn test_eval_2() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 183304563,
-                    mem: 638338
+                    cpu: 188449458,
+                    mem: 655782
                 }
             );
         }
@@ -869,7 +888,7 @@ fn test_eval_3() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -885,8 +904,8 @@ fn test_eval_3() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 177894084,
-                    mem: 566628
+                    cpu: 182855351,
+                    mem: 583272
                 }
             );
         }
@@ -1053,7 +1072,7 @@ fn test_eval_5() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -1069,7 +1088,7 @@ fn test_eval_5() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 40211433,
+                    cpu: 40098159,
                     mem: 114126
                 }
             );
@@ -1157,7 +1176,7 @@ fn test_eval_6() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -1173,8 +1192,8 @@ fn test_eval_6() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 40211433,
-                    mem: 114126
+                    cpu: 6231248,
+                    mem: 4002
                 }
             );
         }
@@ -1261,7 +1280,7 @@ fn test_eval_7() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -1277,8 +1296,8 @@ fn test_eval_7() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 40211433,
-                    mem: 114126
+                    cpu: 1221507148,
+                    mem: 2954794
                 }
             );
         }
@@ -1516,7 +1535,7 @@ fn test_eval_8() {
             )
             .unwrap();
 
-            println!("{:?}", redeemers.len());
+            assert_eq!(redeemers.len(), 1);
 
             let total_budget_used =
                 redeemers
@@ -1532,8 +1551,8 @@ fn test_eval_8() {
                 total_budget_used,
                 // Numbers came uplc evaluate
                 ExBudget {
-                    cpu: 40211433,
-                    mem: 114126
+                    cpu: 711173018,
+                    mem: 2691678
                 }
             );
         }
