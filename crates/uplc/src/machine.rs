@@ -459,7 +459,7 @@ impl Value {
                 }
                 Constant::ByteString(b) => {
                     if b.is_empty() {
-                        0
+                        1
                     } else {
                         ((b.len() as i64 - 1) / 8) + 1
                     }

@@ -1,10 +1,12 @@
 use pallas_codec::utils::KeyValuePairs;
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
-    AddrKeyhash, Certificate, Coin, DatumHash, Mint, PlutusData, PolicyId, Redeemer, RewardAccount,
+    AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer, RewardAccount,
     StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
 };
 use serde::Deserialize;
+
+use super::to_plutus_data::MintValue;
 
 #[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct ResolvedInput {
@@ -36,7 +38,7 @@ pub struct TxInfoV1 {
     pub inputs: Vec<TxInInfo>,
     pub outputs: Vec<TxOut>,
     pub fee: Value,
-    pub mint: Mint,
+    pub mint: MintValue,
     pub dcert: Vec<Certificate>,
     pub wdrl: Vec<(RewardAccount, Coin)>,
     pub valid_range: TimeRange,
@@ -51,7 +53,7 @@ pub struct TxInfoV2 {
     pub reference_inputs: Vec<TxInInfo>,
     pub outputs: Vec<TxOut>,
     pub fee: Value,
-    pub mint: Mint,
+    pub mint: MintValue,
     pub dcert: Vec<Certificate>,
     pub wdrl: Withdrawals,
     pub valid_range: TimeRange,
