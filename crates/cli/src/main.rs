@@ -30,6 +30,7 @@ fn main() -> anyhow::Result<()> {
                 resolved_inputs,
                 slot_length,
                 zero_time,
+                zero_slot,
             } => {
                 let tx_bytes = if cbor {
                     fs::read(input)?
@@ -51,6 +52,7 @@ fn main() -> anyhow::Result<()> {
 
                     let slot_config = SlotConfig {
                         zero_time,
+                        zero_slot,
                         slot_length,
                     };
 

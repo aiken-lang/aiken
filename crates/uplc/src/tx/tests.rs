@@ -42,6 +42,7 @@ fn test_eval() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -292,6 +293,7 @@ fn test_eval_1() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -561,6 +563,7 @@ fn test_eval_2() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -659,6 +662,7 @@ fn test_eval_3() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -925,6 +929,7 @@ fn test_eval_4() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -1006,6 +1011,7 @@ fn test_eval_5() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -1108,6 +1114,7 @@ fn test_eval_6() {
 
     let slot_config = SlotConfig {
         zero_time: 1596059091000, // Mainnet network
+        zero_slot: 4492800,
         slot_length: 1000,
     };
 
@@ -1211,6 +1218,7 @@ fn test_eval_7() {
 
     let slot_config = SlotConfig {
         zero_time: 1596059091000, // Mainnet network
+        zero_slot: 4492800,
         slot_length: 1000,
     };
 
@@ -1301,6 +1309,7 @@ fn test_eval_8() {
 
     let slot_config = SlotConfig {
         zero_time: 1596059091000, // Mainnet network
+        zero_slot: 4492800,
         slot_length: 1000,
     };
 
@@ -1564,6 +1573,7 @@ fn eval_missing_redeemer() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 
@@ -1642,6 +1652,7 @@ fn eval_extraneous_redeemer() {
 
     let slot_config = SlotConfig {
         zero_time: 1660003200000, // Preview network
+        zero_slot: 0,
         slot_length: 1000,
     };
 

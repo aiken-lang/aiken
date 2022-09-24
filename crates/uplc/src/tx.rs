@@ -68,12 +68,13 @@ pub fn eval_phase_two(
 /// This function is the same as [`eval_phase_two`]
 /// but the inputs are raw bytes.
 /// initial_budget expects (cpu, mem).
+/// slot_config (zero_time, zero_slot, slot_length)
 pub fn eval_phase_two_raw(
     tx_bytes: &[u8],
     utxos_bytes: &[(Vec<u8>, Vec<u8>)],
     cost_mdls_bytes: &[u8],
     initial_budget: (u64, u64),
-    slot_config: (u64, u64),
+    slot_config: (u64, u64, u64),
     run_phase_one: bool,
 ) -> Result<Vec<Vec<u8>>, Error> {
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, tx_bytes)
@@ -97,7 +98,8 @@ pub fn eval_phase_two_raw(
 
     let sc = SlotConfig {
         zero_time: slot_config.0,
-        slot_length: slot_config.1,
+        zero_slot: slot_config.1,
+        slot_length: slot_config.2,
     };
 
     match multi_era_tx {

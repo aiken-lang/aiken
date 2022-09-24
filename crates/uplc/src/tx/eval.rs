@@ -24,7 +24,7 @@ use super::{
 };
 
 fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
-    let ms_after_begin = slot * sc.slot_length;
+    let ms_after_begin = (slot - sc.zero_slot) * sc.slot_length;
     sc.zero_time + ms_after_begin
 }
 

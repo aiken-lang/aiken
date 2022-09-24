@@ -84,6 +84,7 @@ pub struct TimeRange {
 
 pub struct SlotConfig {
     pub slot_length: u64,
+    pub zero_slot: u64,
     pub zero_time: u64,
 }
 
@@ -91,7 +92,8 @@ impl Default for SlotConfig {
     fn default() -> Self {
         Self {
             slot_length: 1000,
-            zero_time: 1596491091,
+            zero_slot: 4492800,
+            zero_time: 1596059091000,
         }
     }
 }

@@ -29,6 +29,8 @@ pub enum TxCommand {
         slot_length: u64,
         #[clap(short, long)]
         zero_time: u64,
+        #[clap(short, long)]
+        zero_slot: u64,
     },
 }
 
