@@ -1,7 +1,7 @@
 use pallas_codec::utils::KeyValuePairs;
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
-    AddrKeyhash, Certificate, Coin, DatumHash, Mint, PlutusData, PolicyId, Redeemer, RewardAccount,
+    AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer, RewardAccount,
     StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
 };
 use serde::Deserialize;
