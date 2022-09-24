@@ -1,8 +1,4 @@
-use std::{
-    fmt::Write as _,
-    fs::{self, File},
-    io::BufReader,
-};
+use std::{fmt::Write as _, fs};
 
 use pallas_traverse::{Era, MultiEraTx};
 use uplc::{
@@ -46,9 +42,7 @@ fn main() -> anyhow::Result<()> {
                 println!("Simulating: {}", tx.hash());
 
                 if let Some(tx_babbage) = tx.as_babbage() {
-                    let file = File::open(&resolved_inputs)?;
-                    let reader = BufReader::new(file);
-                    let resolved_inputs: Vec<ResolvedInput> = serde_json::from_reader(reader)?;
+                    let resolved_inputs = ResolvedInput::from_json(&resolved_inputs)?;
 
                     let slot_config = SlotConfig {
                         zero_time,

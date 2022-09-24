@@ -43,7 +43,7 @@ pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MintValue {
     pub mint_value: Mint,
 }

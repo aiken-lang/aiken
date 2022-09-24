@@ -1,5 +1,5 @@
 use crate::{
-    ast::{DeBruijn, FakeNamedDeBruijn, NamedDeBruijn, Program},
+    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
     PlutusData,
 };

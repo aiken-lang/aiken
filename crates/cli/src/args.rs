@@ -20,16 +20,21 @@ pub enum Args {
 pub enum TxCommand {
     /// Simulate a transaction by evaluating it's script
     Simulate {
+        /// A file containing cbor hex
         input: PathBuf,
+
+        /// Toggle whether input is raw cbor or a hex string
         #[clap(short, long)]
         cbor: bool,
+
+        /// Json file containing resolved inputs
         #[clap(short, long)]
         resolved_inputs: PathBuf,
         #[clap(short, long)]
         slot_length: u64,
-        #[clap(short, long)]
+        #[clap(long)]
         zero_time: u64,
-        #[clap(short, long)]
+        #[clap(long)]
         zero_slot: u64,
     },
 }
