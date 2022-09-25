@@ -16,9 +16,44 @@ pub enum Args {
         /// Project name
         name: PathBuf,
     },
+    /// A subcommand for working with transactions
+    #[clap(subcommand)]
+    Tx(TxCommand),
     /// A subcommand for working with Untyped Plutus Core
     #[clap(subcommand)]
     Uplc(UplcCommand),
+}
+
+/// Commands for working with transactions
+#[derive(Subcommand)]
+pub enum TxCommand {
+    /// Simulate a transaction by evaluating it's script
+    Simulate {
+        /// A file containing cbor hex for a transaction
+        input: PathBuf,
+
+        /// Toggle whether input is raw cbor or a hex string
+        #[clap(short, long)]
+        cbor: bool,
+
+        /// A file containing cbor hex for the raw inputs
+        raw_inputs: PathBuf,
+
+        /// A file containing cbor hex for the raw outputs
+        raw_outputs: PathBuf,
+
+        /// Time between each slot
+        #[clap(short, long, default_value_t = 1000)]
+        slot_length: u64,
+
+        /// Time of shelley hardfork
+        #[clap(long, default_value_t = 1596059091000)]
+        zero_time: u64,
+
+        /// Slot number at the start of the shelley hardfork
+        #[clap(long, default_value_t = 4492800)]
+        zero_slot: u64,
+    },
 }
 
 /// Commands for working with Untyped Plutus Core
@@ -26,12 +61,13 @@ pub enum Args {
 pub enum UplcCommand {
     /// Evaluate an Untyped Plutus Core program
     Eval {
-        /// Handle input as flat bytes
+        script: PathBuf,
+
         #[clap(short, long)]
         flat: bool,
 
-        /// File to load and evaluate
-        input: PathBuf,
+        /// Arguments to pass to the uplc program
+        args: Vec<String>,
     },
     /// Encode textual Untyped Plutus Core to flat bytes
     Flat {

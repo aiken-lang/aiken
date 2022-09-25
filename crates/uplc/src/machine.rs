@@ -11,7 +11,7 @@ mod runtime;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
-use pallas_primitives::babbage::{BigInt, PlutusData};
+use pallas_primitives::babbage::{BigInt, Language, PlutusData};
 
 use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
@@ -39,10 +39,16 @@ pub struct Machine {
     unbudgeted_steps: [u32; 8],
     pub logs: Vec<String>,
     stack: Vec<MachineStep>,
+    version: Language,
 }
 
 impl Machine {
-    pub fn new(costs: CostModel, initial_budget: ExBudget, slippage: u32) -> Machine {
+    pub fn new(
+        version: Language,
+        costs: CostModel,
+        initial_budget: ExBudget,
+        slippage: u32,
+    ) -> Machine {
         Machine {
             costs,
             ex_budget: initial_budget,
@@ -50,6 +56,7 @@ impl Machine {
             unbudgeted_steps: [0; 8],
             logs: vec![],
             stack: vec![],
+            version,
         }
     }
 
@@ -347,8 +354,10 @@ impl Machine {
         runtime: BuiltinRuntime,
     ) -> Result<Value, Error> {
         if runtime.is_ready() {
-            let cost = runtime.to_ex_budget(&self.costs.builtin_costs);
-
+            let cost = match self.version {
+                Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
+                Language::PlutusV2 => runtime.to_ex_budget_v2(&self.costs.builtin_costs),
+            };
             self.spend_budget(cost)?;
 
             runtime.call(&mut self.logs)
@@ -448,7 +457,13 @@ impl Value {
                         ((i.abs() as f64).log2().floor() as i64 / 64) + 1
                     }
                 }
-                Constant::ByteString(b) => (((b.len() as i64 - 1) / 8) + 1),
+                Constant::ByteString(b) => {
+                    if b.is_empty() {
+                        1
+                    } else {
+                        ((b.len() as i64 - 1) / 8) + 1
+                    }
+                }
                 Constant::String(s) => s.chars().count() as i64,
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
@@ -488,7 +503,7 @@ impl Value {
                 PlutusData::Map(m) => {
                     let mut new_stack: VecDeque<&PlutusData>;
                     // create new stack with of items from the list of pairs of data
-                    new_stack = m.deref().iter().fold(VecDeque::new(), |mut acc, d| {
+                    new_stack = m.iter().fold(VecDeque::new(), |mut acc, d| {
                         acc.push_back(&d.0);
                         acc.push_back(&d.1);
                         acc
@@ -499,7 +514,7 @@ impl Value {
                 }
                 PlutusData::BigInt(i) => {
                     if let BigInt::Int(g) = i {
-                        let numb: i64 = (*g).try_into().unwrap();
+                        let numb: i128 = (*g).try_into().unwrap();
                         total += Value::Con(Constant::Integer(numb as isize)).to_ex_mem();
                     } else {
                         unreachable!()
@@ -510,14 +525,6 @@ impl Value {
                     total += Value::Con(Constant::ByteString(byte_string)).to_ex_mem();
                 }
                 PlutusData::Array(a) => {
-                    // create new stack with of items from the list of data
-                    let mut new_stack: VecDeque<&PlutusData> =
-                        VecDeque::from_iter(a.deref().iter());
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
-                }
-                PlutusData::ArrayIndef(a) => {
                     // create new stack with of items from the list of data
                     let mut new_stack: VecDeque<&PlutusData> =
                         VecDeque::from_iter(a.deref().iter());

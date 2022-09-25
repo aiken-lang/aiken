@@ -1,14 +1,23 @@
 use std::{fmt::Write as _, fs};
 
+use pallas_primitives::{
+    babbage::{TransactionInput, TransactionOutput},
+    Fragment,
+};
+use pallas_traverse::{Era, MultiEraTx};
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
     parser,
+    tx::{
+        self,
+        script_context::{ResolvedInput, SlotConfig},
+    },
 };
 
 mod args;
 
-use args::{Args, UplcCommand};
+use args::{Args, TxCommand, UplcCommand};
 
 fn main() -> anyhow::Result<()> {
     let args = Args::default();
@@ -39,38 +48,142 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        Args::Uplc(uplc) => match uplc {
-            UplcCommand::Flat { input, print, out } => {
+        Args::Tx(tx_cmd) => match tx_cmd {
+            TxCommand::Simulate {
+                input,
+                cbor,
+                raw_inputs,
+                raw_outputs,
+                slot_length,
+                zero_time,
+                zero_slot,
+            } => {
+                let (tx_bytes, inputs_bytes, outputs_bytes) = if cbor {
+                    (
+                        fs::read(input)?,
+                        fs::read(raw_inputs)?,
+                        fs::read(raw_outputs)?,
+                    )
+                } else {
+                    let cbor_hex = fs::read_to_string(input)?;
+                    let inputs_hex = fs::read_to_string(raw_inputs)?;
+                    let outputs_hex = fs::read_to_string(raw_outputs)?;
+
+                    (
+                        hex::decode(cbor_hex.trim())?,
+                        hex::decode(inputs_hex.trim())?,
+                        hex::decode(outputs_hex.trim())?,
+                    )
+                };
+
+                let tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
+                    .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))?;
+
+                let inputs = Vec::<TransactionInput>::decode_fragment(&inputs_bytes).unwrap();
+                let outputs = Vec::<TransactionOutput>::decode_fragment(&outputs_bytes).unwrap();
+
+                let resolved_inputs: Vec<ResolvedInput> = inputs
+                    .iter()
+                    .zip(outputs.iter())
+                    .map(|(input, output)| ResolvedInput {
+                        input: input.clone(),
+                        output: output.clone(),
+                    })
+                    .collect();
+
+                println!("Simulating: {}", tx.hash());
+
+                if let Some(tx_babbage) = tx.as_babbage() {
+                    let slot_config = SlotConfig {
+                        zero_time,
+                        zero_slot,
+                        slot_length,
+                    };
+
+                    let result = tx::eval_phase_two(
+                        tx_babbage,
+                        &resolved_inputs,
+                        None,
+                        None,
+                        &slot_config,
+                        true,
+                    );
+
+                    match result {
+                        Ok(redeemers) => {
+                            println!("\nTotal Budget Used\n-----------------\n");
+
+                            let total_budget_used = redeemers.iter().fold(
+                                ExBudget { mem: 0, cpu: 0 },
+                                |accum, curr| ExBudget {
+                                    mem: accum.mem + curr.ex_units.mem as i64,
+                                    cpu: accum.cpu + curr.ex_units.steps as i64,
+                                },
+                            );
+
+                            println!("mem: {}", total_budget_used.mem);
+                            println!("cpu: {}", total_budget_used.cpu);
+                        }
+                        Err(err) => {
+                            eprintln!("\nError\n-----\n\n{}\n", err);
+                        }
+                    }
+                }
+            }
+        },
+        Args::Uplc(uplc_cmd) => match uplc_cmd {
+            UplcCommand::Flat {
+                input,
+                print,
+                out,
+                cbor_hex,
+            } => {
                 let code = std::fs::read_to_string(&input)?;
 
                 let program = parser::program(&code)?;
 
                 let program = Program::<DeBruijn>::try_from(program)?;
 
-                let bytes = program.to_flat()?;
+                if cbor_hex {
+                    let bytes = program.to_flat()?;
 
-                if print {
-                    let mut output = String::new();
+                    if print {
+                        let mut output = String::new();
 
-                    for (i, byte) in bytes.iter().enumerate() {
-                        let _ = write!(output, "{:08b}", byte);
+                        for (i, byte) in bytes.iter().enumerate() {
+                            let _ = write!(output, "{:08b}", byte);
 
-                        if (i + 1) % 4 == 0 {
-                            output.push('\n');
-                        } else {
-                            output.push(' ');
+                            if (i + 1) % 4 == 0 {
+                                output.push('\n');
+                            } else {
+                                output.push(' ');
+                            }
                         }
-                    }
 
-                    println!("{}", output);
-                } else {
-                    let out_name = if let Some(out) = out {
-                        out
+                        println!("{}", output);
                     } else {
-                        format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
-                    };
+                        let out_name = if let Some(out) = out {
+                            out
+                        } else {
+                            format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
+                        };
 
-                    fs::write(&out_name, &bytes)?;
+                        fs::write(&out_name, &bytes)?;
+                    }
+                } else {
+                    let cbor = program.to_hex()?;
+
+                    if print {
+                        println!("{}", &cbor);
+                    } else {
+                        let out_name = if let Some(out) = out {
+                            out
+                        } else {
+                            format!("{}.cbor", input.file_stem().unwrap().to_str().unwrap())
+                        };
+
+                        fs::write(&out_name, &cbor)?;
+                    }
                 }
             }
 
@@ -87,11 +200,24 @@ fn main() -> anyhow::Result<()> {
                     fs::write(&input, pretty)?;
                 }
             }
+            UplcCommand::Unflat {
+                input,
+                print,
+                out,
+                cbor_hex,
+            } => {
+                let program = if cbor_hex {
+                    let cbor = std::fs::read_to_string(&input)?;
 
-            UplcCommand::Unflat { input, print, out } => {
-                let bytes = std::fs::read(&input)?;
+                    let mut cbor_buffer = Vec::new();
+                    let mut flat_buffer = Vec::new();
 
-                let program = Program::<DeBruijn>::from_flat(&bytes)?;
+                    Program::<DeBruijn>::from_hex(cbor.trim(), &mut cbor_buffer, &mut flat_buffer)?
+                } else {
+                    let bytes = std::fs::read(&input)?;
+
+                    Program::<DeBruijn>::from_flat(&bytes)?
+                };
 
                 let program: Program<Name> = program.try_into()?;
 
@@ -110,20 +236,26 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            UplcCommand::Eval { input, flat } => {
-                let program = if flat {
-                    let bytes = std::fs::read(&input)?;
+            UplcCommand::Eval { script, flat, args } => {
+                let mut program = if flat {
+                    let bytes = std::fs::read(&script)?;
 
                     let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
 
                     prog.into()
                 } else {
-                    let code = std::fs::read_to_string(&input)?;
+                    let code = std::fs::read_to_string(&script)?;
 
                     let prog = parser::program(&code)?;
 
                     Program::<NamedDeBruijn>::try_from(prog)?
                 };
+
+                for arg in args {
+                    let term: Term<NamedDeBruijn> = parser::term(&arg)?.try_into()?;
+
+                    program = program.apply_term(&term);
+                }
 
                 let (term, cost, logs) = program.eval();
 
@@ -149,7 +281,10 @@ fn main() -> anyhow::Result<()> {
                     "\nBudget\n------\ncpu: {}\nmemory: {}\n",
                     cost.cpu, cost.mem
                 );
-                println!("\nLogs\n----\n{}", logs.join("\n"))
+
+                if !logs.is_empty() {
+                    println!("\nLogs\n----\n{}", logs.join("\n"))
+                }
             }
         },
     }
