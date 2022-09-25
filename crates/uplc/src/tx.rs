@@ -116,7 +116,7 @@ pub fn eval_phase_two_raw(
                     .iter()
                     .map(|r| r.encode_fragment().unwrap())
                     .collect()),
-                Err(_) => Err(Error::NoRedeemers),
+                Err(err) => Err(err),
             }
         }
         // MultiEraTx::AlonzoCompatible(tx, _) => match eval_tx(&tx, &utxos, &sc) {
