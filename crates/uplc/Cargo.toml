@@ -16,12 +16,17 @@ exclude = ["test_data/*"]
 cryptoxide = "0.4.2"
 flat-rs = { path = "../flat", version = "0.0.10" }
 hex = "0.4.3"
-minicbor = { version = "0.18.0", features = ["std"] }
-pallas-codec = "0.12.0"
-pallas-primitives = "0.12.0"
+pallas-addresses = "0.14.0-alpha.3"
+pallas-codec = "0.14.0-alpha.3"
+pallas-crypto = "0.14.0-alpha.3"
+pallas-primitives = "0.14.0-alpha.3"
+pallas-traverse = "0.14.0-alpha.3"
 peg = "0.8.0"
 pretty = "0.11.3"
 thiserror = "1.0.31"
+anyhow = "1.0.57"
+serde = { version = "1.0.144", features = ["derive"] }
+serde_json = "1.0.85"
 
 [dev-dependencies]
 hex = "0.4.3"

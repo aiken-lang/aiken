@@ -1,13 +1,13 @@
 use std::{fmt::Display, rc::Rc};
 
-use pallas_primitives::alonzo::PlutusData;
+use pallas_primitives::{alonzo::PlutusData, babbage::Language};
 
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
     flat::Binder,
     machine::{
-        cost_model::{CostModel, ExBudget},
+        cost_model::{initialize_cost_model, CostModel, ExBudget},
         Machine,
     },
 };
@@ -47,6 +47,18 @@ where
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
             argument: Rc::new(term.clone()),
+        };
+
+        Program {
+            version: self.version,
+            term: applied_term,
+        }
+    }
+
+    pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
+        let applied_term = Term::Apply {
+            function: Rc::new(self.term.clone()),
+            argument: Rc::new(Term::Constant(Constant::Data(plutus_data))),
         };
 
         Program {
@@ -476,7 +488,54 @@ impl Program<NamedDeBruijn> {
         ExBudget,
         Vec<String>,
     ) {
-        let mut machine = Machine::new(CostModel::default(), ExBudget::default(), 200);
+        let mut machine = Machine::new(
+            Language::PlutusV2,
+            CostModel::default(),
+            ExBudget::default(),
+            200,
+        );
+
+        let term = machine.run(&self.term);
+
+        (term, machine.ex_budget, machine.logs)
+    }
+
+    /// Evaluate a Program as PlutusV1
+    pub fn eval_v1(
+        &self,
+    ) -> (
+        Result<Term<NamedDeBruijn>, crate::machine::Error>,
+        ExBudget,
+        Vec<String>,
+    ) {
+        let mut machine = Machine::new(Language::PlutusV1, CostModel::v1(), ExBudget::v1(), 200);
+
+        let term = machine.run(&self.term);
+
+        (term, machine.ex_budget, machine.logs)
+    }
+
+    pub fn eval_as(
+        &self,
+        version: &Language,
+        costs: &[i64],
+        initial_budget: Option<&ExBudget>,
+    ) -> (
+        Result<Term<NamedDeBruijn>, crate::machine::Error>,
+        ExBudget,
+        Vec<String>,
+    ) {
+        let budget = match initial_budget {
+            Some(b) => *b,
+            None => ExBudget::default(),
+        };
+
+        let mut machine = Machine::new(
+            version.clone(),
+            initialize_cost_model(version, costs),
+            budget,
+            200, //slippage
+        );
 
         let term = machine.run(&self.term);
 
@@ -495,5 +554,11 @@ impl Program<DeBruijn> {
         let program: Program<NamedDeBruijn> = self.clone().into();
 
         program.eval()
+    }
+}
+
+impl Term<NamedDeBruijn> {
+    pub fn is_valid_script_result(&self) -> bool {
+        !matches!(self, Term::Error)
     }
 }
