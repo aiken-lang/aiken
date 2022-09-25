@@ -1,4 +1,0 @@
-[
-  {"input":{"tx_hash":"71b02d2309057ca589878c02ef9f89ca2a911f4282bef459a44b035deee292f0","index":0},"output":{"address":"addr1zxj47sy4qxlktqzmkrw8dahe46gtv8seakrshsqz26qnvzypw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspksr3q9nx","value":[1724100,{"deebf749dd081b3aea1c59ef2a1be1038d61a0c7398de15c310244be": {"54455354544f4b454e313631": 1}}],"datum":{"datum_hash": "d908988cd6197fb46e9711a8e84eda57e1b134b0e0fe11ea7e9cdc6e3d484189"}}},
-  {"input":{"tx_hash":"ba68b9076c6c34666d5a554d7cd0fdffacc1c38d86cd37ff5c565d77a1ce2fd0","index":0},"output":{"address":"addr1qxpct7l5e9gmtlt73uz9000y08yelyg0tdcqdc9ykle7w98vqctk0alpkvrf7l226m8djg05lusu74uvx69hp6ve808qxc39wj","value":[5000000,{}]}}
-]

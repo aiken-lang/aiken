@@ -1,5 +1,9 @@
 use std::{fmt::Write as _, fs};
 
+use pallas_primitives::{
+    babbage::{TransactionInput, TransactionOutput},
+    Fragment,
+};
 use pallas_traverse::{Era, MultiEraTx};
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
@@ -23,27 +27,48 @@ fn main() -> anyhow::Result<()> {
             TxCommand::Simulate {
                 input,
                 cbor,
-                resolved_inputs,
+                raw_inputs,
+                raw_outputs,
                 slot_length,
                 zero_time,
                 zero_slot,
             } => {
-                let tx_bytes = if cbor {
-                    fs::read(input)?
+                let (tx_bytes, inputs_bytes, outputs_bytes) = if cbor {
+                    (
+                        fs::read(input)?,
+                        fs::read(raw_inputs)?,
+                        fs::read(raw_outputs)?,
+                    )
                 } else {
                     let cbor_hex = fs::read_to_string(input)?;
+                    let inputs_hex = fs::read_to_string(raw_inputs)?;
+                    let outputs_hex = fs::read_to_string(raw_outputs)?;
 
-                    hex::decode(cbor_hex.trim())?
+                    (
+                        hex::decode(cbor_hex.trim())?,
+                        hex::decode(inputs_hex.trim())?,
+                        hex::decode(outputs_hex.trim())?,
+                    )
                 };
 
                 let tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
                     .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))?;
 
+                let inputs = Vec::<TransactionInput>::decode_fragment(&inputs_bytes).unwrap();
+                let outputs = Vec::<TransactionOutput>::decode_fragment(&outputs_bytes).unwrap();
+
+                let resolved_inputs: Vec<ResolvedInput> = inputs
+                    .iter()
+                    .zip(outputs.iter())
+                    .map(|(input, output)| ResolvedInput {
+                        input: input.clone(),
+                        output: output.clone(),
+                    })
+                    .collect();
+
                 println!("Simulating: {}", tx.hash());
 
                 if let Some(tx_babbage) = tx.as_babbage() {
-                    let resolved_inputs = ResolvedInput::from_json(&resolved_inputs)?;
-
                     let slot_config = SlotConfig {
                         zero_time,
                         zero_slot,
@@ -61,11 +86,18 @@ fn main() -> anyhow::Result<()> {
 
                     match result {
                         Ok(redeemers) => {
-                            println!("\nResult\n------\n\n");
+                            println!("\nTotal Budget Used\n-----------------\n");
 
-                            for redeemer in redeemers {
-                                println!("{:#?}", redeemer)
-                            }
+                            let total_budget_used = redeemers.iter().fold(
+                                ExBudget { mem: 0, cpu: 0 },
+                                |accum, curr| ExBudget {
+                                    mem: accum.mem + curr.ex_units.mem as i64,
+                                    cpu: accum.cpu + curr.ex_units.steps as i64,
+                                },
+                            );
+
+                            println!("mem: {}", total_budget_used.mem);
+                            println!("cpu: {}", total_budget_used.cpu);
                         }
                         Err(err) => {
                             eprintln!("\nError\n-----\n\n{}\n", err);

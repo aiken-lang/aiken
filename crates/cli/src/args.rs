@@ -20,21 +20,29 @@ pub enum Args {
 pub enum TxCommand {
     /// Simulate a transaction by evaluating it's script
     Simulate {
-        /// A file containing cbor hex
+        /// A file containing cbor hex for a transaction
         input: PathBuf,
 
         /// Toggle whether input is raw cbor or a hex string
         #[clap(short, long)]
         cbor: bool,
 
-        /// Json file containing resolved inputs
-        #[clap(short, long)]
-        resolved_inputs: PathBuf,
-        #[clap(short, long)]
+        /// A file containing cbor hex for the raw inputs
+        raw_inputs: PathBuf,
+
+        /// A file containing cbor hex for the raw outputs
+        raw_outputs: PathBuf,
+
+        /// Time between each slot
+        #[clap(short, long, default_value_t = 1000)]
         slot_length: u64,
-        #[clap(long)]
+
+        /// Time of shelley hardfork
+        #[clap(long, default_value_t = 1596059091000)]
         zero_time: u64,
-        #[clap(long)]
+
+        /// Slot number at the start of the shelley hardfork
+        #[clap(long, default_value_t = 4492800)]
         zero_slot: u64,
     },
 }

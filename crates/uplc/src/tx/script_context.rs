@@ -1,5 +1,3 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
-
 use pallas_codec::utils::KeyValuePairs;
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
@@ -14,26 +12,6 @@ use super::to_plutus_data::MintValue;
 pub struct ResolvedInput {
     pub input: TransactionInput,
     pub output: TransactionOutput,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    File(#[from] std::io::Error),
-    #[error("{0}")]
-    Serde(#[from] serde_json::error::Error),
-}
-
-impl ResolvedInput {
-    pub fn from_json(file: &PathBuf) -> Result<Vec<Self>, Error> {
-        let file = File::open(file)?;
-
-        let reader = BufReader::new(file);
-
-        let resolved_inputs: Vec<ResolvedInput> = serde_json::from_reader(reader)?;
-
-        Ok(resolved_inputs)
-    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
