@@ -81,6 +81,9 @@ pub enum UplcCommand {
         /// Print output instead of saving to file
         #[clap(short, long)]
         print: bool,
+
+        #[clap(short, long)]
+        cbor_hex: bool,
     },
     /// Format an Untyped Plutus Core program
     Fmt {
@@ -103,6 +106,9 @@ pub enum UplcCommand {
         /// Print output instead of saving to file
         #[clap(short, long)]
         print: bool,
+
+        #[clap(short, long)]
+        cbor_hex: bool,
     },
 }
 

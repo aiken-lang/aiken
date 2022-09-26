@@ -1,7 +1,7 @@
 use chumsky::prelude::*;
 
 use crate::{
-    ast::{self, TodoKind},
+    ast::{self, BinOp, TodoKind},
     error::ParseError,
     expr,
     token::Token,
@@ -259,7 +259,42 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
     })
 }
 
-pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {}
+pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
+    recursive(|r| {
+        let op = choice((
+            just(Token::Star).to(BinOp::MultInt),
+            just(Token::Slash).to(BinOp::DivInt),
+            just(Token::Percent).to(BinOp::ModInt),
+        ));
+
+        let product = expr_unit_parser()
+            .then(op.then(expr_unit_parser()).repeated())
+            .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
+                location: a.location().union(b.location()),
+                name: op,
+                left: Box::new(a),
+                right: Box::new(b),
+            })
+            .boxed();
+
+        let op = choice((
+            just(Token::Plus).to(BinOp::AddInt),
+            just(Token::Minus).to(BinOp::SubInt),
+        ));
+
+        let sum = product
+            .clone()
+            .then(op.then(product).repeated())
+            .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
+                location: a.location().union(b.location()),
+                name: op,
+                left: Box::new(a),
+                right: Box::new(b),
+            });
+
+        sum
+    })
+}
 
 pub fn expr_unit_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     choice((
@@ -512,7 +547,7 @@ mod tests {
 
     use crate::{
         ast::{self, Span, SrcId},
-        lexer,
+        expr, lexer,
         parser::module_parser,
     };
 
@@ -524,13 +559,13 @@ mod tests {
             use std/tx as t
 
             type Option(a) {
-                Some(a, Int)
-                None
-                Wow { name: Int, age: Int }
+              Some(a, Int)
+              None
+              Wow { name: Int, age: Int }
             }
 
             pub opaque type User {
-                name: _w
+              name: _w
             }
 
             type Thing = Option(Int)
@@ -538,7 +573,7 @@ mod tests {
             pub type Me = Option(String)
 
             pub fn add_one(a) {
-                a + 1
+              a + 1
             }
 
             pub fn add_one(a: Int) -> Int {
@@ -745,6 +780,35 @@ mod tests {
                         parameters: vec![],
                         public: true,
                         tipo: (),
+                    },
+                    ast::UntypedDefinition::Fn {
+                        arguments: vec![ast::Arg {
+                            arg_name: ast::ArgName::Named {
+                                name: "a".to_string(),
+                                location: Span::new(SrcId::empty(), 430..431),
+                            },
+                            location: Span::new(SrcId::empty(), 430..431),
+                            annotation: None,
+                            tipo: (),
+                        },],
+                        body: expr::UntypedExpr::BinOp {
+                            location: Span::new(SrcId::empty(), 451..456),
+                            name: ast::BinOp::AddInt,
+                            left: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new(SrcId::empty(), 451..452),
+                                name: "a".to_string(),
+                            }),
+                            right: Box::new(expr::UntypedExpr::Int {
+                                location: Span::new(SrcId::empty(), 455..456),
+                                value: "1".to_string(),
+                            }),
+                        },
+                        doc: None,
+                        location: Span::new(SrcId::empty(), 415..470),
+                        name: "add_one".to_string(),
+                        public: true,
+                        return_annotation: None,
+                        return_type: (),
                     },
                 ]
             },
