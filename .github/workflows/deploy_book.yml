@@ -6,8 +6,6 @@ on:
       - main
       - book
   pull_request:
-    branches:
-      - main
 
 jobs:
   deploy:
