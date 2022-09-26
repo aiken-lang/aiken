@@ -20,6 +20,7 @@ jobs:
         with:
           mdbook-version: 'latest'
 
+      - run: ls
       - run: mdbook build
 
       - name: Deploy
