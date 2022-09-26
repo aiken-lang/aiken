@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "aiken"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "anyhow",
  "clap",
@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lang"
-version = "0.0.0"
+version = "0.0.16"
 dependencies = [
  "chumsky",
  "internment",
