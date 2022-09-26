@@ -7,6 +7,15 @@ use clap::{Parser, Subcommand};
 #[clap(version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub enum Args {
+    /// Build an aiken project
+    Build,
+    /// Start a development server
+    Dev,
+    /// Create a new aiken project
+    New {
+        /// Project name
+        name: PathBuf,
+    },
     /// A subcommand for working with transactions
     #[clap(subcommand)]
     Tx(TxCommand),
@@ -50,39 +59,56 @@ pub enum TxCommand {
 /// Commands for working with Untyped Plutus Core
 #[derive(Subcommand)]
 pub enum UplcCommand {
+    /// Evaluate an Untyped Plutus Core program
+    Eval {
+        script: PathBuf,
+
+        #[clap(short, long)]
+        flat: bool,
+
+        /// Arguments to pass to the uplc program
+        args: Vec<String>,
+    },
     /// Encode textual Untyped Plutus Core to flat bytes
     Flat {
+        /// Textual Untyped Plutus Core file
         input: PathBuf,
-        #[clap(short, long)]
-        print: bool,
+
+        /// Output file name
         #[clap(short, long)]
         out: Option<String>,
-        #[clap(short, long)]
-        cbor_hex: bool,
-    },
-    /// Decode flat bytes to textual Untyped Plutus Core
-    Unflat {
-        input: PathBuf,
+
+        /// Print output instead of saving to file
         #[clap(short, long)]
         print: bool,
-        #[clap(short, long)]
-        out: Option<String>,
+
         #[clap(short, long)]
         cbor_hex: bool,
     },
     /// Format an Untyped Plutus Core program
     Fmt {
+        /// Textual Untyped Plutus Core file
         input: PathBuf,
+
+        /// Print output instead of saving to file
         #[clap(short, long)]
         print: bool,
     },
-    /// Evaluate an Untyped Plutus Core program
-    Eval {
-        script: PathBuf,
+    /// Decode flat bytes to textual Untyped Plutus Core
+    Unflat {
+        /// Flat encoded Untyped Plutus Core file
+        input: PathBuf,
+
+        /// Output file name
         #[clap(short, long)]
-        flat: bool,
-        /// Arguments to pass to the uplc program
-        args: Vec<String>,
+        out: Option<String>,
+
+        /// Print output instead of saving to file
+        #[clap(short, long)]
+        print: bool,
+
+        #[clap(short, long)]
+        cbor_hex: bool,
     },
 }
 

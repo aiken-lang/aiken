@@ -1,2 +1,2 @@
 [workspace]
-members = ["crates/cli", "crates/flat", "crates/uplc"]
+members = ["crates/*"]

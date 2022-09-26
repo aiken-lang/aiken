@@ -23,6 +23,31 @@ fn main() -> anyhow::Result<()> {
     let args = Args::default();
 
     match args {
+        Args::Build => {
+            // 1. load and parse modules
+            //    * lib - contains modules, types, and functions
+            //    * contracts - contains validators
+            //    * scripts - contains native scripts dsl
+            // 2. type check everything
+            // 3. generate uplc and policy/address if relevant
+            todo!()
+        }
+
+        Args::Dev => {
+            // launch a development server
+            // this should allow people to test
+            // their contracts over http
+            todo!()
+        }
+
+        Args::New { name } => {
+            if !name.exists() {
+                fs::create_dir_all(name.join("lib"))?;
+                fs::create_dir_all(name.join("policies"))?;
+                fs::create_dir_all(name.join("scripts"))?;
+            }
+        }
+
         Args::Tx(tx_cmd) => match tx_cmd {
             TxCommand::Simulate {
                 input,
@@ -161,6 +186,7 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+
             UplcCommand::Fmt { input, print } => {
                 let code = std::fs::read_to_string(&input)?;
 
