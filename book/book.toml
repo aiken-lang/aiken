@@ -1,0 +1,6 @@
+[book]
+authors = ["Ch1n3du"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The Aiken Programming Language"
