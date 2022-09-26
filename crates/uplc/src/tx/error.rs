@@ -21,11 +21,11 @@ pub enum Error {
         missing: Vec<String>,
         extra: Vec<String>,
     },
-    #[error("Extraneous redeemer found: Tag {:?}, Index {}", tag, index)]
-    ExtraneousRedeemer { tag: String, index: u32 },
-    #[error("Resolved Input not found")]
+    #[error("Extraneous redeemer")]
+    ExtraneousRedeemer,
+    #[error("Resolved Input not found.")]
     ResolvedInputNotFound,
-    #[error("A key hash cannot be the hash of a script")]
+    #[error("A key hash cannot be the hash of a script.")]
     ScriptKeyHash,
     #[error("PlutusV1 cost model not found.")]
     V1CostModelNotFound,
@@ -41,12 +41,18 @@ pub enum Error {
     ScriptAndInputRefNotAllowed,
     #[error("Address doesn't contain a payment credential.")]
     NoPaymentCredential,
-    #[error("Missing required datum in witness set. Datum hash: {}", hash)]
+    #[error("Missing required datum: {}", hash)]
     MissingRequiredDatum { hash: String },
-    #[error("Missing required script. Script hash: {}", hash)]
+    #[error("Missing required script: {}", hash)]
     MissingRequiredScript { hash: String },
     #[error("Missing required inline datum or datum hash in script input.")]
     MissingRequiredInlineDatumOrHash,
     #[error("Only stake deregistration and delegation are valid certificate script purposes.")]
     OnlyStakeDeregAndDelegAllowed,
+    #[error("Redeemer ({}, {}): {}", tag, index, err)]
+    RedeemerError {
+        tag: String,
+        index: u32,
+        err: Box<Error>,
+    },
 }

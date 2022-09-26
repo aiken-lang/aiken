@@ -39,6 +39,15 @@ fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> Tim
     }
 }
 
+fn redeemer_tag_to_string(redeemer_tag: &RedeemerTag) -> String {
+    match redeemer_tag {
+        RedeemerTag::Spend => "Spend".to_string(),
+        RedeemerTag::Mint => "Mint".to_string(),
+        RedeemerTag::Cert => "Cert".to_string(),
+        RedeemerTag::Reward => "Reward".to_string(),
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum ScriptVersion {
     Native(NativeScript),
@@ -168,10 +177,7 @@ fn get_script_purpose(
             policy_ids.sort();
             match policy_ids.get(index as usize) {
                 Some(policy_id) => Ok(ScriptPurpose::Minting(*policy_id)),
-                None => Err(Error::ExtraneousRedeemer {
-                    tag: "Mint".to_string(),
-                    index,
-                }),
+                None => Err(Error::ExtraneousRedeemer),
             }
         }
         RedeemerTag::Spend => {
@@ -180,10 +186,7 @@ fn get_script_purpose(
             inputs.sort();
             match inputs.get(index as usize) {
                 Some(input) => Ok(ScriptPurpose::Spending(input.clone())),
-                None => Err(Error::ExtraneousRedeemer {
-                    tag: "Spend".to_string(),
-                    index,
-                }),
+                None => Err(Error::ExtraneousRedeemer),
             }
         }
         RedeemerTag::Reward => {
@@ -197,12 +200,7 @@ fn get_script_purpose(
             reward_accounts.sort();
             let reward_account = match reward_accounts.get(index as usize) {
                 Some(ra) => ra.clone(),
-                None => {
-                    return Err(Error::ExtraneousRedeemer {
-                        tag: "Reward".to_string(),
-                        index,
-                    })
-                }
+                None => return Err(Error::ExtraneousRedeemer),
             };
             let address = Address::from_bytes(&reward_account)?;
             let credential = match address {
@@ -224,10 +222,7 @@ fn get_script_purpose(
                 .get(index as usize)
             {
                 Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
-                None => Err(Error::ExtraneousRedeemer {
-                    tag: "Cert".to_string(),
-                    index,
-                }),
+                None => Err(Error::ExtraneousRedeemer),
             }
         }
     }
@@ -610,224 +605,236 @@ pub fn eval_redeemer(
     cost_mdls_opt: Option<&CostMdls>,
     initial_budget: Option<&ExBudget>,
 ) -> Result<Redeemer, Error> {
-    let purpose = get_script_purpose(
-        redeemer,
-        &tx.transaction_body.inputs,
-        &tx.transaction_body.mint,
-        &tx.transaction_body.certificates,
-        &tx.transaction_body.withdrawals,
-    )?;
+    let result = || {
+        let purpose = get_script_purpose(
+            redeemer,
+            &tx.transaction_body.inputs,
+            &tx.transaction_body.mint,
+            &tx.transaction_body.certificates,
+            &tx.transaction_body.withdrawals,
+        )?;
 
-    let execution_purpose: ExecutionPurpose = get_execution_purpose(utxos, &purpose, lookup_table)?;
+        let execution_purpose: ExecutionPurpose =
+            get_execution_purpose(utxos, &purpose, lookup_table)?;
 
-    match execution_purpose {
-        ExecutionPurpose::WithDatum(script_version, datum) => match script_version {
-            ScriptVersion::V1(script) => {
-                let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
-                let script_context = ScriptContext { tx_info, purpose };
+        match execution_purpose {
+            ExecutionPurpose::WithDatum(script_version, datum) => match script_version {
+                ScriptVersion::V1(script) => {
+                    let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                    let script_context = ScriptContext { tx_info, purpose };
 
-                let program: Program<NamedDeBruijn> = {
-                    let mut buffer = Vec::new();
+                    let program: Program<NamedDeBruijn> = {
+                        let mut buffer = Vec::new();
 
-                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+                        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
 
-                    prog.into()
-                };
-
-                let program = program
-                    .apply_data(datum)
-                    .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data());
-
-                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
-                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
-                        costs
-                    } else {
-                        return Err(Error::V1CostModelNotFound);
+                        prog.into()
                     };
 
-                    program.eval_as(&Language::PlutusV1, costs, initial_budget)
-                } else {
-                    program.eval_v1()
-                };
+                    let program = program
+                        .apply_data(datum)
+                        .apply_data(redeemer.data.clone())
+                        .apply_data(script_context.to_plutus_data());
 
-                match result {
-                    Ok(_) => (),
-                    Err(err) => return Err(Error::Machine(err, budget, logs)),
-                }
+                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                        let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                            costs
+                        } else {
+                            return Err(Error::V1CostModelNotFound);
+                        };
 
-                let initial_budget = match initial_budget {
-                    Some(b) => *b,
-                    None => ExBudget::default(),
-                };
-
-                let new_redeemer = Redeemer {
-                    tag: redeemer.tag.clone(),
-                    index: redeemer.index,
-                    data: redeemer.data.clone(),
-                    ex_units: ExUnits {
-                        mem: (initial_budget.mem - budget.mem) as u32,
-                        steps: (initial_budget.cpu - budget.cpu) as u64,
-                    },
-                };
-
-                Ok(new_redeemer)
-            }
-            ScriptVersion::V2(script) => {
-                let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
-                let script_context = ScriptContext { tx_info, purpose };
-
-                let program: Program<NamedDeBruijn> = {
-                    let mut buffer = Vec::new();
-
-                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
-
-                    prog.into()
-                };
-
-                let program = program
-                    .apply_data(datum)
-                    .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data());
-
-                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
-                    let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
-                        costs
+                        program.eval_as(&Language::PlutusV1, costs, initial_budget)
                     } else {
-                        return Err(Error::V2CostModelNotFound);
+                        program.eval_v1()
                     };
 
-                    program.eval_as(&Language::PlutusV2, costs, initial_budget)
-                } else {
-                    program.eval()
-                };
+                    match result {
+                        Ok(_) => (),
+                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                    }
 
-                match result {
-                    Ok(_) => (),
-                    Err(err) => return Err(Error::Machine(err, budget, logs)),
-                }
-
-                let initial_budget = match initial_budget {
-                    Some(b) => *b,
-                    None => ExBudget::default(),
-                };
-
-                let new_redeemer = Redeemer {
-                    tag: redeemer.tag.clone(),
-                    index: redeemer.index,
-                    data: redeemer.data.clone(),
-                    ex_units: ExUnits {
-                        mem: (initial_budget.mem - budget.mem) as u32,
-                        steps: (initial_budget.cpu - budget.cpu) as u64,
-                    },
-                };
-
-                Ok(new_redeemer)
-            }
-            ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
-        },
-        ExecutionPurpose::NoDatum(script_version) => match script_version {
-            ScriptVersion::V1(script) => {
-                let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
-                let script_context = ScriptContext { tx_info, purpose };
-
-                let program: Program<NamedDeBruijn> = {
-                    let mut buffer = Vec::new();
-
-                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
-
-                    prog.into()
-                };
-
-                let program = program
-                    .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data());
-
-                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
-                    let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
-                        costs
-                    } else {
-                        return Err(Error::V1CostModelNotFound);
+                    let initial_budget = match initial_budget {
+                        Some(b) => *b,
+                        None => ExBudget::default(),
                     };
 
-                    program.eval_as(&Language::PlutusV1, costs, initial_budget)
-                } else {
-                    program.eval_v1()
-                };
-
-                match result {
-                    Ok(_) => (),
-                    Err(err) => return Err(Error::Machine(err, budget, logs)),
-                }
-
-                let initial_budget = match initial_budget {
-                    Some(b) => *b,
-                    None => ExBudget::default(),
-                };
-
-                let new_redeemer = Redeemer {
-                    tag: redeemer.tag.clone(),
-                    index: redeemer.index,
-                    data: redeemer.data.clone(),
-                    ex_units: ExUnits {
-                        mem: (initial_budget.mem - budget.mem) as u32,
-                        steps: (initial_budget.cpu - budget.cpu) as u64,
-                    },
-                };
-
-                Ok(new_redeemer)
-            }
-            ScriptVersion::V2(script) => {
-                let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
-                let script_context = ScriptContext { tx_info, purpose };
-
-                let program: Program<NamedDeBruijn> = {
-                    let mut buffer = Vec::new();
-
-                    let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
-
-                    prog.into()
-                };
-
-                let program = program
-                    .apply_data(redeemer.data.clone())
-                    .apply_data(script_context.to_plutus_data());
-
-                let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
-                    let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
-                        costs
-                    } else {
-                        return Err(Error::V2CostModelNotFound);
+                    let new_redeemer = Redeemer {
+                        tag: redeemer.tag.clone(),
+                        index: redeemer.index,
+                        data: redeemer.data.clone(),
+                        ex_units: ExUnits {
+                            mem: (initial_budget.mem - budget.mem) as u32,
+                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                        },
                     };
 
-                    program.eval_as(&Language::PlutusV2, costs, initial_budget)
-                } else {
-                    program.eval()
-                };
-
-                match result {
-                    Ok(_) => (),
-                    Err(err) => return Err(Error::Machine(err, budget, logs)),
+                    Ok(new_redeemer)
                 }
+                ScriptVersion::V2(script) => {
+                    let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
+                    let script_context = ScriptContext { tx_info, purpose };
 
-                let initial_budget = match initial_budget {
-                    Some(b) => *b,
-                    None => ExBudget::default(),
-                };
+                    let program: Program<NamedDeBruijn> = {
+                        let mut buffer = Vec::new();
 
-                let new_redeemer = Redeemer {
-                    tag: redeemer.tag.clone(),
-                    index: redeemer.index,
-                    data: redeemer.data.clone(),
-                    ex_units: ExUnits {
-                        mem: (initial_budget.mem - budget.mem) as u32,
-                        steps: (initial_budget.cpu - budget.cpu) as u64,
-                    },
-                };
+                        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
 
-                Ok(new_redeemer)
-            }
-            ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
-        },
+                        prog.into()
+                    };
+
+                    let program = program
+                        .apply_data(datum)
+                        .apply_data(redeemer.data.clone())
+                        .apply_data(script_context.to_plutus_data());
+
+                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                        let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
+                            costs
+                        } else {
+                            return Err(Error::V2CostModelNotFound);
+                        };
+
+                        program.eval_as(&Language::PlutusV2, costs, initial_budget)
+                    } else {
+                        program.eval()
+                    };
+
+                    match result {
+                        Ok(_) => (),
+                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                    }
+
+                    let initial_budget = match initial_budget {
+                        Some(b) => *b,
+                        None => ExBudget::default(),
+                    };
+
+                    let new_redeemer = Redeemer {
+                        tag: redeemer.tag.clone(),
+                        index: redeemer.index,
+                        data: redeemer.data.clone(),
+                        ex_units: ExUnits {
+                            mem: (initial_budget.mem - budget.mem) as u32,
+                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                        },
+                    };
+
+                    Ok(new_redeemer)
+                }
+                ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
+            },
+            ExecutionPurpose::NoDatum(script_version) => match script_version {
+                ScriptVersion::V1(script) => {
+                    let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                    let script_context = ScriptContext { tx_info, purpose };
+
+                    let program: Program<NamedDeBruijn> = {
+                        let mut buffer = Vec::new();
+
+                        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                        prog.into()
+                    };
+
+                    let program = program
+                        .apply_data(redeemer.data.clone())
+                        .apply_data(script_context.to_plutus_data());
+
+                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                        let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
+                            costs
+                        } else {
+                            return Err(Error::V1CostModelNotFound);
+                        };
+
+                        program.eval_as(&Language::PlutusV1, costs, initial_budget)
+                    } else {
+                        program.eval_v1()
+                    };
+
+                    match result {
+                        Ok(_) => (),
+                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                    }
+
+                    let initial_budget = match initial_budget {
+                        Some(b) => *b,
+                        None => ExBudget::default(),
+                    };
+
+                    let new_redeemer = Redeemer {
+                        tag: redeemer.tag.clone(),
+                        index: redeemer.index,
+                        data: redeemer.data.clone(),
+                        ex_units: ExUnits {
+                            mem: (initial_budget.mem - budget.mem) as u32,
+                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                        },
+                    };
+
+                    Ok(new_redeemer)
+                }
+                ScriptVersion::V2(script) => {
+                    let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
+                    let script_context = ScriptContext { tx_info, purpose };
+
+                    let program: Program<NamedDeBruijn> = {
+                        let mut buffer = Vec::new();
+
+                        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+
+                        prog.into()
+                    };
+
+                    let program = program
+                        .apply_data(redeemer.data.clone())
+                        .apply_data(script_context.to_plutus_data());
+
+                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                        let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
+                            costs
+                        } else {
+                            return Err(Error::V2CostModelNotFound);
+                        };
+
+                        program.eval_as(&Language::PlutusV2, costs, initial_budget)
+                    } else {
+                        program.eval()
+                    };
+
+                    match result {
+                        Ok(_) => (),
+                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                    }
+
+                    let initial_budget = match initial_budget {
+                        Some(b) => *b,
+                        None => ExBudget::default(),
+                    };
+
+                    let new_redeemer = Redeemer {
+                        tag: redeemer.tag.clone(),
+                        index: redeemer.index,
+                        data: redeemer.data.clone(),
+                        ex_units: ExUnits {
+                            mem: (initial_budget.mem - budget.mem) as u32,
+                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                        },
+                    };
+
+                    Ok(new_redeemer)
+                }
+                ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
+            },
+        }
+    };
+
+    match result() {
+        Ok(r) => Ok(r),
+        Err(err) => Err(Error::RedeemerError {
+            tag: redeemer_tag_to_string(&redeemer.tag),
+            index: redeemer.index,
+            err: Box::new(err),
+        }),
     }
 }
