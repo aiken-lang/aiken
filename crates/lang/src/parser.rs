@@ -250,7 +250,7 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                 }),
             expr_parser()
                 .then(r.repeated())
-                .map_with_span(|(expr, exprs), span| {
+                .map_with_span(|(expr, exprs), _span| {
                     exprs
                         .into_iter()
                         .fold(expr, |acc, elem| acc.append_in_sequence(elem))
@@ -260,7 +260,7 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
 }
 
 pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
-    recursive(|r| {
+    recursive(|_r| {
         let op = choice((
             just(Token::Star).to(BinOp::MultInt),
             just(Token::Slash).to(BinOp::DivInt),
@@ -282,7 +282,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             just(Token::Minus).to(BinOp::SubInt),
         ));
 
-        let sum = product
+        product
             .clone()
             .then(op.then(product).repeated())
             .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
@@ -290,9 +290,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
                 name: op,
                 left: Box::new(a),
                 right: Box::new(b),
-            });
-
-        sum
+            })
     })
 }
 
@@ -544,6 +542,7 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
 #[cfg(test)]
 mod tests {
     use chumsky::prelude::*;
+    use pretty_assertions::assert_eq;
 
     use crate::{
         ast::{self, Span, SrcId},
@@ -574,11 +573,6 @@ mod tests {
 
             pub fn add_one(a) {
               a + 1
-            }
-
-            pub fn add_one(a: Int) -> Int {
-              [1, 2, 3]
-                |> list.map(fn(x) { x + a })
             }
         "#;
         let len = code.chars().count();
@@ -639,31 +633,31 @@ mod tests {
                         package: (),
                     },
                     ast::UntypedDefinition::DataType {
-                        location: Span::new(SrcId::empty(), 122..246),
+                        location: Span::new(SrcId::empty(), 122..240),
                         constructors: vec![
                             ast::RecordConstructor {
-                                location: Span::new(SrcId::empty(), 155..167),
+                                location: Span::new(SrcId::empty(), 153..165),
                                 name: "Some".to_string(),
                                 arguments: vec![
                                     ast::RecordConstructorArg {
                                         label: None,
                                         annotation: ast::Annotation::Var {
-                                            location: Span::new(SrcId::empty(), 160..161),
+                                            location: Span::new(SrcId::empty(), 158..159),
                                             name: "a".to_string(),
                                         },
-                                        location: Span::new(SrcId::empty(), 160..161),
+                                        location: Span::new(SrcId::empty(), 158..159),
                                         tipo: (),
                                         doc: None,
                                     },
                                     ast::RecordConstructorArg {
                                         label: None,
                                         annotation: ast::Annotation::Constructor {
-                                            location: Span::new(SrcId::empty(), 163..166),
+                                            location: Span::new(SrcId::empty(), 161..164),
                                             module: None,
                                             name: "Int".to_string(),
                                             arguments: vec![],
                                         },
-                                        location: Span::new(SrcId::empty(), 163..166),
+                                        location: Span::new(SrcId::empty(), 161..164),
                                         tipo: (),
                                         doc: None,
                                     },
@@ -672,37 +666,37 @@ mod tests {
                                 sugar: false,
                             },
                             ast::RecordConstructor {
-                                location: Span::new(SrcId::empty(), 184..188),
+                                location: Span::new(SrcId::empty(), 180..184),
                                 name: "None".to_string(),
                                 arguments: vec![],
                                 documentation: None,
                                 sugar: false,
                             },
                             ast::RecordConstructor {
-                                location: Span::new(SrcId::empty(), 205..232),
+                                location: Span::new(SrcId::empty(), 199..226),
                                 name: "Wow".to_string(),
                                 arguments: vec![
                                     ast::RecordConstructorArg {
                                         label: Some("name".to_string(),),
                                         annotation: ast::Annotation::Constructor {
-                                            location: Span::new(SrcId::empty(), 217..220),
+                                            location: Span::new(SrcId::empty(), 211..214),
                                             module: None,
                                             name: "Int".to_string(),
                                             arguments: vec![],
                                         },
-                                        location: Span::new(SrcId::empty(), 211..220),
+                                        location: Span::new(SrcId::empty(), 205..214),
                                         tipo: (),
                                         doc: None,
                                     },
                                     ast::RecordConstructorArg {
                                         label: Some("age".to_string(),),
                                         annotation: ast::Annotation::Constructor {
-                                            location: Span::new(SrcId::empty(), 227..230),
+                                            location: Span::new(SrcId::empty(), 221..224),
                                             module: None,
                                             name: "Int".to_string(),
                                             arguments: vec![],
                                         },
-                                        location: Span::new(SrcId::empty(), 222..230),
+                                        location: Span::new(SrcId::empty(), 216..224),
                                         tipo: (),
                                         doc: None,
                                     },
@@ -719,17 +713,17 @@ mod tests {
                         typed_parameters: vec![],
                     },
                     ast::UntypedDefinition::DataType {
-                        location: Span::new(SrcId::empty(), 260..321),
+                        location: Span::new(SrcId::empty(), 254..313),
                         constructors: vec![ast::RecordConstructor {
-                            location: Span::new(SrcId::empty(), 281..321),
+                            location: Span::new(SrcId::empty(), 275..313),
                             name: "User".to_string(),
                             arguments: vec![ast::RecordConstructorArg {
-                                label: Some("name".to_string(),),
+                                label: Some("name".to_string()),
                                 annotation: ast::Annotation::Hole {
-                                    location: Span::new(SrcId::empty(), 305..307),
+                                    location: Span::new(SrcId::empty(), 297..299),
                                     name: "_w".to_string(),
                                 },
-                                location: Span::new(SrcId::empty(), 299..307),
+                                location: Span::new(SrcId::empty(), 291..299),
                                 tipo: (),
                                 doc: None,
                             },],
@@ -746,18 +740,18 @@ mod tests {
                     ast::UntypedDefinition::TypeAlias {
                         alias: "Thing".to_string(),
                         annotation: ast::Annotation::Constructor {
-                            location: Span::new(SrcId::empty(), 348..359),
+                            location: Span::new(SrcId::empty(), 340..351),
                             module: None,
                             name: "Option".to_string(),
                             arguments: vec![ast::Annotation::Constructor {
-                                location: Span::new(SrcId::empty(), 355..358),
+                                location: Span::new(SrcId::empty(), 347..350),
                                 module: None,
                                 name: "Int".to_string(),
                                 arguments: vec![],
                             },],
                         },
                         doc: None,
-                        location: Span::new(SrcId::empty(), 335..359),
+                        location: Span::new(SrcId::empty(), 327..351),
                         parameters: vec![],
                         public: false,
                         tipo: (),
@@ -765,18 +759,18 @@ mod tests {
                     ast::UntypedDefinition::TypeAlias {
                         alias: "Me".to_string(),
                         annotation: ast::Annotation::Constructor {
-                            location: Span::new(SrcId::empty(), 387..401),
+                            location: Span::new(SrcId::empty(), 379..393),
                             module: None,
                             name: "Option".to_string(),
                             arguments: vec![ast::Annotation::Constructor {
-                                location: Span::new(SrcId::empty(), 394..400),
+                                location: Span::new(SrcId::empty(), 386..392),
                                 module: None,
                                 name: "String".to_string(),
                                 arguments: vec![],
                             },],
                         },
                         doc: None,
-                        location: Span::new(SrcId::empty(), 373..401),
+                        location: Span::new(SrcId::empty(), 365..393),
                         parameters: vec![],
                         public: true,
                         tipo: (),
@@ -785,26 +779,26 @@ mod tests {
                         arguments: vec![ast::Arg {
                             arg_name: ast::ArgName::Named {
                                 name: "a".to_string(),
-                                location: Span::new(SrcId::empty(), 430..431),
+                                location: Span::new(SrcId::empty(), 422..423),
                             },
-                            location: Span::new(SrcId::empty(), 430..431),
+                            location: Span::new(SrcId::empty(), 422..423),
                             annotation: None,
                             tipo: (),
                         },],
                         body: expr::UntypedExpr::BinOp {
-                            location: Span::new(SrcId::empty(), 451..456),
+                            location: Span::new(SrcId::empty(), 441..446),
                             name: ast::BinOp::AddInt,
                             left: Box::new(expr::UntypedExpr::Var {
-                                location: Span::new(SrcId::empty(), 451..452),
+                                location: Span::new(SrcId::empty(), 441..442),
                                 name: "a".to_string(),
                             }),
                             right: Box::new(expr::UntypedExpr::Int {
-                                location: Span::new(SrcId::empty(), 455..456),
+                                location: Span::new(SrcId::empty(), 445..446),
                                 value: "1".to_string(),
                             }),
                         },
                         doc: None,
-                        location: Span::new(SrcId::empty(), 415..470),
+                        location: Span::new(SrcId::empty(), 407..460),
                         name: "add_one".to_string(),
                         public: true,
                         return_annotation: None,
@@ -812,8 +806,6 @@ mod tests {
                     },
                 ]
             },
-            "{:#?}",
-            res,
         );
     }
 }

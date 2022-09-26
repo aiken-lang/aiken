@@ -6,6 +6,7 @@ use crate::{ast::Span, token::Token};
 pub struct ParseError {
     kind: ErrorKind,
     span: Span,
+    #[allow(dead_code)]
     while_parsing: Option<(Span, &'static str)>,
     expected: HashSet<Pattern>,
     label: Option<&'static str>,
