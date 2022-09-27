@@ -574,6 +574,19 @@ mod tests {
             pub fn add_one(a) {
               a + 1
             }
+        
+            pub fn thing(a: Int) -> List(Int) {
+              let wow =      
+                [1, 2, 3]
+                  |> list.map(fn(x) { x + a })
+                  |> list.filter(fn(x: Int) -> Bool { x % 2 == 0 })
+
+              let who =
+                wow |> list.map(fn(x) { x + a })
+        
+              who
+            }
+        }
         "#;
         let len = code.chars().count();
 
