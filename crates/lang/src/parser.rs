@@ -1,4 +1,5 @@
 use chumsky::prelude::*;
+use vec1::Vec1;
 
 use crate::{
     ast::{self, BinOp, TodoKind},
@@ -175,9 +176,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
         )
         .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
-        .then_ignore(just(Token::LeftBrace))
-        .then(expr_seq_parser())
-        .then_ignore(just(Token::RightBrace))
+        .then(expr_seq_parser().delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
         .map_with_span(
             |((((opt_pub, name), arguments), return_annotation), body), span| {
                 ast::UntypedDefinition::Fn {
@@ -261,6 +260,7 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
 
 pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     recursive(|_r| {
+        // Product
         let op = choice((
             just(Token::Star).to(BinOp::MultInt),
             just(Token::Slash).to(BinOp::DivInt),
@@ -277,12 +277,13 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             })
             .boxed();
 
+        // Sum
         let op = choice((
             just(Token::Plus).to(BinOp::AddInt),
             just(Token::Minus).to(BinOp::SubInt),
         ));
 
-        product
+        let sum = product
             .clone()
             .then(op.then(product).repeated())
             .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
@@ -290,6 +291,60 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
                 name: op,
                 left: Box::new(a),
                 right: Box::new(b),
+            })
+            .boxed();
+
+        // Logical
+        let op = choice((
+            just(Token::EqualEqual).to(BinOp::Eq),
+            just(Token::NotEqual).to(BinOp::NotEq),
+            just(Token::Less).to(BinOp::LtInt),
+            just(Token::Greater).to(BinOp::GtInt),
+            just(Token::LessEqual).to(BinOp::LtEqInt),
+            just(Token::GreaterEqual).to(BinOp::GtEqInt),
+        ));
+
+        let comparison = sum
+            .clone()
+            .then(op.then(sum).repeated())
+            .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
+                location: a.location().union(b.location()),
+                name: op,
+                left: Box::new(a),
+                right: Box::new(b),
+            })
+            .boxed();
+
+        let op = choice((
+            just(Token::AmperAmper).to(BinOp::And),
+            just(Token::VbarVbar).to(BinOp::Or),
+        ));
+
+        let logical = comparison
+            .clone()
+            .then(op.then(comparison).repeated())
+            .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
+                location: a.location().union(b.location()),
+                name: op,
+                left: Box::new(a),
+                right: Box::new(b),
+            })
+            .boxed();
+
+        // Pipeline
+        logical
+            .clone()
+            .then(just(Token::Pipe).ignore_then(logical).repeated())
+            .foldl(|l, r| {
+                let expressions = if let expr::UntypedExpr::PipeLine { mut expressions } = l {
+                    expressions.push(r);
+                    expressions
+                } else {
+                    let mut expressions = Vec1::new(l);
+                    expressions.push(r);
+                    expressions
+                };
+                expr::UntypedExpr::PipeLine { expressions }
             })
     })
 }
@@ -574,19 +629,12 @@ mod tests {
             pub fn add_one(a) {
               a + 1
             }
-        
-            pub fn thing(a: Int) -> List(Int) {
-              let wow =      
-                [1, 2, 3]
-                  |> list.map(fn(x) { x + a })
-                  |> list.filter(fn(x: Int) -> Bool { x % 2 == 0 })
 
-              let who =
-                wow |> list.map(fn(x) { x + a })
-        
-              who
+            pub fn thing(thing a: Int) {
+                a + 2
+                |> add_one
+                |> add_one
             }
-        }
         "#;
         let len = code.chars().count();
 
@@ -813,6 +861,53 @@ mod tests {
                         doc: None,
                         location: Span::new(SrcId::empty(), 407..460),
                         name: "add_one".to_string(),
+                        public: true,
+                        return_annotation: None,
+                        return_type: (),
+                    },
+                    ast::UntypedDefinition::Fn {
+                        arguments: vec![ast::Arg {
+                            arg_name: ast::ArgName::NamedLabeled {
+                                name: "a".to_string(),
+                                label: "thing".to_string(),
+                                location: Span::new(SrcId::empty(), 487..494),
+                            },
+                            location: Span::new(SrcId::empty(), 487..499),
+                            annotation: Some(ast::Annotation::Constructor {
+                                location: Span::new(SrcId::empty(), 496..499),
+                                module: None,
+                                name: "Int".to_string(),
+                                arguments: vec![],
+                            },),
+                            tipo: (),
+                        },],
+                        body: expr::UntypedExpr::PipeLine {
+                            expressions: vec1::vec1![
+                                expr::UntypedExpr::BinOp {
+                                    location: Span::new(SrcId::empty(), 519..524),
+                                    name: ast::BinOp::AddInt,
+                                    left: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 519..520),
+                                        name: "a".to_string(),
+                                    }),
+                                    right: Box::new(expr::UntypedExpr::Int {
+                                        location: Span::new(SrcId::empty(), 523..524),
+                                        value: "2".to_string(),
+                                    }),
+                                },
+                                expr::UntypedExpr::Var {
+                                    location: Span::new(SrcId::empty(), 544..551),
+                                    name: "add_one".to_string(),
+                                },
+                                expr::UntypedExpr::Var {
+                                    location: Span::new(SrcId::empty(), 571..578),
+                                    name: "add_one".to_string(),
+                                },
+                            ],
+                        },
+                        doc: None,
+                        location: Span::new(SrcId::empty(), 474..592),
+                        name: "thing".to_string(),
                         public: true,
                         return_annotation: None,
                         return_type: (),
