@@ -382,7 +382,28 @@ pub fn expr_unit_parser() -> impl Parser<Token, expr::UntypedExpr, Error = Parse
                 location: span,
                 label,
             }),
+        just(Token::Let)
+            .then(assignment_parser())
+            .map(|(_, assign)| assign),
     ))
+}
+
+fn assignment_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
+    recursive(|_r| {
+        pattern_parser()
+            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+            .then_ignore(just(Token::Equal))
+            .then(expr_parser())
+            .map_with_span(
+                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
+                    location: span,
+                    value: Box::new(value),
+                    pattern,
+                    kind: ast::AssignmentKind::Let,
+                    annotation,
+                },
+            )
+    })
 }
 
 pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
