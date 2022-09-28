@@ -259,7 +259,59 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
 }
 
 pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
-    recursive(|_r| {
+    recursive(|r| {
+        let assignment_parser = pattern_parser()
+            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+            .then_ignore(just(Token::Equal))
+            .then(r)
+            .map_with_span(
+                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
+                    location: span,
+                    value: Box::new(value),
+                    pattern,
+                    kind: ast::AssignmentKind::Let,
+                    annotation,
+                },
+            );
+
+        let expr_unit_parser = choice((
+            select! {Token::String {value} => value}.map_with_span(|value, span| {
+                expr::UntypedExpr::String {
+                    location: span,
+                    value,
+                }
+            }),
+            select! { Token::Int {value} => value}.map_with_span(|value, span| {
+                expr::UntypedExpr::Int {
+                    location: span,
+                    value,
+                }
+            }),
+            select! {
+                Token::Name { name } => name,
+                Token::UpName { name } => name,
+            }
+            .map_with_span(|name, span| expr::UntypedExpr::Var {
+                location: span,
+                name,
+            }),
+            just(Token::Todo)
+                .ignore_then(
+                    select! {Token::String {value} => value}
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                        .or_not(),
+                )
+                .map_with_span(|label, span| expr::UntypedExpr::Todo {
+                    kind: TodoKind::Keyword,
+                    location: span,
+                    label,
+                }),
+            just(Token::Let)
+                .then(assignment_parser)
+                .map(|(_, assign)| assign),
+        ))
+        .boxed();
+
         // Product
         let op = choice((
             just(Token::Star).to(BinOp::MultInt),
@@ -267,8 +319,9 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             just(Token::Percent).to(BinOp::ModInt),
         ));
 
-        let product = expr_unit_parser()
-            .then(op.then(expr_unit_parser()).repeated())
+        let product = expr_unit_parser
+            .clone()
+            .then(op.then(expr_unit_parser).repeated())
             .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
                 location: a.location().union(b.location()),
                 name: op,
@@ -346,63 +399,6 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
                 };
                 expr::UntypedExpr::PipeLine { expressions }
             })
-    })
-}
-
-pub fn expr_unit_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
-    choice((
-        select! {Token::String {value} => value}.map_with_span(|value, span| {
-            expr::UntypedExpr::String {
-                location: span,
-                value,
-            }
-        }),
-        select! { Token::Int {value} => value}.map_with_span(|value, span| {
-            expr::UntypedExpr::Int {
-                location: span,
-                value,
-            }
-        }),
-        select! {
-            Token::Name { name } => name,
-            Token::UpName { name } => name,
-        }
-        .map_with_span(|name, span| expr::UntypedExpr::Var {
-            location: span,
-            name,
-        }),
-        just(Token::Todo)
-            .ignore_then(
-                select! {Token::String {value} => value}
-                    .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                    .or_not(),
-            )
-            .map_with_span(|label, span| expr::UntypedExpr::Todo {
-                kind: TodoKind::Keyword,
-                location: span,
-                label,
-            }),
-        just(Token::Let)
-            .then(assignment_parser())
-            .map(|(_, assign)| assign),
-    ))
-}
-
-fn assignment_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
-    recursive(|_r| {
-        pattern_parser()
-            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-            .then_ignore(just(Token::Equal))
-            .then(expr_parser())
-            .map_with_span(
-                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
-                    location: span,
-                    value: Box::new(value),
-                    pattern,
-                    kind: ast::AssignmentKind::Let,
-                    annotation,
-                },
-            )
     })
 }
 
@@ -655,6 +651,15 @@ mod tests {
                 a + 2
                 |> add_one
                 |> add_one
+            }
+
+            pub fn wow(a: Int) {
+              let x =
+                a + 2
+                |> add_one
+                |> add_one
+
+              y
             }
         "#;
         let len = code.chars().count();
@@ -929,6 +934,70 @@ mod tests {
                         doc: None,
                         location: Span::new(SrcId::empty(), 474..592),
                         name: "thing".to_string(),
+                        public: true,
+                        return_annotation: None,
+                        return_type: (),
+                    },
+                    ast::UntypedDefinition::Fn {
+                        arguments: vec![ast::Arg {
+                            arg_name: ast::ArgName::Named {
+                                name: "a".to_string(),
+                                location: Span::new(SrcId::empty(), 617..618),
+                            },
+                            location: Span::new(SrcId::empty(), 617..623),
+                            annotation: Some(ast::Annotation::Constructor {
+                                location: Span::new(SrcId::empty(), 620..623),
+                                module: None,
+                                name: "Int".to_string(),
+                                arguments: vec![],
+                            },),
+                            tipo: (),
+                        },],
+                        body: expr::UntypedExpr::Sequence {
+                            location: Span::new(SrcId::empty(), 645..741),
+                            expressions: vec![
+                                expr::UntypedExpr::Assignment {
+                                    location: Span::new(SrcId::empty(), 645..724),
+                                    value: Box::new(expr::UntypedExpr::PipeLine {
+                                        expressions: vec1::vec1![
+                                            expr::UntypedExpr::BinOp {
+                                                location: Span::new(SrcId::empty(), 665..670),
+                                                name: ast::BinOp::AddInt,
+                                                left: Box::new(expr::UntypedExpr::Var {
+                                                    location: Span::new(SrcId::empty(), 665..666),
+                                                    name: "a".to_string(),
+                                                }),
+                                                right: Box::new(expr::UntypedExpr::Int {
+                                                    location: Span::new(SrcId::empty(), 669..670),
+                                                    value: "2".to_string(),
+                                                }),
+                                            },
+                                            expr::UntypedExpr::Var {
+                                                location: Span::new(SrcId::empty(), 690..697),
+                                                name: "add_one".to_string(),
+                                            },
+                                            expr::UntypedExpr::Var {
+                                                location: Span::new(SrcId::empty(), 717..724),
+                                                name: "add_one".to_string(),
+                                            },
+                                        ],
+                                    }),
+                                    pattern: ast::Pattern::Var {
+                                        location: Span::new(SrcId::empty(), 645..646),
+                                        name: "x".to_string(),
+                                    },
+                                    kind: ast::AssignmentKind::Let,
+                                    annotation: None,
+                                },
+                                expr::UntypedExpr::Var {
+                                    location: Span::new(SrcId::empty(), 740..741),
+                                    name: "y".to_string(),
+                                },
+                            ],
+                        },
+                        doc: None,
+                        location: Span::new(SrcId::empty(), 606..755),
+                        name: "wow".to_string(),
                         public: true,
                         return_annotation: None,
                         return_type: (),
