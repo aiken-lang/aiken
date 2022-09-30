@@ -28,7 +28,7 @@ fn module() {
 
             pub type Me = Option(String)
 
-            pub fn add_one(a) {
+            pub fn add_one(a) -> Int {
               a + 1
             }
 
@@ -262,22 +262,27 @@ fn module() {
                         tipo: (),
                     },],
                     body: expr::UntypedExpr::BinOp {
-                        location: Span::new(SrcId::empty(), 441..446),
+                        location: Span::new(SrcId::empty(), 448..453),
                         name: ast::BinOp::AddInt,
                         left: Box::new(expr::UntypedExpr::Var {
-                            location: Span::new(SrcId::empty(), 441..442),
+                            location: Span::new(SrcId::empty(), 448..449),
                             name: "a".to_string(),
                         }),
                         right: Box::new(expr::UntypedExpr::Int {
-                            location: Span::new(SrcId::empty(), 445..446),
+                            location: Span::new(SrcId::empty(), 452..453),
                             value: "1".to_string(),
                         }),
                     },
                     doc: None,
-                    location: Span::new(SrcId::empty(), 407..460),
+                    location: Span::new(SrcId::empty(), 407..467),
                     name: "add_one".to_string(),
                     public: true,
-                    return_annotation: None,
+                    return_annotation: Some(ast::Annotation::Constructor {
+                        location: Span::new(SrcId::empty(), 428..431),
+                        module: None,
+                        name: "Int".to_string(),
+                        arguments: vec![],
+                    },),
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
@@ -285,11 +290,11 @@ fn module() {
                         arg_name: ast::ArgName::NamedLabeled {
                             name: "a".to_string(),
                             label: "thing".to_string(),
-                            location: Span::new(SrcId::empty(), 487..494),
+                            location: Span::new(SrcId::empty(), 494..501),
                         },
-                        location: Span::new(SrcId::empty(), 487..499),
+                        location: Span::new(SrcId::empty(), 494..506),
                         annotation: Some(ast::Annotation::Constructor {
-                            location: Span::new(SrcId::empty(), 496..499),
+                            location: Span::new(SrcId::empty(), 503..506),
                             module: None,
                             name: "Int".to_string(),
                             arguments: vec![],
@@ -299,29 +304,29 @@ fn module() {
                     body: expr::UntypedExpr::PipeLine {
                         expressions: vec1::vec1![
                             expr::UntypedExpr::BinOp {
-                                location: Span::new(SrcId::empty(), 519..524),
+                                location: Span::new(SrcId::empty(), 526..531),
                                 name: ast::BinOp::AddInt,
                                 left: Box::new(expr::UntypedExpr::Var {
-                                    location: Span::new(SrcId::empty(), 519..520),
+                                    location: Span::new(SrcId::empty(), 526..527),
                                     name: "a".to_string(),
                                 }),
                                 right: Box::new(expr::UntypedExpr::Int {
-                                    location: Span::new(SrcId::empty(), 523..524),
+                                    location: Span::new(SrcId::empty(), 530..531),
                                     value: "2".to_string(),
                                 }),
                             },
                             expr::UntypedExpr::Var {
-                                location: Span::new(SrcId::empty(), 544..551),
+                                location: Span::new(SrcId::empty(), 551..558),
                                 name: "add_one".to_string(),
                             },
                             expr::UntypedExpr::Var {
-                                location: Span::new(SrcId::empty(), 571..578),
+                                location: Span::new(SrcId::empty(), 578..585),
                                 name: "add_one".to_string(),
                             },
                         ],
                     },
                     doc: None,
-                    location: Span::new(SrcId::empty(), 474..592),
+                    location: Span::new(SrcId::empty(), 481..599),
                     name: "thing".to_string(),
                     public: true,
                     return_annotation: None,
@@ -331,11 +336,11 @@ fn module() {
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
                             name: "a".to_string(),
-                            location: Span::new(SrcId::empty(), 617..618),
+                            location: Span::new(SrcId::empty(), 624..625),
                         },
-                        location: Span::new(SrcId::empty(), 617..623),
+                        location: Span::new(SrcId::empty(), 624..630),
                         annotation: Some(ast::Annotation::Constructor {
-                            location: Span::new(SrcId::empty(), 620..623),
+                            location: Span::new(SrcId::empty(), 627..630),
                             module: None,
                             name: "Int".to_string(),
                             arguments: vec![],
@@ -343,89 +348,89 @@ fn module() {
                         tipo: (),
                     },],
                     body: expr::UntypedExpr::Sequence {
-                        location: Span::new(SrcId::empty(), 641..819),
+                        location: Span::new(SrcId::empty(), 648..826),
                         expressions: vec![
                             expr::UntypedExpr::Assignment {
-                                location: Span::new(SrcId::empty(), 641..724),
+                                location: Span::new(SrcId::empty(), 648..731),
                                 value: Box::new(expr::UntypedExpr::PipeLine {
                                     expressions: vec1::vec1![
                                         expr::UntypedExpr::BinOp {
-                                            location: Span::new(SrcId::empty(), 665..670),
+                                            location: Span::new(SrcId::empty(), 672..677),
                                             name: ast::BinOp::AddInt,
                                             left: Box::new(expr::UntypedExpr::Var {
-                                                location: Span::new(SrcId::empty(), 665..666),
+                                                location: Span::new(SrcId::empty(), 672..673),
                                                 name: "a".to_string(),
                                             }),
                                             right: Box::new(expr::UntypedExpr::Int {
-                                                location: Span::new(SrcId::empty(), 669..670),
+                                                location: Span::new(SrcId::empty(), 676..677),
                                                 value: "2".to_string(),
                                             }),
                                         },
                                         expr::UntypedExpr::Var {
-                                            location: Span::new(SrcId::empty(), 690..697),
+                                            location: Span::new(SrcId::empty(), 697..704),
                                             name: "add_one".to_string(),
                                         },
                                         expr::UntypedExpr::Var {
-                                            location: Span::new(SrcId::empty(), 717..724),
+                                            location: Span::new(SrcId::empty(), 724..731),
                                             name: "add_one".to_string(),
                                         },
                                     ],
                                 }),
                                 pattern: ast::Pattern::Var {
-                                    location: Span::new(SrcId::empty(), 645..646),
+                                    location: Span::new(SrcId::empty(), 652..653),
                                     name: "x".to_string(),
                                 },
                                 kind: ast::AssignmentKind::Let,
                                 annotation: None,
                             },
                             expr::UntypedExpr::Assignment {
-                                location: Span::new(SrcId::empty(), 748..771),
+                                location: Span::new(SrcId::empty(), 755..778),
                                 value: Box::new(expr::UntypedExpr::List {
-                                    location: Span::new(SrcId::empty(), 760..771),
+                                    location: Span::new(SrcId::empty(), 767..778),
                                     elements: vec![
                                         expr::UntypedExpr::Int {
-                                            location: Span::new(SrcId::empty(), 762..763),
+                                            location: Span::new(SrcId::empty(), 769..770),
                                             value: "1".to_string(),
                                         },
                                         expr::UntypedExpr::Int {
-                                            location: Span::new(SrcId::empty(), 765..766),
+                                            location: Span::new(SrcId::empty(), 772..773),
                                             value: "2".to_string(),
                                         },
                                         expr::UntypedExpr::Var {
-                                            location: Span::new(SrcId::empty(), 768..769),
+                                            location: Span::new(SrcId::empty(), 775..776),
                                             name: "a".to_string(),
                                         },
                                     ],
                                     tail: None,
                                 }),
                                 pattern: ast::Pattern::Var {
-                                    location: Span::new(SrcId::empty(), 752..757),
+                                    location: Span::new(SrcId::empty(), 759..764),
                                     name: "thing".to_string(),
                                 },
                                 kind: ast::AssignmentKind::Let,
                                 annotation: None,
                             },
                             expr::UntypedExpr::Assignment {
-                                location: Span::new(SrcId::empty(), 787..802),
+                                location: Span::new(SrcId::empty(), 794..809),
                                 value: Box::new(expr::UntypedExpr::Var {
-                                    location: Span::new(SrcId::empty(), 797..802),
+                                    location: Span::new(SrcId::empty(), 804..809),
                                     name: "thing".to_string(),
                                 }),
                                 pattern: ast::Pattern::Var {
-                                    location: Span::new(SrcId::empty(), 791..794),
+                                    location: Span::new(SrcId::empty(), 798..801),
                                     name: "idk".to_string(),
                                 },
                                 kind: ast::AssignmentKind::Let,
                                 annotation: None,
                             },
                             expr::UntypedExpr::Var {
-                                location: Span::new(SrcId::empty(), 818..819),
+                                location: Span::new(SrcId::empty(), 825..826),
                                 name: "y".to_string(),
                             },
                         ],
                     },
                     doc: None,
-                    location: Span::new(SrcId::empty(), 606..833),
+                    location: Span::new(SrcId::empty(), 613..840),
                     name: "wow".to_string(),
                     public: true,
                     return_annotation: None,
