@@ -277,17 +277,42 @@ impl UntypedExpr {
             ..self.location()
         };
 
-        match self {
-            Self::Sequence {
-                mut expressions, ..
-            } => {
-                expressions.push(next);
+        match (self.clone(), next.clone()) {
+            (
+                Self::Sequence {
+                    expressions: mut current_expressions,
+                    ..
+                },
+                Self::Sequence {
+                    expressions: mut next_expressions,
+                    ..
+                },
+            ) => {
+                current_expressions.append(&mut next_expressions);
+
                 Self::Sequence {
                     location,
-                    expressions,
+                    expressions: current_expressions,
                 }
             }
-            _ => Self::Sequence {
+            (
+                _,
+                Self::Sequence {
+                    expressions: mut next_expressions,
+                    ..
+                },
+            ) => {
+                let mut current_expressions = vec![self];
+
+                current_expressions.append(&mut next_expressions);
+
+                Self::Sequence {
+                    location,
+                    expressions: current_expressions,
+                }
+            }
+
+            (_, _) => Self::Sequence {
                 location,
                 expressions: vec![self, next],
             },
