@@ -312,7 +312,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             .ignore_then(pattern_parser())
             .then(just(Token::Colon).ignore_then(type_parser()).or_not())
             .then_ignore(just(Token::Equal))
-            .then(r)
+            .then(r.clone())
             .map_with_span(
                 |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
                     location: span,
@@ -323,6 +323,19 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
                 },
             );
 
+        let expr_block_parser = just(Token::LeftBrace)
+            .ignore_then(r.clone().then(r.repeated()))
+            .then_ignore(just(Token::RightBrace))
+            .map_with_span(|(a, b), span| {
+                let mut expressions = vec![a];
+                expressions.extend(b);
+
+                expr::UntypedExpr::Sequence {
+                    location: span,
+                    expressions,
+                }
+            });
+
         let expr_unit_parser = choice((
             string_parser,
             int_parser,
@@ -330,6 +343,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             todo_parser,
             list_parser,
             assignment_parser,
+            expr_block_parser,
         ))
         .boxed();
 
@@ -368,7 +382,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             })
             .boxed();
 
-        // Logical
+        // Comparison
         let op = choice((
             just(Token::EqualEqual).to(BinOp::Eq),
             just(Token::NotEqual).to(BinOp::NotEq),
@@ -389,6 +403,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             })
             .boxed();
 
+        // Logical
         let op = choice((
             just(Token::AmperAmper).to(BinOp::And),
             just(Token::VbarVbar).to(BinOp::Or),
