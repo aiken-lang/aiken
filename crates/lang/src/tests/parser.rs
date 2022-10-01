@@ -50,6 +50,13 @@ fn module() {
 
               y
             }
+
+            pub fn wow2(a: Int){
+                let x = 1 + {
+                    2 + 7 * 8
+                } / 2
+                x
+            }
         "#;
     let len = code.chars().count();
 
