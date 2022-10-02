@@ -176,12 +176,20 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
         )
         .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
-        .then(expr_seq_parser().delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
+        .then(
+            expr_seq_parser()
+                .or_not()
+                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+        )
         .map_with_span(
             |((((opt_pub, name), arguments), return_annotation), body), span| {
                 ast::UntypedDefinition::Fn {
                     arguments,
-                    body,
+                    body: body.unwrap_or(expr::UntypedExpr::Todo {
+                        kind: TodoKind::EmptyFunction,
+                        location: span,
+                        label: None,
+                    }),
                     doc: None,
                     location: span,
                     name,
@@ -215,6 +223,29 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
                 name,
                 location: span,
             }),
+        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
+            name,
+            location: span,
+        }),
+    ))
+    .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+    .map_with_span(|(arg_name, annotation), span| ast::Arg {
+        location: span,
+        annotation,
+        tipo: (),
+        arg_name,
+    })
+}
+
+pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
+    // TODO: return a better error when a label is provided `UnexpectedLabel`
+    choice((
+        select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
+            ast::ArgName::Discard {
+                name,
+                location: span,
+            }
+        }),
         select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
             name,
             location: span,
@@ -310,6 +341,28 @@ pub fn expr_parser(
                 tail,
             });
 
+        let anon_fn_parser = just(Token::Fn)
+            .ignore_then(
+                anon_fn_param_parser()
+                    .separated_by(just(Token::Comma))
+                    .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+            )
+            .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
+            .then(
+                seq_r
+                    .clone()
+                    .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+            )
+            .map_with_span(
+                |((arguments, return_annotation), body), span| expr::UntypedExpr::Fn {
+                    arguments,
+                    body: Box::new(body),
+                    location: span,
+                    is_capture: false,
+                    return_annotation,
+                },
+            );
+
         let block_parser = seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
         // TODO: do guards later
@@ -393,6 +446,7 @@ pub fn expr_parser(
             var_parser,
             todo_parser,
             list_parser,
+            anon_fn_parser,
             block_parser,
             when_parser,
             let_parser,
