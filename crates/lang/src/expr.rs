@@ -227,7 +227,7 @@ pub enum UntypedExpr {
         annotation: Option<Annotation>,
     },
 
-    Case {
+    When {
         location: Span,
         subjects: Vec<Self>,
         clauses: Vec<Clause<Self, (), (), ()>>,
@@ -327,7 +327,7 @@ impl UntypedExpr {
             | Self::Var { location, .. }
             | Self::Int { location, .. }
             | Self::Todo { location, .. }
-            | Self::Case { location, .. }
+            | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }
             | Self::Float { location, .. }

@@ -52,10 +52,12 @@ fn module() {
             }
 
             pub fn wow2(a: Int){
-                let x = 1 + {
-                    2 + 7 * 8
-                } / 2
-                x
+               when a is {
+                0 -> 3
+                1 | 2 -> 5
+                3 if a == 3 -> 9
+                _ -> 4
+               }
             }
         "#;
     let len = code.chars().count();
