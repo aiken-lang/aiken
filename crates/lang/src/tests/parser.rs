@@ -75,6 +75,8 @@ fn module() {
 
                 2 |> add_one
             }
+
+            fn run() {}
         "#;
     let len = code.chars().count();
 
@@ -707,6 +709,20 @@ fn module() {
                         name: "Int".to_string(),
                         arguments: vec![],
                     },),
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![],
+                    body: expr::UntypedExpr::Todo {
+                        kind: ast::TodoKind::EmptyFunction,
+                        location: Span::new(SrcId::empty(), 1392..1403),
+                        label: None,
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 1392..1403),
+                    name: "run".to_string(),
+                    public: false,
+                    return_annotation: None,
                     return_type: (),
                 },
             ]
