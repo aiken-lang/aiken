@@ -25,6 +25,9 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just("|>").to(Token::Pipe),
         just(',').to(Token::Comma),
         just(':').to(Token::Colon),
+        just('|').to(Token::Vbar),
+        just("||").to(Token::VbarVbar),
+        just("&&").to(Token::AmperAmper),
     ));
 
     let grouping = choice((
