@@ -323,17 +323,43 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
                 },
             );
 
-        let expr_block_parser = just(Token::LeftBrace)
-            .ignore_then(r.clone().then(r.repeated()))
-            .then_ignore(just(Token::RightBrace))
-            .map_with_span(|(a, b), span| {
-                let mut expressions = vec![a];
-                expressions.extend(b);
+        let when_clause_guard_parser = just(Token::If);
 
-                expr::UntypedExpr::Sequence {
+        let when_clause_parser = pattern_parser()
+            .separated_by(just(Token::Comma))
+            .then(
+                pattern_parser()
+                    .separated_by(just(Token::Comma))
+                    .separated_by(just(Token::Vbar))
+                    .allow_leading()
+                    .or_not(),
+            )
+            .then(when_clause_guard_parser)
+            // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
+            .then_ignore(just(Token::RArrow))
+            .then(r.clone())
+            .map_with_span(
+                |(((patterns, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
                     location: span,
-                    expressions,
-                }
+                    pattern: patterns,
+                    alternative_patterns: alternative_patterns_opt.unwrap_or_default(),
+                    guard,
+                    then,
+                },
+            );
+
+        let when_parser = just(Token::When)
+            // TODO: If subject is empty we should return ParseErrorType::ExpectedExpr,
+            .ignore_then(r.clone().separated_by(just(Token::Comma)))
+            .then_ignore(just(Token::Is))
+            .then_ignore(just(Token::LeftBrace))
+            // TODO: If clauses are empty we should return ParseErrorType::NoCaseClause
+            .then(when_clause_parser.repeated())
+            .then_ignore(just(Token::RightBrace))
+            .map_with_span(|(subjects, clauses), span| expr::UntypedExpr::When {
+                location: span,
+                subjects,
+                clauses,
             });
 
         let expr_unit_parser = choice((
@@ -343,7 +369,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             todo_parser,
             list_parser,
             assignment_parser,
-            expr_block_parser,
+            when_parser,
         ))
         .boxed();
 
