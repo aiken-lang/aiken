@@ -69,6 +69,12 @@ fn module() {
                 _ -> 4
               }
             }
+
+            pub fn such() -> Int {
+                let add_one = fn (a: Int) -> Int { a + 1 }
+
+                2 |> add_one
+            }
         "#;
     let len = code.chars().count();
 
@@ -625,6 +631,82 @@ fn module() {
                     name: "wow2".to_string(),
                     public: true,
                     return_annotation: None,
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![],
+                    body: expr::UntypedExpr::Sequence {
+                        location: Span::new(SrcId::empty(), 1292..1364),
+                        expressions: vec![
+                            expr::UntypedExpr::Assignment {
+                                location: Span::new(SrcId::empty(), 1292..1334),
+                                value: Box::new(expr::UntypedExpr::Fn {
+                                    location: Span::new(SrcId::empty(), 1306..1334),
+                                    is_capture: false,
+                                    arguments: vec![ast::Arg {
+                                        arg_name: ast::ArgName::Named {
+                                            name: "a".to_string(),
+                                            location: Span::new(SrcId::empty(), 1310..1311),
+                                        },
+                                        location: Span::new(SrcId::empty(), 1310..1316),
+                                        annotation: Some(ast::Annotation::Constructor {
+                                            location: Span::new(SrcId::empty(), 1313..1316),
+                                            module: None,
+                                            name: "Int".to_string(),
+                                            arguments: vec![],
+                                        },),
+                                        tipo: (),
+                                    },],
+                                    body: Box::new(expr::UntypedExpr::BinOp {
+                                        location: Span::new(SrcId::empty(), 1327..1332),
+                                        name: ast::BinOp::AddInt,
+                                        left: Box::new(expr::UntypedExpr::Var {
+                                            location: Span::new(SrcId::empty(), 1327..1328),
+                                            name: "a".to_string(),
+                                        }),
+                                        right: Box::new(expr::UntypedExpr::Int {
+                                            location: Span::new(SrcId::empty(), 1331..1332),
+                                            value: "1".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new(SrcId::empty(), 1321..1324),
+                                        module: None,
+                                        name: "Int".to_string(),
+                                        arguments: vec![],
+                                    },),
+                                }),
+                                pattern: ast::Pattern::Var {
+                                    location: Span::new(SrcId::empty(), 1296..1303),
+                                    name: "add_one".to_string(),
+                                },
+                                kind: ast::AssignmentKind::Let,
+                                annotation: None,
+                            },
+                            expr::UntypedExpr::PipeLine {
+                                expressions: vec1::vec1![
+                                    expr::UntypedExpr::Int {
+                                        location: Span::new(SrcId::empty(), 1352..1353),
+                                        value: "2".to_string(),
+                                    },
+                                    expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1357..1364),
+                                        name: "add_one".to_string(),
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 1253..1378),
+                    name: "such".to_string(),
+                    public: true,
+                    return_annotation: Some(ast::Annotation::Constructor {
+                        location: Span::new(SrcId::empty(), 1270..1273),
+                        module: None,
+                        name: "Int".to_string(),
+                        arguments: vec![],
+                    },),
                     return_type: (),
                 },
             ]
