@@ -236,7 +236,7 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                 .ignore_then(pattern_parser())
                 .then(just(Token::Colon).ignore_then(type_parser()).or_not())
                 .then_ignore(just(Token::Equal))
-                .then(expr_parser())
+                .then(expr_parser(r.clone()))
                 .then(r.clone())
                 .map_with_span(|(((pattern, annotation), value), then_), span| {
                     expr::UntypedExpr::Try {
@@ -247,14 +247,16 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                         annotation,
                     }
                 }),
-            expr_parser()
+            expr_parser(r.clone())
                 .then(r.repeated())
                 .foldl(|current, next| current.append_in_sequence(next)),
         ))
     })
 }
 
-pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
+pub fn expr_parser(
+    seq_r: Recursive<'_, Token, expr::UntypedExpr, ParseError>,
+) -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> + '_ {
     recursive(|r| {
         let string_parser =
             select! {Token::String {value} => value}.map_with_span(|value, span| {
@@ -323,30 +325,38 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
                 },
             );
 
-        let when_clause_guard_parser = just(Token::If);
+        let block_parser = seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
+
+        // TODO: do guards later
+        // let when_clause_guard_parser = just(Token::If);
 
         let when_clause_parser = pattern_parser()
             .separated_by(just(Token::Comma))
+            .at_least(1)
             .then(
-                pattern_parser()
-                    .separated_by(just(Token::Comma))
-                    .separated_by(just(Token::Vbar))
-                    .allow_leading()
+                just(Token::Vbar)
+                    .ignore_then(
+                        pattern_parser()
+                            .separated_by(just(Token::Comma))
+                            .at_least(1),
+                    )
+                    .repeated()
                     .or_not(),
             )
-            .then(when_clause_guard_parser)
+            // TODO: do guards later
+            // .then(when_clause_guard_parser)
             // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
             .then_ignore(just(Token::RArrow))
             .then(r.clone())
-            .map_with_span(
-                |(((patterns, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
+            .map_with_span(|((patterns, alternative_patterns_opt), then), span| {
+                ast::UntypedClause {
                     location: span,
                     pattern: patterns,
                     alternative_patterns: alternative_patterns_opt.unwrap_or_default(),
-                    guard,
+                    guard: None,
                     then,
-                },
-            );
+                }
+            });
 
         let when_parser = just(Token::When)
             // TODO: If subject is empty we should return ParseErrorType::ExpectedExpr,
@@ -369,6 +379,7 @@ pub fn expr_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError
             todo_parser,
             list_parser,
             assignment_parser,
+            block_parser,
             when_parser,
         ))
         .boxed();

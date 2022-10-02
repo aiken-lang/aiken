@@ -52,12 +52,22 @@ fn module() {
             }
 
             pub fn wow2(a: Int){
-               when a is {
-                0 -> 3
-                1 | 2 -> 5
-                3 if a == 3 -> 9
+              let b = {
+                let x = 4
+                 
+                x + 5
+              }
+
+              when a, b is {
+                1, 2 -> 3
+                1 | 4, 5 -> {
+                  let amazing = 5
+                  
+                  amazing
+                }
+                3 -> 9
                 _ -> 4
-               }
+              }
             }
         "#;
     let len = code.chars().count();
@@ -441,6 +451,178 @@ fn module() {
                     doc: None,
                     location: Span::new(SrcId::empty(), 613..840),
                     name: "wow".to_string(),
+                    public: true,
+                    return_annotation: None,
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "a".to_string(),
+                            location: Span::new(SrcId::empty(), 866..867),
+                        },
+                        location: Span::new(SrcId::empty(), 866..872),
+                        annotation: Some(ast::Annotation::Constructor {
+                            location: Span::new(SrcId::empty(), 869..872),
+                            module: None,
+                            name: "Int".to_string(),
+                            arguments: vec![],
+                        },),
+                        tipo: (),
+                    },],
+                    body: expr::UntypedExpr::Sequence {
+                        location: Span::new(SrcId::empty(), 889..1225),
+                        expressions: vec![
+                            expr::UntypedExpr::Assignment {
+                                location: Span::new(SrcId::empty(), 889..980),
+                                value: Box::new(expr::UntypedExpr::Sequence {
+                                    location: Span::new(SrcId::empty(), 915..964),
+                                    expressions: vec![
+                                        expr::UntypedExpr::Assignment {
+                                            location: Span::new(SrcId::empty(), 915..924),
+                                            value: Box::new(expr::UntypedExpr::Int {
+                                                location: Span::new(SrcId::empty(), 923..924),
+                                                value: "4".to_string(),
+                                            }),
+                                            pattern: ast::Pattern::Var {
+                                                location: Span::new(SrcId::empty(), 919..920),
+                                                name: "x".to_string(),
+                                            },
+                                            kind: ast::AssignmentKind::Let,
+                                            annotation: None,
+                                        },
+                                        expr::UntypedExpr::BinOp {
+                                            location: Span::new(SrcId::empty(), 959..964),
+                                            name: ast::BinOp::AddInt,
+                                            left: Box::new(expr::UntypedExpr::Var {
+                                                location: Span::new(SrcId::empty(), 959..960),
+                                                name: "x".to_string(),
+                                            }),
+                                            right: Box::new(expr::UntypedExpr::Int {
+                                                location: Span::new(SrcId::empty(), 963..964),
+                                                value: "5".to_string(),
+                                            }),
+                                        },
+                                    ],
+                                }),
+                                pattern: ast::Pattern::Var {
+                                    location: Span::new(SrcId::empty(), 893..894),
+                                    name: "b".to_string(),
+                                },
+                                kind: ast::AssignmentKind::Let,
+                                annotation: None,
+                            },
+                            expr::UntypedExpr::When {
+                                location: Span::new(SrcId::empty(), 996..1225),
+                                subjects: vec![
+                                    expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1001..1002),
+                                        name: "a".to_string(),
+                                    },
+                                    expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1004..1005),
+                                        name: "b".to_string(),
+                                    },
+                                ],
+                                clauses: vec![
+                                    ast::Clause {
+                                        location: Span::new(SrcId::empty(), 1027..1036),
+                                        pattern: vec![
+                                            ast::Pattern::Int {
+                                                location: Span::new(SrcId::empty(), 1027..1028),
+                                                value: "1".to_string(),
+                                            },
+                                            ast::Pattern::Int {
+                                                location: Span::new(SrcId::empty(), 1030..1031),
+                                                value: "2".to_string(),
+                                            },
+                                        ],
+                                        alternative_patterns: vec![],
+                                        guard: None,
+                                        then: expr::UntypedExpr::Int {
+                                            location: Span::new(SrcId::empty(), 1035..1036),
+                                            value: "3".to_string(),
+                                        },
+                                    },
+                                    ast::Clause {
+                                        location: Span::new(SrcId::empty(), 1053..1163),
+                                        pattern: vec![ast::Pattern::Int {
+                                            location: Span::new(SrcId::empty(), 1053..1054),
+                                            value: "1".to_string(),
+                                        },],
+                                        alternative_patterns: vec![vec![
+                                            ast::Pattern::Int {
+                                                location: Span::new(SrcId::empty(), 1057..1058),
+                                                value: "4".to_string(),
+                                            },
+                                            ast::Pattern::Int {
+                                                location: Span::new(SrcId::empty(), 1060..1061),
+                                                value: "5".to_string(),
+                                            },
+                                        ],],
+                                        guard: None,
+                                        then: expr::UntypedExpr::Sequence {
+                                            location: Span::new(SrcId::empty(), 1085..1145),
+                                            expressions: vec![
+                                                expr::UntypedExpr::Assignment {
+                                                    location: Span::new(SrcId::empty(), 1085..1100),
+                                                    value: Box::new(expr::UntypedExpr::Int {
+                                                        location: Span::new(
+                                                            SrcId::empty(),
+                                                            1099..1100
+                                                        ),
+                                                        value: "5".to_string(),
+                                                    }),
+                                                    pattern: ast::Pattern::Var {
+                                                        location: Span::new(
+                                                            SrcId::empty(),
+                                                            1089..1096
+                                                        ),
+                                                        name: "amazing".to_string(),
+                                                    },
+                                                    kind: ast::AssignmentKind::Let,
+                                                    annotation: None,
+                                                },
+                                                expr::UntypedExpr::Var {
+                                                    location: Span::new(SrcId::empty(), 1138..1145),
+                                                    name: "amazing".to_string(),
+                                                },
+                                            ],
+                                        },
+                                    },
+                                    ast::Clause {
+                                        location: Span::new(SrcId::empty(), 1180..1186),
+                                        pattern: vec![ast::Pattern::Int {
+                                            location: Span::new(SrcId::empty(), 1180..1181),
+                                            value: "3".to_string(),
+                                        },],
+                                        alternative_patterns: vec![],
+                                        guard: None,
+                                        then: expr::UntypedExpr::Int {
+                                            location: Span::new(SrcId::empty(), 1185..1186),
+                                            value: "9".to_string(),
+                                        },
+                                    },
+                                    ast::Clause {
+                                        location: Span::new(SrcId::empty(), 1203..1209),
+                                        pattern: vec![ast::Pattern::Discard {
+                                            name: "_".to_string(),
+                                            location: Span::new(SrcId::empty(), 1203..1204),
+                                        },],
+                                        alternative_patterns: vec![],
+                                        guard: None,
+                                        then: expr::UntypedExpr::Int {
+                                            location: Span::new(SrcId::empty(), 1208..1209),
+                                            value: "4".to_string(),
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 854..1239),
+                    name: "wow2".to_string(),
                     public: true,
                     return_annotation: None,
                     return_type: (),
