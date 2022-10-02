@@ -81,6 +81,14 @@ fn module() {
             fn name(user: User) {
                 user.name
             }
+
+            fn calls() {
+                let x = add_one(3)
+
+                let map_add_x = list.map(_, fn (y) { x + y })
+
+                map_add_x([ 1, 2, 3 ])
+            }
         "#;
     let len = code.chars().count();
 
@@ -755,6 +763,162 @@ fn module() {
                     doc: None,
                     location: Span::new(SrcId::empty(), 1417..1478),
                     name: "name".to_string(),
+                    public: false,
+                    return_annotation: None,
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![],
+                    body: expr::UntypedExpr::Sequence {
+                        location: Span::new(SrcId::empty(), 1521..1642),
+                        expressions: vec![
+                            expr::UntypedExpr::Assignment {
+                                location: Span::new(SrcId::empty(), 1521..1539),
+                                value: Box::new(expr::UntypedExpr::Call {
+                                    location: Span::new(SrcId::empty(), 1536..1539),
+                                    fun: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1529..1536),
+                                        name: "add_one".to_string(),
+                                    }),
+                                    arguments: vec![ast::CallArg {
+                                        label: None,
+                                        location: Span::new(SrcId::empty(), 1537..1538),
+                                        value: expr::UntypedExpr::Int {
+                                            location: Span::new(SrcId::empty(), 1537..1538),
+                                            value: "3".to_string(),
+                                        },
+                                    },],
+                                }),
+                                pattern: ast::Pattern::Var {
+                                    location: Span::new(SrcId::empty(), 1525..1526),
+                                    name: "x".to_string(),
+                                },
+                                kind: ast::AssignmentKind::Let,
+                                annotation: None,
+                            },
+                            expr::UntypedExpr::Assignment {
+                                location: Span::new(SrcId::empty(), 1557..1602),
+                                value: Box::new(expr::UntypedExpr::Fn {
+                                    location: Span::new(SrcId::empty(), 1581..1602),
+                                    is_capture: true,
+                                    arguments: vec![ast::Arg {
+                                        arg_name: ast::ArgName::Named {
+                                            name: "_capture__0".to_string(),
+                                            location: Span::new(SrcId::empty(), 0..0),
+                                        },
+                                        location: Span::new(SrcId::empty(), 0..0),
+                                        annotation: None,
+                                        tipo: (),
+                                    },],
+                                    body: Box::new(expr::UntypedExpr::Call {
+                                        location: Span::new(SrcId::empty(), 1581..1602),
+                                        fun: Box::new(expr::UntypedExpr::FieldAccess {
+                                            location: Span::new(SrcId::empty(), 1573..1581),
+                                            label: "map".to_string(),
+                                            container: Box::new(expr::UntypedExpr::Var {
+                                                location: Span::new(SrcId::empty(), 1573..1577),
+                                                name: "list".to_string(),
+                                            }),
+                                        }),
+                                        arguments: vec![
+                                            ast::CallArg {
+                                                label: None,
+                                                location: Span::new(SrcId::empty(), 1582..1583),
+                                                value: expr::UntypedExpr::Var {
+                                                    location: Span::new(SrcId::empty(), 1582..1583),
+                                                    name: "_capture__0".to_string(),
+                                                },
+                                            },
+                                            ast::CallArg {
+                                                label: None,
+                                                location: Span::new(SrcId::empty(), 1585..1601),
+                                                value: expr::UntypedExpr::Fn {
+                                                    location: Span::new(SrcId::empty(), 1585..1601),
+                                                    is_capture: false,
+                                                    arguments: vec![ast::Arg {
+                                                        arg_name: ast::ArgName::Named {
+                                                            name: "y".to_string(),
+                                                            location: Span::new(
+                                                                SrcId::empty(),
+                                                                1589..1590
+                                                            ),
+                                                        },
+                                                        location: Span::new(
+                                                            SrcId::empty(),
+                                                            1589..1590
+                                                        ),
+                                                        annotation: None,
+                                                        tipo: (),
+                                                    },],
+                                                    body: Box::new(expr::UntypedExpr::BinOp {
+                                                        location: Span::new(
+                                                            SrcId::empty(),
+                                                            1594..1599
+                                                        ),
+                                                        name: ast::BinOp::AddInt,
+                                                        left: Box::new(expr::UntypedExpr::Var {
+                                                            location: Span::new(
+                                                                SrcId::empty(),
+                                                                1594..1595
+                                                            ),
+                                                            name: "x".to_string(),
+                                                        }),
+                                                        right: Box::new(expr::UntypedExpr::Var {
+                                                            location: Span::new(
+                                                                SrcId::empty(),
+                                                                1598..1599
+                                                            ),
+                                                            name: "y".to_string(),
+                                                        }),
+                                                    }),
+                                                    return_annotation: None,
+                                                },
+                                            },
+                                        ],
+                                    }),
+                                    return_annotation: None,
+                                }),
+                                pattern: ast::Pattern::Var {
+                                    location: Span::new(SrcId::empty(), 1561..1570),
+                                    name: "map_add_x".to_string(),
+                                },
+                                kind: ast::AssignmentKind::Let,
+                                annotation: None,
+                            },
+                            expr::UntypedExpr::Call {
+                                location: Span::new(SrcId::empty(), 1629..1642),
+                                fun: Box::new(expr::UntypedExpr::Var {
+                                    location: Span::new(SrcId::empty(), 1620..1629),
+                                    name: "map_add_x".to_string(),
+                                }),
+                                arguments: vec![ast::CallArg {
+                                    label: None,
+                                    location: Span::new(SrcId::empty(), 1630..1641),
+                                    value: expr::UntypedExpr::List {
+                                        location: Span::new(SrcId::empty(), 1630..1641),
+                                        elements: vec![
+                                            expr::UntypedExpr::Int {
+                                                location: Span::new(SrcId::empty(), 1632..1633),
+                                                value: "1".to_string(),
+                                            },
+                                            expr::UntypedExpr::Int {
+                                                location: Span::new(SrcId::empty(), 1635..1636),
+                                                value: "2".to_string(),
+                                            },
+                                            expr::UntypedExpr::Int {
+                                                location: Span::new(SrcId::empty(), 1638..1639),
+                                                value: "3".to_string(),
+                                            },
+                                        ],
+                                        tail: None,
+                                    },
+                                },],
+                            },
+                        ],
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 1492..1656),
+                    name: "calls".to_string(),
                     public: false,
                     return_annotation: None,
                     return_type: (),

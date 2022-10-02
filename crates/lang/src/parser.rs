@@ -2,21 +2,11 @@ use chumsky::prelude::*;
 use vec1::Vec1;
 
 use crate::{
-    ast::{self, BinOp, Span, TodoKind},
+    ast::{self, BinOp, Span, TodoKind, CAPTURE_VARIABLE},
     error::ParseError,
     expr,
     token::Token,
 };
-
-// Parsing a function call into the appropriate structure
-#[derive(Debug)]
-pub enum ParserArg {
-    Arg(Box<ast::CallArg<expr::UntypedExpr>>),
-    Hole {
-        location: Span,
-        label: Option<String>,
-    },
-}
 
 pub fn module_parser(
     kind: ast::ModuleKind,
@@ -463,6 +453,16 @@ pub fn expr_parser(
             assert_parser,
         ));
 
+        // Parsing a function call into the appropriate structure
+        #[derive(Debug)]
+        enum ParserArg {
+            Arg(Box<ast::CallArg<expr::UntypedExpr>>),
+            Hole {
+                location: Span,
+                label: Option<String>,
+            },
+        }
+
         enum Chain {
             FieldAccess(String, Span),
             RecordUpdate,
@@ -511,6 +511,55 @@ pub fn expr_parser(
                     label,
                     container: Box::new(e),
                 },
+                Chain::Call(args, span) => {
+                    let mut holes = Vec::new();
+
+                    let args = args
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, a)| match a {
+                            ParserArg::Arg(arg) => *arg,
+                            ParserArg::Hole { location, label } => {
+                                holes.push(ast::Arg {
+                                    location: Span::empty(),
+                                    annotation: None,
+                                    arg_name: ast::ArgName::Named {
+                                        name: format!("{}__{}", CAPTURE_VARIABLE, index),
+                                        location: Span::empty(),
+                                    },
+                                    tipo: (),
+                                });
+
+                                ast::CallArg {
+                                    label,
+                                    location,
+                                    value: expr::UntypedExpr::Var {
+                                        location,
+                                        name: format!("{}__{}", CAPTURE_VARIABLE, index),
+                                    },
+                                }
+                            }
+                        })
+                        .collect();
+
+                    let call = expr::UntypedExpr::Call {
+                        location: span,
+                        fun: Box::new(e),
+                        arguments: args,
+                    };
+
+                    if holes.is_empty() {
+                        call
+                    } else {
+                        expr::UntypedExpr::Fn {
+                            location: call.location(),
+                            is_capture: true,
+                            arguments: holes,
+                            body: Box::new(call),
+                            return_annotation: None,
+                        }
+                    }
+                }
                 _ => todo!(),
             });
 
