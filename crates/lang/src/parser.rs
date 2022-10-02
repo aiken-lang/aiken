@@ -310,21 +310,6 @@ pub fn expr_parser(
                 tail,
             });
 
-        let assignment_parser = just(Token::Let)
-            .ignore_then(pattern_parser())
-            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-            .then_ignore(just(Token::Equal))
-            .then(r.clone())
-            .map_with_span(
-                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
-                    location: span,
-                    value: Box::new(value),
-                    pattern,
-                    kind: ast::AssignmentKind::Let,
-                    annotation,
-                },
-            );
-
         let block_parser = seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
         // TODO: do guards later
@@ -372,17 +357,60 @@ pub fn expr_parser(
                 clauses,
             });
 
+        let let_parser = just(Token::Let)
+            .ignore_then(pattern_parser())
+            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+            .then_ignore(just(Token::Equal))
+            .then(r.clone())
+            .map_with_span(
+                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
+                    location: span,
+                    value: Box::new(value),
+                    pattern,
+                    kind: ast::AssignmentKind::Let,
+                    annotation,
+                },
+            );
+
+        let assert_parser = just(Token::Assert)
+            .ignore_then(pattern_parser())
+            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+            .then_ignore(just(Token::Equal))
+            .then(r.clone())
+            .map_with_span(
+                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
+                    location: span,
+                    value: Box::new(value),
+                    pattern,
+                    kind: ast::AssignmentKind::Assert,
+                    annotation,
+                },
+            );
+
         let expr_unit_parser = choice((
             string_parser,
             int_parser,
             var_parser,
             todo_parser,
             list_parser,
-            assignment_parser,
             block_parser,
             when_parser,
-        ))
-        .boxed();
+            let_parser,
+            assert_parser,
+        ));
+
+        let op = just(Token::Bang);
+
+        let unary = op
+            .ignored()
+            .map_with_span(|_, span| span)
+            .repeated()
+            .then(expr_unit_parser)
+            .foldr(|span, value| expr::UntypedExpr::Negate {
+                location: span.union(value.location()),
+                value: Box::new(value),
+            })
+            .boxed();
 
         // Product
         let op = choice((
@@ -391,9 +419,9 @@ pub fn expr_parser(
             just(Token::Percent).to(BinOp::ModInt),
         ));
 
-        let product = expr_unit_parser
+        let product = unary
             .clone()
-            .then(op.then(expr_unit_parser).repeated())
+            .then(op.then(unary).repeated())
             .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
                 location: a.location().union(b.location()),
                 name: op,
