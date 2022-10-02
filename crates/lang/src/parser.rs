@@ -2,11 +2,21 @@ use chumsky::prelude::*;
 use vec1::Vec1;
 
 use crate::{
-    ast::{self, BinOp, TodoKind},
+    ast::{self, BinOp, Span, TodoKind},
     error::ParseError,
     expr,
     token::Token,
 };
+
+// Parsing a function call into the appropriate structure
+#[derive(Debug)]
+pub enum ParserArg {
+    Arg(Box<ast::CallArg<expr::UntypedExpr>>),
+    Hole {
+        location: Span,
+        label: Option<String>,
+    },
+}
 
 pub fn module_parser(
     kind: ast::ModuleKind,
@@ -453,13 +463,65 @@ pub fn expr_parser(
             assert_parser,
         ));
 
+        enum Chain {
+            FieldAccess(String, Span),
+            RecordUpdate,
+            Call(Vec<ParserArg>, Span),
+        }
+
+        let field_access_parser = just(Token::Dot)
+            .ignore_then(select! {
+                Token::Name { name } => name,
+                Token::UpName { name } => name
+            })
+            .map_with_span(Chain::FieldAccess);
+
+        let call_parser = choice((
+            select! { Token::Name { name } => name }
+                .then_ignore(just(Token::Colon))
+                .or_not()
+                .then(r.clone())
+                .map_with_span(|(label, value), span| {
+                    ParserArg::Arg(Box::new(ast::CallArg {
+                        label,
+                        location: span,
+                        value,
+                    }))
+                }),
+            select! { Token::Name { name } => name }
+                .then_ignore(just(Token::Colon))
+                .or_not()
+                .then_ignore(select! {Token::DiscardName {name} => name })
+                .map_with_span(|label, span| ParserArg::Hole {
+                    location: span,
+                    label,
+                }),
+        ))
+        .separated_by(just(Token::Comma))
+        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+        .map_with_span(Chain::Call);
+
+        let chain = choice((field_access_parser, call_parser));
+
+        let chained = expr_unit_parser
+            .then(chain.repeated())
+            .foldl(|e, chain| match chain {
+                Chain::FieldAccess(label, span) => expr::UntypedExpr::FieldAccess {
+                    location: e.location().union(span),
+                    label,
+                    container: Box::new(e),
+                },
+                _ => todo!(),
+            });
+
+        // Negate
         let op = just(Token::Bang);
 
         let unary = op
             .ignored()
             .map_with_span(|_, span| span)
             .repeated()
-            .then(expr_unit_parser)
+            .then(chained)
             .foldr(|span, value| expr::UntypedExpr::Negate {
                 location: span.union(value.location()),
                 value: Box::new(value),

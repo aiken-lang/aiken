@@ -77,6 +77,10 @@ fn module() {
             }
 
             fn run() {}
+
+            fn name(user: User) {
+                user.name
+            }
         "#;
     let len = code.chars().count();
 
@@ -721,6 +725,36 @@ fn module() {
                     doc: None,
                     location: Span::new(SrcId::empty(), 1392..1403),
                     name: "run".to_string(),
+                    public: false,
+                    return_annotation: None,
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "user".to_string(),
+                            location: Span::new(SrcId::empty(), 1425..1429),
+                        },
+                        location: Span::new(SrcId::empty(), 1425..1435),
+                        annotation: Some(ast::Annotation::Constructor {
+                            location: Span::new(SrcId::empty(), 1431..1435),
+                            module: None,
+                            name: "User".to_string(),
+                            arguments: vec![],
+                        },),
+                        tipo: (),
+                    },],
+                    body: expr::UntypedExpr::FieldAccess {
+                        location: Span::new(SrcId::empty(), 1455..1464),
+                        label: "name".to_string(),
+                        container: Box::new(expr::UntypedExpr::Var {
+                            location: Span::new(SrcId::empty(), 1455..1459),
+                            name: "user".to_string(),
+                        }),
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 1417..1478),
+                    name: "name".to_string(),
                     public: false,
                     return_annotation: None,
                     return_type: (),
