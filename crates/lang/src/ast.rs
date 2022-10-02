@@ -7,6 +7,8 @@ use crate::{
     tipo::{self, PatternConstructor, Type, ValueConstructor},
 };
 
+pub const CAPTURE_VARIABLE: &str = "_capture";
+
 pub type TypedModule = Module<tipo::Module, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
@@ -465,7 +467,6 @@ pub enum TodoKind {
 pub struct SrcId(Intern<Vec<String>>);
 
 impl SrcId {
-    #[cfg(test)]
     pub fn empty() -> Self {
         SrcId(Intern::new(Vec::new()))
     }
@@ -479,7 +480,6 @@ pub struct Span {
 }
 
 impl Span {
-    #[cfg(test)]
     pub fn empty() -> Self {
         use chumsky::Span;
 
