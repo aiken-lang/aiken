@@ -447,7 +447,7 @@ pub struct TypedRecordUpdateArg {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UntypedRecordUpdateArg {
     pub label: String,
-    // pub location: SrcSpan,
+    pub location: Span,
     pub value: UntypedExpr,
 }
 
