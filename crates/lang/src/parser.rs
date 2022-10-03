@@ -467,9 +467,12 @@ pub fn expr_parser(
         }
 
         enum Chain {
-            FieldAccess(String, Span),
-            RecordUpdate,
             Call(Vec<ParserArg>, Span),
+            FieldAccess(String, Span),
+            RecordUpdate(
+                Box<(expr::UntypedExpr, Vec<ast::UntypedRecordUpdateArg>)>,
+                Span,
+            ),
         }
 
         let field_access_parser = just(Token::Dot)
@@ -478,6 +481,29 @@ pub fn expr_parser(
                 Token::UpName { name } => name
             })
             .map_with_span(Chain::FieldAccess);
+
+        let record_update_parser = just(Token::DotDot)
+            .ignore_then(r.clone())
+            .then(
+                just(Token::Comma)
+                    .ignore_then(
+                        select! { Token::Name {name} => name }
+                            .then_ignore(just(Token::Colon))
+                            .then(r.clone())
+                            .map_with_span(|(label, value), span| ast::UntypedRecordUpdateArg {
+                                label,
+                                value,
+                                location: span,
+                            })
+                            .separated_by(just(Token::Comma))
+                            .allow_trailing(),
+                    )
+                    .or_not(),
+            )
+            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
+            .map_with_span(|(spread, args_opt), span| {
+                Chain::RecordUpdate(Box::new((spread, args_opt.unwrap_or_default())), span)
+            });
 
         let call_parser = choice((
             select! { Token::Name { name } => name }
@@ -504,16 +530,11 @@ pub fn expr_parser(
         .delimited_by(just(Token::LeftParen), just(Token::RightParen))
         .map_with_span(Chain::Call);
 
-        let chain = choice((field_access_parser, call_parser));
+        let chain = choice((field_access_parser, record_update_parser, call_parser));
 
         let chained = expr_unit_parser
             .then(chain.repeated())
             .foldl(|e, chain| match chain {
-                Chain::FieldAccess(label, span) => expr::UntypedExpr::FieldAccess {
-                    location: e.location().union(span),
-                    label,
-                    container: Box::new(e),
-                },
                 Chain::Call(args, span) => {
                     let mut holes = Vec::new();
 
@@ -563,7 +584,30 @@ pub fn expr_parser(
                         }
                     }
                 }
-                _ => todo!(),
+
+                Chain::FieldAccess(label, span) => expr::UntypedExpr::FieldAccess {
+                    location: e.location().union(span),
+                    label,
+                    container: Box::new(e),
+                },
+
+                Chain::RecordUpdate(data, span) => {
+                    let (spread, arguments) = *data;
+
+                    let location = span.union(spread.location());
+
+                    let spread = ast::RecordUpdateSpread {
+                        base: Box::new(spread),
+                        location,
+                    };
+
+                    expr::UntypedExpr::RecordUpdate {
+                        location: e.location().union(span),
+                        constructor: Box::new(e),
+                        spread,
+                        arguments,
+                    }
+                }
             });
 
         // Negate

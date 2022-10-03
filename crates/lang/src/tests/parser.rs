@@ -89,6 +89,10 @@ fn module() {
 
                 map_add_x([ 1, 2, 3 ])
             }
+
+            fn update_name(user: User, name: String) -> User {
+                User { ..user, name: "Aiken", }
+            }
         "#;
     let len = code.chars().count();
 
@@ -921,6 +925,71 @@ fn module() {
                     name: "calls".to_string(),
                     public: false,
                     return_annotation: None,
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![
+                        ast::Arg {
+                            arg_name: ast::ArgName::Named {
+                                name: "user".to_string(),
+                                location: Span::new(SrcId::empty(), 1685..1689),
+                            },
+                            location: Span::new(SrcId::empty(), 1685..1695),
+                            annotation: Some(ast::Annotation::Constructor {
+                                location: Span::new(SrcId::empty(), 1691..1695),
+                                module: None,
+                                name: "User".to_string(),
+                                arguments: vec![],
+                            },),
+                            tipo: (),
+                        },
+                        ast::Arg {
+                            arg_name: ast::ArgName::Named {
+                                name: "name".to_string(),
+                                location: Span::new(SrcId::empty(), 1697..1701),
+                            },
+                            location: Span::new(SrcId::empty(), 1697..1709),
+                            annotation: Some(ast::Annotation::Constructor {
+                                location: Span::new(SrcId::empty(), 1703..1709),
+                                module: None,
+                                name: "String".to_string(),
+                                arguments: vec![],
+                            },),
+                            tipo: (),
+                        },
+                    ],
+                    body: expr::UntypedExpr::RecordUpdate {
+                        location: Span::new(SrcId::empty(), 1737..1768),
+                        constructor: Box::new(expr::UntypedExpr::Var {
+                            location: Span::new(SrcId::empty(), 1737..1741),
+                            name: "User".to_string(),
+                        }),
+                        spread: ast::RecordUpdateSpread {
+                            base: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new(SrcId::empty(), 1746..1750),
+                                name: "user".to_string(),
+                            }),
+                            location: Span::new(SrcId::empty(), 1742..1768),
+                        },
+                        arguments: vec![ast::UntypedRecordUpdateArg {
+                            label: "name".to_string(),
+                            location: Span::new(SrcId::empty(), 1752..1765),
+                            value: expr::UntypedExpr::String {
+                                location: Span::new(SrcId::empty(), 1758..1765),
+                                value: "Aiken".to_string(),
+                            },
+                        },],
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 1670..1782),
+                    name: "update_name".to_string(),
+                    public: false,
+                    return_annotation: Some(ast::Annotation::Constructor {
+                        location: Span::new(SrcId::empty(), 1714..1718),
+                        module: None,
+                        name: "User".to_string(),
+                        arguments: vec![],
+                    },),
                     return_type: (),
                 },
             ]
