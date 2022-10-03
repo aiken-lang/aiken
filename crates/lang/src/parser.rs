@@ -326,13 +326,16 @@ pub fn expr_parser(
             });
 
         let list_parser = just(Token::LeftSquare)
-            .ignore_then(r.clone().separated_by(just(Token::Comma)).allow_trailing())
-            .then(
-                just(Token::DotDot)
-                    .ignore_then(r.clone())
-                    .map(Box::new)
-                    .or_not(),
-            )
+            .ignore_then(r.clone().separated_by(just(Token::Comma)))
+            .then(choice((
+                just(Token::Comma).ignore_then(
+                    just(Token::DotDot)
+                        .ignore_then(r.clone())
+                        .map(Box::new)
+                        .or_not(),
+                ),
+                just(Token::Comma).ignored().or_not().map(|_| None),
+            )))
             .then_ignore(just(Token::RightSquare))
             // TODO: check if tail.is_some and elements.is_empty then return ListSpreadWithoutElements error
             .map_with_span(|(elements, tail), span| expr::UntypedExpr::List {
