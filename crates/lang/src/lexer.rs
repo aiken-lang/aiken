@@ -8,7 +8,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
     let op = choice((
         just("==").to(Token::EqualEqual),
         just('=').to(Token::Equal),
-        just("..").to(Token::Dot),
+        just("..").to(Token::DotDot),
         just('.').to(Token::Dot),
         just("!=").to(Token::NotEqual),
         just('!').to(Token::Bang),
