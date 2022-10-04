@@ -9,6 +9,11 @@ use clap::{Parser, Subcommand};
 pub enum Args {
     /// Build an aiken project
     Build,
+    /// Check a file or project
+    Check {
+        /// Specific aiken file to check
+        input: Option<PathBuf>,
+    },
     /// Start a development server
     Dev,
     /// Create a new aiken project

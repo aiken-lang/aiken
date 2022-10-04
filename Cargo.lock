@@ -26,6 +26,7 @@ dependencies = [
 name = "aiken"
 version = "0.0.18"
 dependencies = [
+ "aiken-lang",
  "anyhow",
  "clap",
  "hex",
