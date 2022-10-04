@@ -2,11 +2,25 @@ use chumsky::prelude::*;
 use vec1::Vec1;
 
 use crate::{
-    ast::{self, BinOp, Span, TodoKind, CAPTURE_VARIABLE},
+    ast::{self, BinOp, Span, SrcId, TodoKind, CAPTURE_VARIABLE},
     error::ParseError,
-    expr,
+    expr, lexer,
     token::Token,
 };
+
+pub fn script(src: &str) -> Result<ast::UntypedModule, Vec<ParseError>> {
+    let len = src.chars().count();
+
+    let span = |i| Span::new(SrcId::empty(), i..i + 1);
+
+    let tokens = lexer::lexer().parse(chumsky::Stream::from_iter(
+        span(len),
+        src.chars().enumerate().map(|(i, c)| (c, span(i))),
+    ))?;
+
+    module_parser(ast::ModuleKind::Script)
+        .parse(chumsky::Stream::from_iter(span(len), tokens.into_iter()))
+}
 
 pub fn module_parser(
     kind: ast::ModuleKind,
@@ -86,6 +100,7 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
             location: span,
         })
         .separated_by(just(Token::Comma))
+        .allow_trailing()
         .delimited_by(just(Token::LeftParen), just(Token::RightParen));
 
     let constructors = select! {Token::UpName { name } => name}
@@ -828,6 +843,7 @@ pub fn labeled_constructor_type_args(
             location: span,
         })
         .separated_by(just(Token::Comma))
+        .allow_trailing()
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
 }
 

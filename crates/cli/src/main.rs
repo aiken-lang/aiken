@@ -33,6 +33,21 @@ fn main() -> anyhow::Result<()> {
             todo!()
         }
 
+        Args::Check { input } => {
+            if let Some(input) = input {
+                let src = fs::read_to_string(&input)?;
+
+                match aiken_lang::parser::script(&src) {
+                    Ok(_) => (),
+                    Err(errs) => {
+                        for err in errs {
+                            eprintln!("{:#?}", err);
+                        }
+                    }
+                }
+            }
+        }
+
         Args::Dev => {
             // launch a development server
             // this should allow people to test
