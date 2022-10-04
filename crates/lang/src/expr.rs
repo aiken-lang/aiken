@@ -4,8 +4,8 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, Pattern, RecordUpdateSpread, Span,
-        TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
+        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, IfBranch, Pattern,
+        RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
     },
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
@@ -102,6 +102,13 @@ pub enum TypedExpr {
         tipo: Arc<Type>,
         subjects: Vec<Self>,
         clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>, String>>,
+    },
+
+    If {
+        location: Span,
+        branches: Vec1<IfBranch<Self>>,
+        final_else: Box<Self>,
+        tipo: Arc<Type>,
     },
 
     RecordAccess {
@@ -233,6 +240,12 @@ pub enum UntypedExpr {
         clauses: Vec<Clause<Self, (), (), ()>>,
     },
 
+    If {
+        location: Span,
+        branches: Vec1<IfBranch<Self>>,
+        final_else: Box<Self>,
+    },
+
     FieldAccess {
         location: Span,
         label: String,
@@ -338,7 +351,8 @@ impl UntypedExpr {
             | Self::TupleIndex { location, .. }
             | Self::FieldAccess { location, .. }
             | Self::RecordUpdate { location, .. }
-            | Self::Negate { location, .. } => *location,
+            | Self::Negate { location, .. }
+            | Self::If { location, .. } => *location,
             Self::Sequence {
                 location,
                 expressions,

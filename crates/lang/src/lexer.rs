@@ -25,8 +25,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just("|>").to(Token::Pipe),
         just(',').to(Token::Comma),
         just(':').to(Token::Colon),
-        just('|').to(Token::Vbar),
         just("||").to(Token::VbarVbar),
+        just('|').to(Token::Vbar),
         just("&&").to(Token::AmperAmper),
     ));
 
@@ -63,6 +63,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "const" => Token::Const,
         "fn" => Token::Fn,
         "if" => Token::If,
+        "else" => Token::Else,
         "is" => Token::Is,
         "let" => Token::Let,
         "opaque" => Token::Opaque,

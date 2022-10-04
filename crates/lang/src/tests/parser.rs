@@ -93,6 +93,18 @@ fn module() {
             fn update_name(user: User, name: String) -> User {
                 User { ..user, name: "Aiken", }
             }
+
+            fn ifs() {
+                if True {
+                    1 + 1
+                } else if a < 4 {
+                    5
+                } else if a || b {
+                    6
+                } else {
+                    3
+                }
+            }
         "#;
     let len = code.chars().count();
 
@@ -990,6 +1002,81 @@ fn module() {
                         name: "User".to_string(),
                         arguments: vec![],
                     },),
+                    return_type: (),
+                },
+                ast::UntypedDefinition::Fn {
+                    arguments: vec![],
+                    body: expr::UntypedExpr::If {
+                        location: Span::new(SrcId::empty(), 1823..2036),
+                        branches: vec1::vec1![
+                            ast::IfBranch {
+                                condition: expr::UntypedExpr::Var {
+                                    location: Span::new(SrcId::empty(), 1826..1830),
+                                    name: "True".to_string(),
+                                },
+                                body: expr::UntypedExpr::BinOp {
+                                    location: Span::new(SrcId::empty(), 1853..1858),
+                                    name: ast::BinOp::AddInt,
+                                    left: Box::new(expr::UntypedExpr::Int {
+                                        location: Span::new(SrcId::empty(), 1853..1854),
+                                        value: "1".to_string(),
+                                    }),
+                                    right: Box::new(expr::UntypedExpr::Int {
+                                        location: Span::new(SrcId::empty(), 1857..1858),
+                                        value: "1".to_string(),
+                                    }),
+                                },
+                                location: Span::new(SrcId::empty(), 1826..1876),
+                            },
+                            ast::IfBranch {
+                                condition: expr::UntypedExpr::BinOp {
+                                    location: Span::new(SrcId::empty(), 1885..1890),
+                                    name: ast::BinOp::LtInt,
+                                    left: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1885..1886),
+                                        name: "a".to_string(),
+                                    }),
+                                    right: Box::new(expr::UntypedExpr::Int {
+                                        location: Span::new(SrcId::empty(), 1889..1890),
+                                        value: "4".to_string(),
+                                    }),
+                                },
+                                body: expr::UntypedExpr::Int {
+                                    location: Span::new(SrcId::empty(), 1913..1914),
+                                    value: "5".to_string(),
+                                },
+                                location: Span::new(SrcId::empty(), 1885..1932),
+                            },
+                            ast::IfBranch {
+                                condition: expr::UntypedExpr::BinOp {
+                                    location: Span::new(SrcId::empty(), 1941..1947),
+                                    name: ast::BinOp::Or,
+                                    left: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1941..1942),
+                                        name: "a".to_string(),
+                                    }),
+                                    right: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new(SrcId::empty(), 1946..1947),
+                                        name: "b".to_string(),
+                                    }),
+                                },
+                                body: expr::UntypedExpr::Int {
+                                    location: Span::new(SrcId::empty(), 1970..1971),
+                                    value: "6".to_string(),
+                                },
+                                location: Span::new(SrcId::empty(), 1941..1989),
+                            },
+                        ],
+                        final_else: Box::new(expr::UntypedExpr::Int {
+                            location: Span::new(SrcId::empty(), 2017..2018),
+                            value: "3".to_string(),
+                        }),
+                    },
+                    doc: None,
+                    location: Span::new(SrcId::empty(), 1796..2050),
+                    name: "ifs".to_string(),
+                    public: false,
+                    return_annotation: None,
                     return_type: (),
                 },
             ]
