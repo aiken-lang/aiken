@@ -437,6 +437,16 @@ pub enum ClauseGuard<Type, RecordTag> {
     Constant(Constant<Type, RecordTag>),
 }
 
+pub type TypedIfBranch = IfBranch<TypedExpr>;
+pub type UntypedIfBranch = IfBranch<UntypedExpr>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IfBranch<Expr> {
+    pub condition: Expr,
+    pub body: Expr,
+    pub location: Span,
+}
+
 pub struct TypedRecordUpdateArg {
     pub label: String,
     pub location: Span,

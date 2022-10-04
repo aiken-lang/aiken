@@ -443,6 +443,40 @@ pub fn expr_parser(
                 },
             );
 
+        let if_parser = just(Token::If)
+            .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
+                |(condition, body), span| ast::IfBranch {
+                    condition,
+                    body,
+                    location: span,
+                },
+            ))
+            .then(
+                just(Token::Else)
+                    .ignore_then(just(Token::If))
+                    .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
+                        |(condition, body), span| ast::IfBranch {
+                            condition,
+                            body,
+                            location: span,
+                        },
+                    ))
+                    .repeated(),
+            )
+            .then_ignore(just(Token::Else))
+            .then(block_parser.clone())
+            .map_with_span(|((first, alternative_branches), final_else), span| {
+                let mut branches = vec1::vec1![first];
+
+                branches.extend(alternative_branches);
+
+                expr::UntypedExpr::If {
+                    location: span,
+                    branches,
+                    final_else: Box::new(final_else),
+                }
+            });
+
         let expr_unit_parser = choice((
             string_parser,
             int_parser,
@@ -454,6 +488,7 @@ pub fn expr_parser(
             when_parser,
             let_parser,
             assert_parser,
+            if_parser,
         ));
 
         // Parsing a function call into the appropriate structure
