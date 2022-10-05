@@ -64,7 +64,7 @@ is not necessariy the implementation order or full scope.
 - [x] compile plutus core into it's on chain encoding
 - [x] reverse the on chain encoding into plutus core
 - [x] Plutus Core interpreter
-- [ ] create a higher level syntax with inspiration from
+- [x] create a higher level syntax with inspiration from
   - JS
   - ReasonML
   - Elm
