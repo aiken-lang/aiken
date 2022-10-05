@@ -14,7 +14,6 @@ pub type UntypedModule = Module<(), UntypedDefinition>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ModuleKind {
-    Contract,
     Lib,
     Script,
 }

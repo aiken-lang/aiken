@@ -1,10 +1,12 @@
-use std::{fmt::Write as _, fs};
+use std::{env, fmt::Write as _, fs};
 
+use config::Config;
 use pallas_primitives::{
     babbage::{TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
+use project::Project;
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
@@ -16,6 +18,9 @@ use uplc::{
 };
 
 mod args;
+mod config;
+mod error;
+mod project;
 
 use args::{Args, TxCommand, UplcCommand};
 
@@ -33,19 +38,18 @@ fn main() -> anyhow::Result<()> {
             todo!()
         }
 
-        Args::Check { input } => {
-            if let Some(input) = input {
-                let src = fs::read_to_string(&input)?;
+        Args::Check { directory } => {
+            let project_path = if let Some(d) = directory {
+                d
+            } else {
+                env::current_dir()?
+            };
 
-                match aiken_lang::parser::script(&src) {
-                    Ok(_) => (),
-                    Err(errs) => {
-                        for err in errs {
-                            eprintln!("{:#?}", err);
-                        }
-                    }
-                }
-            }
+            let config = Config::load(project_path.clone())?;
+
+            let mut project = Project::new(config, project_path);
+
+            project.build()?;
         }
 
         Args::Dev => {

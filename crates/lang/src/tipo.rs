@@ -11,7 +11,7 @@ pub enum Type {
     /// custom type such as `Person`. The type can take other types as
     /// arguments (aka "generics" or "parametric polymorphism").
     ///
-    /// If the type is defined in the Gleam prelude the `module` field will be
+    /// If the type is defined in the Aiken prelude the `module` field will be
     /// empty, otherwise it will contain the name of the module that
     /// defines the type.
     ///
@@ -44,7 +44,7 @@ pub enum Type {
 pub enum TypeVar {
     /// Unbound is an unbound variable. It is one specific type but we don't
     /// know what yet in the inference process. It has a unique id which can be used to
-    /// identify if two unbound variable Rust values are the same Gleam type variable
+    /// identify if two unbound variable Rust values are the same Aiken type variable
     /// instance or not.
     ///
     Unbound { id: u64 },
@@ -57,7 +57,7 @@ pub enum TypeVar {
     ///
     /// # Example
     ///
-    /// ```gleam
+    /// ```aiken
     /// type Cat(a) {
     ///   Cat(name: a)
     /// }
