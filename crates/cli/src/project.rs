@@ -127,8 +127,8 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
 
     re.is_match(
         path.strip_prefix(dir)
-            .expect("is_gleam_path(): strip_prefix")
+            .expect("is_aiken_path(): strip_prefix")
             .to_str()
-            .expect("is_gleam_path(): to_str"),
+            .expect("is_aiken_path(): to_str"),
     )
 }
