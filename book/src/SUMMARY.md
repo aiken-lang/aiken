@@ -1,3 +1,8 @@
 # Summary
 
-- [Chapter 1](./chapter_1.md)
+- [Intro](./introduction.md)
+- [Components](./components.md)
+- [Untyped Plutus Core](./uplc.md)
+- [Guides](./guides.md)
+  - [Transactions](./guides/transactions.md)
+    - [Fee estimation without a node](./guides/transactions/fee_estimation.md)
