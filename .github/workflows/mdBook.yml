@@ -1,10 +1,9 @@
-name: github pages
+name: mdBook
 
 on:
   push:
     branches:
       - main
-      - book
   pull_request:
 
 jobs:
@@ -18,13 +17,13 @@ jobs:
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v1
         with:
-          mdbook-version: 'latest'
+          mdbook-version: "latest"
 
-      - run: cd book && mdbook build
+      - run: mdbook build book
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./book
+          publish_dir: ./book/book
