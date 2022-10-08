@@ -1,0 +1,56 @@
+# Contributing
+
+## What & How Can You Contribute?
+
+1. **Feedback**
+
+   Contributions in the form of feedback and issues are very much welcome. Whether it may be a suggestion, a bug report, or maybe some questions that you have. It helps in improving Aiken in over time and these are the best kind of contributions to start with.
+
+   Do not hesitate to add _thumbs up :+1:_ on open issues you support to show your interest.
+
+2. **Documentation**
+
+   Any updates, typo fixes, or expansion of the documention is more than welcome. At the moment,
+   we are using [mdBook](https://github.com/rust-lang/mdBook) to run https://txpipe.github.io/aiken.
+   That can be considered user level documentation but that is not strict. There is also doc comments in the Rust code, which can be considered strictly developer level documentation.
+
+3. **Code**
+
+   **Getting started steps:**
+
+   - `git clone git@github.com:txpipe/aiken.git`
+   - `cd aiken`
+   - `cargo test`
+   - `cargo run -- help`
+
+   ***
+
+   If everything runs fine without any errors you're good to go. If you do run into any errors please come chat with us on [Discord (#aiken)](https://discord.gg/Vc3x8N9nz2)
+
+   Coding standards are enforced using CI. Make sure to configure your editor to pick them up. As an example, if you're using VSCode, please use the [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) extension. Then turn on format on save and map `check` to `clippy` in the VSCode settings. Any clippy or formatting errors will cause CI to fail.
+
+   Pull requests are welcome, but we do recommend you open an issue to bring any idea to discussion first! Especially if the pull request will end up very large, any significant changes should be discussed up front with the maintainers. This avoids awkward situations where someone puts in a bunch of work to ultimately have the pull request closed due to a potential variety of unforeseen reasons.
+
+4. **Donation**
+
+   Want to give some financial support? Have a look at the [sponsors page](https://github.com/sponsors/rvcas/) for more details.
+
+## About Issues
+
+### :bug: How To Report A Bug
+
+Open a [Bug Issue](https://github.com/txpipe/aiken/issues/new?template=bug.md).
+
+### :bulb: How To Propose An Idea
+
+Open a [Proposal Issue](https://github.com/txpipe/aiken/issues/new?template=idea.md).
+
+### :question: How To Ask a Question
+
+Open a [Q&A Discussion](https://github.com/txpipe/aiken/discussions/new?category=q-a).
+
+> Make sure to mark your question as _Answered_ once resolved!
+
+## Need Help Getting Started?
+
+Should you be unsure about where to start, feel free to come and chat on [Discord (#aiken)](https://discord.gg/Vc3x8N9nz2).
