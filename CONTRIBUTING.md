@@ -31,7 +31,15 @@
 
    Pull requests are welcome, but we do recommend you open an issue to bring any idea to discussion first! Especially if the pull request will end up very large, any significant changes should be discussed up front with the maintainers. This avoids awkward situations where someone puts in a bunch of work to ultimately have the pull request closed due to a potential variety of unforeseen reasons.
 
-4. **Donation**
+   CI runs the following commands. To save time, it's good to run these on your local machine before pushing to origin.
+   ```
+   cargo build --workspace
+   cargo test --workspace
+   cargo fmt --all -- --check
+   cargo clippy --all-targets --all-features -- -D warnings
+   ```
+
+5. **Donation**
 
    Want to give some financial support? Have a look at the [sponsors page](https://github.com/sponsors/rvcas/) for more details.
 
