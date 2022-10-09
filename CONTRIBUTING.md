@@ -16,7 +16,7 @@
 
 3. **Code**
 
-   **Getting started steps:**
+   **Getting started**
 
    - `git clone git@github.com:txpipe/aiken.git`
    - `cd aiken`
@@ -32,6 +32,7 @@
    Pull requests are welcome, but we do recommend you open an issue to bring any idea to discussion first! Especially if the pull request will end up very large, any significant changes should be discussed up front with the maintainers. This avoids awkward situations where someone puts in a bunch of work to ultimately have the pull request closed due to a potential variety of unforeseen reasons.
 
    CI runs the following commands. To save time, it's good to run these on your local machine before pushing to origin.
+
    ```
    cargo build --workspace
    cargo test --workspace
@@ -39,7 +40,32 @@
    cargo clippy --all-targets --all-features -- -D warnings
    ```
 
-5. **Donation**
+   **Changelog**
+
+   Please add an entry into [CHANGLOG.md](./CHANGELOG.md) when submitting changes. New entries should go into the `[next] YYYY-MM-DD` section. This let's us keep track of unreleased changes
+   for use in release notes.
+
+   Once a release is ready `[next] YYYY-MM-DD` gets replaced with a verion number and a the release date `[0.0.0] 2009-01-03`. Usually the maintainers will handle the section renaming along with creating a new _empty_ `[next] YYYY-MM-DD` section at the top of the changelog.
+
+   Each release section will be further broken down into three sections named `Added`, `Changed`, and `Removed`. Please put the associated crate's name in **bold** followed by a `:` as a prefix to the new entry.
+
+   ```md
+   ## [next] - YYYY-MM-DD
+
+   ### Added
+
+   - **crate**: some new thing
+
+   ### Changed
+
+   - **crate**: fixed or updated something
+
+   ### Removed
+
+   - **crate**: something is gone now
+   ```
+
+4. **Donation**
 
    Want to give some financial support? Have a look at the [sponsors page](https://github.com/sponsors/rvcas/) for more details.
 
