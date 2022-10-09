@@ -18,9 +18,19 @@ pub enum ModuleKind {
     Script,
 }
 
+impl ModuleKind {
+    pub fn is_script(&self) -> bool {
+        matches!(self, ModuleKind::Script)
+    }
+
+    pub fn is_lib(&self) -> bool {
+        matches!(self, ModuleKind::Lib)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module<Info, Definitions> {
-    pub name: Vec<String>,
+    pub name: String,
     pub docs: Vec<String>,
     pub type_info: Info,
     pub definitions: Vec<Definitions>,

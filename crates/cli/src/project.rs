@@ -1,11 +1,12 @@
 use std::{
-    fs, io,
+    collections::HashMap,
+    fs,
     path::{Path, PathBuf},
 };
 
-use aiken_lang::ast::ModuleKind;
+use aiken_lang::ast::{ModuleKind, UntypedModule};
 
-use crate::config::Config;
+use crate::{config::Config, error::Error};
 
 #[derive(Debug)]
 pub struct Source {
@@ -13,6 +14,17 @@ pub struct Source {
     pub name: String,
     pub code: String,
     pub kind: ModuleKind,
+}
+
+#[derive(Debug)]
+struct ParsedModule {
+    path: PathBuf,
+    name: String,
+    code: String,
+    kind: ModuleKind,
+    package: String,
+    ast: UntypedModule,
+    // extra: ModuleExtra,
 }
 
 pub struct Project {
@@ -30,26 +42,61 @@ impl Project {
         }
     }
 
-    pub fn build(&mut self) -> io::Result<()> {
+    pub fn build(&mut self) -> Result<(), Error> {
         self.read_source_files()?;
 
-        for source in &self.sources {
-            println!("{:#?}", source);
+        self.parse_sources()?;
 
-            match aiken_lang::parser::script(&source.code) {
-                Ok(_) => (),
+        Ok(())
+    }
+
+    fn parse_sources(&mut self) -> Result<HashMap<String, ParsedModule>, Error> {
+        let mut errors = Vec::new();
+        let mut parsed_modules = HashMap::with_capacity(self.sources.len());
+
+        for Source {
+            path,
+            name,
+            code,
+            kind,
+        } in self.sources.drain(0..)
+        {
+            match aiken_lang::parser::script(&code) {
+                Ok(mut ast) => {
+                    // Store the name
+                    ast.name = name.clone();
+
+                    let module = ParsedModule {
+                        kind,
+                        ast,
+                        code,
+                        name,
+                        path,
+                        package: "".to_string(),
+                    };
+
+                    let _ = parsed_modules.insert(module.name.clone(), module);
+                }
                 Err(errs) => {
-                    for err in errs {
-                        eprintln!("{:#?}", err);
+                    for error in errs {
+                        errors.push(Error::Parse {
+                            path: path.clone(),
+                            src: code.clone(),
+                            error: Box::new(error),
+                        })
                     }
                 }
             }
         }
 
-        Ok(())
+        if errors.is_empty() {
+            Ok(parsed_modules)
+        } else {
+            Err(Error::List(errors))
+        }
     }
 
-    fn read_source_files(&mut self) -> io::Result<()> {
+    fn read_source_files(&mut self) -> Result<(), Error> {
         let lib = self.root.join("lib");
         let scripts = self.root.join("scripts");
 
@@ -59,7 +106,7 @@ impl Project {
         Ok(())
     }
 
-    fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> io::Result<()> {
+    fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
         let paths = walkdir::WalkDir::new(dir)
             .follow_links(true)
             .into_iter()
@@ -75,9 +122,12 @@ impl Project {
         Ok(())
     }
 
-    fn add_module(&mut self, path: PathBuf, dir: &Path, kind: ModuleKind) -> io::Result<()> {
-        let name = self.module_name(dir, &path);
-        let code = fs::read_to_string(&path)?;
+    fn add_module(&mut self, path: PathBuf, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
+        let name = self.module_name(dir, &path, kind);
+        let code = fs::read_to_string(&path).map_err(|error| Error::FileIo {
+            path: path.clone(),
+            error,
+        })?;
 
         self.sources.push(Source {
             name,
@@ -89,7 +139,12 @@ impl Project {
         Ok(())
     }
 
-    fn module_name(&self, package_path: &Path, full_module_path: &Path) -> String {
+    fn module_name(
+        &self,
+        package_path: &Path,
+        full_module_path: &Path,
+        kind: ModuleKind,
+    ) -> String {
         // ../../lib/module.ak
 
         // module.ak
@@ -111,7 +166,11 @@ impl Project {
         let name = name.replace('\\', "/");
 
         // project_name/module
-        format!("{}/{}", self.config.name, name)
+        if kind.is_lib() {
+            format!("{}/{}", self.config.name, name)
+        } else {
+            name
+        }
     }
 }
 

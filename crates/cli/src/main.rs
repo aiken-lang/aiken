@@ -1,12 +1,11 @@
 use std::{env, fmt::Write as _, fs};
 
-use config::Config;
+use miette::IntoDiagnostic;
 use pallas_primitives::{
     babbage::{TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
-use project::Project;
 use uplc::{
     ast::{DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
@@ -17,14 +16,13 @@ use uplc::{
     },
 };
 
+use aiken::{config::Config, project::Project};
+
 mod args;
-mod config;
-mod error;
-mod project;
 
 use args::{Args, TxCommand, UplcCommand};
 
-fn main() -> anyhow::Result<()> {
+fn main() -> miette::Result<()> {
     let args = Args::default();
 
     match args {
@@ -42,10 +40,10 @@ fn main() -> anyhow::Result<()> {
             let project_path = if let Some(d) = directory {
                 d
             } else {
-                env::current_dir()?
+                env::current_dir().into_diagnostic()?
             };
 
-            let config = Config::load(project_path.clone())?;
+            let config = Config::load(project_path.clone()).into_diagnostic()?;
 
             let mut project = Project::new(config, project_path);
 
@@ -61,9 +59,9 @@ fn main() -> anyhow::Result<()> {
 
         Args::New { name } => {
             if !name.exists() {
-                fs::create_dir_all(name.join("lib"))?;
-                fs::create_dir_all(name.join("policies"))?;
-                fs::create_dir_all(name.join("scripts"))?;
+                fs::create_dir_all(name.join("lib")).into_diagnostic()?;
+                fs::create_dir_all(name.join("policies")).into_diagnostic()?;
+                fs::create_dir_all(name.join("scripts")).into_diagnostic()?;
             }
         }
 
@@ -79,24 +77,25 @@ fn main() -> anyhow::Result<()> {
             } => {
                 let (tx_bytes, inputs_bytes, outputs_bytes) = if cbor {
                     (
-                        fs::read(input)?,
-                        fs::read(raw_inputs)?,
-                        fs::read(raw_outputs)?,
+                        fs::read(input).into_diagnostic()?,
+                        fs::read(raw_inputs).into_diagnostic()?,
+                        fs::read(raw_outputs).into_diagnostic()?,
                     )
                 } else {
-                    let cbor_hex = fs::read_to_string(input)?;
-                    let inputs_hex = fs::read_to_string(raw_inputs)?;
-                    let outputs_hex = fs::read_to_string(raw_outputs)?;
+                    let cbor_hex = fs::read_to_string(input).into_diagnostic()?;
+                    let inputs_hex = fs::read_to_string(raw_inputs).into_diagnostic()?;
+                    let outputs_hex = fs::read_to_string(raw_outputs).into_diagnostic()?;
 
                     (
-                        hex::decode(cbor_hex.trim())?,
-                        hex::decode(inputs_hex.trim())?,
-                        hex::decode(outputs_hex.trim())?,
+                        hex::decode(cbor_hex.trim()).into_diagnostic()?,
+                        hex::decode(inputs_hex.trim()).into_diagnostic()?,
+                        hex::decode(outputs_hex.trim()).into_diagnostic()?,
                     )
                 };
 
                 let tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
-                    .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))?;
+                    .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
+                    .into_diagnostic()?;
 
                 let inputs = Vec::<TransactionInput>::decode_fragment(&inputs_bytes).unwrap();
                 let outputs = Vec::<TransactionOutput>::decode_fragment(&outputs_bytes).unwrap();
@@ -157,14 +156,14 @@ fn main() -> anyhow::Result<()> {
                 out,
                 cbor_hex,
             } => {
-                let code = std::fs::read_to_string(&input)?;
+                let code = std::fs::read_to_string(&input).into_diagnostic()?;
 
-                let program = parser::program(&code)?;
+                let program = parser::program(&code).into_diagnostic()?;
 
-                let program = Program::<DeBruijn>::try_from(program)?;
+                let program = Program::<DeBruijn>::try_from(program).into_diagnostic()?;
 
                 if cbor_hex {
-                    let bytes = program.to_flat()?;
+                    let bytes = program.to_flat().into_diagnostic()?;
 
                     if print {
                         let mut output = String::new();
@@ -187,10 +186,10 @@ fn main() -> anyhow::Result<()> {
                             format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
                         };
 
-                        fs::write(&out_name, &bytes)?;
+                        fs::write(&out_name, &bytes).into_diagnostic()?;
                     }
                 } else {
-                    let cbor = program.to_hex()?;
+                    let cbor = program.to_hex().into_diagnostic()?;
 
                     if print {
                         println!("{}", &cbor);
@@ -201,22 +200,22 @@ fn main() -> anyhow::Result<()> {
                             format!("{}.cbor", input.file_stem().unwrap().to_str().unwrap())
                         };
 
-                        fs::write(&out_name, &cbor)?;
+                        fs::write(&out_name, &cbor).into_diagnostic()?;
                     }
                 }
             }
 
             UplcCommand::Fmt { input, print } => {
-                let code = std::fs::read_to_string(&input)?;
+                let code = std::fs::read_to_string(&input).into_diagnostic()?;
 
-                let program = parser::program(&code)?;
+                let program = parser::program(&code).into_diagnostic()?;
 
                 let pretty = program.to_pretty();
 
                 if print {
                     println!("{}", pretty);
                 } else {
-                    fs::write(&input, pretty)?;
+                    fs::write(&input, pretty).into_diagnostic()?;
                 }
             }
             UplcCommand::Unflat {
@@ -226,19 +225,20 @@ fn main() -> anyhow::Result<()> {
                 cbor_hex,
             } => {
                 let program = if cbor_hex {
-                    let cbor = std::fs::read_to_string(&input)?;
+                    let cbor = std::fs::read_to_string(&input).into_diagnostic()?;
 
                     let mut cbor_buffer = Vec::new();
                     let mut flat_buffer = Vec::new();
 
-                    Program::<DeBruijn>::from_hex(cbor.trim(), &mut cbor_buffer, &mut flat_buffer)?
+                    Program::<DeBruijn>::from_hex(cbor.trim(), &mut cbor_buffer, &mut flat_buffer)
+                        .into_diagnostic()?
                 } else {
-                    let bytes = std::fs::read(&input)?;
+                    let bytes = std::fs::read(&input).into_diagnostic()?;
 
-                    Program::<DeBruijn>::from_flat(&bytes)?
+                    Program::<DeBruijn>::from_flat(&bytes).into_diagnostic()?
                 };
 
-                let program: Program<Name> = program.try_into()?;
+                let program: Program<Name> = program.try_into().into_diagnostic()?;
 
                 let pretty = program.to_pretty();
 
@@ -251,27 +251,30 @@ fn main() -> anyhow::Result<()> {
                         format!("{}.uplc", input.file_stem().unwrap().to_str().unwrap())
                     };
 
-                    fs::write(&out_name, pretty)?;
+                    fs::write(&out_name, pretty).into_diagnostic()?;
                 }
             }
 
             UplcCommand::Eval { script, flat, args } => {
                 let mut program = if flat {
-                    let bytes = std::fs::read(&script)?;
+                    let bytes = std::fs::read(&script).into_diagnostic()?;
 
-                    let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes)?;
+                    let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes).into_diagnostic()?;
 
                     prog.into()
                 } else {
-                    let code = std::fs::read_to_string(&script)?;
+                    let code = std::fs::read_to_string(&script).into_diagnostic()?;
 
-                    let prog = parser::program(&code)?;
+                    let prog = parser::program(&code).into_diagnostic()?;
 
-                    Program::<NamedDeBruijn>::try_from(prog)?
+                    Program::<NamedDeBruijn>::try_from(prog).into_diagnostic()?
                 };
 
                 for arg in args {
-                    let term: Term<NamedDeBruijn> = parser::term(&arg)?.try_into()?;
+                    let term: Term<NamedDeBruijn> = parser::term(&arg)
+                        .into_diagnostic()?
+                        .try_into()
+                        .into_diagnostic()?;
 
                     program = program.apply_term(&term);
                 }
@@ -280,7 +283,7 @@ fn main() -> anyhow::Result<()> {
 
                 match term {
                     Ok(term) => {
-                        let term: Term<Name> = term.try_into()?;
+                        let term: Term<Name> = term.try_into().into_diagnostic()?;
 
                         println!("\nResult\n------\n\n{}\n", term.to_pretty());
                     }

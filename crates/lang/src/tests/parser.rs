@@ -126,7 +126,7 @@ fn module() {
         ast::UntypedModule {
             docs: vec![],
             kind: ast::ModuleKind::Script,
-            name: vec![],
+            name: "".to_string(),
             type_info: (),
             definitions: vec![
                 ast::UntypedDefinition::Use {
