@@ -37,7 +37,7 @@ pub fn module_parser(
         kind,
         definitions,
         docs: vec![],
-        name: vec![],
+        name: "".to_string(),
         type_info: (),
     })
 }
