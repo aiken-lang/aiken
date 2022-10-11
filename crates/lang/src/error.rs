@@ -1,11 +1,15 @@
 use std::{collections::HashSet, fmt};
 
+use miette::Diagnostic;
+
 use crate::{ast::Span, token::Token};
 
-#[derive(Debug)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
+#[error("{}", .kind)]
 pub struct ParseError {
-    kind: ErrorKind,
-    span: Span,
+    pub kind: ErrorKind,
+    #[label]
+    pub span: Span,
     #[allow(dead_code)]
     while_parsing: Option<(Span, &'static str)>,
     expected: HashSet<Pattern>,
@@ -63,19 +67,24 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Diagnostic, thiserror::Error)]
 pub enum ErrorKind {
+    #[error("unexpected end")]
     UnexpectedEnd,
+    #[error("unexpected {0}")]
+    #[diagnostic(help("try removing it"))]
     Unexpected(Pattern),
+    #[error("unclosed {start}")]
     Unclosed {
         start: Pattern,
         before_span: Span,
         before: Option<Pattern>,
     },
+    #[error("no end branch")]
     NoEndBranch,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
 pub enum Pattern {
     Char(char),
     Token(Token),

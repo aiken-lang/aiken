@@ -498,6 +498,12 @@ pub struct Span {
     pub end: usize,
 }
 
+impl From<Span> for miette::SourceSpan {
+    fn from(span: Span) -> Self {
+        Self::new(span.start.into(), span.end.into())
+    }
+}
+
 impl Span {
     pub fn empty() -> Self {
         use chumsky::Span;

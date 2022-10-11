@@ -17,6 +17,7 @@ pub struct Source {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct ParsedModule {
     path: PathBuf,
     name: String,
