@@ -16,13 +16,15 @@ use uplc::{
     },
 };
 
-use aiken::{config::Config, project::Project};
+use aiken::{config::Config, error, project::Project};
 
 mod args;
 
 use args::{Args, TxCommand, UplcCommand};
 
 fn main() -> miette::Result<()> {
+    miette::set_panic_hook();
+
     let args = Args::default();
 
     match args {
@@ -47,7 +49,16 @@ fn main() -> miette::Result<()> {
 
             let mut project = Project::new(config, project_path);
 
-            project.build()?;
+            if let Err(err) = project.build() {
+                match err {
+                    error::Error::List(errors) => {
+                        for error in errors {
+                            eprintln!("Error: {:?}", error)
+                        }
+                    }
+                    rest => Err(rest)?,
+                }
+            };
         }
 
         Args::Dev => {

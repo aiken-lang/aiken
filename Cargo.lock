@@ -78,6 +78,7 @@ dependencies = [
  "internment",
  "miette",
  "pretty_assertions",
+ "thiserror",
  "vec1",
 ]
 
