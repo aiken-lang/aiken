@@ -173,7 +173,7 @@ fn main() -> miette::Result<()> {
 
                 let program = Program::<DeBruijn>::try_from(program).into_diagnostic()?;
 
-                if cbor_hex {
+                if !cbor_hex {
                     let bytes = program.to_flat().into_diagnostic()?;
 
                     if print {
