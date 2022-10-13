@@ -4,9 +4,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::ast::{ModuleKind, UntypedModule};
+use aiken_lang::ast::ModuleKind;
 
-use crate::{config::Config, error::Error};
+use crate::{
+    config::Config,
+    error::Error,
+    module::{ParsedModule, ParsedModules},
+};
 
 #[derive(Debug)]
 pub struct Source {
@@ -16,22 +20,11 @@ pub struct Source {
     pub kind: ModuleKind,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-struct ParsedModule {
-    path: PathBuf,
-    name: String,
-    code: String,
-    kind: ModuleKind,
-    package: String,
-    ast: UntypedModule,
-    // extra: ModuleExtra,
-}
-
 pub struct Project {
     config: Config,
     root: PathBuf,
     sources: Vec<Source>,
+    defined_modules: HashMap<String, PathBuf>,
 }
 
 impl Project {
@@ -40,18 +33,21 @@ impl Project {
             config,
             root,
             sources: vec![],
+            defined_modules: HashMap::new(),
         }
     }
 
     pub fn build(&mut self) -> Result<(), Error> {
         self.read_source_files()?;
 
-        self.parse_sources()?;
+        let parsed_modules = self.parse_sources()?;
+
+        let processing_sequence = parsed_modules.sequence()?;
 
         Ok(())
     }
 
-    fn parse_sources(&mut self) -> Result<HashMap<String, ParsedModule>, Error> {
+    fn parse_sources(&mut self) -> Result<ParsedModules, Error> {
         let mut errors = Vec::new();
         let mut parsed_modules = HashMap::with_capacity(self.sources.len());
 
@@ -73,10 +69,21 @@ impl Project {
                         code,
                         name,
                         path,
-                        package: "".to_string(),
+                        package: self.config.name.clone(),
                     };
 
-                    let _ = parsed_modules.insert(module.name.clone(), module);
+                    if let Some(first) = self
+                        .defined_modules
+                        .insert(module.name.clone(), module.path.clone())
+                    {
+                        return Err(Error::DuplicateModule {
+                            module: module.name.clone(),
+                            first,
+                            second: module.path,
+                        });
+                    }
+
+                    parsed_modules.insert(module.name.clone(), module);
                 }
                 Err(errs) => {
                     for error in errs {
@@ -91,7 +98,7 @@ impl Project {
         }
 
         if errors.is_empty() {
-            Ok(parsed_modules)
+            Ok(parsed_modules.into())
         } else {
             Err(Error::List(errors))
         }

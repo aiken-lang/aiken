@@ -37,6 +37,31 @@ pub struct Module<Info, Definitions> {
     pub kind: ModuleKind,
 }
 
+impl UntypedModule {
+    pub fn dependencies(&self) -> Vec<(String, Span)> {
+        self.definitions()
+            .flat_map(|def| {
+                if let Definition::Use {
+                    location, module, ..
+                } = def
+                {
+                    Some((module.join("/"), *location))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn definitions(&self) -> impl Iterator<Item = &UntypedDefinition> {
+        self.definitions.iter()
+    }
+
+    pub fn into_definitions(self) -> impl Iterator<Item = UntypedDefinition> {
+        self.definitions.into_iter()
+    }
+}
+
 pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 
@@ -500,7 +525,7 @@ pub struct Span {
 
 impl From<Span> for miette::SourceSpan {
     fn from(span: Span) -> Self {
-        Self::new(span.start.into(), span.end.into())
+        Self::new(span.start.into(), (span.end - span.start).into())
     }
 }
 
