@@ -10,6 +10,7 @@ use crate::{
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
+#[derive(Debug)]
 pub enum TypedExpr {
     Int {
         location: Span,

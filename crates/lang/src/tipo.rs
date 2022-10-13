@@ -1,9 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
-use crate::{
-    ast::{Constant, FieldMap, Span, TypedConstant},
-    build::Origin,
-};
+use crate::ast::{Constant, FieldMap, ModuleKind, Span, TypedConstant};
+
+pub mod error;
+pub mod infer;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -105,9 +105,10 @@ pub enum ValueConstructorVariant {
     },
 }
 
+#[derive(Debug, Clone)]
 pub struct Module {
     pub name: Vec<String>,
-    pub origin: Origin,
+    pub kind: ModuleKind,
     pub package: String,
     pub types: HashMap<String, TypeConstructor>,
     pub types_constructors: HashMap<String, Vec<String>>,
@@ -115,6 +116,7 @@ pub struct Module {
     pub accessors: HashMap<String, AccessorsMap>,
 }
 
+#[derive(Debug, Clone)]
 pub struct TypeConstructor {
     pub public: bool,
     pub origin: Span,
@@ -123,12 +125,14 @@ pub struct TypeConstructor {
     pub typ: Arc<Type>,
 }
 
+#[derive(Debug, Clone)]
 pub struct AccessorsMap {
     pub public: bool,
     pub tipo: Arc<Type>,
     pub accessors: HashMap<String, RecordAccessor>,
 }
 
+#[derive(Debug, Clone)]
 pub struct RecordAccessor {
     // TODO: smaller int. Doesn't need to be this big
     pub index: u64,
@@ -136,6 +140,7 @@ pub struct RecordAccessor {
     pub tipo: Arc<Type>,
 }
 
+#[derive(Debug)]
 pub enum PatternConstructor {
     Record {
         name: String,
@@ -143,6 +148,7 @@ pub enum PatternConstructor {
     },
 }
 
+#[derive(Debug)]
 pub enum ModuleValueConstructor {
     Record {
         name: String,

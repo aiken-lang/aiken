@@ -1,5 +1,5 @@
 pub mod ast;
-pub mod build;
+pub mod builtins;
 pub mod error;
 pub mod expr;
 pub mod lexer;

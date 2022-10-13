@@ -1,16 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
-    ops::Deref,
+    ops::{Deref, DerefMut},
     path::PathBuf,
 };
 
-use aiken_lang::ast::{ModuleKind, UntypedModule};
+use aiken_lang::ast::{ModuleKind, TypedModule, UntypedModule};
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 
 use crate::error::Error;
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct ParsedModule {
     pub path: PathBuf,
     pub name: String,
@@ -120,6 +119,12 @@ impl Deref for ParsedModules {
     }
 }
 
+impl DerefMut for ParsedModules {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 fn find_cycle(
     origin: NodeIndex,
     parent: NodeIndex,
@@ -148,4 +153,14 @@ fn find_cycle(
     }
 
     false
+}
+
+#[derive(Debug)]
+pub struct CheckedModule {
+    pub name: String,
+    pub code: String,
+    pub input_path: PathBuf,
+    pub kind: ModuleKind,
+    pub ast: TypedModule,
+    // pub extra: ModuleExtra,
 }
