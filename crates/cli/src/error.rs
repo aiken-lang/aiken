@@ -10,8 +10,16 @@ use miette::{EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode}
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
 pub enum Error {
+    #[error("duplicate module {module}")]
+    DuplicateModule {
+        module: String,
+        first: PathBuf,
+        second: PathBuf,
+    },
     #[error("file operation failed")]
-    FileIo { path: PathBuf, error: io::Error },
+    FileIo { error: io::Error, path: PathBuf },
+    #[error("cyclical module imports")]
+    ImportCycle { modules: Vec<String> },
     #[error("failed to parse")]
     Parse {
         path: PathBuf,
@@ -48,32 +56,47 @@ impl Debug for Error {
 impl miette::Diagnostic for Error {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Error::Parse { .. } => Some(Box::new("aiken::parser".to_string())),
+            Error::DuplicateModule { .. } => Some(Box::new("aiken::project::duplicate_module")),
             Error::FileIo { .. } => None,
-            Error::List(_) => None,
-        }
-    }
-
-    fn source_code(&self) -> Option<&dyn SourceCode> {
-        match self {
-            Error::Parse { src, .. } => Some(src),
-            Error::FileIo { .. } => None,
-            Error::List(_) => None,
-        }
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
-        match self {
-            Error::Parse { error, .. } => error.labels(),
-            Error::FileIo { .. } => None,
+            Error::ImportCycle { .. } => Some(Box::new("aiken::project::cyclical_import")),
+            Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::List(_) => None,
         }
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Error::Parse { error, .. } => error.kind.help(),
+            Error::DuplicateModule { first, second, .. } => Some(Box::new(format!(
+                "rename either {} or {}",
+                first.display(),
+                second.display()
+            ))),
             Error::FileIo { .. } => None,
+            Error::ImportCycle { modules } => Some(Box::new(format!(
+                "try moving the shared code to a separate module that the others can depend on\n- {}",
+                modules.join("\n- ")
+            ))),
+            Error::Parse { error, .. } => error.kind.help(),
+            Error::List(_) => None,
+        }
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::ImportCycle { .. } => None,
+            Error::Parse { error, .. } => error.labels(),
+            Error::List(_) => None,
+        }
+    }
+
+    fn source_code(&self) -> Option<&dyn SourceCode> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::ImportCycle { .. } => None,
+            Error::Parse { src, .. } => Some(src),
             Error::List(_) => None,
         }
     }
