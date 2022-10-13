@@ -481,6 +481,7 @@ pub struct IfBranch<Expr> {
     pub location: Span,
 }
 
+#[derive(Debug)]
 pub struct TypedRecordUpdateArg {
     pub label: String,
     pub location: Span,

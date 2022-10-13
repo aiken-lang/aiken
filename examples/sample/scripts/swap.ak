@@ -5,7 +5,7 @@ pub type Datum {
 }
 
 pub type Redeemer {
-  Buy,
+  Buy
   Sell
 }
 

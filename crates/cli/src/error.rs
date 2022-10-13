@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use aiken_lang::error::ParseError;
+use aiken_lang::{error::ParseError, tipo};
 use miette::{EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
 
 #[allow(dead_code)]
@@ -16,10 +16,17 @@ pub enum Error {
         first: PathBuf,
         second: PathBuf,
     },
+
     #[error("file operation failed")]
     FileIo { error: io::Error, path: PathBuf },
+
     #[error("cyclical module imports")]
     ImportCycle { modules: Vec<String> },
+
+    /// Useful for returning many [`Error::Parse`] at once
+    #[error("a list of errors")]
+    List(Vec<Self>),
+
     #[error("failed to parse")]
     Parse {
         path: PathBuf,
@@ -29,9 +36,13 @@ pub enum Error {
         #[source]
         error: Box<ParseError>,
     },
-    /// Useful for returning many [`Error::Parse`] at once
-    #[error("a list of errors")]
-    List(Vec<Self>),
+
+    #[error("type checking failed")]
+    Type {
+        path: PathBuf,
+        src: String,
+        error: tipo::error::Error,
+    },
 }
 
 impl Debug for Error {
@@ -56,11 +67,12 @@ impl Debug for Error {
 impl miette::Diagnostic for Error {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Error::DuplicateModule { .. } => Some(Box::new("aiken::project::duplicate_module")),
+            Error::DuplicateModule { .. } => Some(Box::new("aiken::module::duplicate")),
             Error::FileIo { .. } => None,
-            Error::ImportCycle { .. } => Some(Box::new("aiken::project::cyclical_import")),
-            Error::Parse { .. } => Some(Box::new("aiken::parser")),
+            Error::ImportCycle { .. } => Some(Box::new("aiken::module::cyclical")),
             Error::List(_) => None,
+            Error::Parse { .. } => Some(Box::new("aiken::parser")),
+            Error::Type { .. } => Some(Box::new("aiken::typecheck")),
         }
     }
 
@@ -76,8 +88,9 @@ impl miette::Diagnostic for Error {
                 "try moving the shared code to a separate module that the others can depend on\n- {}",
                 modules.join("\n- ")
             ))),
-            Error::Parse { error, .. } => error.kind.help(),
             Error::List(_) => None,
+            Error::Parse { error, .. } => error.kind.help(),
+            Error::Type { .. } => None,
         }
     }
 
@@ -86,8 +99,9 @@ impl miette::Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
-            Error::Parse { error, .. } => error.labels(),
             Error::List(_) => None,
+            Error::Parse { error, .. } => error.labels(),
+            Error::Type { error, .. } => error.labels(),
         }
     }
 
@@ -96,8 +110,9 @@ impl miette::Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
-            Error::Parse { src, .. } => Some(src),
             Error::List(_) => None,
+            Error::Parse { src, .. } => Some(src),
+            Error::Type { src, .. } => Some(src),
         }
     }
 }

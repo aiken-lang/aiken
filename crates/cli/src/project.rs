@@ -4,12 +4,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::ast::ModuleKind;
+use aiken_lang::{ast::ModuleKind, builtins, tipo};
 
 use crate::{
     config::Config,
     error::Error,
-    module::{ParsedModule, ParsedModules},
+    module::{CheckedModule, ParsedModule, ParsedModules},
 };
 
 #[derive(Debug)]
@@ -20,20 +20,43 @@ pub struct Source {
     pub kind: ModuleKind,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Warning {
+    Type {
+        path: PathBuf,
+        src: String,
+        warning: tipo::error::Warning,
+    },
+}
+
+impl Warning {
+    pub fn from_type_warning(warning: tipo::error::Warning, path: PathBuf, src: String) -> Warning {
+        Warning::Type { path, warning, src }
+    }
+}
+
 pub struct Project {
     config: Config,
+    defined_modules: HashMap<String, PathBuf>,
+    module_types: HashMap<String, tipo::Module>,
     root: PathBuf,
     sources: Vec<Source>,
-    defined_modules: HashMap<String, PathBuf>,
+    warnings: Vec<Warning>,
 }
 
 impl Project {
     pub fn new(config: Config, root: PathBuf) -> Project {
+        let mut module_types = HashMap::new();
+
+        module_types.insert("aiken".to_string(), builtins::prelude());
+
         Project {
             config,
+            defined_modules: HashMap::new(),
+            module_types,
             root,
             sources: vec![],
-            defined_modules: HashMap::new(),
+            warnings: vec![],
         }
     }
 
@@ -43,6 +66,20 @@ impl Project {
         let parsed_modules = self.parse_sources()?;
 
         let processing_sequence = parsed_modules.sequence()?;
+
+        let checked_modules = self.type_check(parsed_modules, processing_sequence)?;
+
+        println!("{:?}", checked_modules);
+
+        Ok(())
+    }
+
+    fn read_source_files(&mut self) -> Result<(), Error> {
+        let lib = self.root.join("lib");
+        let scripts = self.root.join("scripts");
+
+        self.aiken_files(&scripts, ModuleKind::Script)?;
+        self.aiken_files(&lib, ModuleKind::Lib)?;
 
         Ok(())
     }
@@ -104,14 +141,62 @@ impl Project {
         }
     }
 
-    fn read_source_files(&mut self) -> Result<(), Error> {
-        let lib = self.root.join("lib");
-        let scripts = self.root.join("scripts");
+    fn type_check(
+        &mut self,
+        mut parsed_modules: ParsedModules,
+        processing_sequence: Vec<String>,
+    ) -> Result<Vec<CheckedModule>, Error> {
+        let mut modules = Vec::with_capacity(parsed_modules.len() + 1);
 
-        self.aiken_files(&scripts, ModuleKind::Script)?;
-        self.aiken_files(&lib, ModuleKind::Lib)?;
+        for name in processing_sequence {
+            if let Some(ParsedModule {
+                name,
+                path,
+                code,
+                kind,
+                package,
+                ast,
+            }) = parsed_modules.remove(&name)
+            {
+                let mut type_warnings = Vec::new();
 
-        Ok(())
+                let ast = tipo::infer::module(
+                    ast,
+                    kind,
+                    &self.config.name,
+                    &self.module_types,
+                    &mut type_warnings,
+                )
+                .map_err(|error| Error::Type {
+                    path: path.clone(),
+                    src: code.clone(),
+                    error,
+                })?;
+
+                // Register any warnings emitted as type warnings
+                let type_warnings = type_warnings
+                    .into_iter()
+                    .map(|w| Warning::from_type_warning(w, path.clone(), code.clone()));
+
+                self.warnings.extend(type_warnings);
+
+                // Register the types from this module so they can be imported into
+                // other modules.
+                self.module_types
+                    .insert(name.clone(), ast.type_info.clone());
+
+                modules.push(CheckedModule {
+                    kind,
+                    // extra,
+                    name,
+                    code,
+                    ast,
+                    input_path: path,
+                });
+            }
+        }
+
+        Ok(modules)
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
