@@ -330,7 +330,7 @@ impl DefaultFunction {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
                     match arg1.checked_add(*arg2) {
                         Some(res) => Ok(Value::Con(Constant::Integer(res))),
-                        None => return Err(Error::OverflowError),
+                        None => Err(Error::OverflowError),
                     }
                 }
                 _ => unreachable!(),
@@ -339,7 +339,7 @@ impl DefaultFunction {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
                     match arg1.checked_sub(*arg2) {
                         Some(res) => Ok(Value::Con(Constant::Integer(res))),
-                        None => return Err(Error::OverflowError),
+                        None => Err(Error::OverflowError),
                     }
                 }
                 _ => unreachable!(),
@@ -348,7 +348,7 @@ impl DefaultFunction {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
                     match arg1.checked_mul(*arg2) {
                         Some(res) => Ok(Value::Con(Constant::Integer(res))),
-                        None => return Err(Error::OverflowError),
+                        None => Err(Error::OverflowError),
                     }
                 }
                 _ => unreachable!(),
