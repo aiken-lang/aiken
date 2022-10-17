@@ -310,7 +310,7 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
 impl<'b> Decode<'b> for Constant {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         match &decode_constant(d)?[..] {
-            [0] => Ok(Constant::Integer(isize::decode(d)?)),
+            [0] => Ok(Constant::Integer(i128::decode(d)?)),
             [1] => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
             [2] => Ok(Constant::String(String::decode(d)?)),
             [3] => Ok(Constant::Unit),
@@ -354,7 +354,7 @@ impl<'b> Decode<'b> for Constant {
 
 fn decode_constant_value(typ: Type, d: &mut Decoder) -> Result<Constant, de::Error> {
     match typ {
-        Type::Integer => Ok(Constant::Integer(isize::decode(d)?)),
+        Type::Integer => Ok(Constant::Integer(i128::decode(d)?)),
         Type::ByteString => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
         Type::String => Ok(Constant::String(String::decode(d)?)),
         Type::Unit => Ok(Constant::Unit),

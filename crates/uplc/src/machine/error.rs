@@ -37,9 +37,9 @@ pub enum Error {
     #[error("Decoding utf8")]
     Utf8(#[from] FromUtf8Error),
     #[error("Out of Bounds\n\nindex: {}\nbytestring: {}\npossible: 0 - {}", .0, hex::encode(.1), .1.len() - 1)]
-    ByteStringOutOfBounds(isize, Vec<u8>),
+    ByteStringOutOfBounds(i128, Vec<u8>),
     #[error("Divide By Zero\n\n{0} / {1}")]
-    DivideByZero(isize, isize),
+    DivideByZero(i128, i128),
     #[error("Ed25519S PublicKey should be 32 bytes but it was {0}")]
     UnexpectedEd25519PublicKeyLength(usize),
     #[error("Ed25519S Signature should be 64 bytes but it was {0}")]

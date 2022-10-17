@@ -515,7 +515,7 @@ impl Value {
                 PlutusData::BigInt(i) => {
                     if let BigInt::Int(g) = i {
                         let numb: i128 = (*g).try_into().unwrap();
-                        total += Value::Con(Constant::Integer(numb as isize)).to_ex_mem();
+                        total += Value::Con(Constant::Integer(numb)).to_ex_mem();
                     } else {
                         unreachable!()
                     };

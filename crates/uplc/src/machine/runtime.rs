@@ -349,7 +349,7 @@ impl DefaultFunction {
                     if *arg2 != 0 {
                         let ret = (*arg1 as f64) / (*arg2 as f64);
 
-                        Ok(Value::Con(Constant::Integer(ret.floor() as isize)))
+                        Ok(Value::Con(Constant::Integer(ret.floor() as i128)))
                     } else {
                         Err(Error::DivideByZero(*arg1, *arg2))
                     }
@@ -363,7 +363,7 @@ impl DefaultFunction {
 
                         let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
 
-                        Ok(Value::Con(Constant::Integer(ret as isize)))
+                        Ok(Value::Con(Constant::Integer(ret as i128)))
                     } else {
                         Err(Error::DivideByZero(*arg1, *arg2))
                     }
@@ -447,7 +447,7 @@ impl DefaultFunction {
             },
             DefaultFunction::LengthOfByteString => match &args[0] {
                 Value::Con(Constant::ByteString(arg1)) => {
-                    Ok(Value::Con(Constant::Integer(arg1.len() as isize)))
+                    Ok(Value::Con(Constant::Integer(arg1.len() as i128)))
                 }
                 _ => unreachable!(),
             },
@@ -456,7 +456,7 @@ impl DefaultFunction {
                     let index = *arg2 as usize;
 
                     if 0 <= *arg2 && index < arg1.len() {
-                        let ret = arg1[index] as isize;
+                        let ret = arg1[index] as i128;
 
                         Ok(Value::Con(Constant::Integer(ret)))
                     } else {
@@ -749,7 +749,7 @@ impl DefaultFunction {
                         Type::Integer,
                         Type::List(Box::new(Type::Data)),
                         // TODO: handle other types of constructor tags
-                        Box::new(Constant::Integer(convert_tag_to_constr(c.tag as isize))),
+                        Box::new(Constant::Integer(convert_tag_to_constr(c.tag as i128))),
                         Box::new(Constant::ProtoList(
                             Type::Data,
                             c.fields
@@ -798,7 +798,7 @@ impl DefaultFunction {
                     if let BigInt::Int(i) = b {
                         let x: i128 = (*i).try_into().unwrap();
 
-                        Ok(Value::Con(Constant::Integer(x as isize)))
+                        Ok(Value::Con(Constant::Integer(x)))
                     } else {
                         unreachable!()
                     }
@@ -844,7 +844,7 @@ impl DefaultFunction {
     }
 }
 
-fn convert_tag_to_constr(tag: isize) -> isize {
+fn convert_tag_to_constr(tag: i128) -> i128 {
     if tag < 128 {
         tag - 121
     } else if (1280..1401).contains(&tag) {

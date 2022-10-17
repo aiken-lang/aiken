@@ -106,7 +106,7 @@ peg::parser! {
           = "(" _* "error" _* ")" { Term::Error }
 
         rule constant_integer() -> Constant
-          = "integer" _+ i:number() { Constant::Integer(i as isize) }
+          = "integer" _+ i:big_number() { Constant::Integer(i as i128) }
 
         rule constant_bytestring() -> Constant
           = "bytestring" _+ "#" i:ident()* {
@@ -123,6 +123,9 @@ peg::parser! {
           = "unit" _+ "()" { Constant::Unit }
 
         rule number() -> isize
+          = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
+
+        rule big_number() -> i128
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
         rule constant_data() -> Constant
