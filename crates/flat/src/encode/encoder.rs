@@ -98,7 +98,7 @@ impl Encoder {
         self
     }
 
-    /// Encode an integer of any size.
+    /// Encode an integer of 128 bits size.
     /// This is byte alignment agnostic.
     /// First we use zigzag once to double the number and encode the negative sign as the least significant bit.
     /// Next we encode the 7 least significant bits of the unsigned integer. If the number is greater than
@@ -165,7 +165,7 @@ impl Encoder {
         self
     }
 
-    /// Encode a unsigned integer of any size.
+    /// Encode a unsigned integer of 128 bits size.
     /// This is byte alignment agnostic.
     /// We encode the 7 least significant bits of the unsigned byte. If the char value is greater than
     /// 127 we encode a leading 1 followed by repeating the above for the next 7 bits and so on.

@@ -35,7 +35,7 @@ impl<'b> Decoder<'b> {
         Ok(zigzag::to_isize(self.word()?))
     }
 
-    /// Decode an integer of any size.
+    /// Decode an integer of 128 bits size.
     /// This is byte alignment agnostic.
     /// First we decode the next 8 bits of the buffer.
     /// We take the 7 least significant bits as the 7 least significant bits of the current unsigned integer.
@@ -142,7 +142,7 @@ impl<'b> Decoder<'b> {
         Ok(final_word)
     }
 
-    /// Decode a word of any size.
+    /// Decode a word of 128 bits size.
     /// This is byte alignment agnostic.
     /// First we decode the next 8 bits of the buffer.
     /// We take the 7 least significant bits as the 7 least significant bits of the current unsigned integer.
