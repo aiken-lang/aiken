@@ -26,7 +26,7 @@ pub enum Type {
     ///
     Fn {
         args: Vec<Arc<Type>>,
-        retrn: Arc<Type>,
+        ret: Arc<Type>,
     },
 
     /// A type variable. See the contained `TypeVar` enum for more information.
@@ -74,6 +74,16 @@ pub struct ValueConstructor {
     pub tipo: Arc<Type>,
 }
 
+impl ValueConstructor {
+    pub fn public(tipo: Arc<Type>, variant: ValueConstructorVariant) -> ValueConstructor {
+        ValueConstructor {
+            public: true,
+            variant,
+            tipo,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValueConstructorVariant {
     /// A locally defined variable or function parameter
@@ -102,6 +112,7 @@ pub enum ValueConstructorVariant {
         field_map: Option<FieldMap>,
         location: Span,
         module: String,
+        constructors_count: u16,
     },
 }
 
@@ -122,7 +133,7 @@ pub struct TypeConstructor {
     pub origin: Span,
     pub module: Vec<String>,
     pub parameters: Vec<Arc<Type>>,
-    pub typ: Arc<Type>,
+    pub tipo: Arc<Type>,
 }
 
 #[derive(Debug, Clone)]

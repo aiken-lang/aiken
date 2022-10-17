@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ast::{ModuleKind, TypedModule, UntypedModule};
+use crate::{
+    ast::{ModuleKind, TypedModule, UntypedModule},
+    IdGenerator,
+};
 
 use super::{
     error::{Error, Warning},
@@ -8,7 +11,7 @@ use super::{
 };
 
 pub fn module(
-    // ids: &UniqueIdGenerator,
+    id_gen: &IdGenerator,
     mut module: UntypedModule,
     kind: ModuleKind,
     package: &str,

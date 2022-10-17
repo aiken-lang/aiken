@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::{ast::ModuleKind, builtins, tipo};
+use aiken_lang::{ast::ModuleKind, builtins, tipo, IdGenerator};
 
 use crate::{
     config::Config,
@@ -38,6 +38,7 @@ impl Warning {
 pub struct Project {
     config: Config,
     defined_modules: HashMap<String, PathBuf>,
+    id_gen: IdGenerator,
     module_types: HashMap<String, tipo::Module>,
     root: PathBuf,
     sources: Vec<Source>,
@@ -46,13 +47,16 @@ pub struct Project {
 
 impl Project {
     pub fn new(config: Config, root: PathBuf) -> Project {
+        let id_gen = IdGenerator::new();
+
         let mut module_types = HashMap::new();
 
-        module_types.insert("aiken".to_string(), builtins::prelude());
+        module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
 
         Project {
             config,
             defined_modules: HashMap::new(),
+            id_gen,
             module_types,
             root,
             sources: vec![],
@@ -161,6 +165,7 @@ impl Project {
                 let mut type_warnings = Vec::new();
 
                 let ast = tipo::infer::module(
+                    &self.id_gen,
                     ast,
                     kind,
                     &self.config.name,
