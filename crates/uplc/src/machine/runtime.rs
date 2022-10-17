@@ -328,19 +328,28 @@ impl DefaultFunction {
         match self {
             DefaultFunction::AddInteger => match (&args[0], &args[1]) {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    Ok(Value::Con(Constant::Integer(arg1 + arg2)))
+                    match arg1.checked_add(*arg2) {
+                        Some(res) => Ok(Value::Con(Constant::Integer(res))),
+                        None => return Err(Error::OverflowError),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::SubtractInteger => match (&args[0], &args[1]) {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    Ok(Value::Con(Constant::Integer(arg1 - arg2)))
+                    match arg1.checked_sub(*arg2) {
+                        Some(res) => Ok(Value::Con(Constant::Integer(res))),
+                        None => return Err(Error::OverflowError),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::MultiplyInteger => match (&args[0], &args[1]) {
                 (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    Ok(Value::Con(Constant::Integer(arg1 * arg2)))
+                    match arg1.checked_mul(*arg2) {
+                        Some(res) => Ok(Value::Con(Constant::Integer(res))),
+                        None => return Err(Error::OverflowError),
+                    }
                 }
                 _ => unreachable!(),
             },

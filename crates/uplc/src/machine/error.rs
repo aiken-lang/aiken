@@ -46,4 +46,6 @@ pub enum Error {
     UnexpectedEd25519SignatureLength(usize),
     #[error("Failed to deserialise PlutusData:\n\n{0:#?}")]
     DeserialisationError(Value),
+    #[error("Integer overflow")]
+    OverflowError,
 }
