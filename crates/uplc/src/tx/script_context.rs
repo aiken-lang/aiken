@@ -83,7 +83,7 @@ pub struct TimeRange {
 }
 
 pub struct SlotConfig {
-    pub slot_length: u64,
+    pub slot_length: u32,
     pub zero_slot: u64,
     pub zero_time: u64,
 }
