@@ -50,7 +50,7 @@ pub enum TxCommand {
 
         /// Time between each slot
         #[clap(short, long, default_value_t = 1000)]
-        slot_length: u64,
+        slot_length: u32,
 
         /// Time of shelley hardfork
         #[clap(long, default_value_t = 1596059091000)]

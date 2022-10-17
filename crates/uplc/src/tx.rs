@@ -74,7 +74,7 @@ pub fn eval_phase_two_raw(
     utxos_bytes: &[(Vec<u8>, Vec<u8>)],
     cost_mdls_bytes: &[u8],
     initial_budget: (u64, u64),
-    slot_config: (u64, u64, u64),
+    slot_config: (u64, u64, u32),
     run_phase_one: bool,
 ) -> Result<Vec<Vec<u8>>, Error> {
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, tx_bytes)
