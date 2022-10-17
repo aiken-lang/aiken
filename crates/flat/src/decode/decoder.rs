@@ -35,6 +35,18 @@ impl<'b> Decoder<'b> {
         Ok(zigzag::to_isize(self.word()?))
     }
 
+    /// Decode an integer of any size.
+    /// This is byte alignment agnostic.
+    /// First we decode the next 8 bits of the buffer.
+    /// We take the 7 least significant bits as the 7 least significant bits of the current unsigned integer.
+    /// If the most significant bit of the 8 bits is 1 then we take the next 8 and repeat the process above,
+    /// filling in the next 7 least significant bits of the unsigned integer and so on.
+    /// If the most significant bit was instead 0 we stop decoding any more bits.
+    /// Finally we use zigzag to convert the unsigned integer back to a signed integer.
+    pub fn big_integer(&mut self) -> Result<i128, Error> {
+        Ok(zigzag::to_i128(self.big_word()?))
+    }
+
     /// Decode a single bit of the buffer to get a bool.
     /// We mask out a single bit of the buffer based on used bits.
     /// and check if it is 0 for false or 1 for true.
@@ -124,6 +136,28 @@ impl<'b> Decoder<'b> {
             let word8 = self.bits8(8)?;
             let word7 = word8 & 127;
             final_word |= (word7 as usize) << shl;
+            shl += 7;
+            leading_bit = word8 & 128;
+        }
+        Ok(final_word)
+    }
+
+    /// Decode a word of any size.
+    /// This is byte alignment agnostic.
+    /// First we decode the next 8 bits of the buffer.
+    /// We take the 7 least significant bits as the 7 least significant bits of the current unsigned integer.
+    /// If the most significant bit of the 8 bits is 1 then we take the next 8 and repeat the process above,
+    /// filling in the next 7 least significant bits of the unsigned integer and so on.
+    /// If the most significant bit was instead 0 we stop decoding any more bits.
+    pub fn big_word(&mut self) -> Result<u128, Error> {
+        let mut leading_bit = 1;
+        let mut final_word: u128 = 0;
+        let mut shl: u128 = 0;
+        // continue looping if lead bit is 1 which is 128 as a u8 otherwise exit
+        while leading_bit > 0 {
+            let word8 = self.bits8(8)?;
+            let word7 = word8 & 127;
+            final_word |= (word7 as u128) << shl;
             shl += 7;
             leading_bit = word8 & 128;
         }

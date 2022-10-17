@@ -2,7 +2,7 @@ use crate::ast::{Constant, Term};
 use crate::program_builder::WithTerm;
 
 pub trait WithConstant: WithTerm {
-    fn with_int(self, int: isize) -> Self::Next {
+    fn with_int(self, int: i128) -> Self::Next {
         let term = Term::Constant(Constant::Integer(int));
         self.next(term)
     }
@@ -42,7 +42,7 @@ mod tests {
     proptest! {
         #[test]
         fn build_named__with_const(
-            int: isize
+            int: i128
         ) {
             let code = format!(r"(program
                            11.22.33

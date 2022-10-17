@@ -26,6 +26,14 @@ impl Encode for u8 {
     }
 }
 
+impl Encode for i128 {
+    fn encode(&self, e: &mut Encoder) -> Result<(), Error> {
+        e.big_integer(*self);
+
+        Ok(())
+    }
+}
+
 impl Encode for isize {
     fn encode(&self, e: &mut Encoder) -> Result<(), Error> {
         e.integer(*self);

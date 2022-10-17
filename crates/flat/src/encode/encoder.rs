@@ -98,6 +98,19 @@ impl Encoder {
         self
     }
 
+    /// Encode an integer of any size.
+    /// This is byte alignment agnostic.
+    /// First we use zigzag once to double the number and encode the negative sign as the least significant bit.
+    /// Next we encode the 7 least significant bits of the unsigned integer. If the number is greater than
+    /// 127 we encode a leading 1 followed by repeating the encoding above for the next 7 bits and so on.
+    pub fn big_integer(&mut self, i: i128) -> &mut Self {
+        let i = zigzag::to_u128(i);
+
+        self.big_word(i);
+
+        self
+    }
+
     /// Encode a char of 32 bits.
     /// This is byte alignment agnostic.
     /// We encode the 7 least significant bits of the unsigned byte. If the char value is greater than
@@ -134,6 +147,29 @@ impl Encoder {
     /// We encode the 7 least significant bits of the unsigned byte. If the char value is greater than
     /// 127 we encode a leading 1 followed by repeating the above for the next 7 bits and so on.
     pub fn word(&mut self, c: usize) -> &mut Self {
+        let mut d = c;
+        loop {
+            let mut w = (d & 127) as u8;
+            d >>= 7;
+
+            if d != 0 {
+                w |= 128;
+            }
+            self.bits(8, w);
+
+            if d == 0 {
+                break;
+            }
+        }
+
+        self
+    }
+
+    /// Encode a unsigned integer of any size.
+    /// This is byte alignment agnostic.
+    /// We encode the 7 least significant bits of the unsigned byte. If the char value is greater than
+    /// 127 we encode a leading 1 followed by repeating the above for the next 7 bits and so on.
+    pub fn big_word(&mut self, c: u128) -> &mut Self {
         let mut d = c;
         loop {
             let mut w = (d & 127) as u8;

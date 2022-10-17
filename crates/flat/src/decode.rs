@@ -36,6 +36,12 @@ impl Decode<'_> for isize {
     }
 }
 
+impl Decode<'_> for i128 {
+    fn decode(d: &mut Decoder) -> Result<Self, Error> {
+        d.big_integer()
+    }
+}
+
 impl Decode<'_> for usize {
     fn decode(d: &mut Decoder) -> Result<Self, Error> {
         d.word()
