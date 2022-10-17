@@ -126,7 +126,7 @@ peg::parser! {
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
         rule big_number() -> i128
-          = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
+          = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("i128")) }
 
         rule constant_data() -> Constant
           = "data" _+ "#" i:ident()* {
