@@ -733,7 +733,7 @@ impl DefaultFunction {
             },
             DefaultFunction::IData => match &args[0] {
                 Value::Con(Constant::Integer(i)) => Ok(Value::Con(Constant::Data(
-                    PlutusData::BigInt(BigInt::Int((*i as i64).try_into().unwrap())),
+                    PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())),
                 ))),
                 _ => unreachable!(),
             },
