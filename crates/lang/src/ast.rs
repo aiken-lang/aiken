@@ -181,6 +181,38 @@ pub struct FieldMap {
     pub fields: HashMap<String, usize>,
 }
 
+impl FieldMap {
+    pub fn new(arity: usize) -> Self {
+        Self {
+            arity,
+            fields: HashMap::new(),
+        }
+    }
+
+    pub fn insert(
+        &mut self,
+        label: String,
+        index: usize,
+        location: &Span,
+    ) -> Result<(), tipo::error::Error> {
+        match self.fields.insert(label.clone(), index) {
+            Some(_) => Err(tipo::error::Error::DuplicateField {
+                label,
+                location: *location,
+            }),
+            None => Ok(()),
+        }
+    }
+
+    pub fn into_option(self) -> Option<Self> {
+        if self.fields.is_empty() {
+            None
+        } else {
+            Some(self)
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecordConstructor<T> {
     pub location: Span,
@@ -261,15 +293,82 @@ pub enum Annotation {
         name: String,
     },
 
-    Tuple {
-        location: Span,
-        elems: Vec<Self>,
-    },
-
     Hole {
         location: Span,
         name: String,
     },
+}
+
+impl Annotation {
+    pub fn location(&self) -> Span {
+        match self {
+            Annotation::Fn { location, .. }
+            | Annotation::Var { location, .. }
+            | Annotation::Hole { location, .. }
+            | Annotation::Constructor { location, .. } => *location,
+        }
+    }
+
+    pub fn is_logically_equal(&self, other: &Annotation) -> bool {
+        match self {
+            Annotation::Constructor {
+                module,
+                name,
+                arguments,
+                location: _,
+            } => match other {
+                Annotation::Constructor {
+                    module: o_module,
+                    name: o_name,
+                    arguments: o_arguments,
+                    location: _,
+                } => {
+                    module == o_module
+                        && name == o_name
+                        && arguments.len() == o_arguments.len()
+                        && arguments
+                            .iter()
+                            .zip(o_arguments)
+                            .all(|a| a.0.is_logically_equal(a.1))
+                }
+                _ => false,
+            },
+            Annotation::Fn {
+                arguments,
+                ret,
+                location: _,
+            } => match other {
+                Annotation::Fn {
+                    arguments: o_arguments,
+                    ret: o_return,
+                    location: _,
+                } => {
+                    arguments.len() == o_arguments.len()
+                        && arguments
+                            .iter()
+                            .zip(o_arguments)
+                            .all(|a| a.0.is_logically_equal(a.1))
+                        && ret.is_logically_equal(o_return)
+                }
+                _ => false,
+            },
+            Annotation::Var { name, location: _ } => match other {
+                Annotation::Var {
+                    name: o_name,
+                    location: _,
+                } => name == o_name,
+                _ => false,
+            },
+
+            Annotation::Hole { name, location: _ } => match other {
+                Annotation::Hole {
+                    name: o_name,
+                    location: _,
+                } => name == o_name,
+                _ => false,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,7 +383,7 @@ impl Default for Layer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
     // Boolean logic
     And,

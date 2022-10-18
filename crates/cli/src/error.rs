@@ -45,6 +45,15 @@ pub enum Error {
     },
 }
 
+impl Error {
+    pub fn total(&self) -> usize {
+        match self {
+            Error::List(errors) => errors.len(),
+            _ => 1,
+        }
+    }
+}
+
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let miette_handler = MietteHandlerOpts::new()

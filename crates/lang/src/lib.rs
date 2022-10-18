@@ -1,4 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
 pub mod ast;
 pub mod builtins;
@@ -9,9 +12,9 @@ pub mod parser;
 pub mod tipo;
 pub mod token;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct IdGenerator {
-    id: AtomicU64,
+    id: Arc<AtomicU64>,
 }
 
 impl IdGenerator {
