@@ -49,15 +49,23 @@ fn main() -> miette::Result<()> {
 
             let mut project = Project::new(config, project_path);
 
-            if let Err(err) = project.build() {
-                match err {
+            let build_result = project.build();
+
+            for warning in project.warnings {
+                eprintln!("Warning: {:?}", warning)
+            }
+
+            if let Err(err) = build_result {
+                match &err {
                     error::Error::List(errors) => {
                         for error in errors {
                             eprintln!("Error: {:?}", error)
                         }
                     }
-                    rest => Err(rest)?,
+                    rest => eprintln!("Error: {:?}", rest),
                 }
+
+                miette::bail!("failed: {} errors", err.total());
             };
         }
 

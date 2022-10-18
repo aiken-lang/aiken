@@ -42,7 +42,7 @@ pub struct Project {
     module_types: HashMap<String, tipo::Module>,
     root: PathBuf,
     sources: Vec<Source>,
-    warnings: Vec<Warning>,
+    pub warnings: Vec<Warning>,
 }
 
 impl Project {

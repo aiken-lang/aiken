@@ -2,7 +2,9 @@ use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use crate::ast::{Constant, FieldMap, ModuleKind, Span, TypedConstant};
 
+mod environment;
 pub mod error;
+mod hydrator;
 pub mod infer;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +19,7 @@ pub enum Type {
     ///
     App {
         public: bool,
-        module: Vec<String>,
+        module: String,
         name: String,
         args: Vec<Arc<Type>>,
     },
@@ -32,12 +34,11 @@ pub enum Type {
     /// A type variable. See the contained `TypeVar` enum for more information.
     ///
     Var { tipo: Arc<RefCell<TypeVar>> },
-
-    /// A tuple is an ordered collection of 0 or more values, each of which
-    /// can have a different type, so the `tuple` type is the sum of all the
-    /// contained types.
-    ///
-    Tuple { elems: Vec<Arc<Type>> },
+    // /// A tuple is an ordered collection of 0 or more values, each of which
+    // /// can have a different type, so the `tuple` type is the sum of all the
+    // /// contained types.
+    // ///
+    // Tuple { elems: Vec<Arc<Type>> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,6 +66,12 @@ pub enum TypeVar {
     /// ```
     ///
     Generic { id: u64 },
+}
+
+impl TypeVar {
+    pub fn is_unbound(&self) -> bool {
+        matches!(self, Self::Unbound { .. })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,7 +107,7 @@ pub enum ValueConstructorVariant {
     ModuleFn {
         name: String,
         field_map: Option<FieldMap>,
-        module: Vec<String>,
+        module: String,
         arity: usize,
         location: Span,
     },
@@ -131,7 +138,7 @@ pub struct Module {
 pub struct TypeConstructor {
     pub public: bool,
     pub origin: Span,
-    pub module: Vec<String>,
+    pub module: String,
     pub parameters: Vec<Arc<Type>>,
     pub tipo: Arc<Type>,
 }

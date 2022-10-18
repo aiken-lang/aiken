@@ -34,7 +34,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             parameters: vec![],
             tipo: int(),
             origin: Span::empty(),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -46,7 +46,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             origin: Span::empty(),
             parameters: vec![],
             tipo: byte_array(),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -93,7 +93,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             origin: Span::empty(),
             parameters: vec![],
             tipo: bool(),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -106,7 +106,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             origin: Span::empty(),
             parameters: vec![list_parameter.clone()],
             tipo: list(list_parameter),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -118,7 +118,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             origin: Span::empty(),
             parameters: vec![],
             tipo: string(),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -145,7 +145,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             origin: Span::empty(),
             parameters: vec![],
             tipo: nil(),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -160,7 +160,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             origin: Span::empty(),
             parameters: vec![result_value.clone(), result_error.clone()],
             tipo: result(result_value, result_error),
-            module: vec![],
+            module: "".to_string(),
             public: true,
         },
     );
@@ -211,7 +211,7 @@ pub fn int() -> Arc<Type> {
     Arc::new(Type::App {
         public: true,
         name: INT.to_string(),
-        module: vec![],
+        module: "".to_string(),
         args: vec![],
     })
 }
@@ -221,7 +221,7 @@ pub fn byte_array() -> Arc<Type> {
         args: vec![],
         public: true,
         name: BYTE_ARRAY.to_string(),
-        module: vec![],
+        module: "".to_string(),
     })
 }
 
@@ -230,7 +230,7 @@ pub fn bool() -> Arc<Type> {
         args: vec![],
         public: true,
         name: BOOL.to_string(),
-        module: vec![],
+        module: "".to_string(),
     })
 }
 
@@ -238,7 +238,7 @@ pub fn list(t: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::App {
         public: true,
         name: LIST.to_string(),
-        module: vec![],
+        module: "".to_string(),
         args: vec![t],
     })
 }
@@ -248,7 +248,7 @@ pub fn string() -> Arc<Type> {
         args: vec![],
         public: true,
         name: STRING.to_string(),
-        module: vec![],
+        module: "".to_string(),
     })
 }
 
@@ -257,7 +257,7 @@ pub fn nil() -> Arc<Type> {
         args: vec![],
         public: true,
         name: NIL.to_string(),
-        module: vec![],
+        module: "".to_string(),
     })
 }
 
@@ -265,7 +265,7 @@ pub fn result(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::App {
         public: true,
         name: RESULT.to_string(),
-        module: vec![],
+        module: "".to_string(),
         args: vec![a, e],
     })
 }
@@ -276,6 +276,12 @@ pub fn function(args: Vec<Arc<Type>>, ret: Arc<Type>) -> Arc<Type> {
 
 pub fn generic_var(id: u64) -> Arc<Type> {
     let tipo = Arc::new(RefCell::new(TypeVar::Generic { id }));
+
+    Arc::new(Type::Var { tipo })
+}
+
+pub fn unbound_var(id: u64) -> Arc<Type> {
+    let tipo = Arc::new(RefCell::new(TypeVar::Unbound { id }));
 
     Arc::new(Type::Var { tipo })
 }
