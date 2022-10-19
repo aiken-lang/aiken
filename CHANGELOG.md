@@ -2,6 +2,11 @@
 
 ## [next] - 2022-MM-DD
 
+### Changed
+
+- **aiken**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int` instances
+
+
 ## [v0.0.20] - 2022-10-17
 
 ### Added
