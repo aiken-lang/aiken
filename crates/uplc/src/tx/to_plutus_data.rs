@@ -96,7 +96,7 @@ impl ToPlutusData for TransactionInput {
             0,
             vec![
                 wrap_with_constr(0, self.transaction_id.to_plutus_data()),
-                PlutusData::BigInt(BigInt::Int((self.index as i64).into())),
+                PlutusData::BigInt(BigInt::Int((self.index as i128).try_into().unwrap())),
             ],
         )
     }
@@ -172,7 +172,7 @@ impl ToPlutusData for AnyUInt {
             AnyUInt::U8(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
             AnyUInt::U16(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
             AnyUInt::U32(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
-            AnyUInt::U64(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))),
+            AnyUInt::U64(n) => PlutusData::BigInt(BigInt::Int(Int::try_from(*n as i128).unwrap())),
             AnyUInt::MajorByte(n) => PlutusData::BigInt(BigInt::Int(Int::from(*n as i64))), // is this correct? I don't know exactly what is does
         }
     }
@@ -198,7 +198,7 @@ impl ToPlutusData for i64 {
 
 impl ToPlutusData for u64 {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::BigInt(BigInt::Int(Int::from(*self as i64)))
+        PlutusData::BigInt(BigInt::Int(Int::try_from(*self as i128).unwrap()))
     }
 }
 
