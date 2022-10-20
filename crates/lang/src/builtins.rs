@@ -2,7 +2,10 @@ use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use crate::{
     ast::{ModuleKind, Span},
-    tipo::{self, Type, TypeConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
+    tipo::{
+        self, fields::FieldMap, Type, TypeConstructor, TypeVar, ValueConstructor,
+        ValueConstructorVariant,
+    },
     IdGenerator,
 };
 
@@ -16,9 +19,9 @@ const STRING: &str = "String";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
-pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
-    let mut prelude = tipo::Module {
-        name: vec!["aiken".to_string()],
+pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
+    let mut prelude = tipo::TypeInfo {
+        name: "aiken".to_string(),
         package: "".to_string(),
         kind: ModuleKind::Lib,
         types: HashMap::new(),
@@ -64,7 +67,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "True".to_string(),
-                field_map: None,
+                field_map: None::<FieldMap>,
                 arity: 0,
                 location: Span::empty(),
                 constructors_count: 2,
@@ -79,7 +82,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "False".to_string(),
-                field_map: None,
+                field_map: None::<FieldMap>,
                 arity: 0,
                 location: Span::empty(),
                 constructors_count: 2,
@@ -132,7 +135,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
                 module: "".into(),
                 name: NIL.to_string(),
                 arity: 0,
-                field_map: None,
+                field_map: None::<FieldMap>,
                 location: Span::empty(),
                 constructors_count: 1,
             },
@@ -179,7 +182,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Ok".to_string(),
-                field_map: None,
+                field_map: None::<FieldMap>,
                 arity: 1,
                 location: Span::empty(),
                 constructors_count: 2,
@@ -196,7 +199,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::Module {
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Error".to_string(),
-                field_map: None,
+                field_map: None::<FieldMap>,
                 arity: 1,
                 location: Span::empty(),
                 constructors_count: 2,

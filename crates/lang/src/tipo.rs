@@ -1,11 +1,18 @@
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
 
-use crate::ast::{Constant, FieldMap, ModuleKind, Span, TypedConstant};
+use crate::{
+    ast::{Constant, ModuleKind, Span, TypedConstant},
+    tipo::fields::FieldMap,
+};
+
+use self::environment::Environment;
 
 mod environment;
 pub mod error;
+mod expr;
+pub mod fields;
 mod hydrator;
-pub mod infer;
+mod infer;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -41,6 +48,161 @@ pub enum Type {
     // Tuple { elems: Vec<Arc<Type>> },
 }
 
+impl Type {
+    pub fn is_result_constructor(&self) -> bool {
+        match self {
+            Type::Fn { ret, .. } => ret.is_result(),
+            _ => false,
+        }
+    }
+
+    pub fn is_result(&self) -> bool {
+        matches!(self, Self::App { name, module, .. } if "Result" == name && module.is_empty())
+    }
+
+    pub fn is_unbound(&self) -> bool {
+        matches!(self, Self::Var { tipo } if tipo.borrow().is_unbound())
+    }
+
+    pub fn return_type(&self) -> Option<Arc<Self>> {
+        match self {
+            Self::Fn { ret, .. } => Some(ret.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn function_types(&self) -> Option<(Vec<Arc<Self>>, Arc<Self>)> {
+        match self {
+            Self::Fn { args, ret, .. } => Some((args.clone(), ret.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn is_nil(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "Nil" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_nil(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bool(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "Bool" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_bool(),
+            _ => false,
+        }
+    }
+
+    pub fn is_int(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "Int" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_int(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bytearray(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "ByteArray" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_bytearray(),
+            _ => false,
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "String" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_string(),
+            _ => false,
+        }
+    }
+
+    /// Get the args for the type if the type is a specific `Type::App`.
+    /// Returns None if the type is not a `Type::App` or is an incorrect `Type:App`
+    ///
+    /// This function is currently only used for finding the `List` type.
+    pub fn get_app_args(
+        &self,
+        public: bool,
+        module: &String,
+        name: &str,
+        arity: usize,
+        environment: &mut Environment<'_>,
+    ) -> Option<Vec<Arc<Self>>> {
+        match self {
+            Self::App {
+                module: m,
+                name: n,
+                args,
+                ..
+            } => {
+                if module == m && name == n && args.len() == arity {
+                    Some(args.clone())
+                } else {
+                    None
+                }
+            }
+
+            Self::Var { tipo } => {
+                let args: Vec<_> = match tipo.borrow().deref() {
+                    TypeVar::Link { tipo } => {
+                        return tipo.get_app_args(public, module, name, arity, environment);
+                    }
+
+                    TypeVar::Unbound { .. } => {
+                        (0..arity).map(|_| environment.new_unbound_var()).collect()
+                    }
+
+                    TypeVar::Generic { .. } => return None,
+                };
+
+                // We are an unbound type variable! So convert us to a type link
+                // to the desired type.
+                *tipo.borrow_mut() = TypeVar::Link {
+                    tipo: Arc::new(Self::App {
+                        name: name.to_string(),
+                        module: module.to_owned(),
+                        args: args.clone(),
+                        public,
+                    }),
+                };
+                Some(args)
+            }
+
+            _ => None,
+        }
+    }
+
+    pub fn find_private_type(&self) -> Option<Self> {
+        match self {
+            Self::App { public: false, .. } => Some(self.clone()),
+
+            Self::App { args, .. } => args.iter().find_map(|t| t.find_private_type()),
+
+            // Self::Tuple { elems, .. } => elems.iter().find_map(|t| t.find_private_type()),
+            Self::Fn { ret, args, .. } => ret
+                .find_private_type()
+                .or_else(|| args.iter().find_map(|t| t.find_private_type())),
+
+            Self::Var { tipo, .. } => match tipo.borrow().deref() {
+                TypeVar::Unbound { .. } => None,
+
+                TypeVar::Generic { .. } => None,
+
+                TypeVar::Link { tipo, .. } => tipo.find_private_type(),
+            },
+        }
+    }
+
+    pub fn fn_arity(&self) -> Option<usize> {
+        match self {
+            Self::Fn { args, .. } => Some(args.len()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeVar {
     /// Unbound is an unbound variable. It is one specific type but we don't
@@ -72,6 +234,41 @@ impl TypeVar {
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
     }
+
+    pub fn is_nil(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_nil(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bool(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_bool(),
+            _ => false,
+        }
+    }
+
+    pub fn is_int(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_int(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bytearray(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_bytearray(),
+            _ => false,
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_string(),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +284,14 @@ impl ValueConstructor {
             public: true,
             variant,
             tipo,
+        }
+    }
+
+    fn field_map(&self) -> Option<&FieldMap> {
+        match &self.variant {
+            ValueConstructorVariant::ModuleFn { field_map, .. }
+            | ValueConstructorVariant::Record { field_map, .. } => field_map.as_ref(),
+            _ => None,
         }
     }
 }
@@ -123,9 +328,20 @@ pub enum ValueConstructorVariant {
     },
 }
 
+impl ValueConstructorVariant {
+    pub fn location(&self) -> Span {
+        match self {
+            ValueConstructorVariant::LocalVariable { location }
+            | ValueConstructorVariant::ModuleConstant { location, .. }
+            | ValueConstructorVariant::ModuleFn { location, .. }
+            | ValueConstructorVariant::Record { location, .. } => *location,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct Module {
-    pub name: Vec<String>,
+pub struct TypeInfo {
+    pub name: String,
     pub kind: ModuleKind,
     pub package: String,
     pub types: HashMap<String, TypeConstructor>,
@@ -171,7 +387,7 @@ pub enum ModuleValueConstructor {
     Record {
         name: String,
         arity: usize,
-        type_: Arc<Type>,
+        tipo: Arc<Type>,
         field_map: Option<FieldMap>,
         location: Span,
     },

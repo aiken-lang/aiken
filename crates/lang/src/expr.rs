@@ -7,6 +7,7 @@ use crate::{
         Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, IfBranch, Pattern,
         RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
     },
+    builtins::{bool, nil},
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
@@ -18,16 +19,16 @@ pub enum TypedExpr {
         value: String,
     },
 
-    Float {
+    String {
         location: Span,
         tipo: Arc<Type>,
         value: String,
     },
 
-    String {
+    ByteArray {
         location: Span,
         tipo: Arc<Type>,
-        value: String,
+        bytes: Vec<u8>,
     },
 
     Sequence {
@@ -161,14 +162,104 @@ pub enum TypedExpr {
     },
 }
 
+impl TypedExpr {
+    pub fn tipo(&self) -> Arc<Type> {
+        match self {
+            Self::Negate { .. } => bool(),
+            Self::Var { constructor, .. } => constructor.tipo.clone(),
+            Self::Try { then, .. } => then.tipo(),
+            Self::Fn { tipo, .. }
+            | Self::Int { tipo, .. }
+            | Self::Todo { tipo, .. }
+            | Self::When { tipo, .. }
+            | Self::List { tipo, .. }
+            | Self::Call { tipo, .. }
+            | Self::If { tipo, .. }
+            | Self::BinOp { tipo, .. }
+            | Self::Tuple { tipo, .. }
+            | Self::String { tipo, .. }
+            | Self::ByteArray { tipo, .. }
+            | Self::TupleIndex { tipo, .. }
+            | Self::Assignment { tipo, .. }
+            | Self::ModuleSelect { tipo, .. }
+            | Self::RecordAccess { tipo, .. }
+            | Self::RecordUpdate { tipo, .. } => tipo.clone(),
+            Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
+                expressions.last().map(TypedExpr::tipo).unwrap_or_else(nil)
+            }
+        }
+    }
+
+    pub fn type_defining_location(&self) -> Span {
+        match self {
+            Self::Fn { location, .. }
+            | Self::Int { location, .. }
+            | Self::Try { location, .. }
+            | Self::Var { location, .. }
+            | Self::Todo { location, .. }
+            | Self::When { location, .. }
+            | Self::Call { location, .. }
+            | Self::List { location, .. }
+            | Self::BinOp { location, .. }
+            | Self::Tuple { location, .. }
+            | Self::String { location, .. }
+            | Self::Negate { location, .. }
+            | Self::Pipeline { location, .. }
+            | Self::ByteArray { location, .. }
+            | Self::Assignment { location, .. }
+            | Self::TupleIndex { location, .. }
+            | Self::ModuleSelect { location, .. }
+            | Self::RecordAccess { location, .. }
+            | Self::RecordUpdate { location, .. } => *location,
+
+            Self::If {
+                location,
+                branches,
+                final_else,
+                tipo,
+            } => branches.first().body.type_defining_location(),
+
+            Self::Sequence {
+                expressions,
+                location,
+                ..
+            } => expressions
+                .last()
+                .map(TypedExpr::location)
+                .unwrap_or(*location),
+        }
+    }
+
+    pub fn location(&self) -> Span {
+        match self {
+            Self::Fn { location, .. }
+            | Self::Try { location, .. }
+            | Self::Int { location, .. }
+            | Self::Var { location, .. }
+            | Self::Todo { location, .. }
+            | Self::When { location, .. }
+            | Self::Call { location, .. }
+            | Self::If { location, .. }
+            | Self::List { location, .. }
+            | Self::BinOp { location, .. }
+            | Self::Tuple { location, .. }
+            | Self::String { location, .. }
+            | Self::Negate { location, .. }
+            | Self::Sequence { location, .. }
+            | Self::Pipeline { location, .. }
+            | Self::ByteArray { location, .. }
+            | Self::Assignment { location, .. }
+            | Self::TupleIndex { location, .. }
+            | Self::ModuleSelect { location, .. }
+            | Self::RecordAccess { location, .. }
+            | Self::RecordUpdate { location, .. } => *location,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum UntypedExpr {
     Int {
-        location: Span,
-        value: String,
-    },
-
-    Float {
         location: Span,
         value: String,
     },
@@ -203,9 +294,9 @@ pub enum UntypedExpr {
     },
 
     Call {
-        location: Span,
-        fun: Box<Self>,
         arguments: Vec<CallArg<Self>>,
+        fun: Box<Self>,
+        location: Span,
     },
 
     BinOp {
@@ -213,6 +304,11 @@ pub enum UntypedExpr {
         name: BinOp,
         left: Box<Self>,
         right: Box<Self>,
+    },
+
+    ByteArray {
+        location: Span,
+        bytes: Vec<u8>,
     },
 
     PipeLine {
@@ -344,7 +440,7 @@ impl UntypedExpr {
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }
-            | Self::Float { location, .. }
+            | Self::ByteArray { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::String { location, .. }

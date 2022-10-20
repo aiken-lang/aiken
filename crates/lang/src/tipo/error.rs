@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use miette::Diagnostic;
 
@@ -6,8 +6,19 @@ use crate::ast::{BinOp, Span, TodoKind};
 
 use super::Type;
 
+// use aiken/pub
+
+// pub fn do_thing() { pub.other() }
+
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
+    #[error("duplicate argument {label}")]
+    DuplicateArgument {
+        #[label]
+        location: Span,
+        label: String,
+    },
+
     #[error("duplicate const {name}")]
     DuplicateConstName {
         #[label]
@@ -49,6 +60,15 @@ pub enum Error {
         name: String,
     },
 
+    #[error("incorrect arity expected {expected} but given {given}")]
+    IncorrectArity {
+        #[label]
+        location: Span,
+        expected: usize,
+        given: usize,
+        labels: Vec<String>,
+    },
+
     #[error("{name} has incorrect type arity expected {expected} but given {given}")]
     IncorrectTypeArity {
         location: Span,
@@ -57,16 +77,57 @@ pub enum Error {
         given: usize,
     },
 
+    #[error("not a function")]
+    NotFn {
+        #[label]
+        location: Span,
+        tipo: Arc<Type>,
+    },
+
     #[error("{name} contains keyword {keyword}")]
     KeywordInModuleName { name: String, keyword: String },
 
+    #[error("clause guard {name} is not local")]
+    NonLocalClauseGuardVariable {
+        #[label]
+        location: Span,
+        name: String,
+    },
+
+    #[error("positional argument after labeled")]
+    PositionalArgumentAfterLabeled {
+        #[label]
+        location: Span,
+    },
+
+    #[error("private type leaked")]
+    PrivateTypeLeak {
+        #[label]
+        location: Span,
+        leaked: Type,
+    },
+
     #[error("{name} is a reserved module name")]
     ReservedModuleName { name: String },
+
+    #[error("unexpected labeled argument {label}")]
+    UnexpectedLabeledArg {
+        #[label]
+        location: Span,
+        label: String,
+    },
 
     #[error("unexpected type hole")]
     UnexpectedTypeHole {
         #[label]
         location: Span,
+    },
+
+    #[error("unknown labels")]
+    UnknownLabels {
+        unknown: Vec<(String, Span)>,
+        valid: Vec<String>,
+        supplied: Vec<String>,
     },
 
     #[error("unknown module {name}")]
@@ -85,54 +146,76 @@ pub enum Error {
         type_constructors: Vec<String>,
     },
 
-    #[error("")]
+    #[error("unknown module value {name}")]
+    UnknownModuleValue {
+        #[label]
+        location: Span,
+        name: String,
+        module_name: String,
+        value_constructors: Vec<String>,
+    },
+
+    #[error("unknown type {name} in module {module_name}")]
+    UnknownModuleType {
+        #[label]
+        location: Span,
+        name: String,
+        module_name: String,
+        type_constructors: Vec<String>,
+    },
+
+    #[error("unknown type {name}")]
     UnknownType {
+        #[label]
         location: Span,
         name: String,
         types: Vec<String>,
     },
 
-    #[error("")]
-    UnknownTypeConstructorType {
+    #[error("unknown variable {name}")]
+    UnknownVariable {
+        #[label]
         location: Span,
         name: String,
-        type_constructors: Vec<String>,
-    },
-
-    #[error("")]
-    UnknownTypeConstructorModule {
-        location: Span,
-        name: String,
-        imported_modules: Vec<String>,
-    },
-
-    #[error("")]
-    UnknownTypeConstructorModuleType {
-        location: Span,
-        name: String,
-        module_name: Vec<String>,
-        type_constructors: Vec<String>,
+        variables: Vec<String>,
     },
 
     #[error("")]
     CouldNotUnify {
+        #[label]
         location: Span,
         expected: Arc<Type>,
         given: Arc<Type>,
         situation: Option<UnifyErrorSituation>,
+        rigid_type_names: HashMap<u64, String>,
     },
 
     #[error("")]
-    ExtraVarInAlternativePattern { location: Span, name: String },
+    ExtraVarInAlternativePattern {
+        #[label]
+        location: Span,
+        name: String,
+    },
 
     #[error("")]
-    MissingVarInAlternativePattern { location: Span, name: String },
+    MissingVarInAlternativePattern {
+        #[label]
+        location: Span,
+        name: String,
+    },
 
     #[error("")]
-    DuplicateVarInPattern { location: Span, name: String },
+    DuplicateVarInPattern {
+        #[label]
+        location: Span,
+        name: String,
+    },
 
     #[error("")]
-    RecursiveType { location: Span },
+    RecursiveType {
+        #[label]
+        location: Span,
+    },
 }
 
 impl Error {
@@ -143,14 +226,52 @@ impl Error {
                 expected,
                 given,
                 situation: note,
+                rigid_type_names,
             } => Error::CouldNotUnify {
                 location,
                 expected: given,
                 given: expected,
                 situation: note,
+                rigid_type_names,
             },
             other => other,
         }
+    }
+
+    pub fn with_unify_error_rigid_names(mut self, new_names: &HashMap<u64, String>) -> Self {
+        match self {
+            Error::CouldNotUnify {
+                rigid_type_names: ref mut annotated_names,
+                ..
+            } => {
+                *annotated_names = new_names.clone();
+                self
+            }
+            _ => self,
+        }
+    }
+
+    pub fn with_unify_error_situation(self, situation: UnifyErrorSituation) -> Self {
+        match self {
+            Self::CouldNotUnify {
+                expected,
+                given,
+                location,
+                rigid_type_names,
+                ..
+            } => Self::CouldNotUnify {
+                expected,
+                given,
+                situation: Some(situation),
+                location,
+                rigid_type_names,
+            },
+            other => other,
+        }
+    }
+
+    pub fn return_annotation_mismatch(self) -> Self {
+        self.with_unify_error_situation(UnifyErrorSituation::ReturnAnnotationMismatch)
     }
 }
 

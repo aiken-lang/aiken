@@ -6,19 +6,25 @@ use std::{
 
 use crate::{
     ast::{
-        Annotation, ArgName, Definition, FieldMap, RecordConstructor, RecordConstructorArg, Span,
-        UnqualifiedImport, UntypedDefinition,
+        Annotation, ArgName, CallArg, Definition, RecordConstructor, RecordConstructorArg, Span,
+        TypedDefinition, UnqualifiedImport, UntypedDefinition, PIPE_VARIABLE,
     },
     builtins::{function, generic_var, unbound_var},
+    tipo::fields::FieldMap,
     IdGenerator,
 };
 
 use super::{
     error::{Error, Warning},
     hydrator::Hydrator,
-    AccessorsMap, Module, RecordAccessor, Type, TypeConstructor, TypeVar, ValueConstructor,
+    AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
     ValueConstructorVariant,
 };
+
+#[derive(Debug)]
+pub struct ScopeResetData {
+    local_values: HashMap<String, ValueConstructor>,
+}
 
 #[derive(Debug)]
 pub struct Environment<'a> {
@@ -31,11 +37,11 @@ pub struct Environment<'a> {
     /// NOTE: The bool in the tuple here tracks if the entity has been used
     pub entity_usages: Vec<HashMap<String, (EntityKind, Span, bool)>>,
     pub id_gen: IdGenerator,
-    pub importable_modules: &'a HashMap<String, Module>,
+    pub importable_modules: &'a HashMap<String, TypeInfo>,
 
     /// Modules that have been imported by the current module, along with the
     /// location of the import statement where they were imported.
-    pub imported_modules: HashMap<String, (Span, &'a Module)>,
+    pub imported_modules: HashMap<String, (Span, &'a TypeInfo)>,
     pub imported_types: HashSet<String>,
 
     /// Types defined in the current module (or the prelude)
@@ -68,10 +74,525 @@ pub struct Environment<'a> {
 }
 
 impl<'a> Environment<'a> {
+    pub fn close_scope(&mut self, data: ScopeResetData) {
+        let unused = self
+            .entity_usages
+            .pop()
+            .expect("There was no top entity scope.");
+
+        self.handle_unused(unused);
+
+        self.scope = data.local_values;
+    }
+
+    /// Converts entities with a usage count of 0 to warnings
+    pub fn convert_unused_to_warnings(&mut self) {
+        let unused = self
+            .entity_usages
+            .pop()
+            .expect("Expected a bottom level of entity usages.");
+
+        self.handle_unused(unused);
+
+        for (name, location) in self.unused_modules.clone().into_iter() {
+            self.warnings
+                .push(Warning::UnusedImportedModule { name, location });
+        }
+    }
+
+    pub fn match_fun_type(
+        &mut self,
+        tipo: Arc<Type>,
+        arity: usize,
+        fn_location: Span,
+        call_location: Span,
+    ) -> Result<(Vec<Arc<Type>>, Arc<Type>), Error> {
+        if let Type::Var { tipo } = tipo.deref() {
+            let new_value = match tipo.borrow().deref() {
+                TypeVar::Link { tipo, .. } => {
+                    return self.match_fun_type(tipo.clone(), arity, fn_location, call_location);
+                }
+
+                TypeVar::Unbound { .. } => {
+                    let args: Vec<_> = (0..arity).map(|_| self.new_unbound_var()).collect();
+
+                    let ret = self.new_unbound_var();
+
+                    Some((args, ret))
+                }
+
+                TypeVar::Generic { .. } => None,
+            };
+
+            if let Some((args, ret)) = new_value {
+                *tipo.borrow_mut() = TypeVar::Link {
+                    tipo: function(args.clone(), ret.clone()),
+                };
+
+                return Ok((args, ret));
+            }
+        }
+
+        if let Type::Fn { args, ret } = tipo.deref() {
+            return if args.len() != arity {
+                Err(Error::IncorrectArity {
+                    expected: args.len(),
+                    given: arity,
+                    labels: vec![],
+                    location: call_location,
+                })
+            } else {
+                Ok((args.clone(), ret.clone()))
+            };
+        }
+
+        Err(Error::NotFn {
+            tipo,
+            location: fn_location,
+        })
+    }
+
+    fn custom_type_accessors<A>(
+        &mut self,
+        constructors: &[RecordConstructor<A>],
+        hydrator: &mut Hydrator,
+    ) -> Result<Option<HashMap<String, RecordAccessor>>, Error> {
+        let args = get_compatible_record_fields(constructors);
+
+        let mut fields = HashMap::with_capacity(args.len());
+
+        hydrator.disallow_new_type_variables();
+
+        for (index, label, ast) in args {
+            let tipo = hydrator.type_from_annotation(ast, self)?;
+
+            fields.insert(
+                label.to_string(),
+                RecordAccessor {
+                    index: index as u64,
+                    label: label.to_string(),
+                    tipo,
+                },
+            );
+        }
+        Ok(Some(fields))
+    }
+
+    pub fn generalise_definition(
+        &mut self,
+        s: TypedDefinition,
+        module_name: &String,
+    ) -> TypedDefinition {
+        match s {
+            Definition::Fn {
+                doc,
+                location,
+                name,
+                public,
+                arguments: args,
+                body,
+                return_annotation,
+                return_type,
+            } => {
+                // Lookup the inferred function information
+                let function = self
+                    .get_variable(&name)
+                    .expect("Could not find preregistered type for function");
+
+                let field_map = function.field_map().cloned();
+
+                let tipo = function.tipo.clone();
+
+                // Generalise the function if not already done so
+                let tipo = if self.ungeneralised_functions.remove(&name) {
+                    generalise(tipo, 0)
+                } else {
+                    tipo
+                };
+
+                // Insert the function into the module's interface
+                self.insert_module_value(
+                    &name,
+                    ValueConstructor {
+                        public,
+                        tipo,
+                        variant: ValueConstructorVariant::ModuleFn {
+                            name: name.clone(),
+                            field_map,
+                            module: module_name.to_owned(),
+                            arity: args.len(),
+                            location,
+                        },
+                    },
+                );
+
+                Definition::Fn {
+                    doc,
+                    location,
+                    name,
+                    public,
+                    arguments: args,
+                    return_annotation,
+                    return_type,
+                    body,
+                }
+            }
+
+            definition @ (Definition::TypeAlias { .. }
+            | Definition::DataType { .. }
+            | Definition::Use { .. }
+            | Definition::ModuleConstant { .. }) => definition,
+        }
+    }
+
+    /// Lookup a type in the current scope.
+    pub fn get_type_constructor(
+        &mut self,
+        module_alias: &Option<String>,
+        name: &str,
+        location: Span,
+    ) -> Result<&TypeConstructor, Error> {
+        match module_alias {
+            None => self
+                .module_types
+                .get(name)
+                .ok_or_else(|| Error::UnknownType {
+                    location,
+                    name: name.to_string(),
+                    types: self.module_types.keys().map(|t| t.to_string()).collect(),
+                }),
+
+            Some(m) => {
+                let (_, module) =
+                    self.imported_modules
+                        .get(m)
+                        .ok_or_else(|| Error::UnknownModule {
+                            location,
+                            name: name.to_string(),
+                            imported_modules: self
+                                .importable_modules
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                        })?;
+
+                self.unused_modules.remove(m);
+
+                module
+                    .types
+                    .get(name)
+                    .ok_or_else(|| Error::UnknownModuleType {
+                        location,
+                        name: name.to_string(),
+                        module_name: module.name.clone(),
+                        type_constructors: module.types.keys().map(|t| t.to_string()).collect(),
+                    })
+            }
+        }
+    }
+
+    /// Lookup a value constructor in the current scope.
+    ///
+    pub fn get_value_constructor(
+        &mut self,
+        module: Option<&String>,
+        name: &str,
+        location: Span,
+    ) -> Result<&ValueConstructor, Error> {
+        match module {
+            None => self.scope.get(name).ok_or_else(|| Error::UnknownVariable {
+                name: name.to_string(),
+                variables: self.local_value_names(),
+                location,
+            }),
+
+            Some(m) => {
+                let (_, module) =
+                    self.imported_modules
+                        .get(m)
+                        .ok_or_else(|| Error::UnknownModule {
+                            name: name.to_string(),
+                            imported_modules: self
+                                .importable_modules
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                            location,
+                        })?;
+
+                self.unused_modules.remove(m);
+
+                module
+                    .values
+                    .get(name)
+                    .ok_or_else(|| Error::UnknownModuleValue {
+                        name: name.to_string(),
+                        module_name: module.name.clone(),
+                        value_constructors: module.values.keys().map(|t| t.to_string()).collect(),
+                        location,
+                    })
+            }
+        }
+    }
+
+    /// Lookup a variable in the current scope.
+    pub fn get_variable(&self, name: &str) -> Option<&ValueConstructor> {
+        self.scope.get(name)
+    }
+
+    fn handle_unused(&mut self, unused: HashMap<String, (EntityKind, Span, bool)>) {
+        for (name, (kind, location, _)) in unused.into_iter().filter(|(_, (_, _, used))| !used) {
+            let warning = match kind {
+                EntityKind::ImportedType | EntityKind::ImportedTypeAndConstructor => {
+                    Warning::UnusedType {
+                        name,
+                        imported: true,
+                        location,
+                    }
+                }
+                EntityKind::ImportedConstructor => Warning::UnusedConstructor {
+                    name,
+                    imported: true,
+                    location,
+                },
+                EntityKind::PrivateConstant => {
+                    Warning::UnusedPrivateModuleConstant { name, location }
+                }
+                EntityKind::PrivateTypeConstructor(_) => Warning::UnusedConstructor {
+                    name,
+                    imported: false,
+                    location,
+                },
+                EntityKind::PrivateFunction => Warning::UnusedPrivateFunction { name, location },
+                EntityKind::PrivateType => Warning::UnusedType {
+                    name,
+                    imported: false,
+                    location,
+                },
+                EntityKind::ImportedValue => Warning::UnusedImportedValue { name, location },
+                EntityKind::Variable => Warning::UnusedVariable { name, location },
+            };
+
+            self.warnings.push(warning);
+        }
+    }
+
+    pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
+        // Record initial scope state
+        let initial = self.open_new_scope();
+
+        // Process scope
+        let result = process_scope(self);
+
+        self.close_scope(initial);
+
+        // Return result of typing the scope
+        result
+    }
+
+    /// Increments an entity's usage in the current or nearest enclosing scope
+    pub fn increment_usage(&mut self, name: &str) {
+        let mut name = name.to_string();
+
+        while let Some((kind, _, used)) = self
+            .entity_usages
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(&name))
+        {
+            *used = true;
+
+            match kind {
+                // If a type constructor is used, we consider its type also used
+                EntityKind::PrivateTypeConstructor(type_name) if type_name != &name => {
+                    name.clone_from(type_name);
+                }
+                _ => return,
+            }
+        }
+    }
+
+    /// Inserts an entity at the current scope for usage tracking.
+    pub fn init_usage(&mut self, name: String, kind: EntityKind, location: Span) {
+        use EntityKind::*;
+
+        match self
+            .entity_usages
+            .last_mut()
+            .expect("Attempted to access non-existant entity usages scope")
+            .insert(name.to_string(), (kind, location, false))
+        {
+            // Private types can be shadowed by a constructor with the same name
+            //
+            // TODO: Improve this so that we can tell if an imported overriden
+            // type is actually used or not by tracking whether usages apply to
+            // the value or type scope
+            Some((ImportedType | ImportedTypeAndConstructor | PrivateType, _, _)) => (),
+
+            Some((kind, location, false)) => {
+                // an entity was overwritten in the top most scope without being used
+                let mut unused = HashMap::with_capacity(1);
+                unused.insert(name, (kind, location, false));
+                self.handle_unused(unused);
+            }
+
+            _ => (),
+        }
+    }
+
+    pub fn insert_accessors(&mut self, type_name: &str, accessors: AccessorsMap) {
+        self.accessors.insert(type_name.to_string(), accessors);
+    }
+
+    /// Insert a value into the current module.
+    /// Errors if the module already has a value with that name.
+    pub fn insert_module_value(&mut self, name: &str, value: ValueConstructor) {
+        self.module_values.insert(name.to_string(), value);
+    }
+
+    /// Map a type in the current scope. Errors if the module
+    /// already has a type with that name, unless the type is
+    /// from the prelude.
+    pub fn insert_type_constructor(
+        &mut self,
+        type_name: String,
+        info: TypeConstructor,
+    ) -> Result<(), Error> {
+        let name = type_name.clone();
+        let location = info.origin;
+
+        match self.module_types.insert(type_name, info) {
+            None => Ok(()),
+            Some(prelude_type) if prelude_type.module.is_empty() => Ok(()),
+            Some(previous) => Err(Error::DuplicateTypeName {
+                name,
+                location,
+                previous_location: previous.origin,
+            }),
+        }
+    }
+
+    /// Map a type to constructors in the current scope.
+    pub fn insert_type_to_constructors(&mut self, type_name: String, constructors: Vec<String>) {
+        self.module_types_constructors
+            .insert(type_name, constructors);
+    }
+
+    /// Insert a variable in the current scope.
+    pub fn insert_variable(
+        &mut self,
+        name: String,
+        variant: ValueConstructorVariant,
+        tipo: Arc<Type>,
+    ) {
+        self.scope.insert(
+            name,
+            ValueConstructor {
+                public: false,
+                variant,
+                tipo,
+            },
+        );
+    }
+
+    /// Instantiate converts generic variables into unbound ones.
+    pub fn instantiate(
+        &mut self,
+        t: Arc<Type>,
+        ids: &mut HashMap<u64, Arc<Type>>,
+        hydrator: &Hydrator,
+    ) -> Arc<Type> {
+        match t.deref() {
+            Type::App {
+                public,
+                name,
+                module,
+                args,
+            } => {
+                let args = args
+                    .iter()
+                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
+                    .collect();
+                Arc::new(Type::App {
+                    public: *public,
+                    name: name.clone(),
+                    module: module.clone(),
+                    args,
+                })
+            }
+
+            Type::Var { tipo } => {
+                match tipo.borrow().deref() {
+                    TypeVar::Link { tipo } => return self.instantiate(tipo.clone(), ids, hydrator),
+
+                    TypeVar::Unbound { .. } => return Arc::new(Type::Var { tipo: tipo.clone() }),
+
+                    TypeVar::Generic { id } => match ids.get(id) {
+                        Some(t) => return t.clone(),
+                        None => {
+                            if !hydrator.is_rigid(id) {
+                                // Check this in the hydrator, i.e. is it a created type
+                                let v = self.new_unbound_var();
+                                ids.insert(*id, v.clone());
+                                return v;
+                            } else {
+                                // tracing::trace!(id = id, "not_instantiating_rigid_type_var")
+                            }
+                        }
+                    },
+                }
+                Arc::new(Type::Var { tipo: tipo.clone() })
+            }
+
+            Type::Fn { args, ret, .. } => function(
+                args.iter()
+                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
+                    .collect(),
+                self.instantiate(ret.clone(), ids, hydrator),
+            ),
+            // Type::Tuple { elems } => tuple(
+            //     elems
+            //         .iter()
+            //         .map(|t| self.instantiate(t.clone(), ids, hydrator))
+            //         .collect(),
+            // ),
+        }
+    }
+
+    pub fn local_value_names(&self) -> Vec<String> {
+        self.scope
+            .keys()
+            .filter(|&t| PIPE_VARIABLE != t)
+            .map(|t| t.to_string())
+            .collect()
+    }
+
+    fn make_type_vars(
+        &mut self,
+        args: &[String],
+        location: &Span,
+        hydrator: &mut Hydrator,
+    ) -> Result<Vec<Arc<Type>>, Error> {
+        let mut type_vars = Vec::new();
+
+        for arg in args {
+            let annotation = Annotation::Var {
+                location: *location,
+                name: arg.to_string(),
+            };
+
+            let tipo = hydrator.type_from_annotation(&annotation, self)?;
+
+            type_vars.push(tipo);
+        }
+
+        Ok(type_vars)
+    }
+
     pub fn new(
         id_gen: IdGenerator,
         current_module: &'a String,
-        importable_modules: &'a HashMap<String, Module>,
+        importable_modules: &'a HashMap<String, TypeInfo>,
         warnings: &'a mut Vec<Warning>,
     ) -> Self {
         let prelude = importable_modules
@@ -96,6 +617,35 @@ impl<'a> Environment<'a> {
             warnings,
             entity_usages: vec![HashMap::new()],
         }
+    }
+
+    /// Create a new generic type that can stand in for any type.
+    pub fn new_generic_var(&mut self) -> Arc<Type> {
+        generic_var(self.next_uid())
+    }
+
+    /// Create a new unbound type that is a specific type, we just don't
+    /// know which one yet.
+    pub fn new_unbound_var(&mut self) -> Arc<Type> {
+        unbound_var(self.next_uid())
+    }
+
+    pub fn next_uid(&mut self) -> u64 {
+        let id = self.id_gen.next();
+        self.previous_id = id;
+        id
+    }
+
+    pub fn open_new_scope(&mut self) -> ScopeResetData {
+        let local_values = self.scope.clone();
+
+        self.entity_usages.push(HashMap::new());
+
+        ScopeResetData { local_values }
+    }
+
+    pub fn previous_uid(&self) -> u64 {
+        self.previous_id
     }
 
     pub fn register_import(&mut self, def: &UntypedDefinition) -> Result<(), Error> {
@@ -532,154 +1082,6 @@ impl<'a> Environment<'a> {
         Ok(())
     }
 
-    /// Insert a variable in the current scope.
-    pub fn insert_variable(
-        &mut self,
-        name: String,
-        variant: ValueConstructorVariant,
-        tipo: Arc<Type>,
-    ) {
-        self.scope.insert(
-            name,
-            ValueConstructor {
-                public: false,
-                variant,
-                tipo,
-            },
-        );
-    }
-
-    /// Map a type in the current scope. Errors if the module
-    /// already has a type with that name, unless the type is
-    /// from the prelude.
-    pub fn insert_type_constructor(
-        &mut self,
-        type_name: String,
-        info: TypeConstructor,
-    ) -> Result<(), Error> {
-        let name = type_name.clone();
-        let location = info.origin;
-
-        match self.module_types.insert(type_name, info) {
-            None => Ok(()),
-            Some(prelude_type) if prelude_type.module.is_empty() => Ok(()),
-            Some(previous) => Err(Error::DuplicateTypeName {
-                name,
-                location,
-                previous_location: previous.origin,
-            }),
-        }
-    }
-
-    /// Map a type to constructors in the current scope.
-    pub fn insert_type_to_constructors(&mut self, type_name: String, constructors: Vec<String>) {
-        self.module_types_constructors
-            .insert(type_name, constructors);
-    }
-
-    pub fn insert_accessors(&mut self, type_name: &str, accessors: AccessorsMap) {
-        self.accessors.insert(type_name.to_string(), accessors);
-    }
-
-    /// Insert a value into the current module.
-    /// Errors if the module already has a value with that name.
-    pub fn insert_module_value(&mut self, name: &str, value: ValueConstructor) {
-        self.module_values.insert(name.to_string(), value);
-    }
-
-    /// Lookup a type in the current scope.
-    pub fn get_type_constructor(
-        &mut self,
-        module_alias: &Option<String>,
-        name: &str,
-        location: Span,
-    ) -> Result<&TypeConstructor, Error> {
-        match module_alias {
-            None => self
-                .module_types
-                .get(name)
-                .ok_or_else(|| Error::UnknownTypeConstructorType {
-                    location,
-                    name: name.to_string(),
-                    type_constructors: self.module_types.keys().map(|t| t.to_string()).collect(),
-                }),
-
-            Some(m) => {
-                let (_, module) = self.imported_modules.get(m).ok_or_else(|| {
-                    Error::UnknownTypeConstructorModule {
-                        location,
-                        name: name.to_string(),
-                        imported_modules: self
-                            .importable_modules
-                            .keys()
-                            .map(|t| t.to_string())
-                            .collect(),
-                    }
-                })?;
-                self.unused_modules.remove(m);
-                module
-                    .types
-                    .get(name)
-                    .ok_or_else(|| Error::UnknownTypeConstructorModuleType {
-                        location,
-                        name: name.to_string(),
-                        module_name: module.name.clone(),
-                        type_constructors: module.types.keys().map(|t| t.to_string()).collect(),
-                    })
-            }
-        }
-    }
-
-    /// Increments an entity's usage in the current or nearest enclosing scope
-    pub fn increment_usage(&mut self, name: &str) {
-        let mut name = name.to_string();
-
-        while let Some((kind, _, used)) = self
-            .entity_usages
-            .iter_mut()
-            .rev()
-            .find_map(|scope| scope.get_mut(&name))
-        {
-            *used = true;
-
-            match kind {
-                // If a type constructor is used, we consider its type also used
-                EntityKind::PrivateTypeConstructor(type_name) if type_name != &name => {
-                    name.clone_from(type_name);
-                }
-                _ => return,
-            }
-        }
-    }
-
-    /// Inserts an entity at the current scope for usage tracking.
-    pub fn init_usage(&mut self, name: String, kind: EntityKind, location: Span) {
-        use EntityKind::*;
-
-        match self
-            .entity_usages
-            .last_mut()
-            .expect("Attempted to access non-existant entity usages scope")
-            .insert(name.to_string(), (kind, location, false))
-        {
-            // Private types can be shadowed by a constructor with the same name
-            //
-            // TODO: Improve this so that we can tell if an imported overriden
-            // type is actually used or not by tracking whether usages apply to
-            // the value or type scope
-            Some((ImportedType | ImportedTypeAndConstructor | PrivateType, _, _)) => (),
-
-            Some((kind, location, false)) => {
-                // an entity was overwritten in the top most scope without being used
-                let mut unused = HashMap::with_capacity(1);
-                unused.insert(name, (kind, location, false));
-                self.handle_unused(unused);
-            }
-
-            _ => (),
-        }
-    }
-
     /// Unify two types that should be the same.
     /// Any unbound type variables will be linked to the other type as they are the same.
     ///
@@ -735,6 +1137,7 @@ impl<'a> Environment<'a> {
                     expected: t1.clone(),
                     given: t2,
                     situation: None,
+                    rigid_type_names: HashMap::new(),
                 }),
             };
         }
@@ -787,6 +1190,7 @@ impl<'a> Environment<'a> {
                             expected: t1.clone(),
                             given: t2.clone(),
                             situation: None,
+                            rigid_type_names: HashMap::new(),
                         }
                     })?;
                 }
@@ -796,6 +1200,7 @@ impl<'a> Environment<'a> {
                         expected: t1.clone(),
                         given: t2.clone(),
                         situation: None,
+                        rigid_type_names: HashMap::new(),
                     })
             }
 
@@ -804,177 +1209,8 @@ impl<'a> Environment<'a> {
                 expected: t1.clone(),
                 given: t2.clone(),
                 situation: None,
+                rigid_type_names: HashMap::new(),
             }),
-        }
-    }
-
-    /// Instantiate converts generic variables into unbound ones.
-    pub fn instantiate(
-        &mut self,
-        t: Arc<Type>,
-        ids: &mut HashMap<u64, Arc<Type>>,
-        hydrator: &Hydrator,
-    ) -> Arc<Type> {
-        match t.deref() {
-            Type::App {
-                public,
-                name,
-                module,
-                args,
-            } => {
-                let args = args
-                    .iter()
-                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
-                    .collect();
-                Arc::new(Type::App {
-                    public: *public,
-                    name: name.clone(),
-                    module: module.clone(),
-                    args,
-                })
-            }
-
-            Type::Var { tipo } => {
-                match tipo.borrow().deref() {
-                    TypeVar::Link { tipo } => return self.instantiate(tipo.clone(), ids, hydrator),
-
-                    TypeVar::Unbound { .. } => return Arc::new(Type::Var { tipo: tipo.clone() }),
-
-                    TypeVar::Generic { id } => match ids.get(id) {
-                        Some(t) => return t.clone(),
-                        None => {
-                            if !hydrator.is_rigid(id) {
-                                // Check this in the hydrator, i.e. is it a created type
-                                let v = self.new_unbound_var();
-                                ids.insert(*id, v.clone());
-                                return v;
-                            } else {
-                                // tracing::trace!(id = id, "not_instantiating_rigid_type_var")
-                            }
-                        }
-                    },
-                }
-                Arc::new(Type::Var { tipo: tipo.clone() })
-            }
-
-            Type::Fn { args, ret, .. } => function(
-                args.iter()
-                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
-                    .collect(),
-                self.instantiate(ret.clone(), ids, hydrator),
-            ),
-            // Type::Tuple { elems } => tuple(
-            //     elems
-            //         .iter()
-            //         .map(|t| self.instantiate(t.clone(), ids, hydrator))
-            //         .collect(),
-            // ),
-        }
-    }
-
-    /// Create a new generic type that can stand in for any type.
-    pub fn new_generic_var(&mut self) -> Arc<Type> {
-        generic_var(self.next_uid())
-    }
-
-    /// Create a new unbound type that is a specific type, we just don't
-    /// know which one yet.
-    pub fn new_unbound_var(&mut self) -> Arc<Type> {
-        unbound_var(self.next_uid())
-    }
-
-    pub fn next_uid(&mut self) -> u64 {
-        let id = self.id_gen.next();
-        self.previous_id = id;
-        id
-    }
-
-    pub fn previous_uid(&self) -> u64 {
-        self.previous_id
-    }
-
-    fn make_type_vars(
-        &mut self,
-        args: &[String],
-        location: &Span,
-        hydrator: &mut Hydrator,
-    ) -> Result<Vec<Arc<Type>>, Error> {
-        let mut type_vars = Vec::new();
-
-        for arg in args {
-            let annotation = Annotation::Var {
-                location: *location,
-                name: arg.to_string(),
-            };
-
-            let tipo = hydrator.type_from_annotation(&annotation, self)?;
-
-            type_vars.push(tipo);
-        }
-
-        Ok(type_vars)
-    }
-
-    fn custom_type_accessors<A>(
-        &mut self,
-        constructors: &[RecordConstructor<A>],
-        hydrator: &mut Hydrator,
-    ) -> Result<Option<HashMap<String, RecordAccessor>>, Error> {
-        let args = get_compatible_record_fields(constructors);
-
-        let mut fields = HashMap::with_capacity(args.len());
-
-        hydrator.disallow_new_type_variables();
-
-        for (index, label, ast) in args {
-            let tipo = hydrator.type_from_annotation(ast, self)?;
-
-            fields.insert(
-                label.to_string(),
-                RecordAccessor {
-                    index: index as u64,
-                    label: label.to_string(),
-                    tipo,
-                },
-            );
-        }
-        Ok(Some(fields))
-    }
-
-    fn handle_unused(&mut self, unused: HashMap<String, (EntityKind, Span, bool)>) {
-        for (name, (kind, location, _)) in unused.into_iter().filter(|(_, (_, _, used))| !used) {
-            let warning = match kind {
-                EntityKind::ImportedType | EntityKind::ImportedTypeAndConstructor => {
-                    Warning::UnusedType {
-                        name,
-                        imported: true,
-                        location,
-                    }
-                }
-                EntityKind::ImportedConstructor => Warning::UnusedConstructor {
-                    name,
-                    imported: true,
-                    location,
-                },
-                EntityKind::PrivateConstant => {
-                    Warning::UnusedPrivateModuleConstant { name, location }
-                }
-                EntityKind::PrivateTypeConstructor(_) => Warning::UnusedConstructor {
-                    name,
-                    imported: false,
-                    location,
-                },
-                EntityKind::PrivateFunction => Warning::UnusedPrivateFunction { name, location },
-                EntityKind::PrivateType => Warning::UnusedType {
-                    name,
-                    imported: false,
-                    location,
-                },
-                EntityKind::ImportedValue => Warning::UnusedImportedValue { name, location },
-                EntityKind::Variable => Warning::UnusedVariable { name, location },
-            };
-
-            self.warnings.push(warning);
         }
     }
 }
@@ -1052,12 +1288,14 @@ fn unify_enclosed_type(
         Err(Error::CouldNotUnify {
             situation,
             location,
+            rigid_type_names,
             ..
         }) => Err(Error::CouldNotUnify {
             expected: e1,
             given: e2,
             situation,
             location,
+            rigid_type_names,
         }),
 
         _ => result,
@@ -1109,6 +1347,18 @@ fn assert_unique_const_name<'a>(
     }
 }
 
+pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Result<(), Error> {
+    for arg in args {
+        if let Some(label) = &arg.label {
+            return Err(Error::UnexpectedLabeledArg {
+                location: arg.location,
+                label: label.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Returns the fields that have the same label and type across all variants of
 /// the given type.
 fn get_compatible_record_fields<A>(
@@ -1158,4 +1408,48 @@ fn get_compatible_record_fields<A>(
     }
 
     compatible
+}
+
+/// Takes a level and a type and turns all type variables within the type that have
+/// level higher than the input level into generalized (polymorphic) type variables.
+pub(crate) fn generalise(t: Arc<Type>, ctx_level: usize) -> Arc<Type> {
+    match t.deref() {
+        Type::Var { tipo } => match tipo.borrow().deref() {
+            TypeVar::Unbound { id } => generic_var(*id),
+            TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
+            TypeVar::Generic { .. } => Arc::new(Type::Var { tipo: tipo.clone() }),
+        },
+
+        Type::App {
+            public,
+            module,
+            name,
+            args,
+        } => {
+            let args = args
+                .iter()
+                .map(|t| generalise(t.clone(), ctx_level))
+                .collect();
+
+            Arc::new(Type::App {
+                public: *public,
+                module: module.clone(),
+                name: name.clone(),
+                args,
+            })
+        }
+
+        Type::Fn { args, ret } => function(
+            args.iter()
+                .map(|t| generalise(t.clone(), ctx_level))
+                .collect(),
+            generalise(ret.clone(), ctx_level),
+        ),
+        // Type::Tuple { elems } => tuple(
+        //     elems
+        //         .iter()
+        //         .map(|t| generalise(t.clone(), ctx_level))
+        //         .collect(),
+        // ),
+    }
 }
