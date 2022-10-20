@@ -1,15 +1,19 @@
-use std::{collections::HashMap, fmt, ops::Range, sync::Arc};
+use std::{fmt, ops::Range, sync::Arc};
 
 use internment::Intern;
 
 use crate::{
+    builtins,
     expr::{TypedExpr, UntypedExpr},
-    tipo::{self, PatternConstructor, Type, ValueConstructor},
+    tipo::{fields::FieldMap, PatternConstructor, Type, TypeInfo, ValueConstructor},
 };
 
+pub const ASSERT_VARIABLE: &str = "_try";
 pub const CAPTURE_VARIABLE: &str = "_capture";
+pub const PIPE_VARIABLE: &str = "_pipe";
+pub const TRY_VARIABLE: &str = "_try";
 
-pub type TypedModule = Module<tipo::Module, TypedDefinition>;
+pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -133,11 +137,6 @@ pub enum Constant<T, RecordTag> {
         value: String,
     },
 
-    Pair {
-        location: Span,
-        elements: Vec<Self>,
-    },
-
     List {
         location: Span,
         elements: Vec<Self>,
@@ -154,9 +153,9 @@ pub enum Constant<T, RecordTag> {
         field_map: Option<FieldMap>,
     },
 
-    ByteString {
+    ByteArray {
         location: Span,
-        // segments: Vec<BitStringSegment<Self, T>>,
+        bytes: Vec<u8>,
     },
 
     Var {
@@ -168,49 +167,44 @@ pub enum Constant<T, RecordTag> {
     },
 }
 
+impl TypedConstant {
+    pub fn tipo(&self) -> Arc<Type> {
+        match self {
+            Constant::Int { .. } => builtins::int(),
+            Constant::String { .. } => builtins::string(),
+            Constant::ByteArray { .. } => builtins::byte_array(),
+            Constant::List { tipo, .. }
+            | Constant::Record { tipo, .. }
+            | Constant::Var { tipo, .. } => tipo.clone(),
+        }
+    }
+}
+
+impl<A, B> Constant<A, B> {
+    pub fn location(&self) -> Span {
+        match self {
+            Constant::Int { location, .. }
+            | Constant::List { location, .. }
+            | Constant::String { location, .. }
+            | Constant::Record { location, .. }
+            | Constant::ByteArray { location, .. }
+            | Constant::Var { location, .. } => *location,
+        }
+    }
+
+    pub fn is_simple(&self) -> bool {
+        matches!(
+            self,
+            Self::Int { .. } | Self::ByteArray { .. } | Self::String { .. }
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg<A> {
     pub label: Option<String>,
     pub location: Span,
     pub value: A,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FieldMap {
-    pub arity: usize,
-    pub fields: HashMap<String, usize>,
-}
-
-impl FieldMap {
-    pub fn new(arity: usize) -> Self {
-        Self {
-            arity,
-            fields: HashMap::new(),
-        }
-    }
-
-    pub fn insert(
-        &mut self,
-        label: String,
-        index: usize,
-        location: &Span,
-    ) -> Result<(), tipo::error::Error> {
-        match self.fields.insert(label.clone(), index) {
-            Some(_) => Err(tipo::error::Error::DuplicateField {
-                label,
-                location: *location,
-            }),
-            None => Ok(()),
-        }
-    }
-
-    pub fn into_option(self) -> Option<Self> {
-        if self.fields.is_empty() {
-            None
-        } else {
-            Some(self)
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -232,6 +226,7 @@ pub struct RecordConstructorArg<T> {
     pub doc: Option<String>,
 }
 
+pub type TypedArg = Arg<Arc<Type>>;
 pub type UntypedArg = Arg<()>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,6 +235,21 @@ pub struct Arg<T> {
     pub location: Span,
     pub annotation: Option<Annotation>,
     pub tipo: T,
+}
+
+impl<A> Arg<A> {
+    pub fn set_type<B>(self, tipo: B) -> Arg<B> {
+        Arg {
+            tipo,
+            arg_name: self.arg_name,
+            location: self.location,
+            annotation: self.annotation,
+        }
+    }
+
+    pub fn get_variable_name(&self) -> Option<&str> {
+        self.arg_name.get_variable_name()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,12 +274,31 @@ pub enum ArgName {
     },
 }
 
+impl ArgName {
+    pub fn get_variable_name(&self) -> Option<&str> {
+        match self {
+            ArgName::Discard { .. } | ArgName::LabeledDiscard { .. } => None,
+            ArgName::NamedLabeled { name, .. } | ArgName::Named { name, .. } => Some(name),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnqualifiedImport {
     pub location: Span,
     pub name: String,
     pub as_name: Option<String>,
     pub layer: Layer,
+}
+
+impl UnqualifiedImport {
+    pub fn variable_name(&self) -> &str {
+        self.as_name.as_deref().unwrap_or(&self.name)
+    }
+
+    pub fn is_value(&self) -> bool {
+        self.layer.is_value()
+    }
 }
 
 // TypeAst
@@ -380,6 +409,13 @@ pub enum Layer {
 impl Default for Layer {
     fn default() -> Self {
         Layer::Value
+    }
+}
+
+impl Layer {
+    /// Returns `true` if the layer is [`Value`].
+    pub fn is_value(&self) -> bool {
+        matches!(self, Self::Value)
     }
 }
 

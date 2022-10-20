@@ -13,6 +13,7 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 chumsky = "0.8.0"
 internment = "0.7.0"
+itertools = "0.10.5"
 miette = "5.2.0"
 thiserror = "1.0.37"
 vec1 = "1.8.0"

@@ -4,7 +4,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::{ast::ModuleKind, builtins, tipo, IdGenerator};
+use aiken_lang::{
+    ast::ModuleKind,
+    builtins,
+    tipo::{self, TypeInfo},
+    IdGenerator,
+};
 
 use crate::{
     config::Config,
@@ -39,7 +44,7 @@ pub struct Project {
     config: Config,
     defined_modules: HashMap<String, PathBuf>,
     id_gen: IdGenerator,
-    module_types: HashMap<String, tipo::Module>,
+    module_types: HashMap<String, TypeInfo>,
     root: PathBuf,
     sources: Vec<Source>,
     pub warnings: Vec<Warning>,
@@ -164,19 +169,19 @@ impl Project {
             {
                 let mut type_warnings = Vec::new();
 
-                let ast = tipo::infer::module(
-                    &self.id_gen,
-                    ast,
-                    kind,
-                    &self.config.name,
-                    &self.module_types,
-                    &mut type_warnings,
-                )
-                .map_err(|error| Error::Type {
-                    path: path.clone(),
-                    src: code.clone(),
-                    error,
-                })?;
+                let ast = ast
+                    .infer(
+                        &self.id_gen,
+                        kind,
+                        &self.config.name,
+                        &self.module_types,
+                        &mut type_warnings,
+                    )
+                    .map_err(|error| Error::Type {
+                        path: path.clone(),
+                        src: code.clone(),
+                        error,
+                    })?;
 
                 // Register any warnings emitted as type warnings
                 let type_warnings = type_warnings
