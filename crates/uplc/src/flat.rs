@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
+use anyhow::anyhow;
 use flat_rs::{
     de::{self, Decode, Decoder},
     en::{self, Encode, Encoder},
@@ -109,10 +110,14 @@ where
     T: Binder<'b>,
 {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
+        let mut state_log: Vec<String> = vec![];
         let version = (usize::decode(d)?, usize::decode(d)?, usize::decode(d)?);
-        let term = Term::decode(d)?;
+        let term_option = Term::decode_debug(d, &mut state_log);
 
-        Ok(Program { version, term })
+        match term_option {
+            Ok(term) => Ok(Program { version, term }),
+            Err(error) => Err(de::Error::ParseError(state_log.join(""), anyhow!(error))),
+        }
     }
 }
 
@@ -190,11 +195,185 @@ where
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
             x => Err(de::Error::Message(format!(
-                "Unknown term constructor tag: {} and buffer position is {} and buffer length is {}",
+                "Unknown term constructor tag: {}{} {:02X?} {} {} {} {}",
                 x,
-                d.buffer.len() - d.pos,
+                ".\n\nHere are the buffer bytes (5 preceding) ",
+                d.buffer
+                    .iter()
+                    .skip(if d.pos - 5 > 0 { d.pos - 5 } else { 0 })
+                    .take(10),
+                "\n\nBuffer position is",
+                d.pos,
+                "and buffer length is",
                 d.buffer.len()
             ))),
+        }
+    }
+}
+
+impl<'b, T> Term<T>
+where
+    T: Binder<'b>,
+{
+    fn decode_debug(d: &mut Decoder, state_log: &mut Vec<String>) -> Result<Term<T>, de::Error> {
+        match decode_term_tag(d)? {
+            0 => {
+                state_log.push("(var ".to_string());
+                let var_option = T::decode(d);
+                match var_option {
+                    Ok(var) => {
+                        state_log.push(format!("{})", var.text()));
+                        Ok(Term::Var(var))
+                    }
+                    Err(error) => {
+                        state_log.push("parse error)".to_string());
+                        Err(error)
+                    }
+                }
+            }
+
+            1 => {
+                state_log.push("(delay ".to_string());
+                let term_option = Term::decode_debug(d, state_log);
+                match term_option {
+                    Ok(term) => {
+                        state_log.push(")".to_string());
+                        Ok(Term::Delay(Rc::new(term)))
+                    }
+                    Err(error) => {
+                        state_log.push(")".to_string());
+                        Err(error)
+                    }
+                }
+            }
+            2 => {
+                state_log.push("(lam ".to_string());
+
+                let var_option = T::binder_decode(d);
+                match var_option {
+                    Ok(var) => {
+                        state_log.push(var.text().to_string());
+                        let term_option = Term::decode_debug(d, state_log);
+                        match term_option {
+                            Ok(term) => {
+                                state_log.push(")".to_string());
+                                Ok(Term::Lambda {
+                                    parameter_name: var,
+                                    body: Rc::new(term),
+                                })
+                            }
+                            Err(error) => {
+                                state_log.push(")".to_string());
+                                Err(error)
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        state_log.push(")".to_string());
+                        Err(error)
+                    }
+                }
+            }
+            3 => {
+                state_log.push("[ ".to_string());
+
+                let function_term_option = Term::decode_debug(d, state_log);
+                match function_term_option {
+                    Ok(function) => {
+                        state_log.push(" ".to_string());
+                        let arg_term_option = Term::decode_debug(d, state_log);
+                        match arg_term_option {
+                            Ok(argument) => {
+                                state_log.push("]".to_string());
+                                Ok(Term::Apply {
+                                    function: Rc::new(function),
+                                    argument: Rc::new(argument),
+                                })
+                            }
+                            Err(error) => {
+                                state_log.push("]".to_string());
+                                Err(error)
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        state_log.push(" not parsed]".to_string());
+                        Err(error)
+                    }
+                }
+            }
+            // Need size limit for Constant
+            4 => {
+                state_log.push("(con ".to_string());
+
+                let con_option = Constant::decode(d);
+                match con_option {
+                    Ok(constant) => {
+                        state_log.push(format!("{})", constant.to_pretty()));
+                        Ok(Term::Constant(constant))
+                    }
+                    Err(error) => {
+                        state_log.push("parse error)".to_string());
+                        Err(error)
+                    }
+                }
+            }
+            5 => {
+                state_log.push("(force ".to_string());
+                let term_option = Term::decode_debug(d, state_log);
+                match term_option {
+                    Ok(term) => {
+                        state_log.push(")".to_string());
+                        Ok(Term::Force(Rc::new(term)))
+                    }
+                    Err(error) => {
+                        state_log.push(")".to_string());
+                        Err(error)
+                    }
+                }
+            }
+            6 => {
+                state_log.push("(error)".to_string());
+                Ok(Term::Error)
+            }
+            7 => {
+                state_log.push("(builtin ".to_string());
+
+                let builtin_option = DefaultFunction::decode(d);
+                match builtin_option {
+                    Ok(builtin) => {
+                        state_log.push(format!("{})", builtin));
+                        Ok(Term::Builtin(builtin))
+                    }
+                    Err(error) => {
+                        state_log.push("parse error)".to_string());
+                        Err(error)
+                    }
+                }
+            }
+            x => {
+                state_log.push("parse error".to_string());
+
+                let buffer_slice: Vec<u8> = d
+                    .buffer
+                    .to_vec()
+                    .iter()
+                    .skip(if d.pos - 5 > 0 { d.pos - 5 } else { 0 })
+                    .take(10)
+                    .cloned()
+                    .collect();
+
+                Err(de::Error::Message(format!(
+                    "Unknown term constructor tag: {}{} {:02X?} {} {} {} {}",
+                    x,
+                    ".\n\nHere are the buffer bytes (5 preceding) ",
+                    buffer_slice,
+                    "\n\nBuffer position is",
+                    d.pos,
+                    "and buffer length is",
+                    d.buffer.len()
+                )))
+            }
         }
     }
 }
