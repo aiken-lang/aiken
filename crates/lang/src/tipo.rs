@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
 
 use crate::{
-    ast::{Constant, ModuleKind, Span, TypedConstant},
+    ast::{Constant, DefinitionLocation, ModuleKind, Span, TypedConstant},
     tipo::fields::FieldMap,
 };
 
@@ -13,6 +13,8 @@ mod expr;
 pub mod fields;
 mod hydrator;
 mod infer;
+mod pattern;
+mod pipe;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -125,7 +127,7 @@ impl Type {
     pub fn get_app_args(
         &self,
         public: bool,
-        module: &String,
+        module: &str,
         name: &str,
         arity: usize,
         environment: &mut Environment<'_>,
@@ -294,6 +296,30 @@ impl ValueConstructor {
             _ => None,
         }
     }
+
+    pub fn is_local_variable(&self) -> bool {
+        self.variant.is_local_variable()
+    }
+
+    pub fn definition_location(&self) -> DefinitionLocation<'_> {
+        match &self.variant {
+            ValueConstructorVariant::Record {
+                module, location, ..
+            }
+            | ValueConstructorVariant::ModuleConstant {
+                location, module, ..
+            } => DefinitionLocation {
+                module: Some(module.as_str()),
+                span: *location,
+            },
+
+            ValueConstructorVariant::ModuleFn { location, .. }
+            | ValueConstructorVariant::LocalVariable { location } => DefinitionLocation {
+                module: None,
+                span: *location,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -329,6 +355,54 @@ pub enum ValueConstructorVariant {
 }
 
 impl ValueConstructorVariant {
+    fn to_module_value_constructor(
+        &self,
+        tipo: Arc<Type>,
+        module_name: &str,
+        function_name: &str,
+    ) -> ModuleValueConstructor {
+        match self {
+            Self::Record {
+                name,
+                arity,
+                field_map,
+                location,
+                ..
+            } => ModuleValueConstructor::Record {
+                name: name.clone(),
+                field_map: field_map.clone(),
+                arity: *arity,
+                tipo,
+                location: *location,
+            },
+
+            // TODO: remove this clone with an rc clone
+            Self::ModuleConstant {
+                literal, location, ..
+            } => ModuleValueConstructor::Constant {
+                literal: literal.clone(),
+                location: *location,
+            },
+
+            Self::LocalVariable { location, .. } => ModuleValueConstructor::Fn {
+                name: function_name.to_string(),
+                module: module_name.to_string(),
+                location: *location,
+            },
+
+            Self::ModuleFn {
+                name,
+                module,
+                location,
+                ..
+            } => ModuleValueConstructor::Fn {
+                name: name.clone(),
+                module: module.clone(),
+                location: *location,
+            },
+        }
+    }
+
     pub fn location(&self) -> Span {
         match self {
             ValueConstructorVariant::LocalVariable { location }
@@ -336,6 +410,11 @@ impl ValueConstructorVariant {
             | ValueConstructorVariant::ModuleFn { location, .. }
             | ValueConstructorVariant::Record { location, .. } => *location,
         }
+    }
+
+    /// Returns `true` if the variant is [`LocalVariable`].
+    pub fn is_local_variable(&self) -> bool {
+        matches!(self, Self::LocalVariable { .. })
     }
 }
 
@@ -374,7 +453,7 @@ pub struct RecordAccessor {
     pub tipo: Arc<Type>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PatternConstructor {
     Record {
         name: String,
@@ -382,7 +461,7 @@ pub enum PatternConstructor {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ModuleValueConstructor {
     Record {
         name: String,
@@ -394,10 +473,34 @@ pub enum ModuleValueConstructor {
 
     Fn {
         location: Span,
+        /// The name of the module and the function
+        /// Typically this will be the module that this constructor belongs to
+        /// and the name that was used for the function. However it could also
+        /// point to some other module and function when this is an `external fn`.
+        ///
+        /// This function has module "themodule" and name "wibble"
+        ///     pub fn wibble() { Nil }
+        ///
+        /// This function has module "other" and name "whoop"
+        ///     pub external fn wibble() -> Nil =
+        ///       "other" "whoop"
+        ///
+        module: String,
+        name: String,
     },
 
     Constant {
         literal: TypedConstant,
         location: Span,
     },
+}
+
+impl ModuleValueConstructor {
+    pub fn location(&self) -> Span {
+        match self {
+            ModuleValueConstructor::Fn { location, .. }
+            | ModuleValueConstructor::Record { location, .. }
+            | ModuleValueConstructor::Constant { location, .. } => *location,
+        }
+    }
 }

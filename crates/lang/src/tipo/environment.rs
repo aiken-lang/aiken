@@ -4,10 +4,12 @@ use std::{
     sync::Arc,
 };
 
+use itertools::Itertools;
+
 use crate::{
     ast::{
-        Annotation, ArgName, CallArg, Definition, RecordConstructor, RecordConstructorArg, Span,
-        TypedDefinition, UnqualifiedImport, UntypedDefinition, PIPE_VARIABLE,
+        Annotation, ArgName, CallArg, Definition, Pattern, RecordConstructor, RecordConstructorArg,
+        Span, TypedDefinition, UnqualifiedImport, UntypedDefinition, PIPE_VARIABLE,
     },
     builtins::{function, generic_var, unbound_var},
     tipo::fields::FieldMap,
@@ -17,8 +19,8 @@ use crate::{
 use super::{
     error::{Error, Warning},
     hydrator::Hydrator,
-    AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
-    ValueConstructorVariant,
+    AccessorsMap, PatternConstructor, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar,
+    ValueConstructor, ValueConstructorVariant,
 };
 
 #[derive(Debug)]
@@ -1213,6 +1215,114 @@ impl<'a> Environment<'a> {
             }),
         }
     }
+
+    /// Checks that the given patterns are exhaustive for given type.
+    /// Currently only performs exhaustiveness checking for custom types,
+    /// only at the top level (without recursing into constructor arguments).
+    pub fn check_exhaustiveness(
+        &mut self,
+        patterns: Vec<Pattern<PatternConstructor, Arc<Type>>>,
+        value_typ: Arc<Type>,
+        location: Span,
+    ) -> Result<(), Vec<String>> {
+        match &*value_typ {
+            Type::App {
+                name: type_name,
+                module,
+                ..
+            } => {
+                let m = if module.is_empty() || module == self.current_module {
+                    None
+                } else {
+                    Some(module.clone())
+                };
+
+                if let Ok(constructors) = self.get_constructors_for_type(&m, type_name, location) {
+                    let mut unmatched_constructors: HashSet<String> =
+                        constructors.iter().cloned().collect();
+
+                    for p in &patterns {
+                        // ignore Assign patterns
+                        let mut pattern = p;
+                        while let Pattern::Assign {
+                            pattern: assign_pattern,
+                            ..
+                        } = pattern
+                        {
+                            pattern = assign_pattern;
+                        }
+
+                        match pattern {
+                            // If the pattern is a Discard or Var, all constructors are covered by it
+                            Pattern::Discard { .. } => return Ok(()),
+                            Pattern::Var { .. } => return Ok(()),
+                            // If the pattern is a constructor, remove it from unmatched patterns
+                            Pattern::Constructor {
+                                constructor: PatternConstructor::Record { name, .. },
+                                ..
+                            } => {
+                                unmatched_constructors.remove(name);
+                            }
+                            _ => return Ok(()),
+                        }
+                    }
+
+                    if !unmatched_constructors.is_empty() {
+                        return Err(unmatched_constructors.into_iter().sorted().collect());
+                    }
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Lookup constructors for type in the current scope.
+    ///
+    pub fn get_constructors_for_type(
+        &mut self,
+        full_module_name: &Option<String>,
+        name: &str,
+        location: Span,
+    ) -> Result<&Vec<String>, Error> {
+        match full_module_name {
+            None => self
+                .module_types_constructors
+                .get(name)
+                .ok_or_else(|| Error::UnknownType {
+                    name: name.to_string(),
+                    types: self.module_types.keys().map(|t| t.to_string()).collect(),
+                    location,
+                }),
+
+            Some(m) => {
+                let module =
+                    self.importable_modules
+                        .get(m)
+                        .ok_or_else(|| Error::UnknownModule {
+                            location,
+                            name: name.to_string(),
+                            imported_modules: self
+                                .importable_modules
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                        })?;
+
+                self.unused_modules.remove(m);
+
+                module
+                    .types_constructors
+                    .get(name)
+                    .ok_or_else(|| Error::UnknownModuleType {
+                        location,
+                        name: name.to_string(),
+                        module_name: module.name.clone(),
+                        type_constructors: module.types.keys().map(|t| t.to_string()).collect(),
+                    })
+            }
+        }
+    }
 }
 
 /// For Keeping track of entity usages and knowing which error to display.
@@ -1357,6 +1467,15 @@ pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Result<(), 
         }
     }
     Ok(())
+}
+
+pub(super) fn collapse_links(t: Arc<Type>) -> Arc<Type> {
+    if let Type::Var { tipo } = t.deref() {
+        if let TypeVar::Link { tipo } = tipo.borrow().deref() {
+            return tipo.clone();
+        }
+    }
+    t
 }
 
 /// Returns the fields that have the same label and type across all variants of

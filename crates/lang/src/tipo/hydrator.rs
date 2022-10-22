@@ -34,6 +34,12 @@ pub struct ScopeResetData {
     rigid_type_names: HashMap<u64, String>,
 }
 
+impl Default for Hydrator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Hydrator {
     pub fn new() -> Hydrator {
         Hydrator {

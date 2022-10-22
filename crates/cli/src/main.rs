@@ -52,7 +52,7 @@ fn main() -> miette::Result<()> {
             let build_result = project.build();
 
             for warning in project.warnings {
-                eprintln!("Warning: {:?}", warning)
+                warning.report()
             }
 
             if let Err(err) = build_result {
@@ -65,7 +65,7 @@ fn main() -> miette::Result<()> {
                     rest => eprintln!("Error: {:?}", rest),
                 }
 
-                miette::bail!("failed: {} errors", err.total());
+                // miette::bail!("failed: {} errors", err.total());
             };
         }
 

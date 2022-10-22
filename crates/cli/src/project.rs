@@ -4,16 +4,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::{
-    ast::ModuleKind,
-    builtins,
-    tipo::{self, TypeInfo},
-    IdGenerator,
-};
+use aiken_lang::{ast::ModuleKind, builtins, tipo::TypeInfo, IdGenerator};
 
 use crate::{
     config::Config,
-    error::Error,
+    error::{Error, Warning},
     module::{CheckedModule, ParsedModule, ParsedModules},
 };
 
@@ -23,21 +18,6 @@ pub struct Source {
     pub name: String,
     pub code: String,
     pub kind: ModuleKind,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Warning {
-    Type {
-        path: PathBuf,
-        src: String,
-        warning: tipo::error::Warning,
-    },
-}
-
-impl Warning {
-    pub fn from_type_warning(warning: tipo::error::Warning, path: PathBuf, src: String) -> Warning {
-        Warning::Type { path, warning, src }
-    }
 }
 
 pub struct Project {

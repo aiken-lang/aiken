@@ -69,12 +69,27 @@ pub enum Error {
         labels: Vec<String>,
     },
 
+    #[error("incorrect number of clause patterns expected {expected} but given {given}")]
+    IncorrectNumClausePatterns {
+        #[label]
+        location: Span,
+        expected: usize,
+        given: usize,
+    },
+
     #[error("{name} has incorrect type arity expected {expected} but given {given}")]
     IncorrectTypeArity {
         location: Span,
         name: String,
         expected: usize,
         given: usize,
+    },
+
+    #[error("non-exhaustive pattern match")]
+    NotExhaustivePatternMatch {
+        #[label]
+        location: Span,
+        unmatched: Vec<String>,
     },
 
     #[error("not a function")]
@@ -107,6 +122,18 @@ pub enum Error {
         leaked: Type,
     },
 
+    #[error("record access unknown type")]
+    RecordAccessUnknownType {
+        #[label]
+        location: Span,
+    },
+
+    #[error("record update invalid constructor")]
+    RecordUpdateInvalidConstructor {
+        #[label]
+        location: Span,
+    },
+
     #[error("{name} is a reserved module name")]
     ReservedModuleName { name: String },
 
@@ -132,6 +159,7 @@ pub enum Error {
 
     #[error("unknown module {name}")]
     UnknownModule {
+        #[label]
         location: Span,
         name: String,
         imported_modules: Vec<String>,
@@ -164,6 +192,16 @@ pub enum Error {
         type_constructors: Vec<String>,
     },
 
+    #[error("unknown record field {label}")]
+    UnknownRecordField {
+        #[label]
+        location: Span,
+        typ: Arc<Type>,
+        label: String,
+        fields: Vec<String>,
+        situation: Option<UnknownRecordFieldSituation>,
+    },
+
     #[error("unknown type {name}")]
     UnknownType {
         #[label]
@@ -178,6 +216,19 @@ pub enum Error {
         location: Span,
         name: String,
         variables: Vec<String>,
+    },
+
+    #[error("unnecessary spread operator")]
+    UnnecessarySpreadOperator {
+        #[label]
+        location: Span,
+        arity: usize,
+    },
+
+    #[error("cannot update a type with multiple constructors")]
+    UpdateMultiConstructorType {
+        #[label]
+        location: Span,
     },
 
     #[error("")]
@@ -219,6 +270,20 @@ pub enum Error {
 }
 
 impl Error {
+    pub fn call_situation(mut self) -> Self {
+        if let Error::UnknownRecordField {
+            ref mut situation, ..
+        } = self
+        {
+            *situation = Some(UnknownRecordFieldSituation::FunctionCall);
+        }
+        self
+    }
+
+    pub fn case_clause_mismatch(self) -> Self {
+        self.with_unify_error_situation(UnifyErrorSituation::CaseClauseMismatch)
+    }
+
     pub fn flip_unify(self) -> Error {
         match self {
             Error::CouldNotUnify {
@@ -236,6 +301,22 @@ impl Error {
             },
             other => other,
         }
+    }
+
+    pub fn inconsistent_try(self, return_value_is_result: bool) -> Self {
+        self.with_unify_error_situation(if return_value_is_result {
+            UnifyErrorSituation::TryErrorMismatch
+        } else {
+            UnifyErrorSituation::TryReturnResult
+        })
+    }
+
+    pub fn operator_situation(self, binop: BinOp) -> Self {
+        self.with_unify_error_situation(UnifyErrorSituation::Operator(binop))
+    }
+
+    pub fn return_annotation_mismatch(self) -> Self {
+        self.with_unify_error_situation(UnifyErrorSituation::ReturnAnnotationMismatch)
     }
 
     pub fn with_unify_error_rigid_names(mut self, new_names: &HashMap<u64, String>) -> Self {
@@ -269,69 +350,89 @@ impl Error {
             other => other,
         }
     }
-
-    pub fn return_annotation_mismatch(self) -> Self {
-        self.with_unify_error_situation(UnifyErrorSituation::ReturnAnnotationMismatch)
-    }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, thiserror::Error, Diagnostic)]
 pub enum Warning {
+    #[error("todo")]
     Todo {
         kind: TodoKind,
+        #[label]
         location: Span,
-        typ: Arc<Type>,
+        tipo: Arc<Type>,
     },
 
+    #[error("implicitly discarded result")]
     ImplicitlyDiscardedResult {
+        #[label]
         location: Span,
     },
 
+    #[error("unused literal")]
     UnusedLiteral {
+        #[label]
         location: Span,
     },
 
+    #[error("record update with no fields")]
     NoFieldsRecordUpdate {
+        #[label]
         location: Span,
     },
 
+    #[error("record update using all fields")]
     AllFieldsRecordUpdate {
+        #[label]
         location: Span,
     },
 
+    #[error("unused type {name}")]
     UnusedType {
+        #[label]
         location: Span,
         imported: bool,
         name: String,
     },
 
+    #[error("unused constructor {name}")]
     UnusedConstructor {
+        #[label]
         location: Span,
         imported: bool,
         name: String,
     },
 
+    #[error("unused imported value {name}")]
     UnusedImportedValue {
+        #[label]
         location: Span,
         name: String,
     },
 
+    #[error("unused imported module {name}")]
     UnusedImportedModule {
+        #[label]
         location: Span,
         name: String,
     },
 
+    #[error("unused private module constant {name}")]
     UnusedPrivateModuleConstant {
+        #[label]
         location: Span,
         name: String,
     },
 
+    #[error("unused private function {name}")]
     UnusedPrivateFunction {
+        #[label]
         location: Span,
         name: String,
     },
 
+    #[error("unused variable {name}")]
     UnusedVariable {
+        #[label]
         location: Span,
         name: String,
     },
@@ -356,4 +457,10 @@ pub enum UnifyErrorSituation {
 
     /// The final value of a try expression was not a Result.
     TryReturnResult,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnknownRecordFieldSituation {
+    /// This unknown record field is being called as a function. i.e. `record.field()`
+    FunctionCall,
 }

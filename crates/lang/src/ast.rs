@@ -3,7 +3,7 @@ use std::{fmt, ops::Range, sync::Arc};
 use internment::Intern;
 
 use crate::{
-    builtins,
+    builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
     tipo::{fields::FieldMap, PatternConstructor, Type, TypeInfo, ValueConstructor},
 };
@@ -122,6 +122,12 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     },
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct DefinitionLocation<'module> {
+    pub module: Option<&'module str>,
+    pub span: Span,
+}
+
 pub type TypedConstant = Constant<Arc<Type>, String>;
 pub type UntypedConstant = Constant<(), ()>;
 
@@ -199,6 +205,8 @@ impl<A, B> Constant<A, B> {
         )
     }
 }
+
+pub type TypedCallArg = CallArg<TypedExpr>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg<A> {
@@ -453,11 +461,6 @@ pub enum Pattern<Constructor, Type> {
         value: String,
     },
 
-    Float {
-        location: Span,
-        value: String,
-    },
-
     String {
         location: Span,
         value: String,
@@ -509,11 +512,34 @@ pub enum Pattern<Constructor, Type> {
         with_spread: bool,
         tipo: Type,
     },
+    // Tuple {
+    //     location: Span,
+    //     elems: Vec<Self>,
+    // },
+}
 
-    Tuple {
-        location: Span,
-        elems: Vec<Self>,
-    },
+impl<A, B> Pattern<A, B> {
+    pub fn location(&self) -> Span {
+        match self {
+            Pattern::Assign { pattern, .. } => pattern.location(),
+            Pattern::Int { location, .. }
+            | Pattern::Var { location, .. }
+            | Pattern::VarUsage { location, .. }
+            | Pattern::List { location, .. }
+            | Pattern::Discard { location, .. }
+            | Pattern::String { location, .. }
+            // | Pattern::Tuple { location, .. }
+            // | Pattern::Concatenate { location, .. }
+            | Pattern::Constructor { location, .. } => *location,
+        }
+    }
+
+    /// Returns `true` if the pattern is [`Discard`].
+    ///
+    /// [`Discard`]: Pattern::Discard
+    pub fn is_discard(&self) -> bool {
+        matches!(self, Self::Discard { .. })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -528,7 +554,6 @@ pub type UntypedMultiPattern = MultiPattern<(), ()>;
 pub type TypedMultiPattern = MultiPattern<PatternConstructor, Arc<Type>>;
 
 pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>, String>;
-
 pub type UntypedClause = Clause<UntypedExpr, (), (), ()>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -539,6 +564,23 @@ pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
     pub guard: Option<ClauseGuard<Type, RecordTag>>,
     pub then: Expr,
 }
+
+impl TypedClause {
+    pub fn location(&self) -> Span {
+        Span {
+            src: SrcId::empty(),
+            start: self
+                .pattern
+                .get(0)
+                .map(|p| p.location().start)
+                .unwrap_or_default(),
+            end: self.then.location().end,
+        }
+    }
+}
+
+pub type UntypedClauseGuard = ClauseGuard<(), ()>;
+pub type TypedClauseGuard = ClauseGuard<Arc<Type>, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClauseGuard<Type, RecordTag> {
@@ -596,14 +638,50 @@ pub enum ClauseGuard<Type, RecordTag> {
         name: String,
     },
 
-    TupleIndex {
-        location: Span,
-        index: u64,
-        tipo: Type,
-        tuple: Box<Self>,
-    },
-
+    // TupleIndex {
+    //     location: Span,
+    //     index: u64,
+    //     tipo: Type,
+    //     tuple: Box<Self>,
+    // },
     Constant(Constant<Type, RecordTag>),
+}
+
+impl<A, B> ClauseGuard<A, B> {
+    pub fn location(&self) -> Span {
+        match self {
+            ClauseGuard::Constant(constant) => constant.location(),
+            ClauseGuard::Or { location, .. }
+            | ClauseGuard::And { location, .. }
+            | ClauseGuard::Var { location, .. }
+            // | ClauseGuard::TupleIndex { location, .. }
+            | ClauseGuard::Equals { location, .. }
+            | ClauseGuard::NotEquals { location, .. }
+            | ClauseGuard::GtInt { location, .. }
+            | ClauseGuard::GtEqInt { location, .. }
+            | ClauseGuard::LtInt { location, .. }
+            | ClauseGuard::LtEqInt { location, .. } => *location,
+        }
+    }
+}
+
+impl TypedClauseGuard {
+    pub fn tipo(&self) -> Arc<Type> {
+        match self {
+            ClauseGuard::Var { tipo, .. } => tipo.clone(),
+            // ClauseGuard::TupleIndex { type_, .. } => type_.clone(),
+            ClauseGuard::Constant(constant) => constant.tipo(),
+
+            ClauseGuard::Or { .. }
+            | ClauseGuard::And { .. }
+            | ClauseGuard::Equals { .. }
+            | ClauseGuard::NotEquals { .. }
+            | ClauseGuard::GtInt { .. }
+            | ClauseGuard::GtEqInt { .. }
+            | ClauseGuard::LtInt { .. }
+            | ClauseGuard::LtEqInt { .. } => bool(),
+        }
+    }
 }
 
 pub type TypedIfBranch = IfBranch<TypedExpr>;
@@ -616,7 +694,7 @@ pub struct IfBranch<Expr> {
     pub location: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypedRecordUpdateArg {
     pub label: String,
     pub location: Span,

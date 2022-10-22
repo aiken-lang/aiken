@@ -1,4 +1,4 @@
-use sample/syntax.{append, Bool}
+use sample/syntax.{append}
 
 pub type Datum {
   something: String,
