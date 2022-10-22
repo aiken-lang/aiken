@@ -55,4 +55,6 @@ pub enum Error {
         index: u32,
         err: Box<Error>,
     },
+    #[error("Failed to apply parameters to Plutus script.")]
+    ApplyParamsError,
 }
