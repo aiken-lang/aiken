@@ -4,14 +4,14 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, IfBranch, Pattern,
-        RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
+        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
+        Pattern, RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
     },
     builtins::{bool, nil},
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypedExpr {
     Int {
         location: Span,
@@ -130,19 +130,18 @@ pub enum TypedExpr {
         constructor: ModuleValueConstructor,
     },
 
-    Tuple {
-        location: Span,
-        tipo: Arc<Type>,
-        elems: Vec<Self>,
-    },
+    // Tuple {
+    //     location: Span,
+    //     tipo: Arc<Type>,
+    //     elems: Vec<Self>,
+    // },
 
-    TupleIndex {
-        location: Span,
-        tipo: Arc<Type>,
-        index: u64,
-        tuple: Box<Self>,
-    },
-
+    // TupleIndex {
+    //     location: Span,
+    //     tipo: Arc<Type>,
+    //     index: u64,
+    //     tuple: Box<Self>,
+    // },
     Todo {
         location: Span,
         label: Option<String>,
@@ -176,10 +175,10 @@ impl TypedExpr {
             | Self::Call { tipo, .. }
             | Self::If { tipo, .. }
             | Self::BinOp { tipo, .. }
-            | Self::Tuple { tipo, .. }
+            // | Self::Tuple { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
-            | Self::TupleIndex { tipo, .. }
+            // | Self::TupleIndex { tipo, .. }
             | Self::Assignment { tipo, .. }
             | Self::ModuleSelect { tipo, .. }
             | Self::RecordAccess { tipo, .. }
@@ -187,6 +186,62 @@ impl TypedExpr {
             Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
                 expressions.last().map(TypedExpr::tipo).unwrap_or_else(nil)
             }
+        }
+    }
+
+    pub fn is_literal(&self) -> bool {
+        matches!(
+            self,
+            Self::Int { .. }
+                | Self::List { .. }
+                // | Self::Tuple { .. }
+                | Self::String { .. }
+                | Self::ByteArray { .. }
+        )
+    }
+
+    /// Returns `true` if the typed expr is [`Assignment`].
+    pub fn is_assignment(&self) -> bool {
+        matches!(self, Self::Assignment { .. })
+    }
+
+    pub fn definition_location(&self) -> Option<DefinitionLocation<'_>> {
+        match self {
+            TypedExpr::Fn { .. }
+            | TypedExpr::Int { .. }
+            | TypedExpr::Try { .. }
+            | TypedExpr::List { .. }
+            | TypedExpr::Call { .. }
+            | TypedExpr::When { .. }
+            | TypedExpr::Todo { .. }
+            | TypedExpr::BinOp { .. }
+            // | TypedExpr::Tuple { .. }
+            | TypedExpr::Negate { .. }
+            | TypedExpr::String { .. }
+            | TypedExpr::Sequence { .. }
+            | TypedExpr::Pipeline { .. }
+            | TypedExpr::ByteArray { .. }
+            | TypedExpr::Assignment { .. }
+            // | TypedExpr::TupleIndex { .. }
+            | TypedExpr::RecordAccess { .. } => None,
+            | TypedExpr::If { .. } => None,
+
+            // TODO: test
+            // TODO: definition
+            TypedExpr::RecordUpdate { .. } => None,
+
+            // TODO: test
+            TypedExpr::ModuleSelect {
+                module_name,
+                constructor,
+                ..
+            } => Some(DefinitionLocation {
+                module: Some(module_name.as_str()),
+                span: constructor.location(),
+            }),
+
+            // TODO: test
+            TypedExpr::Var { constructor, .. } => Some(constructor.definition_location()),
         }
     }
 
@@ -201,22 +256,20 @@ impl TypedExpr {
             | Self::Call { location, .. }
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
-            | Self::Tuple { location, .. }
+            // | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Negate { location, .. }
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
             | Self::Assignment { location, .. }
-            | Self::TupleIndex { location, .. }
+            // | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
             | Self::RecordUpdate { location, .. } => *location,
 
             Self::If {
-                location,
                 branches,
-                final_else,
-                tipo,
+                ..
             } => branches.first().body.type_defining_location(),
 
             Self::Sequence {
@@ -242,14 +295,14 @@ impl TypedExpr {
             | Self::If { location, .. }
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
-            | Self::Tuple { location, .. }
+            // | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Negate { location, .. }
             | Self::Sequence { location, .. }
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
             | Self::Assignment { location, .. }
-            | Self::TupleIndex { location, .. }
+            // | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
             | Self::RecordUpdate { location, .. } => *location,
@@ -349,17 +402,15 @@ pub enum UntypedExpr {
         container: Box<Self>,
     },
 
-    Tuple {
-        location: Span,
-        elems: Vec<Self>,
-    },
-
-    TupleIndex {
-        location: Span,
-        index: u64,
-        tuple: Box<Self>,
-    },
-
+    // Tuple {
+    //     location: Span,
+    //     elems: Vec<Self>,
+    // },
+    // TupleIndex {
+    //     location: Span,
+    //     index: u64,
+    //     tuple: Box<Self>,
+    // },
     Todo {
         kind: TodoKind,
         location: Span,
@@ -442,10 +493,10 @@ impl UntypedExpr {
             | Self::List { location, .. }
             | Self::ByteArray { location, .. }
             | Self::BinOp { location, .. }
-            | Self::Tuple { location, .. }
+            // | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Assignment { location, .. }
-            | Self::TupleIndex { location, .. }
+            // | Self::TupleIndex { location, .. }
             | Self::FieldAccess { location, .. }
             | Self::RecordUpdate { location, .. }
             | Self::Negate { location, .. }

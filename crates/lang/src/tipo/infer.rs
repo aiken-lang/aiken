@@ -61,7 +61,8 @@ impl UntypedModule {
         let mut definitions = Vec::with_capacity(self.definitions.len());
         let mut consts = vec![];
         let mut not_consts = vec![];
-        for def in self.into_definitions() {
+
+        for def in self.definitions().cloned() {
             match def {
                 Definition::ModuleConstant { .. } => consts.push(def),
 

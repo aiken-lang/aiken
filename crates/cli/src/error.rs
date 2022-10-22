@@ -5,7 +5,7 @@ use std::{
 };
 
 use aiken_lang::{error::ParseError, tipo};
-use miette::{EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
+use miette::{Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -27,7 +27,7 @@ pub enum Error {
     #[error("a list of errors")]
     List(Vec<Self>),
 
-    #[error("failed to parse")]
+    #[error("parsing")]
     Parse {
         path: PathBuf,
 
@@ -37,10 +37,11 @@ pub enum Error {
         error: Box<ParseError>,
     },
 
-    #[error("type checking failed")]
+    #[error("type checking")]
     Type {
         path: PathBuf,
         src: String,
+        #[source]
         error: tipo::error::Error,
     },
 }
@@ -51,6 +52,10 @@ impl Error {
             Error::List(errors) => errors.len(),
             _ => 1,
         }
+    }
+
+    pub fn report(&self) {
+        eprintln!("Error: {:?}", self)
     }
 }
 
@@ -73,7 +78,7 @@ impl Debug for Error {
     }
 }
 
-impl miette::Diagnostic for Error {
+impl Diagnostic for Error {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Error::DuplicateModule { .. } => Some(Box::new("aiken::module::duplicate")),
@@ -99,7 +104,7 @@ impl miette::Diagnostic for Error {
             ))),
             Error::List(_) => None,
             Error::Parse { error, .. } => error.kind.help(),
-            Error::Type { .. } => None,
+            Error::Type { error, .. } => error.help(),
         }
     }
 
@@ -123,5 +128,64 @@ impl miette::Diagnostic for Error {
             Error::Parse { src, .. } => Some(src),
             Error::Type { src, .. } => Some(src),
         }
+    }
+}
+
+#[derive(PartialEq, thiserror::Error)]
+pub enum Warning {
+    #[error("type checking")]
+    Type {
+        path: PathBuf,
+        src: String,
+        #[source]
+        warning: tipo::error::Warning,
+    },
+}
+
+impl Diagnostic for Warning {
+    fn source_code(&self) -> Option<&dyn SourceCode> {
+        match self {
+            Warning::Type { src, .. } => Some(src),
+        }
+    }
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        match self {
+            Warning::Type { warning, .. } => warning.labels(),
+        }
+    }
+
+    fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        match self {
+            Warning::Type { .. } => Some(Box::new("aiken::typecheck")),
+        }
+    }
+}
+
+impl Warning {
+    pub fn from_type_warning(warning: tipo::error::Warning, path: PathBuf, src: String) -> Warning {
+        Warning::Type { path, warning, src }
+    }
+
+    pub fn report(&self) {
+        eprintln!("Warning: {:?}", self)
+    }
+}
+
+impl Debug for Warning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let miette_handler = MietteHandlerOpts::new()
+            // For better support of terminal themes use the ANSI coloring
+            .rgb_colors(RgbColors::Never)
+            // If ansi support is disabled in the config disable the eye-candy
+            .color(true)
+            .unicode(true)
+            .terminal_links(true)
+            .build();
+
+        // Ignore error to prevent format! panics. This can happen if span points at some
+        // inaccessible location, for example by calling `report_error()` with wrong working set.
+        let _ = miette_handler.debug(self, f);
+
+        Ok(())
     }
 }
