@@ -151,6 +151,28 @@ where
 }
 
 impl Constant {
+    pub fn to_pretty(&self) -> String {
+        let mut w = Vec::new();
+
+        self.to_doc().render(80, &mut w).unwrap();
+
+        String::from_utf8(w)
+            .unwrap()
+            .lines()
+            // This is a hack to deal with blank newlines
+            // that end up with a bunch of useless whitespace
+            // because of the nesting
+            .map(|l| {
+                if l.chars().all(|c| c.is_whitespace()) {
+                    "".to_string()
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     fn to_doc(&self) -> RcDoc<()> {
         match self {
             Constant::Integer(i) => RcDoc::text("integer")
