@@ -136,8 +136,8 @@ pub fn eval_phase_two_raw(
 }
 
 pub fn apply_params_to_script(
-    params_bytes: &Vec<u8>, // PlutusData array
-    plutus_script_bytes: &Vec<u8>,
+    params_bytes: &[u8], // PlutusData array
+    plutus_script_bytes: &[u8],
 ) -> Result<Vec<u8>, Error> {
     let params = match PlutusData::decode_fragment(params_bytes).unwrap() {
         PlutusData::Array(res) => res,
