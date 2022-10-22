@@ -18,7 +18,7 @@ pub enum Error {
     DecodeChar(u32),
     #[error("{0}")]
     Message(String),
-    #[error("Parse error: So far we parsed {0} and we ran into error: {1}")]
+    #[error("Parse error: So far we parsed\n\n{0}\n\nand we ran into error: {1}")]
     ParseError(String, anyhow::Error),
     #[error(transparent)]
     Custom(#[from] anyhow::Error),
