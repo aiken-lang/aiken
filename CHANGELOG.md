@@ -4,7 +4,8 @@
 
 ### Changed
 
-- **aiken**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int` instances
+- **uplc**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int` instances
+- **uplc**: Added `apply_params_to_script` function (applies params to script and serializes the new script).
 
 
 ## [v0.0.20] - 2022-10-17

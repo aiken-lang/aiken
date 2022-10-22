@@ -9,7 +9,11 @@ pub use eval::get_script_and_datum_lookup_table;
 pub use phase_one::eval_phase_one;
 use script_context::{ResolvedInput, SlotConfig};
 
-use crate::machine::cost_model::ExBudget;
+use crate::{
+    ast::{DeBruijn, Program},
+    machine::cost_model::ExBudget,
+    PlutusData,
+};
 
 pub mod error;
 mod eval;
@@ -128,5 +132,27 @@ pub fn eval_phase_two_raw(
         // },
         // TODO: I probably did a mistake here with using MintedTx which is only compatible with Babbage tx.
         _ => todo!("Wrong era. Please use babbage"),
+    }
+}
+
+pub fn apply_params_to_script(
+    params_bytes: &Vec<u8>, // PlutusData array
+    plutus_script_bytes: &Vec<u8>,
+) -> Result<Vec<u8>, Error> {
+    let params = match PlutusData::decode_fragment(params_bytes).unwrap() {
+        PlutusData::Array(res) => res,
+        _ => unreachable!(),
+    };
+
+    let mut buffer = Vec::new();
+    let mut program = Program::<DeBruijn>::from_cbor(plutus_script_bytes, &mut buffer)?;
+
+    for param in params {
+        program = program.apply_data(param);
+    }
+
+    match program.to_cbor() {
+        Ok(res) => Ok(res),
+        Err(_) => Err(Error::ApplyParamsError),
     }
 }
