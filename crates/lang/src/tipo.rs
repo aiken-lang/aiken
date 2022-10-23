@@ -5,7 +5,7 @@ use crate::{
     tipo::fields::FieldMap,
 };
 
-use self::environment::Environment;
+use self::{environment::Environment, pretty::Printer};
 
 mod environment;
 pub mod error;
@@ -15,6 +15,7 @@ mod hydrator;
 mod infer;
 mod pattern;
 mod pipe;
+mod pretty;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -202,6 +203,18 @@ impl Type {
             Self::Fn { args, .. } => Some(args.len()),
             _ => None,
         }
+    }
+
+    pub fn to_pretty(&self, indent: usize) -> String {
+        Printer::new().pretty_print(self, indent)
+    }
+
+    pub fn to_pretty_with_names(&self, names: HashMap<u64, String>, indent: usize) -> String {
+        let mut printer = Printer::new();
+
+        printer.with_names(names);
+
+        printer.pretty_print(self, indent)
     }
 }
 

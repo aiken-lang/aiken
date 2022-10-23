@@ -16,7 +16,7 @@ use uplc::{
     },
 };
 
-use aiken::{config::Config, error, project::Project};
+use aiken::{config::Config, project::Project};
 
 mod args;
 
@@ -28,14 +28,35 @@ fn main() -> miette::Result<()> {
     let args = Args::default();
 
     match args {
-        Args::Build => {
-            // 1. load and parse modules
-            //    * lib - contains modules, types, and functions
-            //    * contracts - contains validators
-            //    * scripts - contains native scripts dsl
-            // 2. type check everything
-            // 3. generate uplc and policy/address if relevant
-            todo!()
+        Args::Build { directory } => {
+            let project_path = if let Some(d) = directory {
+                d
+            } else {
+                env::current_dir().into_diagnostic()?
+            };
+
+            let config = Config::load(project_path.clone()).into_diagnostic()?;
+
+            let mut project = Project::new(config, project_path);
+
+            let build_result = project.build();
+
+            let warning_count = project.warnings.len();
+
+            for warning in project.warnings {
+                warning.report()
+            }
+
+            if let Err(err) = build_result {
+                err.report();
+
+                miette::bail!(
+                    "failed: {} error(s), {warning_count} warning(s)",
+                    err.total(),
+                );
+            };
+
+            println!("finished with {warning_count} warning(s)")
         }
 
         Args::Check { directory } => {
@@ -49,24 +70,24 @@ fn main() -> miette::Result<()> {
 
             let mut project = Project::new(config, project_path);
 
-            let build_result = project.build();
+            let build_result = project.check();
+
+            let warning_count = project.warnings.len();
 
             for warning in project.warnings {
                 warning.report()
             }
 
             if let Err(err) = build_result {
-                match &err {
-                    error::Error::List(errors) => {
-                        for error in errors {
-                            eprintln!("Error: {:?}", error)
-                        }
-                    }
-                    rest => eprintln!("Error: {:?}", rest),
-                }
+                err.report();
 
-                // miette::bail!("failed: {} errors", err.total());
+                miette::bail!(
+                    "failed: {} error(s), {warning_count} warning(s)",
+                    err.total(),
+                );
             };
+
+            println!("finished with {warning_count} warning(s)")
         }
 
         Args::Dev => {
