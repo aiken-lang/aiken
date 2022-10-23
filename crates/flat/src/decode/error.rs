@@ -20,6 +20,8 @@ pub enum Error {
     Message(String),
     #[error("Parse error: So far we parsed\n\n{0}\n\nand we ran into error: {1}")]
     ParseError(String, anyhow::Error),
+    #[error("Unknown term constructor tag: {0}.\n\nHere are the buffer bytes ({1} preceding) {2}\n\nBuffer position is {3} and buffer length is {4}")]
+    UnknownTermConstructor(u8, usize, String, usize, usize),
     #[error(transparent)]
     Custom(#[from] anyhow::Error),
 }
