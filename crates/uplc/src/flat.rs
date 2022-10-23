@@ -195,9 +195,11 @@ where
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
             x => Err(de::Error::Message(format!(
-                "Unknown term constructor tag: {}{} {:02X?} {} {} {} {}",
+                "Unknown term constructor tag: {}{}{} {} {:02X?} {} {} {} {}",
                 x,
-                ".\n\nHere are the buffer bytes (5 preceding) ",
+                ".\n\nHere are the buffer bytes (",
+                if d.pos > 5 { 5 } else { d.pos },
+                "preceding) ",
                 d.buffer
                     .iter()
                     .skip(if d.pos - 5 > 0 { d.pos - 5 } else { 0 })
@@ -364,9 +366,11 @@ where
                     .collect();
 
                 Err(de::Error::Message(format!(
-                    "Unknown term constructor tag: {}{} {:02X?} {} {} {} {}",
+                    "Unknown term constructor tag: {}{}{} {} {:02X?} {} {} {} {}",
                     x,
-                    ".\n\nHere are the buffer bytes (5 preceding) ",
+                    ".\n\nHere are the buffer bytes (",
+                    if d.pos > 5 { 5 } else { d.pos },
+                    "preceding) ",
                     buffer_slice,
                     "\n\nBuffer position is",
                     d.pos,
