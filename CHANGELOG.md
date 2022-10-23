@@ -2,11 +2,16 @@
 
 ## [next] - 2022-MM-DD
 
+## [v0.0.21] - 2022-10-23
+
+### Added
+
+- **flat-rs**: New errors for debugging flat decoding issues
+
 ### Changed
 
 - **uplc**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int` instances
 - **uplc**: Added `apply_params_to_script` function (applies params to script and serializes the new script).
-
 
 ## [v0.0.20] - 2022-10-17
 
