@@ -194,21 +194,24 @@ where
             5 => Ok(Term::Force(Rc::new(Term::decode(d)?))),
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
-            x => Err(de::Error::Message(format!(
-                "Unknown term constructor tag: {}{}{} {} {:02X?} {} {} {} {}",
-                x,
-                ".\n\nHere are the buffer bytes (",
-                if d.pos > 5 { 5 } else { d.pos },
-                "preceding) ",
-                d.buffer
+            x => {
+                let buffer_slice: Vec<u8> = d
+                    .buffer
+                    .to_vec()
                     .iter()
-                    .skip(if d.pos - 5 > 0 { d.pos - 5 } else { 0 })
-                    .take(10),
-                "\n\nBuffer position is",
-                d.pos,
-                "and buffer length is",
-                d.buffer.len()
-            ))),
+                    .skip(if d.pos > 5 { d.pos - 5 } else { 0 })
+                    .take(10)
+                    .cloned()
+                    .collect();
+
+                Err(de::Error::UnknownTermConstructor(
+                    x,
+                    if d.pos > 5 { 5 } else { d.pos },
+                    format!("{:02X?}", buffer_slice),
+                    d.pos,
+                    d.buffer.len(),
+                ))
+            }
         }
     }
 }
@@ -360,23 +363,18 @@ where
                     .buffer
                     .to_vec()
                     .iter()
-                    .skip(if d.pos - 5 > 0 { d.pos - 5 } else { 0 })
+                    .skip(if d.pos > 5 { d.pos - 5 } else { 0 })
                     .take(10)
                     .cloned()
                     .collect();
 
-                Err(de::Error::Message(format!(
-                    "Unknown term constructor tag: {}{}{} {} {:02X?} {} {} {} {}",
+                Err(de::Error::UnknownTermConstructor(
                     x,
-                    ".\n\nHere are the buffer bytes (",
                     if d.pos > 5 { 5 } else { d.pos },
-                    "preceding) ",
-                    buffer_slice,
-                    "\n\nBuffer position is",
+                    format!("{:02X?}", buffer_slice),
                     d.pos,
-                    "and buffer length is",
-                    d.buffer.len()
-                )))
+                    d.buffer.len(),
+                ))
             }
         }
     }
