@@ -50,15 +50,21 @@ impl Project {
     }
 
     pub fn build(&mut self) -> Result<(), Error> {
+        self.compile(true)
+    }
+
+    pub fn check(&mut self) -> Result<(), Error> {
+        self.compile(false)
+    }
+
+    pub fn compile(&mut self, _uplc_gen: bool) -> Result<(), Error> {
         self.read_source_files()?;
 
         let parsed_modules = self.parse_sources()?;
 
         let processing_sequence = parsed_modules.sequence()?;
 
-        let checked_modules = self.type_check(parsed_modules, processing_sequence)?;
-
-        println!("{:?}", checked_modules);
+        let _checked_modules = self.type_check(parsed_modules, processing_sequence)?;
 
         Ok(())
     }
@@ -143,7 +149,8 @@ impl Project {
                 path,
                 code,
                 kind,
-                package,
+                // TODO: come back and figure out where to use this
+                package: _package,
                 ast,
             }) = parsed_modules.remove(&name)
             {

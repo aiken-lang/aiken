@@ -231,7 +231,11 @@ pub enum Error {
         location: Span,
     },
 
-    #[error("")]
+    #[error(
+        "Type Mismatch\n\nExpected type:\n\n{}\n\nFound type:\n\n{}\n",
+        expected.to_pretty_with_names(rigid_type_names.clone(), 4),
+        given.to_pretty_with_names(rigid_type_names.clone(), 4)
+    )]
     CouldNotUnify {
         #[label]
         location: Span,

@@ -6,9 +6,9 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
         RecordUpdateSpread, Span, SrcId, TodoKind, TypedArg, TypedCallArg, TypedClause,
-        TypedClauseGuard, TypedConstant, TypedMultiPattern, TypedRecordUpdateArg, UntypedArg,
-        UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedMultiPattern, UntypedPattern,
-        UntypedRecordUpdateArg,
+        TypedClauseGuard, TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg,
+        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch,
+        UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, result, string},
     expr::{TypedExpr, UntypedExpr},
@@ -267,7 +267,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 branches,
                 final_else,
-            } => todo!(),
+            } => self.infer_if(branches, *final_else, location),
 
             UntypedExpr::Assignment {
                 location,
@@ -1419,6 +1419,60 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             elements,
             location,
             tipo: list(tipo),
+        })
+    }
+
+    fn infer_if(
+        &mut self,
+        branches: Vec1<UntypedIfBranch>,
+        final_else: UntypedExpr,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let first = branches.first();
+
+        let condition = self.infer(first.condition.clone())?;
+
+        self.unify(bool(), condition.tipo(), condition.type_defining_location())?;
+
+        let body = self.infer(first.body.clone())?;
+
+        let tipo = body.tipo();
+
+        let mut typed_branches = Vec1::new(TypedIfBranch {
+            body,
+            condition,
+            location: first.location,
+        });
+
+        for branch in &branches[1..] {
+            let condition = self.infer(branch.condition.clone())?;
+
+            self.unify(bool(), condition.tipo(), condition.type_defining_location())?;
+
+            let body = self.infer(first.body.clone())?;
+
+            self.unify(tipo.clone(), body.tipo(), body.type_defining_location())?;
+
+            typed_branches.push(TypedIfBranch {
+                body,
+                condition,
+                location: branch.location,
+            });
+        }
+
+        let typed_final_else = self.infer(final_else)?;
+
+        self.unify(
+            tipo.clone(),
+            typed_final_else.tipo(),
+            typed_final_else.type_defining_location(),
+        )?;
+
+        Ok(TypedExpr::If {
+            location,
+            branches: typed_branches,
+            final_else: Box::new(typed_final_else),
+            tipo,
         })
     }
 

@@ -55,7 +55,14 @@ impl Error {
     }
 
     pub fn report(&self) {
-        eprintln!("Error: {:?}", self)
+        match self {
+            Error::List(errors) => {
+                for error in errors {
+                    eprintln!("Error: {:?}", error)
+                }
+            }
+            rest => eprintln!("Error: {:?}", rest),
+        }
     }
 }
 

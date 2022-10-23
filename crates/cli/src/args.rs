@@ -8,7 +8,11 @@ use clap::{Parser, Subcommand};
 #[clap(propagate_version = true)]
 pub enum Args {
     /// Build an aiken project
-    Build,
+    Build {
+        /// Path to project
+        #[clap(short, long)]
+        directory: Option<PathBuf>,
+    },
     /// Typecheck a project project
     Check {
         /// Path to project
