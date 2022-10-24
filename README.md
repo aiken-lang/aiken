@@ -7,7 +7,7 @@
 [![Licence](https://img.shields.io/github/license/txpipe/aiken)](https://github.com/txpipe/aiken/blob/main/LICENSE) 
 [![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
 [![Rust Build](https://github.com/txpipe/aiken/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/txpipe/aiken/actions/workflows/rust.yml)
-[![Nix Build](https://github.com/txpipe/aiken/actions/workflows/nix.yml/badge.svg?branch=main)](https://github.com/txpipe/aiken/actions/workflows/nix.yml)
+[![mdBook Build](https://github.com/txpipe/aiken/actions/workflows/mdBook.yml/badge.svg?branch=main)](https://github.com/txpipe/aiken/actions/workflows/mdBook.yml)
   
   <hr/>
 </div>
