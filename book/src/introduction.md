@@ -28,7 +28,7 @@ building a new high level language for writing smart contracts on Cardano.
 - [ ] [v0.1.0 - Initial Alpha](https://github.com/txpipe/aiken/milestone/1)
   - [x] define aiken as a language
   - [x] implement lexing/parsing with pretty error messages
-  - [ ] type checking and inference
+  - [x] type checking and inference
   - [ ] uplc code gen
 - [ ] [v0.2.0 - Implement standard library
       ](https://github.com/txpipe/aiken/milestone/2)
