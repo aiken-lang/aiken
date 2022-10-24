@@ -70,11 +70,22 @@ impl Project {
     }
 
     fn read_source_files(&mut self) -> Result<(), Error> {
-        let lib = self.root.join("lib");
-        let scripts = self.root.join("scripts");
+        let lib = self.root.join(format!("src/{}", self.config.name));
+        let scripts = self.root.join("src/scripts");
 
+        self.read_root_lib_file()?;
         self.aiken_files(&scripts, ModuleKind::Script)?;
         self.aiken_files(&lib, ModuleKind::Lib)?;
+
+        Ok(())
+    }
+
+    fn read_root_lib_file(&mut self) -> Result<(), Error> {
+        let root_lib_path = self.root.join(format!("src/{}.ak", self.config.name));
+
+        if root_lib_path.exists() {
+            self.add_module(root_lib_path, &self.root.join("src"), ModuleKind::Lib)?;
+        }
 
         Ok(())
     }
@@ -235,7 +246,7 @@ impl Project {
         full_module_path: &Path,
         kind: ModuleKind,
     ) -> String {
-        // ../../lib/module.ak
+        // ../../{config.name}/module.ak
 
         // module.ak
         let mut module_path = full_module_path
@@ -244,7 +255,7 @@ impl Project {
             .to_path_buf();
 
         // module
-        let _ = module_path.set_extension("");
+        module_path.set_extension("");
 
         // Stringify
         let name = module_path
@@ -256,7 +267,7 @@ impl Project {
         let name = name.replace('\\', "/");
 
         // project_name/module
-        if kind.is_lib() {
+        if kind.is_lib() && name != self.config.name {
             format!("{}/{}", self.config.name, name)
         } else {
             name

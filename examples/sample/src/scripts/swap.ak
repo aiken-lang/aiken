@@ -1,3 +1,4 @@
+use sample
 use sample/syntax.{append}
 
 pub type Datum {
@@ -9,7 +10,7 @@ pub type Redeemer {
   Sell
 }
 
-pub fn validate(datum: Datum, rdmr: Redeemer, ctx: syntax.ScriptContext) -> Bool {
+pub fn validate(datum: Datum, rdmr: Redeemer, ctx: sample.ScriptContext) -> Bool {
   let thing = if True {
     3
   } else {
