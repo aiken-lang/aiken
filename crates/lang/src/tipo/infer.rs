@@ -206,6 +206,7 @@ fn infer_definition(
                     module: module_name.to_owned(),
                     arity: args.len(),
                     location,
+                    builtin: None,
                 };
 
                 environment.insert_variable(name.clone(), module_fn, tipo.clone());
@@ -422,7 +423,7 @@ fn infer_definition(
 }
 
 fn validate_module_name(name: &str) -> Result<(), Error> {
-    if name == "aiken" {
+    if name == "aiken" || name == "aiken/builtin" {
         return Err(Error::ReservedModuleName {
             name: name.to_string(),
         });

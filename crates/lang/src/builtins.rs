@@ -1,9 +1,11 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
+use uplc::builtins::DefaultFunction;
+
 use crate::{
     ast::{ModuleKind, Span},
     tipo::{
-        self, fields::FieldMap, Type, TypeConstructor, TypeVar, ValueConstructor,
+        fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant,
     },
     IdGenerator,
@@ -19,8 +21,8 @@ const STRING: &str = "String";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
-pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
-    let mut prelude = tipo::TypeInfo {
+pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
+    let mut prelude = TypeInfo {
         name: "aiken".to_string(),
         package: "".to_string(),
         kind: ModuleKind::Lib,
@@ -36,7 +38,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
         TypeConstructor {
             parameters: vec![],
             tipo: int(),
-            origin: Span::empty(),
+            location: Span::empty(),
             module: "".to_string(),
             public: true,
         },
@@ -46,7 +48,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     prelude.types.insert(
         BYTE_ARRAY.to_string(),
         TypeConstructor {
-            origin: Span::empty(),
+            location: Span::empty(),
             parameters: vec![],
             tipo: byte_array(),
             module: "".to_string(),
@@ -93,7 +95,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     prelude.types.insert(
         BOOL.to_string(),
         TypeConstructor {
-            origin: Span::empty(),
+            location: Span::empty(),
             parameters: vec![],
             tipo: bool(),
             module: "".to_string(),
@@ -106,7 +108,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     prelude.types.insert(
         LIST.to_string(),
         TypeConstructor {
-            origin: Span::empty(),
+            location: Span::empty(),
             parameters: vec![list_parameter.clone()],
             tipo: list(list_parameter),
             module: "".to_string(),
@@ -118,7 +120,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     prelude.types.insert(
         STRING.to_string(),
         TypeConstructor {
-            origin: Span::empty(),
+            location: Span::empty(),
             parameters: vec![],
             tipo: string(),
             module: "".to_string(),
@@ -145,7 +147,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     prelude.types.insert(
         NIL.to_string(),
         TypeConstructor {
-            origin: Span::empty(),
+            location: Span::empty(),
             parameters: vec![],
             tipo: nil(),
             module: "".to_string(),
@@ -160,7 +162,7 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     prelude.types.insert(
         RESULT.to_string(),
         TypeConstructor {
-            origin: Span::empty(),
+            location: Span::empty(),
             parameters: vec![result_value.clone(), result_error.clone()],
             tipo: result(result_value, result_error),
             module: "".to_string(),
@@ -208,6 +210,122 @@ pub fn prelude(id_gen: &IdGenerator) -> tipo::TypeInfo {
     );
 
     prelude
+}
+
+pub fn plutus() -> TypeInfo {
+    let mut plutus = TypeInfo {
+        name: "aiken/builtin".to_string(),
+        package: "".to_string(),
+        kind: ModuleKind::Lib,
+        types: HashMap::new(),
+        types_constructors: HashMap::new(),
+        values: HashMap::new(),
+        accessors: HashMap::new(),
+    };
+
+    plutus.values.insert(
+        DefaultFunction::AddInteger.to_string(),
+        DefaultFunction::AddInteger.into(),
+    );
+
+    plutus.values.insert(
+        DefaultFunction::SubtractInteger.to_string(),
+        DefaultFunction::SubtractInteger.into(),
+    );
+
+    plutus.values.insert(
+        DefaultFunction::MultiplyInteger.to_string(),
+        DefaultFunction::MultiplyInteger.into(),
+    );
+
+    plutus.values.insert(
+        DefaultFunction::DivideInteger.to_string(),
+        DefaultFunction::DivideInteger.into(),
+    );
+
+    plutus
+}
+
+impl From<DefaultFunction> for ValueConstructor {
+    fn from(builtin: DefaultFunction) -> Self {
+        let (tipo, arity) = match builtin {
+            DefaultFunction::AddInteger
+            | DefaultFunction::SubtractInteger
+            | DefaultFunction::MultiplyInteger
+            | DefaultFunction::DivideInteger
+            | DefaultFunction::QuotientInteger
+            | DefaultFunction::RemainderInteger
+            | DefaultFunction::ModInteger => {
+                let tipo = function(vec![int(), int()], int());
+
+                (tipo, 2)
+            }
+
+            DefaultFunction::EqualsInteger
+            | DefaultFunction::LessThanInteger
+            | DefaultFunction::LessThanEqualsInteger => {
+                let tipo = function(vec![int(), int()], bool());
+
+                (tipo, 2)
+            }
+            DefaultFunction::AppendByteString => todo!(),
+            DefaultFunction::ConsByteString => todo!(),
+            DefaultFunction::SliceByteString => todo!(),
+            DefaultFunction::LengthOfByteString => todo!(),
+            DefaultFunction::IndexByteString => todo!(),
+            DefaultFunction::EqualsByteString => todo!(),
+            DefaultFunction::LessThanByteString => todo!(),
+            DefaultFunction::LessThanEqualsByteString => todo!(),
+            DefaultFunction::Sha2_256 => todo!(),
+            DefaultFunction::Sha3_256 => todo!(),
+            DefaultFunction::Blake2b_256 => todo!(),
+            DefaultFunction::VerifyEd25519Signature => todo!(),
+            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
+            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
+            DefaultFunction::AppendString => todo!(),
+            DefaultFunction::EqualsString => todo!(),
+            DefaultFunction::EncodeUtf8 => todo!(),
+            DefaultFunction::DecodeUtf8 => todo!(),
+            DefaultFunction::IfThenElse => todo!(),
+            DefaultFunction::ChooseUnit => todo!(),
+            DefaultFunction::Trace => todo!(),
+            DefaultFunction::FstPair => todo!(),
+            DefaultFunction::SndPair => todo!(),
+            DefaultFunction::ChooseList => todo!(),
+            DefaultFunction::MkCons => todo!(),
+            DefaultFunction::HeadList => todo!(),
+            DefaultFunction::TailList => todo!(),
+            DefaultFunction::NullList => todo!(),
+            DefaultFunction::ChooseData => todo!(),
+            DefaultFunction::ConstrData => todo!(),
+            DefaultFunction::MapData => todo!(),
+            DefaultFunction::ListData => todo!(),
+            DefaultFunction::IData => todo!(),
+            DefaultFunction::BData => todo!(),
+            DefaultFunction::UnConstrData => todo!(),
+            DefaultFunction::UnMapData => todo!(),
+            DefaultFunction::UnListData => todo!(),
+            DefaultFunction::UnIData => todo!(),
+            DefaultFunction::UnBData => todo!(),
+            DefaultFunction::EqualsData => todo!(),
+            DefaultFunction::SerialiseData => todo!(),
+            DefaultFunction::MkPairData => todo!(),
+            DefaultFunction::MkNilData => todo!(),
+            DefaultFunction::MkNilPairData => todo!(),
+        };
+
+        ValueConstructor::public(
+            tipo,
+            ValueConstructorVariant::ModuleFn {
+                name: builtin.to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity,
+                location: Span::empty(),
+                builtin: Some(builtin),
+            },
+        )
+    }
 }
 
 pub fn int() -> Arc<Type> {

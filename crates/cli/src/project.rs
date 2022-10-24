@@ -37,6 +37,7 @@ impl Project {
         let mut module_types = HashMap::new();
 
         module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
+        module_types.insert("aiken/builtin".to_string(), builtins::plutus());
 
         Project {
             config,
