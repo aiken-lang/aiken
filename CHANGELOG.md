@@ -2,6 +2,16 @@
 
 ## [next] - 2022-MM-DD
 
+### Added
+
+**aiken**: Fancy errors using [miette](https://github.com/zkat/miette)
+**aiken**: Typechecking
+**aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
+
+### Changed
+
+**aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/txpipe/aiken/tree/main/examples/sample) for more
+
 ## [v0.0.21] - 2022-10-23
 
 ### Added
