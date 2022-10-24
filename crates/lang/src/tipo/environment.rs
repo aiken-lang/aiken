@@ -224,6 +224,7 @@ impl<'a> Environment<'a> {
                             module: module_name.to_owned(),
                             arity: args.len(),
                             location,
+                            builtin: None,
                         },
                     },
                 );
@@ -461,7 +462,7 @@ impl<'a> Environment<'a> {
         info: TypeConstructor,
     ) -> Result<(), Error> {
         let name = type_name.clone();
-        let location = info.origin;
+        let location = info.location;
 
         match self.module_types.insert(type_name, info) {
             None => Ok(()),
@@ -469,7 +470,7 @@ impl<'a> Environment<'a> {
             Some(previous) => Err(Error::DuplicateTypeName {
                 name,
                 location,
-                previous_location: previous.origin,
+                previous_location: previous.location,
             }),
         }
     }
@@ -720,7 +721,7 @@ impl<'a> Environment<'a> {
                     // Register the unqualified import if it is a type constructor
                     if let Some(typ) = module_info.types.get(name) {
                         let typ_info = TypeConstructor {
-                            origin: *location,
+                            location: *location,
                             ..typ.clone()
                         };
 
@@ -843,7 +844,7 @@ impl<'a> Environment<'a> {
                 self.insert_type_constructor(
                     name.clone(),
                     TypeConstructor {
-                        origin: *location,
+                        location: *location,
                         module: module.to_owned(),
                         public: *public,
                         parameters,
@@ -884,7 +885,7 @@ impl<'a> Environment<'a> {
                 self.insert_type_constructor(
                     name.clone(),
                     TypeConstructor {
-                        origin: *location,
+                        location: *location,
                         module: module.to_owned(),
                         public: *public,
                         parameters,
@@ -967,6 +968,7 @@ impl<'a> Environment<'a> {
                         module: module_name.to_owned(),
                         arity: args.len(),
                         location: *location,
+                        builtin: None,
                     },
                     tipo,
                 );

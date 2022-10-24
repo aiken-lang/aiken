@@ -1,5 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
 
+use uplc::builtins::DefaultFunction;
+
 use crate::{
     ast::{Constant, DefinitionLocation, ModuleKind, Span, TypedConstant},
     tipo::fields::FieldMap,
@@ -354,6 +356,7 @@ pub enum ValueConstructorVariant {
         module: String,
         arity: usize,
         location: Span,
+        builtin: Option<DefaultFunction>,
     },
 
     /// A constructor for a custom type
@@ -445,7 +448,7 @@ pub struct TypeInfo {
 #[derive(Debug, Clone)]
 pub struct TypeConstructor {
     pub public: bool,
-    pub origin: Span,
+    pub location: Span,
     pub module: String,
     pub parameters: Vec<Arc<Type>>,
     pub tipo: Arc<Type>,
