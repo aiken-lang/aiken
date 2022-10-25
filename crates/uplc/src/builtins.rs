@@ -1,11 +1,13 @@
 use std::{fmt::Display, str::FromStr};
 
+use strum_macros::EnumIter;
+
 use flat_rs::de;
 
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, EnumIter)]
 pub enum DefaultFunction {
     // Integer functions
     AddInteger = 0,
