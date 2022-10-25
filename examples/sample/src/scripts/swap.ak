@@ -1,5 +1,5 @@
-use sample
-use sample/syntax.{append}
+use sample/mint
+use sample/spend
 
 pub type Datum {
   something: String,
@@ -10,13 +10,7 @@ pub type Redeemer {
   Sell
 }
 
-pub fn validate(datum: Datum, rdmr: Redeemer, ctx: sample.ScriptContext) -> Bool {
-  let thing = if True {
-    3
-  } else {
-    "thing"
-  }
-
+pub fn spend(datum: Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> Bool {
   when rdmr is {
     Buy -> True
     Sell -> datum.something == "Aiken"

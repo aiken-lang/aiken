@@ -6,6 +6,7 @@
 
 **aiken**: Fancy errors using [miette](https://github.com/zkat/miette)
 **aiken**: Typechecking
+**aiken**: Inject `aiken/builtin` module with some functions from `DefaultFunction` in UPLC directly exposed
 **aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
 
 ### Changed

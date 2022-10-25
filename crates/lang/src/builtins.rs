@@ -1,5 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
+use strum::IntoEnumIterator;
+
 use uplc::builtins::DefaultFunction;
 
 use crate::{
@@ -212,7 +214,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude
 }
 
-pub fn plutus() -> TypeInfo {
+pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
     let mut plutus = TypeInfo {
         name: "aiken/builtin".to_string(),
         package: "".to_string(),
@@ -223,101 +225,174 @@ pub fn plutus() -> TypeInfo {
         accessors: HashMap::new(),
     };
 
-    plutus.values.insert(
-        DefaultFunction::AddInteger.to_string(),
-        DefaultFunction::AddInteger.into(),
-    );
-
-    plutus.values.insert(
-        DefaultFunction::SubtractInteger.to_string(),
-        DefaultFunction::SubtractInteger.into(),
-    );
-
-    plutus.values.insert(
-        DefaultFunction::MultiplyInteger.to_string(),
-        DefaultFunction::MultiplyInteger.into(),
-    );
-
-    plutus.values.insert(
-        DefaultFunction::DivideInteger.to_string(),
-        DefaultFunction::DivideInteger.into(),
-    );
+    for builtin in DefaultFunction::iter() {
+        if let Some(value) = from_default_function(builtin, id_gen) {
+            plutus.values.insert(
+                builtin.to_string().replace("ByteString", "ByteArray"),
+                value,
+            );
+        }
+    }
 
     plutus
 }
 
-impl From<DefaultFunction> for ValueConstructor {
-    fn from(builtin: DefaultFunction) -> Self {
-        let (tipo, arity) = match builtin {
-            DefaultFunction::AddInteger
-            | DefaultFunction::SubtractInteger
-            | DefaultFunction::MultiplyInteger
-            | DefaultFunction::DivideInteger
-            | DefaultFunction::QuotientInteger
-            | DefaultFunction::RemainderInteger
-            | DefaultFunction::ModInteger => {
-                let tipo = function(vec![int(), int()], int());
+pub fn from_default_function(
+    builtin: DefaultFunction,
+    id_gen: &IdGenerator,
+) -> Option<ValueConstructor> {
+    let info = match builtin {
+        DefaultFunction::AddInteger
+        | DefaultFunction::SubtractInteger
+        | DefaultFunction::MultiplyInteger
+        | DefaultFunction::DivideInteger
+        | DefaultFunction::QuotientInteger
+        | DefaultFunction::RemainderInteger
+        | DefaultFunction::ModInteger => {
+            let tipo = function(vec![int(), int()], int());
 
-                (tipo, 2)
-            }
+            Some((tipo, 2))
+        }
 
-            DefaultFunction::EqualsInteger
-            | DefaultFunction::LessThanInteger
-            | DefaultFunction::LessThanEqualsInteger => {
-                let tipo = function(vec![int(), int()], bool());
+        DefaultFunction::EqualsInteger
+        | DefaultFunction::LessThanInteger
+        | DefaultFunction::LessThanEqualsInteger => {
+            let tipo = function(vec![int(), int()], bool());
 
-                (tipo, 2)
-            }
-            DefaultFunction::AppendByteString => todo!(),
-            DefaultFunction::ConsByteString => todo!(),
-            DefaultFunction::SliceByteString => todo!(),
-            DefaultFunction::LengthOfByteString => todo!(),
-            DefaultFunction::IndexByteString => todo!(),
-            DefaultFunction::EqualsByteString => todo!(),
-            DefaultFunction::LessThanByteString => todo!(),
-            DefaultFunction::LessThanEqualsByteString => todo!(),
-            DefaultFunction::Sha2_256 => todo!(),
-            DefaultFunction::Sha3_256 => todo!(),
-            DefaultFunction::Blake2b_256 => todo!(),
-            DefaultFunction::VerifyEd25519Signature => todo!(),
-            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
-            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
-            DefaultFunction::AppendString => todo!(),
-            DefaultFunction::EqualsString => todo!(),
-            DefaultFunction::EncodeUtf8 => todo!(),
-            DefaultFunction::DecodeUtf8 => todo!(),
-            DefaultFunction::IfThenElse => todo!(),
-            DefaultFunction::ChooseUnit => todo!(),
-            DefaultFunction::Trace => todo!(),
-            DefaultFunction::FstPair => todo!(),
-            DefaultFunction::SndPair => todo!(),
-            DefaultFunction::ChooseList => todo!(),
-            DefaultFunction::MkCons => todo!(),
-            DefaultFunction::HeadList => todo!(),
-            DefaultFunction::TailList => todo!(),
-            DefaultFunction::NullList => todo!(),
-            DefaultFunction::ChooseData => todo!(),
-            DefaultFunction::ConstrData => todo!(),
-            DefaultFunction::MapData => todo!(),
-            DefaultFunction::ListData => todo!(),
-            DefaultFunction::IData => todo!(),
-            DefaultFunction::BData => todo!(),
-            DefaultFunction::UnConstrData => todo!(),
-            DefaultFunction::UnMapData => todo!(),
-            DefaultFunction::UnListData => todo!(),
-            DefaultFunction::UnIData => todo!(),
-            DefaultFunction::UnBData => todo!(),
-            DefaultFunction::EqualsData => todo!(),
-            DefaultFunction::SerialiseData => todo!(),
-            DefaultFunction::MkPairData => todo!(),
-            DefaultFunction::MkNilData => todo!(),
-            DefaultFunction::MkNilPairData => todo!(),
-        };
+            Some((tipo, 2))
+        }
+        DefaultFunction::AppendByteString => {
+            let tipo = function(vec![byte_array(), byte_array()], byte_array());
 
+            Some((tipo, 2))
+        }
+        DefaultFunction::ConsByteString => {
+            let tipo = function(vec![int(), byte_array()], byte_array());
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::SliceByteString => {
+            let tipo = function(vec![int(), int(), byte_array()], byte_array());
+
+            Some((tipo, 3))
+        }
+        DefaultFunction::LengthOfByteString => {
+            let tipo = function(vec![byte_array()], int());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::IndexByteString => {
+            let tipo = function(vec![byte_array(), int()], int());
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::EqualsByteString
+        | DefaultFunction::LessThanByteString
+        | DefaultFunction::LessThanEqualsByteString => {
+            let tipo = function(vec![byte_array(), byte_array()], bool());
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::Sha2_256 | DefaultFunction::Sha3_256 | DefaultFunction::Blake2b_256 => {
+            let tipo = function(vec![byte_array()], byte_array());
+
+            Some((tipo, 1))
+        }
+
+        DefaultFunction::VerifyEd25519Signature => {
+            let tipo = function(vec![byte_array(), byte_array(), byte_array()], bool());
+
+            Some((tipo, 3))
+        }
+        DefaultFunction::VerifyEcdsaSecp256k1Signature => None,
+        DefaultFunction::VerifySchnorrSecp256k1Signature => None,
+        DefaultFunction::AppendString => {
+            let tipo = function(vec![string(), string()], string());
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::EqualsString => {
+            let tipo = function(vec![string(), string()], bool());
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::EncodeUtf8 => {
+            let tipo = function(vec![string()], byte_array());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::DecodeUtf8 => {
+            let tipo = function(vec![byte_array()], string());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::IfThenElse => None,
+        DefaultFunction::ChooseUnit => None,
+        DefaultFunction::Trace => {
+            let ret = generic_var(id_gen.next());
+
+            let tipo = function(vec![string(), ret.clone()], ret);
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::FstPair => None,
+        DefaultFunction::SndPair => None,
+        DefaultFunction::ChooseList => None,
+        DefaultFunction::MkCons => None,
+        DefaultFunction::HeadList => {
+            let ret = generic_var(id_gen.next());
+
+            let tipo = function(vec![list(ret.clone())], ret);
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::TailList => {
+            let ret = list(generic_var(id_gen.next()));
+
+            let tipo = function(vec![ret.clone()], ret);
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::NullList => {
+            let ret = list(generic_var(id_gen.next()));
+
+            let tipo = function(vec![ret], bool());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::ChooseData => None,
+        DefaultFunction::ConstrData => None,
+        DefaultFunction::MapData => None,
+        DefaultFunction::ListData => None,
+        DefaultFunction::IData => None,
+        DefaultFunction::BData => None,
+        DefaultFunction::UnConstrData => None,
+        DefaultFunction::UnMapData => None,
+        DefaultFunction::UnListData => None,
+        DefaultFunction::UnIData => None,
+        DefaultFunction::UnBData => None,
+        DefaultFunction::EqualsData => {
+            let arg = generic_var(id_gen.next());
+
+            let tipo = function(vec![arg.clone(), arg], bool());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::SerialiseData => {
+            let tipo = function(vec![generic_var(id_gen.next())], byte_array());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::MkPairData => None,
+        DefaultFunction::MkNilData => None,
+        DefaultFunction::MkNilPairData => None,
+    };
+
+    info.map(|(tipo, arity)| {
         ValueConstructor::public(
             tipo,
             ValueConstructorVariant::ModuleFn {
-                name: builtin.to_string(),
+                name: builtin.to_string().replace("ByteString", "ByteArray"),
                 field_map: None,
                 module: "".to_string(),
                 arity,
@@ -325,7 +400,7 @@ impl From<DefaultFunction> for ValueConstructor {
                 builtin: Some(builtin),
             },
         )
-    }
+    })
 }
 
 pub fn int() -> Arc<Type> {
