@@ -57,6 +57,15 @@ pub enum Error {
         src: String,
         location: Span,
     },
+
+    #[error("{name} requires at least {at_least} arguments")]
+    WrongValidatorArity {
+        name: String,
+        at_least: u8,
+        location: Span,
+        path: PathBuf,
+        src: String,
+    },
 }
 
 impl Error {
@@ -151,19 +160,20 @@ impl Diagnostic for Error {
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
+            Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
         }
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Error::DuplicateModule { first, second, .. } => Some(Box::new(format!(
-                "rename either {} or {}",
+                "Rename either {} or {}",
                 first.display(),
                 second.display()
             ))),
             Error::FileIo { .. } => None,
             Error::ImportCycle { modules } => Some(Box::new(format!(
-                "try moving the shared code to a separate module that the others can depend on\n- {}",
+                "Try moving the shared code to a separate module that the others can depend on\n- {}",
                 modules.join("\n- ")
             ))),
             Error::List(_) => None,
@@ -171,7 +181,8 @@ impl Diagnostic for Error {
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => Some(Box::new("try annotating the validator's return type with Bool")),
+            Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
+            Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
         }
     }
 
@@ -188,6 +199,9 @@ impl Diagnostic for Error {
             Error::ValidatorMustReturnBool { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
+            Error::WrongValidatorArity { location, .. } => Some(Box::new(
+                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+            )),
         }
     }
 
@@ -202,6 +216,7 @@ impl Diagnostic for Error {
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { src, .. } => Some(src),
+            Error::WrongValidatorArity { src, .. } => Some(src),
         }
     }
 }

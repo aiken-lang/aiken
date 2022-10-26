@@ -12,7 +12,7 @@ pub mod module;
 use aiken_lang::{
     ast::{Definition, ModuleKind},
     builtins,
-    tipo::{Type, TypeInfo},
+    tipo::TypeInfo,
     IdGenerator,
 };
 
@@ -83,7 +83,7 @@ impl Project {
 
         let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
 
-        let scripts = self.validate_scripts(&mut checked_modules)?;
+        let _scripts = self.validate_scripts(&mut checked_modules)?;
 
         Ok(())
     }
@@ -260,6 +260,25 @@ impl Project {
 
                         // depending on name, validate the minimum number of arguments
                         // if too low, push a new error on to errors
+                        if [MINT, CERT, WITHDRAWL].contains(&name.as_str()) && arguments.len() < 2 {
+                            errors.push(Error::WrongValidatorArity {
+                                location: *location,
+                                src: module.code.clone(),
+                                path: module.input_path.clone(),
+                                name: name.clone(),
+                                at_least: 2,
+                            })
+                        }
+
+                        if SPEND == name && arguments.len() < 3 {
+                            errors.push(Error::WrongValidatorArity {
+                                location: *location,
+                                src: module.code.clone(),
+                                path: module.input_path.clone(),
+                                name: name.clone(),
+                                at_least: 3,
+                            })
+                        }
                     }
                 }
             }
