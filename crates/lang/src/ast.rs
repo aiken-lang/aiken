@@ -39,6 +39,16 @@ pub struct Module<Info, Definitions> {
     pub kind: ModuleKind,
 }
 
+impl<Info, Definitions> Module<Info, Definitions> {
+    pub fn definitions(&self) -> impl Iterator<Item = &Definitions> {
+        self.definitions.iter()
+    }
+
+    pub fn into_definitions(self) -> impl Iterator<Item = Definitions> {
+        self.definitions.into_iter()
+    }
+}
+
 impl UntypedModule {
     pub fn dependencies(&self) -> Vec<(String, Span)> {
         self.definitions()
@@ -53,14 +63,6 @@ impl UntypedModule {
                 }
             })
             .collect()
-    }
-
-    pub fn definitions(&self) -> impl Iterator<Item = &UntypedDefinition> {
-        self.definitions.iter()
-    }
-
-    pub fn into_definitions(self) -> impl Iterator<Item = UntypedDefinition> {
-        self.definitions.into_iter()
     }
 }
 

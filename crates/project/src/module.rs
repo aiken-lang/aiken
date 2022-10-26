@@ -155,7 +155,7 @@ fn find_cycle(
     false
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CheckedModule {
     pub name: String,
     pub code: String,
@@ -163,4 +163,45 @@ pub struct CheckedModule {
     pub kind: ModuleKind,
     pub ast: TypedModule,
     // pub extra: ModuleExtra,
+}
+
+#[derive(Debug, Clone)]
+pub struct CheckedModules(HashMap<String, CheckedModule>);
+
+impl From<HashMap<String, CheckedModule>> for CheckedModules {
+    fn from(checked_modules: HashMap<String, CheckedModule>) -> Self {
+        CheckedModules(checked_modules)
+    }
+}
+
+impl From<CheckedModules> for HashMap<String, CheckedModule> {
+    fn from(checked_modules: CheckedModules) -> Self {
+        checked_modules.0
+    }
+}
+
+impl CheckedModules {
+    pub fn scripts(&self) -> impl Iterator<Item = &CheckedModule> {
+        self.0.values().filter(|module| module.kind.is_script())
+    }
+
+    pub fn into_scripts(self) -> impl Iterator<Item = CheckedModule> {
+        self.0
+            .into_values()
+            .filter(|module| module.kind.is_script())
+    }
+}
+
+impl Deref for CheckedModules {
+    type Target = HashMap<String, CheckedModule>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for CheckedModules {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
