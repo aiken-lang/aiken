@@ -9,12 +9,17 @@ pub mod error;
 pub mod format;
 pub mod module;
 
-use aiken_lang::{ast::ModuleKind, builtins, tipo::TypeInfo, IdGenerator};
+use aiken_lang::{
+    ast::{Definition, ModuleKind},
+    builtins,
+    tipo::{Type, TypeInfo},
+    IdGenerator,
+};
 
 use crate::{
     config::Config,
     error::{Error, Warning},
-    module::{CheckedModule, ParsedModule, ParsedModules},
+    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
 };
 
 #[derive(Debug)]
@@ -24,6 +29,12 @@ pub struct Source {
     pub code: String,
     pub kind: ModuleKind,
 }
+
+pub const SPEND: &str = "spend";
+pub const CERT: &str = "cert";
+pub const MINT: &str = "mint";
+pub const WITHDRAWL: &str = "withdrawl";
+pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAWL];
 
 pub struct Project {
     config: Config,
@@ -70,7 +81,9 @@ impl Project {
 
         let processing_sequence = parsed_modules.sequence()?;
 
-        let _checked_modules = self.type_check(parsed_modules, processing_sequence)?;
+        let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
+
+        let scripts = self.validate_scripts(&mut checked_modules)?;
 
         Ok(())
     }
@@ -157,8 +170,8 @@ impl Project {
         &mut self,
         mut parsed_modules: ParsedModules,
         processing_sequence: Vec<String>,
-    ) -> Result<Vec<CheckedModule>, Error> {
-        let mut modules = Vec::with_capacity(parsed_modules.len() + 1);
+    ) -> Result<CheckedModules, Error> {
+        let mut modules = HashMap::with_capacity(parsed_modules.len() + 1);
 
         for name in processing_sequence {
             if let Some(ParsedModule {
@@ -199,18 +212,68 @@ impl Project {
                 self.module_types
                     .insert(name.clone(), ast.type_info.clone());
 
-                modules.push(CheckedModule {
-                    kind,
-                    // extra,
-                    name,
-                    code,
-                    ast,
-                    input_path: path,
-                });
+                modules.insert(
+                    name.clone(),
+                    CheckedModule {
+                        kind,
+                        // extra,
+                        name,
+                        code,
+                        ast,
+                        input_path: path,
+                    },
+                );
             }
         }
 
-        Ok(modules)
+        Ok(modules.into())
+    }
+
+    fn validate_scripts(
+        &self,
+        checked_modules: &mut CheckedModules,
+    ) -> Result<Vec<CheckedModule>, Error> {
+        let mut errors = Vec::new();
+        let mut scripts = Vec::new();
+
+        for module in checked_modules.scripts() {
+            scripts.push(module.clone());
+
+            for def in module.ast.definitions() {
+                if let Definition::Fn {
+                    arguments,
+                    location,
+                    name,
+                    return_type,
+                    ..
+                } = def
+                {
+                    if VALIDATOR_NAMES.contains(&name.as_str()) {
+                        // validators must return a Bool
+                        if !return_type.is_bool() {
+                            errors.push(Error::ValidatorMustReturnBool {
+                                location: *location,
+                                src: module.code.clone(),
+                                path: module.input_path.clone(),
+                            })
+                        }
+
+                        // depending on name, validate the minimum number of arguments
+                        // if too low, push a new error on to errors
+                    }
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            for script in &scripts {
+                checked_modules.remove(&script.name);
+            }
+
+            Ok(scripts)
+        } else {
+            Err(Error::List(errors))
+        }
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {

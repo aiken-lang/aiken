@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::{parser::error::ParseError, tipo};
+use aiken_lang::{error::ParseError, parser::ast::Span, tipo};
 use miette::{Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
 
 #[allow(dead_code)]
@@ -49,6 +49,13 @@ pub enum Error {
         src: String,
         #[source]
         error: tipo::error::Error,
+    },
+
+    #[error("validator functions must return Bool")]
+    ValidatorMustReturnBool {
+        path: PathBuf,
+        src: String,
+        location: Span,
     },
 }
 
@@ -143,6 +150,7 @@ impl Diagnostic for Error {
             Error::Type { .. } => Some(Box::new("aiken::typecheck")),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
         }
     }
 
@@ -163,6 +171,7 @@ impl Diagnostic for Error {
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { .. } => Some(Box::new("try annotating the validator's return type with Bool")),
         }
     }
 
@@ -176,6 +185,9 @@ impl Diagnostic for Error {
             Error::Type { error, .. } => error.labels(),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { location, .. } => Some(Box::new(
+                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+            )),
         }
     }
 
@@ -189,6 +201,7 @@ impl Diagnostic for Error {
             Error::Type { src, .. } => Some(src),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { src, .. } => Some(src),
         }
     }
 }
