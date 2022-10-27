@@ -9,7 +9,7 @@ use interner::Interner;
 use pallas_primitives::{alonzo::PlutusData, Fragment};
 use peg::{error::ParseError, str::LineCol};
 
-mod interner;
+pub mod interner;
 
 /// Parse a `Program` from a str.
 pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {

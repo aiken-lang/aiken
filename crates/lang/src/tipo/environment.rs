@@ -8,8 +8,9 @@ use itertools::Itertools;
 
 use crate::{
     ast::{
-        Annotation, ArgName, CallArg, Definition, Pattern, RecordConstructor, RecordConstructorArg,
-        Span, TypedDefinition, UnqualifiedImport, UntypedDefinition, PIPE_VARIABLE,
+        Annotation, ArgName, CallArg, DataType, Definition, Function, ModuleConstant, Pattern,
+        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
+        UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
     },
     builtins::{function, generic_var, unbound_var},
     tipo::fields::FieldMap,
@@ -186,7 +187,7 @@ impl<'a> Environment<'a> {
         module_name: &String,
     ) -> TypedDefinition {
         match s {
-            Definition::Fn {
+            Definition::Fn(Function {
                 doc,
                 location,
                 name,
@@ -196,7 +197,7 @@ impl<'a> Environment<'a> {
                 return_annotation,
                 return_type,
                 end_position,
-            } => {
+            }) => {
                 // Lookup the inferred function information
                 let function = self
                     .get_variable(&name)
@@ -230,7 +231,7 @@ impl<'a> Environment<'a> {
                     },
                 );
 
-                Definition::Fn {
+                Definition::Fn(Function {
                     doc,
                     location,
                     name,
@@ -240,7 +241,7 @@ impl<'a> Environment<'a> {
                     return_type,
                     body,
                     end_position,
-                }
+                })
             }
 
             definition @ (Definition::TypeAlias { .. }
@@ -655,13 +656,13 @@ impl<'a> Environment<'a> {
 
     pub fn register_import(&mut self, def: &UntypedDefinition) -> Result<(), Error> {
         match def {
-            Definition::Use {
+            Definition::Use(Use {
                 module,
                 as_name,
                 unqualified,
                 location,
                 ..
-            } => {
+            }) => {
                 let name = module.join("/");
 
                 // Find imported module
@@ -819,14 +820,14 @@ impl<'a> Environment<'a> {
         names: &mut HashMap<&'a str, &'a Span>,
     ) -> Result<(), Error> {
         match def {
-            Definition::DataType {
+            Definition::DataType(DataType {
                 name,
                 public,
                 parameters,
                 location,
                 constructors,
                 ..
-            } => {
+            }) => {
                 assert_unique_type_name(names, name, location)?;
 
                 // Build a type from the type Annotation
@@ -864,14 +865,14 @@ impl<'a> Environment<'a> {
                 }
             }
 
-            Definition::TypeAlias {
+            Definition::TypeAlias(TypeAlias {
                 location,
                 public,
                 parameters: args,
                 alias: name,
                 annotation: resolved_type,
                 ..
-            } => {
+            }) => {
                 assert_unique_type_name(names, name, location)?;
 
                 // Register the paramerterised types
@@ -915,14 +916,14 @@ impl<'a> Environment<'a> {
         names: &mut HashMap<&'a str, &'a Span>,
     ) -> Result<(), Error> {
         match def {
-            Definition::Fn {
+            Definition::Fn(Function {
                 name,
                 arguments: args,
                 location,
                 return_annotation,
                 public,
                 ..
-            } => {
+            }) => {
                 assert_unique_value_name(names, name, location)?;
 
                 self.ungeneralised_functions.insert(name.to_string());
@@ -980,14 +981,14 @@ impl<'a> Environment<'a> {
                 }
             }
 
-            Definition::DataType {
+            Definition::DataType(DataType {
                 location,
                 public,
                 opaque,
                 name,
                 constructors,
                 ..
-            } => {
+            }) => {
                 let mut hydrator = hydrators
                     .remove(name)
                     .expect("Could not find hydrator for register_values custom type");
@@ -1079,7 +1080,7 @@ impl<'a> Environment<'a> {
                 }
             }
 
-            Definition::ModuleConstant { name, location, .. } => {
+            Definition::ModuleConstant(ModuleConstant { name, location, .. }) => {
                 assert_unique_const_name(names, name, location)?;
             }
 

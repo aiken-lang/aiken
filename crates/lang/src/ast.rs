@@ -53,9 +53,9 @@ impl UntypedModule {
     pub fn dependencies(&self) -> Vec<(String, Span)> {
         self.definitions()
             .flat_map(|def| {
-                if let Definition::Use {
+                if let Definition::Use(Use {
                     location, module, ..
-                } = def
+                }) = def
                 {
                     Some((module.join("/"), *location))
                 } else {
@@ -70,57 +70,72 @@ pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Function<T, Expr> {
+    pub arguments: Vec<Arg<T>>,
+    pub body: Expr,
+    pub doc: Option<String>,
+    pub location: Span,
+    pub name: String,
+    pub public: bool,
+    pub return_annotation: Option<Annotation>,
+    pub return_type: T,
+    pub end_position: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeAlias<T> {
+    pub alias: String,
+    pub annotation: Annotation,
+    pub doc: Option<String>,
+    pub location: Span,
+    pub parameters: Vec<String>,
+    pub public: bool,
+    pub tipo: T,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataType<T> {
+    pub constructors: Vec<RecordConstructor<T>>,
+    pub doc: Option<String>,
+    pub location: Span,
+    pub name: String,
+    pub opaque: bool,
+    pub parameters: Vec<String>,
+    pub public: bool,
+    pub typed_parameters: Vec<T>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Use<PackageName> {
+    pub as_name: Option<String>,
+    pub location: Span,
+    pub module: Vec<String>,
+    pub package: PackageName,
+    pub unqualified: Vec<UnqualifiedImport>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleConstant<T, ConstantRecordTag> {
+    pub doc: Option<String>,
+    pub location: Span,
+    pub public: bool,
+    pub name: String,
+    pub annotation: Option<Annotation>,
+    pub value: Box<Constant<T, ConstantRecordTag>>,
+    pub tipo: T,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
-    Fn {
-        arguments: Vec<Arg<T>>,
-        body: Expr,
-        doc: Option<String>,
-        location: Span,
-        name: String,
-        public: bool,
-        return_annotation: Option<Annotation>,
-        return_type: T,
-        end_position: usize,
-    },
+    Fn(Function<T, Expr>),
 
-    TypeAlias {
-        alias: String,
-        annotation: Annotation,
-        doc: Option<String>,
-        location: Span,
-        parameters: Vec<String>,
-        public: bool,
-        tipo: T,
-    },
+    TypeAlias(TypeAlias<T>),
 
-    DataType {
-        constructors: Vec<RecordConstructor<T>>,
-        doc: Option<String>,
-        location: Span,
-        name: String,
-        opaque: bool,
-        parameters: Vec<String>,
-        public: bool,
-        typed_parameters: Vec<T>,
-    },
+    DataType(DataType<T>),
 
-    Use {
-        as_name: Option<String>,
-        location: Span,
-        module: Vec<String>,
-        package: PackageName,
-        unqualified: Vec<UnqualifiedImport>,
-    },
+    Use(Use<PackageName>),
 
-    ModuleConstant {
-        doc: Option<String>,
-        location: Span,
-        public: bool,
-        name: String,
-        annotation: Option<Annotation>,
-        value: Box<Constant<T, ConstantRecordTag>>,
-        tipo: T,
-    },
+    ModuleConstant(ModuleConstant<T, ConstantRecordTag>),
 }
 
 impl<A, B, C, E> Definition<A, B, C, E> {

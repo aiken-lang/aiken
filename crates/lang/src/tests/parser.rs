@@ -2,8 +2,9 @@ use chumsky::prelude::*;
 use pretty_assertions::assert_eq;
 
 use crate::{
-    ast::{self, Span},
-    expr, parser,
+    ast::{self, DataType, Function, Span, TypeAlias, Use},
+    expr, lexer,
+    parser::module_parser,
 };
 
 #[test]
@@ -116,14 +117,14 @@ fn module() {
             name: "".to_string(),
             type_info: (),
             definitions: vec![
-                ast::UntypedDefinition::Use {
+                ast::UntypedDefinition::Use(Use {
                     location: Span::new((), 13..25),
                     module: vec!["std".to_string(), "list".to_string()],
                     as_name: None,
                     unqualified: vec![],
                     package: (),
-                },
-                ast::UntypedDefinition::Use {
+                }),
+                ast::UntypedDefinition::Use(Use {
                     location: Span::new((), 38..80),
                     module: vec!["std".to_string(), "address".to_string()],
                     as_name: None,
@@ -142,15 +143,15 @@ fn module() {
                         }
                     ],
                     package: (),
-                },
-                ast::UntypedDefinition::Use {
+                }),
+                ast::UntypedDefinition::Use(Use {
                     location: Span::new((), 93..108),
                     module: vec!["std".to_string(), "tx".to_string()],
                     as_name: Some("t".to_string()),
                     unqualified: vec![],
                     package: (),
-                },
-                ast::UntypedDefinition::DataType {
+                }),
+                ast::UntypedDefinition::DataType(DataType {
                     location: Span::new((), 122..240),
                     constructors: vec![
                         ast::RecordConstructor {
@@ -229,8 +230,8 @@ fn module() {
                     parameters: vec!["a".to_string(),],
                     public: false,
                     typed_parameters: vec![],
-                },
-                ast::UntypedDefinition::DataType {
+                }),
+                ast::UntypedDefinition::DataType(DataType {
                     location: Span::new((), 254..313),
                     constructors: vec![ast::RecordConstructor {
                         location: Span::new((), 275..313),
@@ -254,8 +255,8 @@ fn module() {
                     parameters: vec![],
                     public: true,
                     typed_parameters: vec![],
-                },
-                ast::UntypedDefinition::TypeAlias {
+                }),
+                ast::UntypedDefinition::TypeAlias(TypeAlias {
                     alias: "Thing".to_string(),
                     annotation: ast::Annotation::Constructor {
                         location: Span::new((), 340..351),
@@ -273,8 +274,8 @@ fn module() {
                     parameters: vec![],
                     public: false,
                     tipo: (),
-                },
-                ast::UntypedDefinition::TypeAlias {
+                }),
+                ast::UntypedDefinition::TypeAlias(TypeAlias {
                     alias: "Me".to_string(),
                     annotation: ast::Annotation::Constructor {
                         location: Span::new((), 379..393),
@@ -292,8 +293,9 @@ fn module() {
                     parameters: vec![],
                     public: true,
                     tipo: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
+                    end_position: 0,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
                             name: "a".to_string(),
@@ -326,9 +328,8 @@ fn module() {
                         arguments: vec![],
                     },),
                     return_type: (),
-                    end_position: 466,
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 598,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::NamedLabeled {
@@ -375,8 +376,8 @@ fn module() {
                     public: true,
                     return_annotation: None,
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 839,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
@@ -480,8 +481,8 @@ fn module() {
                     public: true,
                     return_annotation: None,
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 1238,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
@@ -647,8 +648,8 @@ fn module() {
                     public: true,
                     return_annotation: None,
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 1377,
                     arguments: vec![],
                     body: expr::UntypedExpr::Sequence {
@@ -724,8 +725,8 @@ fn module() {
                         arguments: vec![],
                     },),
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 1402,
                     arguments: vec![],
                     body: expr::UntypedExpr::Todo {
@@ -739,8 +740,8 @@ fn module() {
                     public: false,
                     return_annotation: None,
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 1477,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
@@ -770,8 +771,8 @@ fn module() {
                     public: false,
                     return_annotation: None,
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 1655,
                     arguments: vec![],
                     body: expr::UntypedExpr::Sequence {
@@ -912,8 +913,8 @@ fn module() {
                     public: false,
                     return_annotation: None,
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 1781,
                     arguments: vec![
                         ast::Arg {
@@ -978,8 +979,8 @@ fn module() {
                         arguments: vec![],
                     },),
                     return_type: (),
-                },
-                ast::UntypedDefinition::Fn {
+                }),
+                ast::UntypedDefinition::Fn(Function {
                     end_position: 2049,
                     arguments: vec![],
                     body: expr::UntypedExpr::If {
@@ -1054,7 +1055,7 @@ fn module() {
                     public: false,
                     return_annotation: None,
                     return_type: (),
-                },
+                }),
             ]
         },
     );

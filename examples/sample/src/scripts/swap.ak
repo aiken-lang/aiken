@@ -1,9 +1,6 @@
+use sample
 use sample/mint
 use sample/spend
-
-pub type Datum {
-  something: String,
-}
 
 pub type Redeemer {
   Buy { id: Int }
