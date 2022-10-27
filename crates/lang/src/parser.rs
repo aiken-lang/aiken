@@ -119,12 +119,14 @@ pub fn import_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Par
         .then(as_name);
 
     just(Token::Use).ignore_then(module_path).map_with_span(
-        |((module, unqualified), as_name), span| ast::UntypedDefinition::Use {
-            module,
-            as_name,
-            unqualified: unqualified.unwrap_or_default(),
-            package: (),
-            location: span,
+        |((module, unqualified), as_name), span| {
+            ast::UntypedDefinition::Use(ast::Use {
+                module,
+                as_name,
+                unqualified: unqualified.unwrap_or_default(),
+                package: (),
+                location: span,
+            })
         },
     )
 }
@@ -176,7 +178,7 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
         .then(type_name_with_args())
         .then(choice((constructors, record_sugar)))
         .map_with_span(|((pub_opaque, (name, parameters)), constructors), span| {
-            ast::UntypedDefinition::DataType {
+            ast::UntypedDefinition::DataType(ast::DataType {
                 location: span,
                 constructors: constructors
                     .into_iter()
@@ -196,7 +198,7 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
                 parameters: parameters.unwrap_or_default(),
                 public: pub_opaque.is_some(),
                 typed_parameters: vec![],
-            }
+            })
         })
 }
 
@@ -207,7 +209,7 @@ pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error =
         .then_ignore(just(Token::Equal))
         .then(type_parser())
         .map_with_span(|((opt_pub, (alias, parameters)), annotation), span| {
-            ast::UntypedDefinition::TypeAlias {
+            ast::UntypedDefinition::TypeAlias(ast::TypeAlias {
                 alias,
                 annotation,
                 doc: None,
@@ -215,7 +217,7 @@ pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error =
                 parameters: parameters.unwrap_or_default(),
                 public: opt_pub.is_some(),
                 tipo: (),
-            }
+            })
         })
 }
 
@@ -239,7 +241,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
         )
         .map_with_span(
             |((((opt_pub, name), (arguments, args_span)), return_annotation), body), span| {
-                ast::UntypedDefinition::Fn {
+                ast::UntypedDefinition::Fn(ast::Function {
                     arguments,
                     body: body.unwrap_or(expr::UntypedExpr::Todo {
                         kind: TodoKind::EmptyFunction,
@@ -259,7 +261,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                     public: opt_pub.is_some(),
                     return_annotation,
                     return_type: (),
-                }
+                })
             },
         )
 }

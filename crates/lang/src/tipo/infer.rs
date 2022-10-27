@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Definition, Layer, ModuleKind, RecordConstructor, RecordConstructorArg, TypedDefinition,
-        TypedModule, UntypedDefinition, UntypedModule,
+        DataType, Definition, Function, Layer, ModuleConstant, ModuleKind, RecordConstructor,
+        RecordConstructorArg, TypeAlias, TypedDefinition, TypedModule, UntypedDefinition,
+        UntypedModule, Use,
     },
     builtins::function,
     parser::token::Token,
@@ -142,7 +143,7 @@ fn infer_definition(
     environment: &mut Environment<'_>,
 ) -> Result<TypedDefinition, Error> {
     match def {
-        Definition::Fn {
+        Definition::Fn(Function {
             doc,
             location,
             name,
@@ -152,7 +153,7 @@ fn infer_definition(
             return_annotation,
             end_position,
             ..
-        } => {
+        }) => {
             let preregistered_fn = environment
                 .get_variable(&name)
                 .expect("Could not find preregistered type for function");
@@ -217,7 +218,7 @@ fn infer_definition(
                 tipo
             };
 
-            Ok(Definition::Fn {
+            Ok(Definition::Fn(Function {
                 doc,
                 location,
                 name,
@@ -229,10 +230,10 @@ fn infer_definition(
                     .expect("Could not find return type for fn"),
                 body,
                 end_position,
-            })
+            }))
         }
 
-        Definition::TypeAlias {
+        Definition::TypeAlias(TypeAlias {
             doc,
             location,
             public,
@@ -240,14 +241,14 @@ fn infer_definition(
             parameters,
             annotation,
             ..
-        } => {
+        }) => {
             let tipo = environment
                 .get_type_constructor(&None, &alias, location)
                 .expect("Could not find existing type for type alias")
                 .tipo
                 .clone();
 
-            Ok(Definition::TypeAlias {
+            Ok(Definition::TypeAlias(TypeAlias {
                 doc,
                 location,
                 public,
@@ -255,10 +256,10 @@ fn infer_definition(
                 parameters,
                 annotation,
                 tipo,
-            })
+            }))
         }
 
-        Definition::DataType {
+        Definition::DataType(DataType {
             doc,
             location,
             public,
@@ -267,7 +268,7 @@ fn infer_definition(
             parameters,
             constructors,
             ..
-        } => {
+        }) => {
             let constructors = constructors
                 .into_iter()
                 .map(
@@ -330,7 +331,7 @@ fn infer_definition(
                 .parameters
                 .clone();
 
-            Ok(Definition::DataType {
+            Ok(Definition::DataType(DataType {
                 doc,
                 location,
                 public,
@@ -339,16 +340,16 @@ fn infer_definition(
                 parameters,
                 constructors,
                 typed_parameters,
-            })
+            }))
         }
 
-        Definition::Use {
+        Definition::Use(Use {
             location,
             module,
             as_name,
             mut unqualified,
             ..
-        } => {
+        }) => {
             let name = module.join("/");
 
             // Find imported module
@@ -371,16 +372,16 @@ fn infer_definition(
                 }
             }
 
-            Ok(Definition::Use {
+            Ok(Definition::Use(Use {
                 location,
                 module,
                 as_name,
                 unqualified,
                 package: module_info.package.clone(),
-            })
+            }))
         }
 
-        Definition::ModuleConstant {
+        Definition::ModuleConstant(ModuleConstant {
             doc,
             location,
             name,
@@ -388,7 +389,7 @@ fn infer_definition(
             public,
             value,
             ..
-        } => {
+        }) => {
             let typed_expr = ExprTyper::new(environment).infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
@@ -411,7 +412,7 @@ fn infer_definition(
                 environment.init_usage(name.clone(), EntityKind::PrivateConstant, location);
             }
 
-            Ok(Definition::ModuleConstant {
+            Ok(Definition::ModuleConstant(ModuleConstant {
                 doc,
                 location,
                 name,
@@ -419,7 +420,7 @@ fn infer_definition(
                 public,
                 value: Box::new(typed_expr),
                 tipo,
-            })
+            }))
         }
     }
 }

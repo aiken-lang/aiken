@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 pub mod config;
@@ -10,16 +11,22 @@ pub mod format;
 pub mod module;
 
 use aiken_lang::{
-    ast::{Definition, ModuleKind},
+    ast::{Definition, Function, ModuleKind},
     builtins,
+    expr::TypedExpr,
     tipo::TypeInfo,
     IdGenerator,
+};
+use uplc::{
+    ast::{Constant, Name, NamedDeBruijn, Program, Term, Unique},
+    builtins::DefaultFunction,
+    parser::interner::Interner,
 };
 
 use crate::{
     config::Config,
     error::{Error, Warning},
-    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    module::{self, CheckedModule, CheckedModules, ParsedModule, ParsedModules},
 };
 
 #[derive(Debug)]
@@ -74,7 +81,7 @@ impl Project {
         self.compile(false)
     }
 
-    pub fn compile(&mut self, _uplc_gen: bool) -> Result<(), Error> {
+    pub fn compile(&mut self, uplc_gen: bool) -> Result<(), Error> {
         self.read_source_files()?;
 
         let parsed_modules = self.parse_sources()?;
@@ -83,7 +90,11 @@ impl Project {
 
         let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
 
-        let _scripts = self.validate_scripts(&mut checked_modules)?;
+        let scripts = self.validate_scripts(&mut checked_modules)?;
+
+        if uplc_gen {
+            self.code_gen(&scripts, &checked_modules)?;
+        }
 
         Ok(())
     }
@@ -240,13 +251,13 @@ impl Project {
             scripts.push(module.clone());
 
             for def in module.ast.definitions() {
-                if let Definition::Fn {
+                if let Definition::Fn(Function {
                     arguments,
                     location,
                     name,
                     return_type,
                     ..
-                } = def
+                }) = def
                 {
                     if VALIDATOR_NAMES.contains(&name.as_str()) {
                         // validators must return a Bool
@@ -293,6 +304,286 @@ impl Project {
         } else {
             Err(Error::List(errors))
         }
+    }
+
+    fn code_gen(
+        &mut self,
+        scripts: &[CheckedModule],
+        checked_modules: &CheckedModules,
+    ) -> Result<Vec<Program<NamedDeBruijn>>, Error> {
+        let mut programs = Vec::new();
+        let mut uplc_function_holder = Vec::new();
+        let mut functions = HashMap::new();
+        let mut type_aliases = HashMap::new();
+        let mut data_types = HashMap::new();
+        let mut imports = HashMap::new();
+        let mut constants = HashMap::new();
+
+        for module in checked_modules.values() {
+            for def in module.ast.definitions() {
+                match def {
+                    Definition::Fn(func) => {
+                        functions.insert((module.name.clone(), func.name.clone()), func);
+                    }
+                    Definition::TypeAlias(ta) => {
+                        type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
+                    }
+                    Definition::DataType(dt) => {
+                        data_types.insert((module.name.clone(), dt.name.clone()), dt);
+                    }
+                    Definition::Use(import) => {
+                        imports.insert((module.name.clone(), import.module.join("/")), import);
+                    }
+                    Definition::ModuleConstant(mc) => {
+                        constants.insert((module.name.clone(), mc.name.clone()), mc);
+                    }
+                }
+            }
+        }
+
+        for script in scripts {
+            for def in script.ast.definitions() {
+                if let Definition::Fn(Function {
+                    arguments,
+                    name,
+                    body,
+                    ..
+                }) = def
+                {
+                    if VALIDATOR_NAMES.contains(&name.as_str()) {
+                        let type_info = self.module_types.get(&script.name).unwrap();
+                        println!("{type_info:#?}");
+
+                        let mut term = self.recurse_code_gen(
+                            body,
+                            scripts,
+                            0,
+                            &uplc_function_holder,
+                            &functions,
+                            &type_aliases,
+                            &data_types,
+                            &imports,
+                            &constants,
+                        );
+
+                        for arg in arguments.iter().rev() {
+                            term = Term::Lambda {
+                                parameter_name: uplc::ast::Name {
+                                    text: arg
+                                        .arg_name
+                                        .get_variable_name()
+                                        .unwrap_or("_")
+                                        .to_string(),
+                                    unique: Unique::new(0),
+                                },
+                                body: Rc::new(term),
+                            }
+                        }
+
+                        let mut program = Program {
+                            version: (1, 0, 0),
+                            term,
+                        };
+
+                        let mut interner = Interner::new();
+
+                        interner.program(&mut program);
+
+                        programs.push(program.try_into().unwrap());
+                    }
+                }
+            }
+        }
+
+        Ok(programs)
+    }
+
+    fn recurse_code_gen(
+        &self,
+        body: &aiken_lang::expr::TypedExpr,
+        scripts: &[CheckedModule],
+        scope_level: i32,
+        uplc_function_holder: &Vec<Term<Name>>,
+        functions: &HashMap<
+            (String, String),
+            &Function<std::sync::Arc<aiken_lang::tipo::Type>, aiken_lang::expr::TypedExpr>,
+        >,
+        type_aliases: &HashMap<
+            (String, String),
+            &aiken_lang::ast::TypeAlias<std::sync::Arc<aiken_lang::tipo::Type>>,
+        >,
+        data_types: &HashMap<
+            (String, String),
+            &aiken_lang::ast::DataType<std::sync::Arc<aiken_lang::tipo::Type>>,
+        >,
+        imports: &HashMap<(String, String), &aiken_lang::ast::Use<String>>,
+        constants: &HashMap<
+            (String, String),
+            &aiken_lang::ast::ModuleConstant<std::sync::Arc<aiken_lang::tipo::Type>, String>,
+        >,
+    ) -> Term<uplc::ast::Name> {
+        let terms = match body {
+            aiken_lang::expr::TypedExpr::Int { value, .. } => {
+                Term::Constant(Constant::Integer(value.parse::<i128>().unwrap()))
+            }
+            aiken_lang::expr::TypedExpr::String { value, .. } => {
+                Term::Constant(Constant::String(value.clone()))
+            }
+            aiken_lang::expr::TypedExpr::ByteArray { bytes, .. } => {
+                Term::Constant(Constant::ByteString(bytes.clone()))
+            }
+            aiken_lang::expr::TypedExpr::Sequence {
+                location,
+                expressions,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Pipeline {
+                location,
+                expressions,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Var {
+                location,
+                constructor,
+                name,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Fn {
+                location,
+                tipo,
+                is_capture,
+                args,
+                body,
+                return_annotation,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::List {
+                location,
+                tipo,
+                elements,
+                tail,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Call {
+                location,
+                tipo,
+                fun,
+                args,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::BinOp {
+                location,
+                tipo,
+                name,
+                left,
+                right,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Assignment {
+                location,
+                tipo,
+                value,
+                pattern,
+                kind,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Try {
+                location,
+                tipo,
+                value,
+                then,
+                pattern,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::When {
+                location,
+                tipo,
+                subjects,
+                clauses,
+            } => todo!(),
+            //if statements increase scope due to branching.
+            aiken_lang::expr::TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => {
+                let mut final_if_term = self.recurse_code_gen(
+                    final_else,
+                    scripts,
+                    scope_level + 1,
+                    uplc_function_holder,
+                    functions,
+                    type_aliases,
+                    data_types,
+                    imports,
+                    constants,
+                );
+
+                for branch in branches {
+                    // Need some scoping count to potentially replace condition with var since we should assume a condition
+                    // may be repeated 3 + times or be large enough series of binops to warrant var replacement
+                    let condition_term = self.recurse_code_gen(
+                        &branch.condition,
+                        scripts,
+                        scope_level + 1, // Since this happens before branching. Maybe not increase scope level
+                        uplc_function_holder,
+                        functions,
+                        type_aliases,
+                        data_types,
+                        imports,
+                        constants,
+                    );
+
+                    let branch_term = self.recurse_code_gen(
+                        &branch.body,
+                        scripts,
+                        scope_level + 1,
+                        uplc_function_holder,
+                        functions,
+                        type_aliases,
+                        data_types,
+                        imports,
+                        constants,
+                    );
+
+                    final_if_term = Term::Apply {
+                        function: Rc::new(Term::Apply {
+                            function: Rc::new(Term::Apply {
+                                function: Rc::new(Term::Force(Rc::new(Term::Builtin(
+                                    DefaultFunction::IfThenElse,
+                                )))),
+                                argument: Rc::new(condition_term),
+                            }),
+                            //If this is just a var then don't include delay
+                            argument: Rc::new(Term::Delay(Rc::new(branch_term))),
+                        }),
+                        //If this is just a var then don't include delay
+                        argument: Rc::new(Term::Delay(Rc::new(final_if_term.clone()))),
+                    };
+                }
+                Term::Force(Rc::new(final_if_term))
+            }
+            aiken_lang::expr::TypedExpr::RecordAccess {
+                location,
+                tipo,
+                label,
+                index,
+                record,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::ModuleSelect {
+                location,
+                tipo,
+                label,
+                module_name,
+                module_alias,
+                constructor,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Todo {
+                location,
+                label,
+                tipo,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::RecordUpdate {
+                location,
+                tipo,
+                spread,
+                args,
+            } => todo!(),
+            aiken_lang::expr::TypedExpr::Negate { location, value } => todo!(),
+        };
+
+        terms
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
