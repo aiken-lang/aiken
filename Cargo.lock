@@ -92,6 +92,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "toml",
+ "uplc",
  "walkdir",
 ]
 
