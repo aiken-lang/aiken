@@ -11,10 +11,10 @@ pub mod format;
 pub mod module;
 
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind},
+    ast::{self, Definition, Function, ModuleKind},
     builtins,
     expr::TypedExpr,
-    tipo::TypeInfo,
+    tipo::{self, TypeInfo},
     IdGenerator,
 };
 use uplc::{
@@ -26,7 +26,7 @@ use uplc::{
 use crate::{
     config::Config,
     error::{Error, Warning},
-    module::{self, CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
 };
 
 #[derive(Debug)]
@@ -424,17 +424,15 @@ impl Project {
             &aiken_lang::ast::ModuleConstant<std::sync::Arc<aiken_lang::tipo::Type>, String>,
         >,
     ) -> Term<uplc::ast::Name> {
-        let terms = match dbg!(body) {
-            aiken_lang::expr::TypedExpr::Int { value, .. } => {
+        match dbg!(body) {
+            TypedExpr::Int { value, .. } => {
                 Term::Constant(Constant::Integer(value.parse::<i128>().unwrap()))
             }
-            aiken_lang::expr::TypedExpr::String { value, .. } => {
-                Term::Constant(Constant::String(value.clone()))
-            }
-            aiken_lang::expr::TypedExpr::ByteArray { bytes, .. } => {
+            TypedExpr::String { value, .. } => Term::Constant(Constant::String(value.clone())),
+            TypedExpr::ByteArray { bytes, .. } => {
                 Term::Constant(Constant::ByteString(bytes.clone()))
             }
-            aiken_lang::expr::TypedExpr::Sequence {
+            TypedExpr::Sequence {
                 location,
                 expressions,
             } => {
@@ -456,11 +454,11 @@ impl Project {
 
                 uplc_function_holder.pop().unwrap()
             }
-            aiken_lang::expr::TypedExpr::Pipeline {
+            TypedExpr::Pipeline {
                 location,
                 expressions,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::Var {
+            TypedExpr::Var {
                 location,
                 constructor,
                 name,
@@ -469,18 +467,18 @@ impl Project {
                     Term::Constant(Constant::Bool(name == "True"))
                 } else {
                     match constructor.variant.clone() {
-                        aiken_lang::tipo::ValueConstructorVariant::LocalVariable { location } => {
+                        tipo::ValueConstructorVariant::LocalVariable { location } => {
                             Term::Var(Name {
                                 text: name.to_string(),
                                 unique: 0.into(),
                             })
                         }
-                        aiken_lang::tipo::ValueConstructorVariant::ModuleConstant {
+                        tipo::ValueConstructorVariant::ModuleConstant {
                             location,
                             module,
                             literal,
                         } => todo!(),
-                        aiken_lang::tipo::ValueConstructorVariant::ModuleFn {
+                        tipo::ValueConstructorVariant::ModuleFn {
                             name,
                             field_map,
                             module,
@@ -488,7 +486,7 @@ impl Project {
                             location,
                             builtin,
                         } => todo!(),
-                        aiken_lang::tipo::ValueConstructorVariant::Record {
+                        tipo::ValueConstructorVariant::Record {
                             name,
                             arity,
                             field_map,
@@ -499,7 +497,7 @@ impl Project {
                     }
                 }
             }
-            aiken_lang::expr::TypedExpr::Fn {
+            TypedExpr::Fn {
                 location,
                 tipo,
                 is_capture,
@@ -507,19 +505,19 @@ impl Project {
                 body,
                 return_annotation,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::List {
+            TypedExpr::List {
                 location,
                 tipo,
                 elements,
                 tail,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::Call {
+            TypedExpr::Call {
                 location,
                 tipo,
                 fun,
                 args,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::BinOp {
+            TypedExpr::BinOp {
                 location,
                 tipo,
                 name,
@@ -528,16 +526,16 @@ impl Project {
             } => {
                 todo!()
             }
-            aiken_lang::expr::TypedExpr::Assignment {
+            TypedExpr::Assignment {
                 location,
                 tipo,
                 value,
                 pattern,
                 kind,
             } => match pattern {
-                aiken_lang::ast::Pattern::Int { location, value } => todo!(),
-                aiken_lang::ast::Pattern::String { location, value } => todo!(),
-                aiken_lang::ast::Pattern::Var { location, name } => Term::Apply {
+                ast::Pattern::Int { location, value } => todo!(),
+                ast::Pattern::String { location, value } => todo!(),
+                ast::Pattern::Var { location, name } => Term::Apply {
                     function: Rc::new(Term::Lambda {
                         parameter_name: Name {
                             text: name.to_string(),
@@ -559,23 +557,23 @@ impl Project {
                         )
                         .into(),
                 },
-                aiken_lang::ast::Pattern::VarUsage {
+                ast::Pattern::VarUsage {
                     location,
                     name,
                     tipo,
                 } => todo!(),
-                aiken_lang::ast::Pattern::Assign {
+                ast::Pattern::Assign {
                     name,
                     location,
                     pattern,
                 } => todo!(),
-                aiken_lang::ast::Pattern::Discard { name, location } => todo!(),
-                aiken_lang::ast::Pattern::List {
+                ast::Pattern::Discard { name, location } => todo!(),
+                ast::Pattern::List {
                     location,
                     elements,
                     tail,
                 } => todo!(),
-                aiken_lang::ast::Pattern::Constructor {
+                ast::Pattern::Constructor {
                     location,
                     name,
                     arguments,
@@ -585,21 +583,21 @@ impl Project {
                     tipo,
                 } => todo!(),
             },
-            aiken_lang::expr::TypedExpr::Try {
+            TypedExpr::Try {
                 location,
                 tipo,
                 value,
                 then,
                 pattern,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::When {
+            TypedExpr::When {
                 location,
                 tipo,
                 subjects,
                 clauses,
             } => todo!(),
             //if statements increase scope due to branching.
-            aiken_lang::expr::TypedExpr::If {
+            TypedExpr::If {
                 branches,
                 final_else,
                 ..
@@ -660,14 +658,14 @@ impl Project {
                 }
                 Term::Force(Rc::new(final_if_term))
             }
-            aiken_lang::expr::TypedExpr::RecordAccess {
+            TypedExpr::RecordAccess {
                 location,
                 tipo,
                 label,
                 index,
                 record,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::ModuleSelect {
+            TypedExpr::ModuleSelect {
                 location,
                 tipo,
                 label,
@@ -675,21 +673,19 @@ impl Project {
                 module_alias,
                 constructor,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::Todo {
+            TypedExpr::Todo {
                 location,
                 label,
                 tipo,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::RecordUpdate {
+            TypedExpr::RecordUpdate {
                 location,
                 tipo,
                 spread,
                 args,
             } => todo!(),
-            aiken_lang::expr::TypedExpr::Negate { location, value } => todo!(),
-        };
-
-        terms
+            TypedExpr::Negate { location, value } => todo!(),
+        }
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
