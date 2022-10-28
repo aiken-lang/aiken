@@ -16,5 +16,5 @@ pub fn exec(Args { name }: Args) -> miette::Result<()> {
         fs::create_dir_all(name.join("scripts")).into_diagnostic()?;
     }
 
-    return Ok(());
+    Ok(())
 }

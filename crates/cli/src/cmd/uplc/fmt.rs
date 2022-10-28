@@ -26,5 +26,5 @@ pub fn exec(Args { input, print }: Args) -> miette::Result<()> {
         fs::write(&input, pretty).into_diagnostic()?;
     }
 
-    return Ok(());
+    Ok(())
 }

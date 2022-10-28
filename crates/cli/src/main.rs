@@ -1,7 +1,5 @@
-mod cmd;
-
+use aiken::cmd::{build, check, new, tx, uplc};
 use clap::Parser;
-use cmd::{build, check, new, tx, uplc};
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]

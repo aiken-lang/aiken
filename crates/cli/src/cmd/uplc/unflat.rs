@@ -57,5 +57,5 @@ pub fn exec(
 
         fs::write(&out_name, pretty).into_diagnostic()?;
     }
-    return Ok(());
+    Ok(())
 }

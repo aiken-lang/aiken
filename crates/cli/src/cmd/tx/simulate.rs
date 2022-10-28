@@ -121,5 +121,5 @@ pub fn exec(
         }
     }
 
-    return Ok(());
+    Ok(())
 }

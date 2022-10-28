@@ -71,5 +71,5 @@ pub fn exec(Args { script, flat, args }: Args) -> miette::Result<()> {
         println!("\nLogs\n----\n{}", logs.join("\n"))
     }
 
-    return Ok(());
+    Ok(())
 }
