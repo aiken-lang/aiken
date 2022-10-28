@@ -8,7 +8,12 @@ mod pretty;
 pub mod program_builder;
 pub mod tx;
 
-pub use pallas_primitives::alonzo::PlutusData;
+pub use pallas_codec::utils::KeyValuePairs;
+pub use pallas_crypto::hash::Hash;
+pub use pallas_primitives::{
+    alonzo::{BigInt, Constr, PlutusData},
+    babbage::{PostAlonzoTransactionOutput, TransactionInput, TransactionOutput, Value},
+};
 
 use pallas_primitives::{Error, Fragment};
 

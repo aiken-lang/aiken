@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.0.22] - 2022-10-28
+
+## Added
+**uplc**: Expose various Pallas primitives from UPLC to make constructing 
+UPLC types possible for consumers
+
 ## [next] - 2022-MM-DD
 
 ### Added
