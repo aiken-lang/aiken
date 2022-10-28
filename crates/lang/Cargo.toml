@@ -17,7 +17,7 @@ itertools = "0.10.5"
 miette = "5.2.0"
 strum = "0.24.1"
 thiserror = "1.0.37"
-uplc = { path = '../uplc', version = "0.0.22" }
+uplc = { path = '../uplc', version = "0.0.21" }
 vec1 = "1.8.0"
 
 [dev-dependencies]
