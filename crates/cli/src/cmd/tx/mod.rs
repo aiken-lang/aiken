@@ -4,6 +4,7 @@ use clap::Subcommand;
 
 /// Commands for working with transactions
 #[derive(Subcommand)]
+#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     Simulate(simulate::Args),
 }

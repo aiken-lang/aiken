@@ -7,6 +7,7 @@ use cmd::{build, check, new, tx, uplc};
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
 #[clap(propagate_version = true)]
+#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     New(new::Args),
     Build(build::Args),
@@ -28,9 +29,9 @@ impl Default for Cmd {
 fn main() -> miette::Result<()> {
     miette::set_panic_hook();
     match Cmd::default() {
+        Cmd::New(args) => new::exec(args),
         Cmd::Build(args) => build::exec(args),
         Cmd::Check(args) => check::exec(args),
-        Cmd::New(args) => new::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
     }
