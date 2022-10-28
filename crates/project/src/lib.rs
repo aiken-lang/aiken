@@ -358,7 +358,7 @@ impl Project {
                             body,
                             scripts,
                             0,
-                            &uplc_function_holder,
+                            &mut uplc_function_holder,
                             &functions,
                             &type_aliases,
                             &data_types,
@@ -389,6 +389,8 @@ impl Project {
 
                         interner.program(&mut program);
 
+                        println!("{}", program.to_pretty());
+
                         programs.push(program.try_into().unwrap());
                     }
                 }
@@ -403,7 +405,7 @@ impl Project {
         body: &aiken_lang::expr::TypedExpr,
         scripts: &[CheckedModule],
         scope_level: i32,
-        uplc_function_holder: &Vec<Term<Name>>,
+        uplc_function_holder: &mut Vec<Term<Name>>,
         functions: &HashMap<
             (String, String),
             &Function<std::sync::Arc<aiken_lang::tipo::Type>, aiken_lang::expr::TypedExpr>,
@@ -422,7 +424,7 @@ impl Project {
             &aiken_lang::ast::ModuleConstant<std::sync::Arc<aiken_lang::tipo::Type>, String>,
         >,
     ) -> Term<uplc::ast::Name> {
-        let terms = match body {
+        let terms = match dbg!(body) {
             aiken_lang::expr::TypedExpr::Int { value, .. } => {
                 Term::Constant(Constant::Integer(value.parse::<i128>().unwrap()))
             }
@@ -435,7 +437,25 @@ impl Project {
             aiken_lang::expr::TypedExpr::Sequence {
                 location,
                 expressions,
-            } => todo!(),
+            } => {
+                // let mut terms = Vec::new();
+                for exp in expressions.iter().rev() {
+                    let term = self.recurse_code_gen(
+                        exp,
+                        scripts,
+                        scope_level,
+                        uplc_function_holder,
+                        functions,
+                        type_aliases,
+                        data_types,
+                        imports,
+                        constants,
+                    );
+                    uplc_function_holder.push(term.clone());
+                }
+
+                uplc_function_holder.pop().unwrap()
+            }
             aiken_lang::expr::TypedExpr::Pipeline {
                 location,
                 expressions,
@@ -444,7 +464,41 @@ impl Project {
                 location,
                 constructor,
                 name,
-            } => todo!(),
+            } => {
+                if name == "True" || name == "False" {
+                    Term::Constant(Constant::Bool(name == "True"))
+                } else {
+                    match constructor.variant.clone() {
+                        aiken_lang::tipo::ValueConstructorVariant::LocalVariable { location } => {
+                            Term::Var(Name {
+                                text: name.to_string(),
+                                unique: 0.into(),
+                            })
+                        }
+                        aiken_lang::tipo::ValueConstructorVariant::ModuleConstant {
+                            location,
+                            module,
+                            literal,
+                        } => todo!(),
+                        aiken_lang::tipo::ValueConstructorVariant::ModuleFn {
+                            name,
+                            field_map,
+                            module,
+                            arity,
+                            location,
+                            builtin,
+                        } => todo!(),
+                        aiken_lang::tipo::ValueConstructorVariant::Record {
+                            name,
+                            arity,
+                            field_map,
+                            location,
+                            module,
+                            constructors_count,
+                        } => todo!(),
+                    }
+                }
+            }
             aiken_lang::expr::TypedExpr::Fn {
                 location,
                 tipo,
@@ -471,14 +525,66 @@ impl Project {
                 name,
                 left,
                 right,
-            } => todo!(),
+            } => {
+                todo!()
+            }
             aiken_lang::expr::TypedExpr::Assignment {
                 location,
                 tipo,
                 value,
                 pattern,
                 kind,
-            } => todo!(),
+            } => match pattern {
+                aiken_lang::ast::Pattern::Int { location, value } => todo!(),
+                aiken_lang::ast::Pattern::String { location, value } => todo!(),
+                aiken_lang::ast::Pattern::Var { location, name } => Term::Apply {
+                    function: Rc::new(Term::Lambda {
+                        parameter_name: Name {
+                            text: name.to_string(),
+                            unique: 0.into(),
+                        },
+                        body: uplc_function_holder.pop().unwrap().into(),
+                    }),
+                    argument: self
+                        .recurse_code_gen(
+                            value,
+                            scripts,
+                            scope_level,
+                            uplc_function_holder,
+                            functions,
+                            type_aliases,
+                            data_types,
+                            imports,
+                            constants,
+                        )
+                        .into(),
+                },
+                aiken_lang::ast::Pattern::VarUsage {
+                    location,
+                    name,
+                    tipo,
+                } => todo!(),
+                aiken_lang::ast::Pattern::Assign {
+                    name,
+                    location,
+                    pattern,
+                } => todo!(),
+                aiken_lang::ast::Pattern::Discard { name, location } => todo!(),
+                aiken_lang::ast::Pattern::List {
+                    location,
+                    elements,
+                    tail,
+                } => todo!(),
+                aiken_lang::ast::Pattern::Constructor {
+                    location,
+                    name,
+                    arguments,
+                    module,
+                    constructor,
+                    with_spread,
+                    tipo,
+                } => todo!(),
+            },
             aiken_lang::expr::TypedExpr::Try {
                 location,
                 tipo,
