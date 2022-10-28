@@ -1,0 +1,20 @@
+[package]
+name = "project"
+description = "Aiken project utilities"
+version = "0.0.21"
+edition = "2021"
+repository = "https://github.com/txpipe/aiken/crates/project"
+homepage = "https://github.com/txpipe/aiken"
+license = "Apache-2.0"
+authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
+
+[dependencies]
+aiken-lang = { path = "../lang", version = "0.0.20" }
+miette = { version = "5.3.0", features = ["fancy"] }
+petgraph = "0.6.2"
+regex = "1.6.0"
+serde = { version = "1.0.144", features = ["derive"] }
+serde_json = "1.0.85"
+thiserror = "1.0.37"
+toml = "0.5.9"
+walkdir = "2.3.2"

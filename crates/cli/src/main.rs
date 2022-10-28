@@ -16,7 +16,7 @@ use uplc::{
     },
 };
 
-use aiken::{config::Config, project::Project};
+use project::{config::Config, Project};
 
 mod args;
 

@@ -4,6 +4,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod config;
+pub mod error;
+pub mod module;
+
 use aiken_lang::{ast::ModuleKind, builtins, tipo::TypeInfo, IdGenerator};
 
 use crate::{
