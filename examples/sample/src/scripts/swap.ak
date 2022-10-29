@@ -7,12 +7,11 @@ pub type Redeemer {
   Sell(Int)
 }
 
-pub fn spend(datum: Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> Bool {
-  if datum.something == "Aiken" {
-    True
-  } else if datum.something == "Wow" {
-    True
-  } else {
-    False
-  }
+
+pub fn spend(datum: sample.Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> Bool {
+  let a = True
+  let b = sample.thing(a)
+  let c = sample.thing(b)
+
+  c
 }
