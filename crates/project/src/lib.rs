@@ -14,7 +14,7 @@ use aiken_lang::{
     ast::{self, Definition, Function, ModuleKind},
     builtins,
     expr::TypedExpr,
-    tipo::{self, TypeInfo},
+    tipo::{self, ModuleValueConstructor, TypeInfo},
     IdGenerator,
 };
 use uplc::{
@@ -354,11 +354,28 @@ impl Project {
                         let type_info = self.module_types.get(&script.name).unwrap();
                         println!("{type_info:#?}");
 
+                        // let mut lookup_map = HashMap::new();
+
+                        // self.recurse_simplifier(
+                        //     body,
+                        //     scripts,
+                        //     0,
+                        //     &mut lookup_map,
+                        //     &functions,
+                        //     &type_aliases,
+                        //     &data_types,
+                        //     &imports,
+                        //     &constants,
+                        // );
+
+                        let mut lookup_map = HashMap::new();
+
                         let mut term = self.recurse_code_gen(
                             body,
                             scripts,
                             0,
                             &mut uplc_function_holder,
+                            &mut lookup_map,
                             &functions,
                             &type_aliases,
                             &data_types,
@@ -400,12 +417,203 @@ impl Project {
         Ok(programs)
     }
 
+    // fn recurse_simplifier(
+    //     &self,
+    //     body: &TypedExpr,
+    //     scripts: &[CheckedModule],
+    //     scope_level: i32,
+    //     lookup_map: &mut HashMap<_, _>,
+    //     functions: &HashMap<
+    //         (String, String),
+    //         &Function<std::sync::Arc<aiken_lang::tipo::Type>, TypedExpr>,
+    //     >,
+    //     type_aliases: &HashMap<
+    //         (String, String),
+    //         &aiken_lang::ast::TypeAlias<std::sync::Arc<aiken_lang::tipo::Type>>,
+    //     >,
+    //     data_types: &HashMap<
+    //         (String, String),
+    //         &aiken_lang::ast::DataType<std::sync::Arc<aiken_lang::tipo::Type>>,
+    //     >,
+    //     imports: &HashMap<(String, String), &aiken_lang::ast::Use<String>>,
+    //     constants: &HashMap<
+    //         (String, String),
+    //         &aiken_lang::ast::ModuleConstant<std::sync::Arc<aiken_lang::tipo::Type>, String>,
+    //     >,
+    // ) {
+    //     match body {
+    //         TypedExpr::Int {
+    //             location,
+    //             tipo,
+    //             value,
+    //         } => {}
+    //         TypedExpr::String {
+    //             location,
+    //             tipo,
+    //             value,
+    //         } => {}
+    //         TypedExpr::ByteArray {
+    //             location,
+    //             tipo,
+    //             bytes,
+    //         } => {}
+    //         TypedExpr::Sequence {
+    //             location,
+    //             expressions,
+    //         } => {
+    //             for expression in expressions {
+    //                 self.recurse_simplifier(
+    //                     expression,
+    //                     scripts,
+    //                     scope_level,
+    //                     lookup_map,
+    //                     functions,
+    //                     type_aliases,
+    //                     data_types,
+    //                     imports,
+    //                     constants,
+    //                 );
+    //             }
+    //         }
+    //         TypedExpr::Pipeline {
+    //             location,
+    //             expressions,
+    //         } => {
+    //             for expression in expressions {
+    //                 self.recurse_simplifier(
+    //                     expression,
+    //                     scripts,
+    //                     scope_level,
+    //                     lookup_map,
+    //                     functions,
+    //                     type_aliases,
+    //                     data_types,
+    //                     imports,
+    //                     constants,
+    //                 );
+    //             }
+    //         }
+    //         TypedExpr::Var {
+    //             location,
+    //             constructor,
+    //             name,
+    //         } => match constructor.variant {
+    //             aiken_lang::tipo::ValueConstructorVariant::LocalVariable { location } => {}
+    //             aiken_lang::tipo::ValueConstructorVariant::ModuleConstant {
+    //                 location,
+    //                 module,
+    //                 literal,
+    //             } => {}
+    //             aiken_lang::tipo::ValueConstructorVariant::ModuleFn {
+    //                 name,
+    //                 field_map,
+    //                 module,
+    //                 arity,
+    //                 location,
+    //                 builtin,
+    //             } => {
+
+    //                 self.recurse_simplifier(&functions.get(&(module, name)).unwrap().body, scripts, scope_level, lookup_map, functions, type_aliases, data_types, imports, constants)
+    //             }
+    //             aiken_lang::tipo::ValueConstructorVariant::Record {
+    //                 name,
+    //                 arity,
+    //                 field_map,
+    //                 location,
+    //                 module,
+    //                 constructors_count,
+    //             } => todo!(),
+    //         },
+    //         TypedExpr::Fn {
+    //             location,
+    //             tipo,
+    //             is_capture,
+    //             args,
+    //             body,
+    //             return_annotation,
+    //         } => todo!(),
+    //         TypedExpr::List {
+    //             location,
+    //             tipo,
+    //             elements,
+    //             tail,
+    //         } => todo!(),
+    //         TypedExpr::Call {
+    //             location,
+    //             tipo,
+    //             fun,
+    //             args,
+    //         } => todo!(),
+    //         TypedExpr::BinOp {
+    //             location,
+    //             tipo,
+    //             name,
+    //             left,
+    //             right,
+    //         } => todo!(),
+    //         TypedExpr::Assignment {
+    //             location,
+    //             tipo,
+    //             value,
+    //             pattern,
+    //             kind,
+    //         } => todo!(),
+    //         TypedExpr::Try {
+    //             location,
+    //             tipo,
+    //             value,
+    //             then,
+    //             pattern,
+    //         } => todo!(),
+    //         TypedExpr::When {
+    //             location,
+    //             tipo,
+    //             subjects,
+    //             clauses,
+    //         } => todo!(),
+    //         TypedExpr::If {
+    //             location,
+    //             branches,
+    //             final_else,
+    //             tipo,
+    //         } => todo!(),
+    //         TypedExpr::RecordAccess {
+    //             location,
+    //             tipo,
+    //             label,
+    //             index,
+    //             record,
+    //         } => todo!(),
+    //         TypedExpr::ModuleSelect {
+    //             location,
+    //             tipo,
+    //             label,
+    //             module_name,
+    //             module_alias,
+    //             constructor,
+    //         } => todo!(),
+    //         TypedExpr::Todo {
+    //             location,
+    //             label,
+    //             tipo,
+    //         } => todo!(),
+    //         TypedExpr::RecordUpdate {
+    //             location,
+    //             tipo,
+    //             spread,
+    //             args,
+    //         } => todo!(),
+    //         TypedExpr::Negate { location, value } => todo!(),
+    //     }
+    // }
+
     fn recurse_code_gen(
         &self,
         body: &aiken_lang::expr::TypedExpr,
         scripts: &[CheckedModule],
         scope_level: i32,
-        uplc_function_holder: &mut Vec<Term<Name>>,
+        uplc_function_holder: &mut Vec<(String, Term<Name>)>,
+        uplc_function_holder_lookup: &mut HashMap<(String, String), i32>,
         functions: &HashMap<
             (String, String),
             &Function<std::sync::Arc<aiken_lang::tipo::Type>, aiken_lang::expr::TypedExpr>,
@@ -437,22 +645,74 @@ impl Project {
                 expressions,
             } => {
                 // let mut terms = Vec::new();
-                for exp in expressions.iter().rev() {
-                    let term = self.recurse_code_gen(
+                for (i, exp) in expressions.iter().enumerate().rev() {
+                    println!(
+                        "The index is {} and the scope level is {} and next scope is {}",
+                        i,
+                        scope_level,
+                        scope_level + i as i32 + 1
+                    );
+                    let mut term = self.recurse_code_gen(
                         exp,
                         scripts,
-                        scope_level,
+                        scope_level + i as i32 + 1,
                         uplc_function_holder,
+                        uplc_function_holder_lookup,
                         functions,
                         type_aliases,
                         data_types,
                         imports,
                         constants,
                     );
-                    uplc_function_holder.push(term.clone());
+
+                    let mut above_scope = Vec::new();
+                    for func in uplc_function_holder.clone() {
+                        let mut split_name = func.0.split('_');
+                        let mut split_name2 = func.0.split('_');
+
+                        println!("This is scope level {}", scope_level + i as i32 + 1);
+                        println!(
+                            "This is uplc_function_holder_lookup scope  {} and func is {}",
+                            uplc_function_holder_lookup
+                                .get(&(
+                                    split_name2.next().unwrap().to_string(),
+                                    split_name2.next().unwrap().to_string(),
+                                ))
+                                .unwrap(),
+                            func.0
+                        );
+
+                        if uplc_function_holder_lookup
+                            .get(&(
+                                split_name.next().unwrap().to_string(),
+                                split_name.next().unwrap().to_string(),
+                            ))
+                            .unwrap()
+                            < &(scope_level + i as i32 + 1)
+                        {
+                            term = Term::Apply {
+                                function: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: func.0.clone(),
+                                        unique: 0.into(),
+                                    },
+                                    body: term.into(),
+                                }
+                                .into(),
+                                argument: func.1.clone().into(),
+                            };
+                        } else {
+                            above_scope.push(func);
+                        }
+
+                        uplc_function_holder.drain(0..);
+
+                        uplc_function_holder.append(&mut above_scope);
+                    }
+                    uplc_function_holder.push(("".to_string(), term.clone()));
                 }
 
-                uplc_function_holder.pop().unwrap()
+                uplc_function_holder.pop().unwrap().1
             }
             TypedExpr::Pipeline {
                 location,
@@ -516,7 +776,57 @@ impl Project {
                 tipo,
                 fun,
                 args,
-            } => todo!(),
+            } => {
+                println!("Scope is {} and Scope with args is {}", scope_level, scope_level + args.len() as i32);
+                let mut term = self.recurse_code_gen(
+                    fun,
+                    scripts,
+                    scope_level + args.len() as i32,
+                    uplc_function_holder,
+                    uplc_function_holder_lookup,
+                    functions,
+                    type_aliases,
+                    data_types,
+                    imports,
+                    constants,
+                );
+
+                // if let Some((name, hoisted_term)) = uplc_function_holder.pop() {
+                //     term = Term::Apply {
+                //         function: Term::Lambda {
+                //             parameter_name: Name {
+                //                 text: name,
+                //                 unique: 0.into(),
+                //             },
+                //             body: term.into(),
+                //         }
+                //         .into(),
+                //         argument: hoisted_term.into(),
+                //     };
+                // }
+
+                for (i, arg) in args.iter().enumerate() {
+                    term = Term::Apply {
+                        function: term.into(),
+                        argument: self
+                            .recurse_code_gen(
+                                &arg.value,
+                                scripts,
+                                scope_level + i as i32,
+                                uplc_function_holder,
+                                uplc_function_holder_lookup,
+                                functions,
+                                type_aliases,
+                                data_types,
+                                imports,
+                                constants,
+                            )
+                            .into(),
+                    };
+                }
+
+                term
+            }
             TypedExpr::BinOp {
                 location,
                 tipo,
@@ -541,14 +851,15 @@ impl Project {
                             text: name.to_string(),
                             unique: 0.into(),
                         },
-                        body: uplc_function_holder.pop().unwrap().into(),
+                        body: uplc_function_holder.pop().unwrap().1.into(),
                     }),
                     argument: self
                         .recurse_code_gen(
                             value,
                             scripts,
-                            scope_level,
+                            scope_level + 1,
                             uplc_function_holder,
+                            uplc_function_holder_lookup,
                             functions,
                             type_aliases,
                             data_types,
@@ -607,6 +918,7 @@ impl Project {
                     scripts,
                     scope_level + 1,
                     uplc_function_holder,
+                    uplc_function_holder_lookup,
                     functions,
                     type_aliases,
                     data_types,
@@ -622,6 +934,7 @@ impl Project {
                         scripts,
                         scope_level + 1, // Since this happens before branching. Maybe not increase scope level
                         uplc_function_holder,
+                        uplc_function_holder_lookup,
                         functions,
                         type_aliases,
                         data_types,
@@ -634,6 +947,7 @@ impl Project {
                         scripts,
                         scope_level + 1,
                         uplc_function_holder,
+                        uplc_function_holder_lookup,
                         functions,
                         type_aliases,
                         data_types,
@@ -672,7 +986,80 @@ impl Project {
                 module_name,
                 module_alias,
                 constructor,
-            } => todo!(),
+            } => match constructor {
+                ModuleValueConstructor::Record {
+                    name,
+                    arity,
+                    tipo,
+                    field_map,
+                    location,
+                } => todo!(),
+                ModuleValueConstructor::Fn {
+                    location,
+                    module,
+                    name,
+                } => {
+                    if !uplc_function_holder_lookup
+                        .contains_key(&(module.to_string(), name.to_string()))
+                    {
+                        let func_def = functions
+                            .get(&(module.to_string(), name.to_string()))
+                            .unwrap();
+
+                        let mut term = self.recurse_code_gen(
+                            &func_def.body,
+                            scripts,
+                            scope_level + func_def.arguments.len() as i32,
+                            uplc_function_holder,
+                            uplc_function_holder_lookup,
+                            functions,
+                            type_aliases,
+                            data_types,
+                            imports,
+                            constants,
+                        );
+
+                        for arg in func_def.arguments.iter().rev() {
+                            term = Term::Lambda {
+                                parameter_name: Name {
+                                    text: arg
+                                        .arg_name
+                                        .get_variable_name()
+                                        .unwrap_or("_")
+                                        .to_string(),
+                                    unique: Unique::new(0),
+                                },
+                                body: Rc::new(term),
+                            }
+                        }
+
+                        uplc_function_holder.push((format!("{module}_{name}"), term));
+
+                        uplc_function_holder_lookup
+                            .insert((module.to_string(), name.to_string()), scope_level);
+                    }
+
+                    if uplc_function_holder_lookup
+                        .get(&(module.to_string(), name.to_string()))
+                        .unwrap()
+                        > &scope_level
+                    {
+                        println!(
+                            "This is scope level in module select {} and func is {}_{}",
+                            scope_level,
+                            module.to_string(),
+                            name.to_string()
+                        );
+                        uplc_function_holder_lookup
+                            .insert((module.to_string(), name.to_string()), scope_level);
+                    }
+                    Term::Var(Name {
+                        text: format!("{module}_{name}"),
+                        unique: 0.into(),
+                    })
+                }
+                ModuleValueConstructor::Constant { literal, location } => todo!(),
+            },
             TypedExpr::Todo {
                 location,
                 label,
