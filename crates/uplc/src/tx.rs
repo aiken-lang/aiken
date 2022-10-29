@@ -21,7 +21,7 @@ mod phase_one;
 pub mod script_context;
 #[cfg(test)]
 mod tests;
-mod to_plutus_data;
+pub mod to_plutus_data;
 
 /// Evaluate the scripts in a transaction using
 /// the UPLC Cek Machine. This function collects

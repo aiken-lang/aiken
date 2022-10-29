@@ -8,6 +8,8 @@
 **aiken**: Typechecking
 **aiken**: Inject `aiken/builtin` module with some functions from `DefaultFunction` in UPLC directly exposed
 **aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
+**uplc**: Expose various Pallas primitives from UPLC to make constructing
+UPLC types possible for consumers
 
 ### Changed
 
