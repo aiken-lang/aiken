@@ -77,7 +77,13 @@ Open a [Bug Issue](https://github.com/txpipe/aiken/issues/new?template=bug.md).
 
 ### :bulb: How To Propose An Idea
 
-Open a [Proposal Issue](https://github.com/txpipe/aiken/issues/new?template=idea.md).
+Feel free to bring any idea as a [discussion [category: idea]](https://github.com/txpipe/aiken/discussions/new?category=ideas). Make sure to highlight your use case so we can understand the design space and agree on a solution.
+
+> **Note** Ideally, follow this simple template:
+>
+> - What is your idea? Describe it in simple words. Provide a use case.
+> - Why is it a good idea?
+> - What is the current alternative and why is it not good enough?
 
 ### :question: How To Ask a Question
 
