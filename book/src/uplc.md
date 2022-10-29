@@ -1,35 +1,23 @@
 # Untyped Plutus Core
 
-## Usage
+One key feature of Aiken is how it helps you manipulate Untyped Plutus Core
+(abbrev. UPLC in short). UPLC is ultimately the format whereby codes gets
+executed on-chain. This is pretty-much as low-level as you can get when it
+comes to Cardano smart-contracts.
 
-For now the command line application can only encode/decode Untyped Plutus Core
-to/from it's on chain format. See the roadmap below for a list of planned features and goals.
+Understanding how UPLC works, and having the right tools to troubleshoot
+UPLC programs can be handy when developing contracts on Cardano. Fortunately,
+this is something Aiken can help you with.
 
-```sh
-# help
-aiken help
-
-# compile an untyped plutus core program to flat
-aiken uplc flat program.uplc
-
-aiken uplc flat program.uplc --print
-
-# output
-00001011 00010110 00100001 01001000
-00000101 10000001
-
-aiken uplc flat program.uplc --out=something.flat
-
-# decode an untyped plutus core program from flat
-aiken uplc unflat program.flat
-
-aiken uplc unflat program.flat --print
-
-# output
-(program
-  11.22.33
-  (con integer 11)
-)
-
-aiken uplc unflat program.flat --out=something.uplc
-```
+> **Note**
+>
+> While UPLC has erased any _explicit_ notion of types; functions, variables and
+> constants are still _implicitly_ typed and, an interpreter will raise errors
+> when encountering a type mismatch.
+>
+> For the sake of simplicity, we might speak about the type-signature of
+> builtin functions such as `addInteger` which, in principle, only has a
+> concrete meaning in Typed Plutus Core. Hence, even though they are _untyped_,
+> we often think of UPLC programs has having implicit types, as if they were
+> originally _typed_ programs whose types had simply been erased (in fact,
+> that's exactly what they are).

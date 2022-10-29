@@ -1,4 +1,4 @@
-# Intro
+# Introduction
 
 Aiken is a new programming language and toolchain for developing
 smart contracts on the [Cardano](https://cardano.org) blockchain.
@@ -43,6 +43,4 @@ The Aiken project is made up of a few different components. The two most importa
 ones are the high level Aiken language for writing smart contracts and a rust library
 for working with Untyped Plutus Core.
 
-### The Language
-
-### Untyped Plutus Core
+Learn more about them in the next sections of this book.
