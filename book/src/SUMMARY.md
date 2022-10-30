@@ -1,8 +1,8 @@
 # Summary
 
-- [Intro](./introduction.md)
+- [Introduction](./introduction.md)
 - [Untyped Plutus Core](./uplc.md)
-- [Guides](./guides.md)
-  - [Transactions](./guides/transactions.md)
-    - [Fee estimation without a node](./guides/transactions/fee_estimation.md)
+    - [Syntax](./uplc/syntax.md)
+    - [Command-line utilities](./uplc/cli.md)
+    - [Builtins](./uplc/builtins.md)
 - [Resources](./resources.md)
