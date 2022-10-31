@@ -460,6 +460,8 @@ impl Project {
 
                         interner.program(&mut program);
 
+                        println!("{}", program.to_pretty());
+
                         programs.push(program.try_into().unwrap());
                     }
                 }
@@ -484,7 +486,7 @@ impl Project {
             &ast::ModuleConstant<std::sync::Arc<tipo::Type>, String>,
         >,
     ) {
-        match dbg!(body) {
+        match body {
             TypedExpr::Int { value, .. } => {}
             TypedExpr::String { value, .. } => {}
             TypedExpr::ByteArray { bytes, .. } => {}
@@ -568,9 +570,44 @@ impl Project {
                 name,
                 left,
                 right,
-            } => {
-                todo!()
-            }
+            } => match name {
+                ast::BinOp::And => todo!(),
+                ast::BinOp::Or => todo!(),
+                ast::BinOp::Eq => {
+                    self.recurse_scope_level(
+                        left,
+                        scripts,
+                        scope_level.clone(),
+                        uplc_function_holder_lookup,
+                        functions,
+                        type_aliases,
+                        data_types,
+                        imports,
+                        constants,
+                    );
+                    self.recurse_scope_level(
+                        right,
+                        scripts,
+                        scope_level,
+                        uplc_function_holder_lookup,
+                        functions,
+                        type_aliases,
+                        data_types,
+                        imports,
+                        constants,
+                    );
+                }
+                ast::BinOp::NotEq => todo!(),
+                ast::BinOp::LtInt => todo!(),
+                ast::BinOp::LtEqInt => todo!(),
+                ast::BinOp::GtEqInt => todo!(),
+                ast::BinOp::GtInt => todo!(),
+                ast::BinOp::AddInt => todo!(),
+                ast::BinOp::SubInt => todo!(),
+                ast::BinOp::MultInt => todo!(),
+                ast::BinOp::DivInt => todo!(),
+                ast::BinOp::ModInt => todo!(),
+            },
             TypedExpr::Assignment {
                 location,
                 tipo,
@@ -933,7 +970,76 @@ impl Project {
                 left,
                 right,
             } => {
-                todo!()
+                let left_term = self.recurse_code_gen(
+                    left,
+                    scripts,
+                    scope_level.clone(),
+                    uplc_function_holder,
+                    uplc_function_holder_lookup,
+                    functions,
+                    type_aliases,
+                    data_types,
+                    imports,
+                    constants,
+                );
+
+                let right_term = self.recurse_code_gen(
+                    right,
+                    scripts,
+                    scope_level,
+                    uplc_function_holder,
+                    uplc_function_holder_lookup,
+                    functions,
+                    type_aliases,
+                    data_types,
+                    imports,
+                    constants,
+                );
+
+                match name {
+                    ast::BinOp::And => todo!(),
+                    ast::BinOp::Or => todo!(),
+                    ast::BinOp::Eq => match &*left.tipo() {
+                        tipo::Type::App {
+                            public,
+                            module,
+                            name,
+                            args,
+                        } => match name.as_str() {
+                            "Int" => Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::EqualsInteger).into(),
+                                    argument: left_term.into(),
+                                }
+                                .into(),
+                                argument: right_term.into(),
+                            },
+
+                            "String" => Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::EqualsString).into(),
+                                    argument: left_term.into(),
+                                }
+                                .into(),
+                                argument: right_term.into(),
+                            },
+
+                            _ => todo!(),
+                        },
+                        tipo::Type::Fn { args, ret } => todo!(),
+                        tipo::Type::Var { tipo } => todo!(),
+                    },
+                    ast::BinOp::NotEq => todo!(),
+                    ast::BinOp::LtInt => todo!(),
+                    ast::BinOp::LtEqInt => todo!(),
+                    ast::BinOp::GtEqInt => todo!(),
+                    ast::BinOp::GtInt => todo!(),
+                    ast::BinOp::AddInt => todo!(),
+                    ast::BinOp::SubInt => todo!(),
+                    ast::BinOp::MultInt => todo!(),
+                    ast::BinOp::DivInt => todo!(),
+                    ast::BinOp::ModInt => todo!(),
+                }
             }
             TypedExpr::Assignment {
                 location,
