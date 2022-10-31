@@ -7,6 +7,12 @@ pub struct Interner {
     current: Unique,
 }
 
+impl Default for Interner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Interner {
     pub fn new() -> Self {
         Interner {
