@@ -6,16 +6,16 @@
 
 ### Added
 
-**aiken**: Fancy errors using [miette](https://github.com/zkat/miette)
-**aiken**: Typechecking
-**aiken**: Inject `aiken/builtin` module with some functions from `DefaultFunction` in UPLC directly exposed
-**aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
-**uplc**: Expose various Pallas primitives from UPLC to make constructing
-UPLC types possible for consumers
+- **aiken**: Fancy errors using [miette](https://github.com/zkat/miette)
+- **aiken**: Typechecking
+- **aiken**: Inject `aiken/builtin` module with some functions from `DefaultFunction` in UPLC directly exposed
+- **aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
+- **uplc**: Expose various Pallas primitives from UPLC to make constructing
+            UPLC types possible for consumers
 
 ### Changed
 
-**aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/txpipe/aiken/tree/main/examples/sample) for more
+- **aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/txpipe/aiken/tree/main/examples/sample) for more
 
 ## [v0.0.21] - 2022-10-23
 
