@@ -51,6 +51,7 @@ name = "aiken"
 version = "0.0.21"
 dependencies = [
  "aiken-lang",
+ "aiken-project",
  "anyhow",
  "clap",
  "hex",
@@ -61,7 +62,6 @@ dependencies = [
  "pallas-crypto",
  "pallas-primitives",
  "pallas-traverse",
- "project",
  "uplc",
 ]
 
@@ -78,6 +78,21 @@ dependencies = [
  "thiserror",
  "uplc",
  "vec1",
+]
+
+[[package]]
+name = "aiken-project"
+version = "0.0.21"
+dependencies = [
+ "aiken-lang",
+ "miette",
+ "petgraph",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml",
+ "walkdir",
 ]
 
 [[package]]
@@ -800,21 +815,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bd7356a8122b6c4a24a82b278680c73357984ca2fc79a0f9fa6dea7dced7c58"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "project"
-version = "0.0.21"
-dependencies = [
- "aiken-lang",
- "miette",
- "petgraph",
- "regex",
- "serde",
- "serde_json",
- "thiserror",
- "toml",
- "walkdir",
 ]
 
 [[package]]

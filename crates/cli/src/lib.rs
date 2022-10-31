@@ -1,13 +1,13 @@
 pub mod cmd;
 
+use aiken_project::{config::Config, Project};
 use miette::IntoDiagnostic;
-use project::{config::Config, Project};
 use std::env;
 use std::path::PathBuf;
 
 pub fn with_project<A>(directory: Option<PathBuf>, mut action: A) -> miette::Result<()>
 where
-    A: FnMut(&mut Project) -> Result<(), project::error::Error>,
+    A: FnMut(&mut Project) -> Result<(), aiken_project::error::Error>,
 {
     let project_path = if let Some(d) = directory {
         d

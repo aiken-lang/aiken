@@ -1,5 +1,5 @@
 [package]
-name = "project"
+name = "aiken-project"
 description = "Aiken project utilities"
 version = "0.0.21"
 edition = "2021"
