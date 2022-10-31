@@ -409,7 +409,6 @@ impl Project {
                 {
                     if VALIDATOR_NAMES.contains(&name.as_str()) {
                         let type_info = self.module_types.get(&script.name).unwrap();
-                        println!("{type_info:#?}");
 
                         let mut lookup_map = HashMap::new();
 
@@ -424,8 +423,6 @@ impl Project {
                             &imports,
                             &constants,
                         );
-
-                        println!("Look up map is {:#?}", lookup_map);
 
                         let mut term = self.recurse_code_gen(
                             body,
@@ -462,8 +459,6 @@ impl Project {
                         let mut interner = Interner::new();
 
                         interner.program(&mut program);
-
-                        println!("{}", program.to_pretty());
 
                         programs.push(program.try_into().unwrap());
                     }
@@ -802,12 +797,6 @@ impl Project {
                 expressions,
             } => {
                 for (i, exp) in expressions.iter().enumerate().rev() {
-                    println!(
-                        "The index is {} and the scope level is {:#?} and next scope is {:#?}",
-                        i,
-                        scope_level,
-                        scope_level.scope_increment_sequence(i as i32 + 1),
-                    );
                     let mut term = self.recurse_code_gen(
                         exp,
                         scripts,
@@ -902,11 +891,6 @@ impl Project {
                 fun,
                 args,
             } => {
-                println!(
-                    "Scope is {:#?} and Scope with args is {:#?}",
-                    scope_level,
-                    scope_level.scope_increment(args.len() as i32 + 1)
-                );
                 let mut term = self.recurse_code_gen(
                     fun,
                     scripts,
@@ -1239,7 +1223,6 @@ impl Project {
         let mut term = current_term;
         for func in uplc_function_holder_lookup.clone().keys() {
             if scope_level.is_less_than(&uplc_function_holder_lookup.clone().get(func).unwrap().0) {
-                println!("Scope level -1 is {:#?}", scope_level);
                 let func_def = functions
                     .get(&(func.0.to_string(), func.1.to_string()))
                     .unwrap();
