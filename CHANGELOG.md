@@ -2,6 +2,8 @@
 
 ## [next] - 2022-MM-DD
 
+## [v0.0.22] - 2022-10-31
+
 ### Added
 
 **aiken**: Fancy errors using [miette](https://github.com/zkat/miette)
