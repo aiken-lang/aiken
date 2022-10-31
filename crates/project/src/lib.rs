@@ -43,6 +43,63 @@ pub const MINT: &str = "mint";
 pub const WITHDRAWL: &str = "withdrawl";
 pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAWL];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopeLevels {
+    scope_tracker: Vec<i32>,
+}
+
+impl ScopeLevels {
+    pub fn new() -> Self {
+        ScopeLevels {
+            scope_tracker: vec![0],
+        }
+    }
+
+    pub fn is_less_than(&self, other: &ScopeLevels) -> bool {
+        if self.scope_tracker.is_empty() && !other.scope_tracker.is_empty() {
+            return true;
+        } else if other.scope_tracker.is_empty() {
+            return false;
+        }
+
+        let mut result = self.scope_tracker.len() < other.scope_tracker.len();
+
+        for (scope_self, scope_other) in self.scope_tracker.iter().zip(other.scope_tracker.iter()) {
+            match scope_self.cmp(scope_other) {
+                std::cmp::Ordering::Less => {
+                    result = true;
+                    break;
+                }
+                std::cmp::Ordering::Equal => {}
+                std::cmp::Ordering::Greater => {
+                    result = false;
+                    break;
+                }
+            }
+        }
+        result
+    }
+
+    pub fn scope_increment_sequence(&self, inc: i32) -> ScopeLevels {
+        let mut new_scope = self.clone();
+        *new_scope.scope_tracker.last_mut().unwrap() += inc;
+        new_scope.scope_tracker.push(0);
+        new_scope
+    }
+
+    pub fn scope_increment(&self, inc: i32) -> ScopeLevels {
+        let mut new_scope = self.clone();
+        *new_scope.scope_tracker.last_mut().unwrap() += inc;
+        new_scope
+    }
+}
+
+impl Default for ScopeLevels {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct Project {
     config: Config,
     defined_modules: HashMap<String, PathBuf>,
@@ -354,26 +411,12 @@ impl Project {
                         let type_info = self.module_types.get(&script.name).unwrap();
                         println!("{type_info:#?}");
 
-                        // let mut lookup_map = HashMap::new();
-
-                        // self.recurse_simplifier(
-                        //     body,
-                        //     scripts,
-                        //     0,
-                        //     &mut lookup_map,
-                        //     &functions,
-                        //     &type_aliases,
-                        //     &data_types,
-                        //     &imports,
-                        //     &constants,
-                        // );
-
                         let mut lookup_map = HashMap::new();
 
                         self.recurse_scope_level(
                             body,
                             scripts,
-                            0,
+                            ScopeLevels::new(),
                             &mut lookup_map,
                             &functions,
                             &type_aliases,
@@ -387,7 +430,7 @@ impl Project {
                         let mut term = self.recurse_code_gen(
                             body,
                             scripts,
-                            0,
+                            ScopeLevels::new(),
                             &mut uplc_function_holder,
                             &mut lookup_map,
                             &functions,
@@ -435,8 +478,8 @@ impl Project {
         &self,
         body: &TypedExpr,
         scripts: &[CheckedModule],
-        scope_level: i32,
-        uplc_function_holder_lookup: &mut HashMap<(String, String), (i32, TypedExpr)>,
+        scope_level: ScopeLevels,
+        uplc_function_holder_lookup: &mut HashMap<(String, String), (ScopeLevels, TypedExpr)>,
         functions: &HashMap<(String, String), &Function<std::sync::Arc<tipo::Type>, TypedExpr>>,
         type_aliases: &HashMap<(String, String), &ast::TypeAlias<std::sync::Arc<tipo::Type>>>,
         data_types: &HashMap<(String, String), &ast::DataType<std::sync::Arc<tipo::Type>>>,
@@ -459,7 +502,7 @@ impl Project {
                     self.recurse_scope_level(
                         exp,
                         scripts,
-                        scope_level + i as i32 * 100 + 1,
+                        scope_level.scope_increment_sequence(i as i32 + 1),
                         uplc_function_holder_lookup,
                         functions,
                         type_aliases,
@@ -498,10 +541,10 @@ impl Project {
                 fun,
                 args,
             } => {
-                let mut term = self.recurse_scope_level(
+                self.recurse_scope_level(
                     fun,
                     scripts,
-                    scope_level + args.len() as i32,
+                    scope_level.scope_increment(args.len() as i32 + 1),
                     uplc_function_holder_lookup,
                     functions,
                     type_aliases,
@@ -514,7 +557,7 @@ impl Project {
                     self.recurse_scope_level(
                         &arg.value,
                         scripts,
-                        scope_level + i as i32,
+                        scope_level.scope_increment(i as i32 + 1),
                         uplc_function_holder_lookup,
                         functions,
                         type_aliases,
@@ -546,7 +589,7 @@ impl Project {
                     self.recurse_scope_level(
                         value,
                         scripts,
-                        scope_level + 1,
+                        scope_level.scope_increment(1),
                         uplc_function_holder_lookup,
                         functions,
                         type_aliases,
@@ -600,10 +643,10 @@ impl Project {
                 final_else,
                 ..
             } => {
-                let mut final_if_term = self.recurse_scope_level(
+                self.recurse_scope_level(
                     final_else,
                     scripts,
-                    scope_level + 1,
+                    scope_level.scope_increment_sequence(1),
                     uplc_function_holder_lookup,
                     functions,
                     type_aliases,
@@ -615,10 +658,10 @@ impl Project {
                 for branch in branches {
                     // Need some scoping count to potentially replace condition with var since we should assume a condition
                     // may be repeated 3 + times or be large enough series of binops to warrant var replacement
-                    let condition_term = self.recurse_scope_level(
+                    self.recurse_scope_level(
                         &branch.condition,
                         scripts,
-                        scope_level + 1, // Since this happens before branching. Maybe not increase scope level
+                        scope_level.scope_increment_sequence(1), // Since this happens before branching. Maybe not increase scope level
                         uplc_function_holder_lookup,
                         functions,
                         type_aliases,
@@ -627,10 +670,10 @@ impl Project {
                         constants,
                     );
 
-                    let branch_term = self.recurse_scope_level(
+                    self.recurse_scope_level(
                         &branch.body,
                         scripts,
-                        scope_level + 1,
+                        scope_level.scope_increment_sequence(1),
                         uplc_function_holder_lookup,
                         functions,
                         type_aliases,
@@ -674,10 +717,10 @@ impl Project {
                             .get(&(module.to_string(), name.to_string()))
                             .unwrap();
 
-                        let mut term = self.recurse_scope_level(
+                        self.recurse_scope_level(
                             &func_def.body,
                             scripts,
-                            scope_level + func_def.arguments.len() as i32,
+                            scope_level.scope_increment(func_def.arguments.len() as i32 + 1),
                             uplc_function_holder_lookup,
                             functions,
                             type_aliases,
@@ -688,16 +731,16 @@ impl Project {
 
                         uplc_function_holder_lookup.insert(
                             (module.to_string(), name.to_string()),
-                            (scope_level, a.clone()),
+                            (scope_level.clone(), a.clone()),
                         );
                     }
 
-                    if uplc_function_holder_lookup
-                        .get(&(module.to_string(), name.to_string()))
-                        .unwrap()
-                        .0
-                        > scope_level
-                    {
+                    if scope_level.is_less_than(
+                        &uplc_function_holder_lookup
+                            .get(&(module.to_string(), name.to_string()))
+                            .unwrap()
+                            .0,
+                    ) {
                         uplc_function_holder_lookup.insert(
                             (module.to_string(), name.to_string()),
                             (scope_level, a.clone()),
@@ -725,9 +768,9 @@ impl Project {
         &self,
         body: &aiken_lang::expr::TypedExpr,
         scripts: &[CheckedModule],
-        scope_level: i32,
+        scope_level: ScopeLevels,
         uplc_function_holder: &mut Vec<(String, Term<Name>)>,
-        uplc_function_holder_lookup: &mut HashMap<(String, String), (i32, TypedExpr)>,
+        uplc_function_holder_lookup: &mut HashMap<(String, String), (ScopeLevels, TypedExpr)>,
         functions: &HashMap<
             (String, String),
             &Function<std::sync::Arc<aiken_lang::tipo::Type>, TypedExpr>,
@@ -760,15 +803,15 @@ impl Project {
             } => {
                 for (i, exp) in expressions.iter().enumerate().rev() {
                     println!(
-                        "The index is {} and the scope level is {} and next scope is {}",
+                        "The index is {} and the scope level is {:#?} and next scope is {:#?}",
                         i,
                         scope_level,
-                        scope_level + i as i32 * 100 + 1,
+                        scope_level.scope_increment_sequence(i as i32 + 1),
                     );
                     let mut term = self.recurse_code_gen(
                         exp,
                         scripts,
-                        scope_level + i as i32 * 100 + 1,
+                        scope_level.scope_increment_sequence(i as i32 + 1),
                         uplc_function_holder,
                         uplc_function_holder_lookup,
                         functions,
@@ -778,56 +821,18 @@ impl Project {
                         constants,
                     );
 
-                    for func in uplc_function_holder_lookup.clone().keys() {
-                        if uplc_function_holder_lookup.clone().get(func).unwrap().0
-                            > scope_level + i as i32 * 100
-                        {
-                            println!("Scope level -1 is {}", scope_level + i as i32);
-                            let func_def = functions
-                                .get(&(func.0.to_string(), func.1.to_string()))
-                                .unwrap();
-
-                            let mut function_body = self.recurse_code_gen(
-                                &func_def.body,
-                                scripts,
-                                scope_level + func_def.arguments.len() as i32,
-                                uplc_function_holder,
-                                uplc_function_holder_lookup,
-                                functions,
-                                type_aliases,
-                                data_types,
-                                imports,
-                                constants,
-                            );
-
-                            for arg in func_def.arguments.iter().rev() {
-                                function_body = Term::Lambda {
-                                    parameter_name: Name {
-                                        text: arg
-                                            .arg_name
-                                            .get_variable_name()
-                                            .unwrap_or("_")
-                                            .to_string(),
-                                        unique: Unique::new(0),
-                                    },
-                                    body: Rc::new(function_body),
-                                }
-                            }
-
-                            term = Term::Apply {
-                                function: Term::Lambda {
-                                    parameter_name: Name {
-                                        text: format!("{}_{}", func.0, func.1),
-                                        unique: 0.into(),
-                                    },
-                                    body: term.into(),
-                                }
-                                .into(),
-                                argument: function_body.into(),
-                            };
-                            uplc_function_holder_lookup.remove(func);
-                        }
-                    }
+                    term = self.maybe_insert_func_def(
+                        term,
+                        scripts,
+                        scope_level.scope_increment_sequence(i as i32 + 1),
+                        uplc_function_holder,
+                        uplc_function_holder_lookup,
+                        functions,
+                        type_aliases,
+                        data_types,
+                        imports,
+                        constants,
+                    );
 
                     uplc_function_holder.push(("".to_string(), term.clone()));
                 }
@@ -898,14 +903,14 @@ impl Project {
                 args,
             } => {
                 println!(
-                    "Scope is {} and Scope with args is {}",
+                    "Scope is {:#?} and Scope with args is {:#?}",
                     scope_level,
-                    scope_level + args.len() as i32
+                    scope_level.scope_increment(args.len() as i32 + 1)
                 );
                 let mut term = self.recurse_code_gen(
                     fun,
                     scripts,
-                    scope_level + args.len() as i32,
+                    scope_level.scope_increment(args.len() as i32 + 1),
                     uplc_function_holder,
                     uplc_function_holder_lookup,
                     functions,
@@ -915,20 +920,6 @@ impl Project {
                     constants,
                 );
 
-                // if let Some((name, hoisted_term)) = uplc_function_holder.pop() {
-                //     term = Term::Apply {
-                //         function: Term::Lambda {
-                //             parameter_name: Name {
-                //                 text: name,
-                //                 unique: 0.into(),
-                //             },
-                //             body: term.into(),
-                //         }
-                //         .into(),
-                //         argument: hoisted_term.into(),
-                //     };
-                // }
-
                 for (i, arg) in args.iter().enumerate() {
                     term = Term::Apply {
                         function: term.into(),
@@ -936,7 +927,7 @@ impl Project {
                             .recurse_code_gen(
                                 &arg.value,
                                 scripts,
-                                scope_level + i as i32,
+                                scope_level.scope_increment(i as i32 + 1),
                                 uplc_function_holder,
                                 uplc_function_holder_lookup,
                                 functions,
@@ -982,7 +973,7 @@ impl Project {
                         .recurse_code_gen(
                             value,
                             scripts,
-                            scope_level + 1,
+                            scope_level.scope_increment(1),
                             uplc_function_holder,
                             uplc_function_holder_lookup,
                             functions,
@@ -1042,7 +1033,7 @@ impl Project {
                 let mut final_if_term = self.recurse_code_gen(
                     final_else,
                     scripts,
-                    scope_level + 1,
+                    scope_level.scope_increment_sequence(1),
                     uplc_function_holder,
                     uplc_function_holder_lookup,
                     functions,
@@ -1052,13 +1043,11 @@ impl Project {
                     constants,
                 );
 
-                for branch in branches {
-                    // Need some scoping count to potentially replace condition with var since we should assume a condition
-                    // may be repeated 3 + times or be large enough series of binops to warrant var replacement
+                if branches.len() == 1 {
                     let condition_term = self.recurse_code_gen(
-                        &branch.condition,
+                        &branches[0].condition,
                         scripts,
-                        scope_level + 1, // Since this happens before branching. Maybe not increase scope level
+                        scope_level.scope_increment_sequence(1),
                         uplc_function_holder,
                         uplc_function_holder_lookup,
                         functions,
@@ -1069,9 +1058,9 @@ impl Project {
                     );
 
                     let branch_term = self.recurse_code_gen(
-                        &branch.body,
+                        &branches[0].body,
                         scripts,
-                        scope_level + 1,
+                        scope_level.scope_increment_sequence(1),
                         uplc_function_holder,
                         uplc_function_holder_lookup,
                         functions,
@@ -1081,22 +1070,99 @@ impl Project {
                         constants,
                     );
 
-                    final_if_term = Term::Apply {
-                        function: Rc::new(Term::Apply {
-                            function: Rc::new(Term::Apply {
-                                function: Rc::new(Term::Force(Rc::new(Term::Builtin(
-                                    DefaultFunction::IfThenElse,
-                                )))),
-                                argument: Rc::new(condition_term),
-                            }),
-                            //If this is just a var then don't include delay
-                            argument: Rc::new(Term::Delay(Rc::new(branch_term))),
-                        }),
-                        //If this is just a var then don't include delay
-                        argument: Rc::new(Term::Delay(Rc::new(final_if_term.clone()))),
-                    };
+                    match (final_if_term.clone(), branch_term.clone()) {
+                        (Term::Var(..), Term::Var(..)) => {
+                            final_if_term = Term::Apply {
+                                function: Rc::new(Term::Apply {
+                                    function: Rc::new(Term::Apply {
+                                        function: Rc::new(Term::Force(Rc::new(Term::Builtin(
+                                            DefaultFunction::IfThenElse,
+                                        )))),
+                                        argument: Rc::new(condition_term),
+                                    }),
+                                    //If this is just a var then don't include delay
+                                    argument: Rc::new(branch_term),
+                                }),
+                                //If this is just a var then don't include delay
+                                argument: Rc::new(final_if_term.clone()),
+                            };
+                        }
+                        _ => {
+                            final_if_term = Term::Force(
+                                Term::Apply {
+                                    function: Rc::new(Term::Apply {
+                                        function: Rc::new(Term::Apply {
+                                            function: Rc::new(Term::Force(Rc::new(Term::Builtin(
+                                                DefaultFunction::IfThenElse,
+                                            )))),
+                                            argument: Rc::new(condition_term),
+                                        }),
+                                        argument: Rc::new(Term::Delay(Rc::new(branch_term))),
+                                    }),
+                                    argument: Rc::new(Term::Delay(Rc::new(final_if_term.clone()))),
+                                }
+                                .into(),
+                            );
+                        }
+                    }
+                } else {
+                    //TODO: for multi branch if statements we can insert function definitions between branches
+                    for branch in branches {
+                        let condition_term = self.recurse_code_gen(
+                            &branch.condition,
+                            scripts,
+                            scope_level.scope_increment_sequence(1),
+                            uplc_function_holder,
+                            uplc_function_holder_lookup,
+                            functions,
+                            type_aliases,
+                            data_types,
+                            imports,
+                            constants,
+                        );
+
+                        let branch_term = self.recurse_code_gen(
+                            &branch.body,
+                            scripts,
+                            scope_level.scope_increment_sequence(1),
+                            uplc_function_holder,
+                            uplc_function_holder_lookup,
+                            functions,
+                            type_aliases,
+                            data_types,
+                            imports,
+                            constants,
+                        );
+
+                        final_if_term = Term::Force(
+                            Term::Apply {
+                                function: Rc::new(Term::Apply {
+                                    function: Rc::new(Term::Apply {
+                                        function: Rc::new(Term::Force(Rc::new(Term::Builtin(
+                                            DefaultFunction::IfThenElse,
+                                        )))),
+                                        argument: Rc::new(condition_term),
+                                    }),
+                                    argument: Rc::new(Term::Delay(Rc::new(branch_term))),
+                                }),
+                                argument: Rc::new(Term::Delay(Rc::new(final_if_term.clone()))),
+                            }
+                            .into(),
+                        );
+                    }
                 }
-                Term::Force(Rc::new(final_if_term))
+                self.maybe_insert_func_def(
+                    final_if_term,
+                    scripts,
+                    scope_level,
+                    uplc_function_holder,
+                    uplc_function_holder_lookup,
+                    functions,
+                    type_aliases,
+                    data_types,
+                    imports,
+                    constants,
+                )
             }
             TypedExpr::RecordAccess {
                 location,
@@ -1143,6 +1209,79 @@ impl Project {
             } => todo!(),
             TypedExpr::Negate { location, value } => todo!(),
         }
+    }
+
+    fn maybe_insert_func_def(
+        &self,
+        current_term: Term<Name>,
+        scripts: &[CheckedModule],
+        scope_level: ScopeLevels,
+        uplc_function_holder: &mut Vec<(String, Term<Name>)>,
+        uplc_function_holder_lookup: &mut HashMap<(String, String), (ScopeLevels, TypedExpr)>,
+        functions: &HashMap<
+            (String, String),
+            &Function<std::sync::Arc<aiken_lang::tipo::Type>, TypedExpr>,
+        >,
+        type_aliases: &HashMap<
+            (String, String),
+            &aiken_lang::ast::TypeAlias<std::sync::Arc<aiken_lang::tipo::Type>>,
+        >,
+        data_types: &HashMap<
+            (String, String),
+            &aiken_lang::ast::DataType<std::sync::Arc<aiken_lang::tipo::Type>>,
+        >,
+        imports: &HashMap<(String, String), &aiken_lang::ast::Use<String>>,
+        constants: &HashMap<
+            (String, String),
+            &aiken_lang::ast::ModuleConstant<std::sync::Arc<aiken_lang::tipo::Type>, String>,
+        >,
+    ) -> Term<Name> {
+        let mut term = current_term;
+        for func in uplc_function_holder_lookup.clone().keys() {
+            if scope_level.is_less_than(&uplc_function_holder_lookup.clone().get(func).unwrap().0) {
+                println!("Scope level -1 is {:#?}", scope_level);
+                let func_def = functions
+                    .get(&(func.0.to_string(), func.1.to_string()))
+                    .unwrap();
+
+                let mut function_body = self.recurse_code_gen(
+                    &func_def.body,
+                    scripts,
+                    scope_level.scope_increment_sequence(func_def.arguments.len() as i32),
+                    uplc_function_holder,
+                    uplc_function_holder_lookup,
+                    functions,
+                    type_aliases,
+                    data_types,
+                    imports,
+                    constants,
+                );
+
+                for arg in func_def.arguments.iter().rev() {
+                    function_body = Term::Lambda {
+                        parameter_name: Name {
+                            text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                            unique: Unique::new(0),
+                        },
+                        body: Rc::new(function_body),
+                    }
+                }
+
+                term = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: format!("{}_{}", func.0, func.1),
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    }
+                    .into(),
+                    argument: function_body.into(),
+                };
+                uplc_function_holder_lookup.remove(func);
+            }
+        }
+        term
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
