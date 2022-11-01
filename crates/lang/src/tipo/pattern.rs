@@ -15,7 +15,7 @@ use super::{
     PatternConstructor, Type, ValueConstructor, ValueConstructorVariant,
 };
 use crate::{
-    ast::{CallArg, Pattern, Span, SrcId, TypedPattern, UntypedMultiPattern, UntypedPattern},
+    ast::{CallArg, Pattern, Span, TypedPattern, UntypedMultiPattern, UntypedPattern},
     builtins::{int, list, string},
 };
 
@@ -427,7 +427,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             if pattern_args.len() == field_map.arity as usize {
                                 return Err(Error::UnnecessarySpreadOperator {
                                     location: Span {
-                                        src: SrcId::empty(),
                                         start: location.end - 3,
                                         end: location.end - 1,
                                     },
@@ -437,7 +436,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                             // The location of the spread operator itself
                             let spread_location = Span {
-                                src: SrcId::empty(),
                                 start: location.end - 3,
                                 end: location.end - 1,
                             };

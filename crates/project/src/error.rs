@@ -1,10 +1,10 @@
 use std::{
     fmt::{Debug, Display},
     io,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
-use aiken_lang::{error::ParseError, tipo};
+use aiken_lang::{parser::error::ParseError, tipo};
 use miette::{Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
 
 #[allow(dead_code)]
@@ -19,6 +19,12 @@ pub enum Error {
 
     #[error("file operation failed")]
     FileIo { error: io::Error, path: PathBuf },
+
+    #[error("source code incorrectly formatted")]
+    Format { problem_files: Vec<Unformatted> },
+
+    #[error(transparent)]
+    StandardIo(#[from] io::Error),
 
     #[error("cyclical module imports")]
     ImportCycle { modules: Vec<String> },
@@ -64,6 +70,20 @@ impl Error {
             rest => eprintln!("Error: {:?}", rest),
         }
     }
+
+    pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Self {
+        let mut errors = Vec::with_capacity(errs.len());
+
+        for error in errs {
+            errors.push(Error::Parse {
+                path: path.into(),
+                src: src.to_string(),
+                error: error.into(),
+            });
+        }
+
+        Error::List(errors)
+    }
 }
 
 impl Debug for Error {
@@ -94,6 +114,8 @@ impl Diagnostic for Error {
             Error::List(_) => None,
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::Type { .. } => Some(Box::new("aiken::typecheck")),
+            Error::StandardIo(_) => None,
+            Error::Format { .. } => None,
         }
     }
 
@@ -112,6 +134,8 @@ impl Diagnostic for Error {
             Error::List(_) => None,
             Error::Parse { error, .. } => error.kind.help(),
             Error::Type { error, .. } => error.help(),
+            Error::StandardIo(_) => None,
+            Error::Format { .. } => None,
         }
     }
 
@@ -123,6 +147,8 @@ impl Diagnostic for Error {
             Error::List(_) => None,
             Error::Parse { error, .. } => error.labels(),
             Error::Type { error, .. } => error.labels(),
+            Error::StandardIo(_) => None,
+            Error::Format { .. } => None,
         }
     }
 
@@ -134,6 +160,8 @@ impl Diagnostic for Error {
             Error::List(_) => None,
             Error::Parse { src, .. } => Some(src),
             Error::Type { src, .. } => Some(src),
+            Error::StandardIo(_) => None,
+            Error::Format { .. } => None,
         }
     }
 }
@@ -195,4 +223,12 @@ impl Debug for Warning {
 
         Ok(())
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Unformatted {
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    pub input: String,
+    pub output: String,
 }

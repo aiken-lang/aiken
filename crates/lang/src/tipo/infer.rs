@@ -6,7 +6,7 @@ use crate::{
         TypedModule, UntypedDefinition, UntypedModule,
     },
     builtins::function,
-    token::Token,
+    parser::token::Token,
     IdGenerator,
 };
 
@@ -150,6 +150,7 @@ fn infer_definition(
             arguments: args,
             body,
             return_annotation,
+            end_position,
             ..
         } => {
             let preregistered_fn = environment
@@ -227,6 +228,7 @@ fn infer_definition(
                     .return_type()
                     .expect("Could not find return type for fn"),
                 body,
+                end_position,
             })
         }
 

@@ -1,4 +1,4 @@
-use aiken::cmd::{build, check, new, tx, uplc};
+use aiken::cmd::{build, check, fmt, new, tx, uplc};
 use clap::Parser;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
@@ -8,6 +8,7 @@ use clap::Parser;
 #[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     New(new::Args),
+    Fmt(fmt::Args),
     Build(build::Args),
     Check(check::Args),
 
@@ -28,6 +29,7 @@ fn main() -> miette::Result<()> {
     miette::set_panic_hook();
     match Cmd::default() {
         Cmd::New(args) => new::exec(args),
+        Cmd::Fmt(args) => fmt::exec(args),
         Cmd::Build(args) => build::exec(args),
         Cmd::Check(args) => check::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),

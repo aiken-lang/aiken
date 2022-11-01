@@ -17,7 +17,7 @@ mod hydrator;
 mod infer;
 mod pattern;
 mod pipe;
-mod pretty;
+pub mod pretty;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {

@@ -1,7 +1,5 @@
 use std::{fmt, ops::Range, sync::Arc};
 
-use internment::Intern;
-
 use crate::{
     builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
@@ -80,6 +78,7 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
         public: bool,
         return_annotation: Option<Annotation>,
         return_type: T,
+        end_position: usize,
     },
 
     TypeAlias {
@@ -120,6 +119,30 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
         value: Box<Constant<T, ConstantRecordTag>>,
         tipo: T,
     },
+}
+
+impl<A, B, C, E> Definition<A, B, C, E> {
+    pub fn location(&self) -> Span {
+        match self {
+            Definition::Fn { location, .. }
+            | Definition::Use { location, .. }
+            | Definition::TypeAlias { location, .. }
+            | Definition::DataType { location, .. }
+            | Definition::ModuleConstant { location, .. } => *location,
+        }
+    }
+
+    pub fn put_doc(&mut self, new_doc: String) {
+        match self {
+            Definition::Use { .. } => (),
+            Definition::Fn { doc, .. }
+            | Definition::TypeAlias { doc, .. }
+            | Definition::DataType { doc, .. }
+            | Definition::ModuleConstant { doc, .. } => {
+                let _ = std::mem::replace(doc, Some(new_doc));
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -213,6 +236,15 @@ pub struct CallArg<A> {
     pub label: Option<String>,
     pub location: Span,
     pub value: A,
+}
+
+impl CallArg<UntypedExpr> {
+    pub fn is_capture_hole(&self) -> bool {
+        match &self.value {
+            UntypedExpr::Var { ref name, .. } => name == CAPTURE_VARIABLE,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -451,6 +483,26 @@ pub enum BinOp {
     ModInt,
 }
 
+impl BinOp {
+    pub fn precedence(&self) -> u8 {
+        // Ensure that this matches the other precedence function for guards
+        match self {
+            Self::Or => 1,
+
+            Self::And => 2,
+
+            Self::Eq | Self::NotEq => 3,
+
+            Self::LtInt | Self::LtEqInt | Self::GtEqInt | Self::GtInt => 4,
+
+            // Pipe is 5
+            Self::AddInt | Self::SubInt => 6,
+
+            Self::MultInt | Self::DivInt | Self::ModInt => 7,
+        }
+    }
+}
+
 pub type UntypedPattern = Pattern<(), ()>;
 pub type TypedPattern = Pattern<PatternConstructor, Arc<Type>>;
 
@@ -542,7 +594,7 @@ impl<A, B> Pattern<A, B> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum AssignmentKind {
     Let,
     Assert,
@@ -568,7 +620,6 @@ pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
 impl TypedClause {
     pub fn location(&self) -> Span {
         Span {
-            src: SrcId::empty(),
             start: self
                 .pattern
                 .get(0)
@@ -663,6 +714,23 @@ impl<A, B> ClauseGuard<A, B> {
             | ClauseGuard::LtEqInt { location, .. } => *location,
         }
     }
+
+    pub fn precedence(&self) -> u8 {
+        // Ensure that this matches the other precedence function for guards
+        match self {
+            ClauseGuard::Or { .. } => 1,
+            ClauseGuard::And { .. } => 2,
+
+            ClauseGuard::Equals { .. } | ClauseGuard::NotEquals { .. } => 3,
+
+            ClauseGuard::GtInt { .. }
+            | ClauseGuard::GtEqInt { .. }
+            | ClauseGuard::LtInt { .. }
+            | ClauseGuard::LtEqInt { .. } => 4,
+
+            ClauseGuard::Constant(_) | ClauseGuard::Var { .. } => 5,
+        }
+    }
 }
 
 impl TypedClauseGuard {
@@ -721,18 +789,8 @@ pub enum TodoKind {
     EmptyFunction,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SrcId(Intern<Vec<String>>);
-
-impl SrcId {
-    pub fn empty() -> Self {
-        SrcId(Intern::new(Vec::new()))
-    }
-}
-
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Span {
-    pub src: SrcId,
     pub start: usize,
     pub end: usize,
 }
@@ -747,11 +805,7 @@ impl Span {
     pub fn empty() -> Self {
         use chumsky::Span;
 
-        Self::new(SrcId::empty(), 0..0)
-    }
-
-    pub fn src(&self) -> SrcId {
-        self.src
+        Self::new((), 0..0)
     }
 
     pub fn range(&self) -> Range<usize> {
@@ -763,43 +817,34 @@ impl Span {
     pub fn union(self, other: Self) -> Self {
         use chumsky::Span;
 
-        assert_eq!(
-            self.src, other.src,
-            "attempted to union spans with different sources"
-        );
-
         Self {
             start: self.start().min(other.start()),
             end: self.end().max(other.end()),
-            ..self
         }
     }
 }
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}:{:?}", self.src, self.range())
+        write!(f, "{:?}", self.range())
     }
 }
 
 impl chumsky::Span for Span {
-    type Context = SrcId;
+    type Context = ();
 
     type Offset = usize;
 
-    fn new(context: Self::Context, range: Range<Self::Offset>) -> Self {
+    fn new(_context: Self::Context, range: Range<Self::Offset>) -> Self {
         assert!(range.start <= range.end);
 
         Self {
-            src: context,
             start: range.start,
             end: range.end,
         }
     }
 
-    fn context(&self) -> Self::Context {
-        self.src
-    }
+    fn context(&self) -> Self::Context {}
 
     fn start(&self) -> Self::Offset {
         self.start

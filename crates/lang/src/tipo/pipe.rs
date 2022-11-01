@@ -3,7 +3,7 @@ use std::sync::Arc;
 use vec1::Vec1;
 
 use crate::{
-    ast::{AssignmentKind, CallArg, Pattern, Span, SrcId, PIPE_VARIABLE},
+    ast::{AssignmentKind, CallArg, Pattern, Span, PIPE_VARIABLE},
     builtins::function,
     expr::{TypedExpr, UntypedExpr},
 };
@@ -48,7 +48,6 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
             argument_type: first.tipo(),
             argument_location: first.location(),
             location: Span {
-                src: SrcId::empty(),
                 start: first.location().start,
                 end: *end,
             },

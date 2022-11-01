@@ -1,3 +1,5 @@
-pub type ScriptContext {
-    thing: String
-}
+
+
+
+
+pub type ScriptContext { thing: String }

@@ -1,6 +1,8 @@
 use chumsky::prelude::*;
 
-use crate::{ast::Span, error::ParseError, token::Token};
+use crate::ast::Span;
+
+use super::{error::ParseError, token::Token};
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
     let int = text::int(10).map(|value| Token::Int { value });

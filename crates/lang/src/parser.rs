@@ -1,45 +1,83 @@
 use chumsky::prelude::*;
 use vec1::Vec1;
 
+pub mod error;
+pub mod extra;
+pub mod lexer;
+pub mod token;
+
 use crate::{
-    ast::{self, BinOp, Span, SrcId, TodoKind, CAPTURE_VARIABLE},
-    error::ParseError,
-    expr, lexer,
-    token::Token,
+    ast::{self, BinOp, Span, TodoKind, CAPTURE_VARIABLE},
+    expr,
 };
 
-pub fn script(src: &str) -> Result<ast::UntypedModule, Vec<ParseError>> {
+use error::ParseError;
+use extra::ModuleExtra;
+use token::Token;
+
+enum DefinitionOrExtra {
+    Definition(Box<ast::UntypedDefinition>),
+    ModuleComment(Span),
+    DocComment(Span),
+    Comment(Span),
+    EmptyLine(usize),
+}
+
+pub fn module(
+    src: &str,
+    kind: ast::ModuleKind,
+) -> Result<(ast::UntypedModule, ModuleExtra), Vec<ParseError>> {
     let len = src.chars().count();
 
-    let span = |i| Span::new(SrcId::empty(), i..i + 1);
+    let span = |i| Span::new((), i..i + 1);
 
     let tokens = lexer::lexer().parse(chumsky::Stream::from_iter(
         span(len),
         src.chars().enumerate().map(|(i, c)| (c, span(i))),
     ))?;
 
-    module_parser(ast::ModuleKind::Script)
-        .parse(chumsky::Stream::from_iter(span(len), tokens.into_iter()))
-}
+    let module_data =
+        module_parser().parse(chumsky::Stream::from_iter(span(len), tokens.into_iter()))?;
 
-pub fn module_parser(
-    kind: ast::ModuleKind,
-) -> impl Parser<Token, ast::UntypedModule, Error = ParseError> {
-    choice((
-        import_parser(),
-        data_parser(),
-        type_alias_parser(),
-        fn_parser(),
-    ))
-    .repeated()
-    .then_ignore(end())
-    .map(move |definitions| ast::UntypedModule {
+    let mut definitions = Vec::new();
+    let mut extra = ModuleExtra::new();
+
+    for data in module_data {
+        match data {
+            DefinitionOrExtra::Definition(def) => definitions.push(*def),
+            DefinitionOrExtra::ModuleComment(c) => extra.module_comments.push(c),
+            DefinitionOrExtra::DocComment(c) => extra.doc_comments.push(c),
+            DefinitionOrExtra::Comment(c) => extra.comments.push(c),
+            DefinitionOrExtra::EmptyLine(e) => extra.empty_lines.push(e),
+        }
+    }
+
+    let module = ast::UntypedModule {
         kind,
         definitions,
         docs: vec![],
         name: "".to_string(),
         type_info: (),
-    })
+    };
+
+    Ok((module, extra))
+}
+
+fn module_parser() -> impl Parser<Token, Vec<DefinitionOrExtra>, Error = ParseError> {
+    choice((
+        import_parser()
+            .map(Box::new)
+            .map(DefinitionOrExtra::Definition),
+        data_parser()
+            .map(Box::new)
+            .map(DefinitionOrExtra::Definition),
+        type_alias_parser()
+            .map(Box::new)
+            .map(DefinitionOrExtra::Definition),
+        fn_parser().map(Box::new).map(DefinitionOrExtra::Definition),
+    ))
+    .repeated()
+    .then_ignore(end())
 }
 
 pub fn import_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -188,7 +226,8 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
         .then(
             fn_param_parser()
                 .separated_by(just(Token::Comma))
-                .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                .map_with_span(|arguments, span| (arguments, span)),
         )
         .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
         .then(
@@ -197,7 +236,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(
-            |((((opt_pub, name), arguments), return_annotation), body), span| {
+            |((((opt_pub, name), (arguments, args_span)), return_annotation), body), span| {
                 ast::UntypedDefinition::Fn {
                     arguments,
                     body: body.unwrap_or(expr::UntypedExpr::Todo {
@@ -206,7 +245,14 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                         label: None,
                     }),
                     doc: None,
-                    location: span,
+                    location: Span {
+                        start: span.start,
+                        end: return_annotation
+                            .as_ref()
+                            .map(|l| l.location().end)
+                            .unwrap_or_else(|| args_span.end),
+                    },
+                    end_position: span.end - 1,
                     name,
                     public: opt_pub.is_some(),
                     return_annotation,

@@ -1,17 +1,13 @@
 use chumsky::prelude::*;
 
-use crate::{
-    ast::{Span, SrcId},
-    lexer,
-    token::Token,
-};
+use crate::{ast::Span, parser::lexer, parser::token::Token};
 
 #[test]
 fn tokens() {
     let code = "pub type |> >=\n{ Thing _na_thing name";
     let len = code.chars().count();
 
-    let span = |i| Span::new(SrcId::empty(), i..i + 1);
+    let span = |i| Span::new((), i..i + 1);
 
     assert_eq!(
         lexer::lexer()

@@ -5,10 +5,10 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
-        RecordUpdateSpread, Span, SrcId, TodoKind, TypedArg, TypedCallArg, TypedClause,
-        TypedClauseGuard, TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg,
-        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch,
-        UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
+        RecordUpdateSpread, Span, TodoKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
+        TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UntypedArg,
+        UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
+        UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, result, string},
     expr::{TypedExpr, UntypedExpr},
@@ -605,7 +605,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     .ok_or_else(|| Error::UnknownModuleValue {
                         name: label.clone(),
                         location: Span {
-                            src: SrcId::empty(),
                             start: module_location.end,
                             end: select_location.end,
                         },
