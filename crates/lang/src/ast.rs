@@ -241,7 +241,7 @@ pub struct CallArg<A> {
 impl CallArg<UntypedExpr> {
     pub fn is_capture_hole(&self) -> bool {
         match &self.value {
-            UntypedExpr::Var { ref name, .. } => name == CAPTURE_VARIABLE,
+            UntypedExpr::Var { ref name, .. } => name.contains(CAPTURE_VARIABLE),
             _ => false,
         }
     }

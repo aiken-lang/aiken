@@ -608,7 +608,7 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Sequence { expressions, .. } => self.sequence(expressions),
 
-            UntypedExpr::Var { name, .. } if name == CAPTURE_VARIABLE => "_".to_doc(),
+            UntypedExpr::Var { name, .. } if name.contains(CAPTURE_VARIABLE) => "_".to_doc(),
 
             UntypedExpr::Var { name, .. } => name.to_doc(),
 
@@ -860,7 +860,7 @@ impl<'comments> Formatter<'comments> {
             Some(CallArg {
                 value: UntypedExpr::Var { name, .. },
                 ..
-            }) if name == CAPTURE_VARIABLE
+            }) if name.contains(CAPTURE_VARIABLE)
         );
 
         if hole_in_first_position && args.len() == 1 {
