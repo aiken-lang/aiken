@@ -3,7 +3,11 @@ pub type ScriptContext {
 }
 
 pub type Datum {
-  something: String,
+  Datum2{
+    something: String,
+    fin: Int
+  }
+  None{}
 }
 
 pub fn eqInt(a: Int, b: Int) {
