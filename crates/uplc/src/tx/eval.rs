@@ -239,8 +239,8 @@ fn get_tx_info_v1(
         return Err(Error::ScriptAndInputRefNotAllowed);
     }
 
-    let inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
-
+    let mut inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
+    inputs.sort_by(|x, y| x.out_ref.cmp(&y.out_ref));
     let outputs = body
         .outputs
         .iter()
@@ -298,7 +298,9 @@ fn get_tx_info_v2(
 ) -> Result<TxInfo, Error> {
     let body = tx.transaction_body.clone();
 
-    let inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
+    let mut inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
+    inputs.sort_by(|x, y| x.out_ref.cmp(&y.out_ref));
+
     let reference_inputs =
         get_tx_in_info_v2(&body.reference_inputs.clone().unwrap_or_default(), utxos)?;
     let outputs = body
