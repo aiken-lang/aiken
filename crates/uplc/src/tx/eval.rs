@@ -54,7 +54,7 @@ fn sort_mint(mint: &Mint) -> Mint {
 
     for m in mint.deref().iter().sorted() {
         mint_vec.push((
-            m.0.clone(),
+            m.0,
             KeyValuePairs::Indef(m.1.deref().clone().into_iter().sorted().clone().collect()),
         ));
     }
@@ -82,7 +82,7 @@ fn sort_value(value: &Value) -> Value {
     }
 }
 
-fn sort_tx_output_value(tx_output: &TransactionOutput) -> TransactionOutput {
+fn sort_tx_out_value(tx_output: &TransactionOutput) -> TransactionOutput {
     match tx_output {
         TransactionOutput::Legacy(output) => {
             let mut new_output = output.clone();
@@ -164,7 +164,7 @@ pub fn get_tx_in_info_v1(
 
             Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
-                resolved: TxOut::V1(sort_tx_output_value(&utxo.output)),
+                resolved: TxOut::V1(sort_tx_out_value(&utxo.output)),
             })
         })
         .collect()
@@ -200,7 +200,7 @@ fn get_tx_in_info_v2(
 
             Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
-                resolved: TxOut::V2(sort_tx_output_value(&utxo.output)),
+                resolved: TxOut::V2(sort_tx_out_value(&utxo.output)),
             })
         })
         .collect()
@@ -295,7 +295,7 @@ fn get_tx_info_v1(
     let outputs = body
         .outputs
         .iter()
-        .map(|output| TxOut::V1(sort_tx_output_value(&output)))
+        .map(|output| TxOut::V1(sort_tx_out_value(output)))
         .collect();
 
     let fee = Value::Coin(body.fee);
@@ -371,7 +371,7 @@ fn get_tx_info_v2(
     let outputs = body
         .outputs
         .iter()
-        .map(|output| TxOut::V2(sort_tx_output_value(&output)))
+        .map(|output| TxOut::V2(sort_tx_out_value(output)))
         .collect();
 
     let fee = Value::Coin(body.fee);
