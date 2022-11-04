@@ -70,7 +70,7 @@ fn sort_value(value: &Value) -> Value {
 
             for m in ma.deref().iter().sorted() {
                 ma_vec.push((
-                    m.0.clone(),
+                    m.0,
                     KeyValuePairs::Indef(
                         m.1.deref().clone().into_iter().sorted().clone().collect(),
                     ),
