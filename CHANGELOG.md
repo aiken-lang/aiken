@@ -4,6 +4,8 @@
 
 ## [v0.0.24] - 2022-11-04
 
+### Changed
+
 - **uplc**: Sorted remaining structured in the ScriptContext (Value, Wdrl, (Ref) Inputs, Mint, Required signers, Data, Redeemers)
 
 ## [v0.0.23] - 2022-11-03
