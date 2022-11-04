@@ -2,6 +2,12 @@
 
 ## [next] - 2022-MM-DD
 
+## [v0.0.23] - 2022-11-03
+
+### Changed
+
+- **uplc**: sort inputs for script context fixes an issue in lucid https://github.com/spacebudz/lucid/issues/109
+
 ## [v0.0.22] - 2022-10-31
 
 ### Added
