@@ -1,19 +1,17 @@
 pub type ScriptContext {
-    thing: String
+    thing: ByteArray
 }
 
 pub type Datum {
-  Datum2{
-    something: String,
-    fin: Int
-  }
-  None{}
+    something: ByteArray, 
+    fin: Int  
 }
 
 pub fn eqInt(a: Int, b: Int) {
     a == b
 }
 
-pub fn eqString(a: String, b: String) {
+pub fn eqString(a: ByteArray, b: ByteArray) {
     a == b
 }
+

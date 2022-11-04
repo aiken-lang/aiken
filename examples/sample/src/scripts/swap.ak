@@ -9,15 +9,11 @@ pub type Redeemer {
 
 
 pub fn spend(datum: sample.Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> Bool {
-
+  let dat = sample.Datum{..}
+  let y = 2
   let x = 1
-  let a = when datum is {
-    sample.Datum2(first, rest) -> rest
-    sample.None -> 0
-  }
-  let b = x
+  let a = datum.something
+  let e = dat.something
+  let b = 2
   b == 1
-
-  
-
 }
