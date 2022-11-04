@@ -1217,6 +1217,7 @@ dependencies = [
  "cryptoxide",
  "flat-rs",
  "hex",
+ "itertools",
  "pallas-addresses",
  "pallas-codec",
  "pallas-crypto",

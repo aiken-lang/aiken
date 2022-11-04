@@ -22,6 +22,7 @@ use super::{
     to_plutus_data::{MintValue, ToPlutusData},
     Error,
 };
+use itertools::Itertools;
 
 fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
     let ms_after_begin = (slot - sc.zero_slot) * sc.slot_length as u64;
@@ -45,6 +46,54 @@ fn redeemer_tag_to_string(redeemer_tag: &RedeemerTag) -> String {
         RedeemerTag::Mint => "Mint".to_string(),
         RedeemerTag::Cert => "Cert".to_string(),
         RedeemerTag::Reward => "Reward".to_string(),
+    }
+}
+
+fn sort_mint(mint: &Mint) -> Mint {
+    let mut mint_vec = vec![];
+
+    for m in mint.deref().iter().sorted() {
+        mint_vec.push((
+            m.0,
+            KeyValuePairs::Indef(m.1.deref().clone().into_iter().sorted().clone().collect()),
+        ));
+    }
+
+    KeyValuePairs::Indef(mint_vec)
+}
+
+fn sort_value(value: &Value) -> Value {
+    match value {
+        Value::Coin(_) => value.clone(),
+        Value::Multiasset(coin, ma) => {
+            let mut ma_vec = vec![];
+
+            for m in ma.deref().iter().sorted() {
+                ma_vec.push((
+                    m.0,
+                    KeyValuePairs::Indef(
+                        m.1.deref().clone().into_iter().sorted().clone().collect(),
+                    ),
+                ));
+            }
+
+            Value::Multiasset(*coin, KeyValuePairs::Indef(ma_vec))
+        }
+    }
+}
+
+fn sort_tx_out_value(tx_output: &TransactionOutput) -> TransactionOutput {
+    match tx_output {
+        TransactionOutput::Legacy(output) => {
+            let mut new_output = output.clone();
+            new_output.amount = sort_value(&output.amount);
+            TransactionOutput::Legacy(new_output)
+        }
+        TransactionOutput::PostAlonzo(output) => {
+            let mut new_output = output.clone();
+            new_output.value = sort_value(&output.value);
+            TransactionOutput::PostAlonzo(new_output)
+        }
     }
 }
 
@@ -78,6 +127,7 @@ pub fn get_tx_in_info_v1(
 ) -> Result<Vec<TxInInfo>, Error> {
     inputs
         .iter()
+        .sorted()
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
                 Some(resolved) => resolved,
@@ -114,7 +164,7 @@ pub fn get_tx_in_info_v1(
 
             Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
-                resolved: TxOut::V1(utxo.output.clone()),
+                resolved: TxOut::V1(sort_tx_out_value(&utxo.output)),
             })
         })
         .collect()
@@ -126,6 +176,7 @@ fn get_tx_in_info_v2(
 ) -> Result<Vec<TxInInfo>, Error> {
     inputs
         .iter()
+        .sorted()
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
                 Some(resolved) => resolved,
@@ -149,7 +200,7 @@ fn get_tx_in_info_v2(
 
             Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
-                resolved: TxOut::V2(utxo.output.clone()),
+                resolved: TxOut::V2(sort_tx_out_value(&utxo.output)),
             })
         })
         .collect()
@@ -239,23 +290,29 @@ fn get_tx_info_v1(
         return Err(Error::ScriptAndInputRefNotAllowed);
     }
 
-    let mut inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
-    inputs.sort_by(|x, y| x.out_ref.cmp(&y.out_ref));
+    let inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
+
     let outputs = body
         .outputs
         .iter()
-        .map(|output| TxOut::V1(output.clone()))
+        .map(|output| TxOut::V1(sort_tx_out_value(output)))
         .collect();
 
     let fee = Value::Coin(body.fee);
-    let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
+
+    let mint = sort_mint(&body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![])));
+
     let dcert = body.certificates.clone().unwrap_or_default();
+
     let wdrl = body
         .withdrawals
         .clone()
         .unwrap_or(KeyValuePairs::Indef(vec![]))
         .deref()
-        .clone();
+        .clone()
+        .into_iter()
+        .sorted()
+        .collect();
 
     let valid_range = slot_range_to_posix_time_range(
         TimeRange {
@@ -264,7 +321,14 @@ fn get_tx_info_v1(
         },
         slot_config,
     );
-    let signatories = body.required_signers.clone().unwrap_or_default();
+
+    let signatories = body
+        .required_signers
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .sorted()
+        .collect();
 
     let data = tx
         .transaction_witness_set
@@ -273,6 +337,7 @@ fn get_tx_info_v1(
         .unwrap_or(&vec![])
         .iter()
         .map(|d| (d.original_hash(), d.clone().unwrap()))
+        .sorted()
         .collect();
 
     let id = tx.transaction_body.compute_hash();
@@ -298,23 +363,34 @@ fn get_tx_info_v2(
 ) -> Result<TxInfo, Error> {
     let body = tx.transaction_body.clone();
 
-    let mut inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
-    inputs.sort_by(|x, y| x.out_ref.cmp(&y.out_ref));
+    let inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
 
     let reference_inputs =
         get_tx_in_info_v2(&body.reference_inputs.clone().unwrap_or_default(), utxos)?;
+
     let outputs = body
         .outputs
         .iter()
-        .map(|output| TxOut::V2(output.clone()))
+        .map(|output| TxOut::V2(sort_tx_out_value(output)))
         .collect();
+
     let fee = Value::Coin(body.fee);
-    let mint = body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![]));
+
+    let mint = sort_mint(&body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![])));
+
     let dcert = body.certificates.clone().unwrap_or_default();
-    let wdrl = body
-        .withdrawals
-        .clone()
-        .unwrap_or(KeyValuePairs::Indef(vec![]));
+
+    let wdrl = KeyValuePairs::Indef(
+        body.withdrawals
+            .clone()
+            .unwrap_or(KeyValuePairs::Indef(vec![]))
+            .deref()
+            .clone()
+            .into_iter()
+            .sorted()
+            .collect(),
+    );
+
     let valid_range = slot_range_to_posix_time_range(
         TimeRange {
             lower_bound: body.validity_interval_start,
@@ -322,13 +398,22 @@ fn get_tx_info_v2(
         },
         slot_config,
     );
-    let signatories = body.required_signers.clone().unwrap_or_default();
+
+    let signatories = body
+        .required_signers
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .sorted()
+        .collect();
+
     let redeemers = KeyValuePairs::Indef(
         tx.transaction_witness_set
             .redeemer
             .as_ref()
             .unwrap_or(&MaybeIndefArray::Indef(vec![]))
             .iter()
+            .sorted_by(|a, b| a.data.compute_hash().cmp(&b.data.compute_hash()))
             .map(|r| {
                 (
                     get_script_purpose(
@@ -344,6 +429,7 @@ fn get_tx_info_v2(
             })
             .collect(),
     );
+
     let data = KeyValuePairs::Indef(
         tx.transaction_witness_set
             .plutus_data
@@ -351,8 +437,10 @@ fn get_tx_info_v2(
             .unwrap_or(&vec![])
             .iter()
             .map(|d| (d.original_hash(), d.clone().unwrap()))
+            .sorted()
             .collect(),
     );
+
     let id = tx.transaction_body.compute_hash();
 
     Ok(TxInfo::V2(TxInfoV2 {
