@@ -319,7 +319,10 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => name
                 .to_doc()
-                .append(wrap_args(args.iter().map(|a| self.constant_call_arg(a))))
+                .append(wrap_args(
+                    args.iter()
+                        .map(|a| (self.constant_call_arg(a), a.label.is_some())),
+                ))
                 .group(),
 
             Constant::Record {
@@ -331,7 +334,10 @@ impl<'comments> Formatter<'comments> {
                 .to_doc()
                 .append(".")
                 .append(name.as_str())
-                .append(wrap_args(args.iter().map(|a| self.constant_call_arg(a))))
+                .append(wrap_args(
+                    args.iter()
+                        .map(|a| (self.constant_call_arg(a), a.label.is_some())),
+                ))
                 .group(),
 
             Constant::Var {
@@ -430,7 +436,7 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
-        wrap_args(args.iter().map(|t| self.type_ast(t)))
+        wrap_args(args.iter().map(|t| (self.type_ast(t), false)))
     }
 
     pub fn type_alias<'a>(
@@ -445,7 +451,7 @@ impl<'comments> Formatter<'comments> {
         let head = if args.is_empty() {
             head
         } else {
-            head.append(wrap_args(args.iter().map(|e| e.to_doc())).group())
+            head.append(wrap_args(args.iter().map(|e| (e.to_doc(), false))).group())
         };
 
         head.append(" =")
@@ -477,7 +483,7 @@ impl<'comments> Formatter<'comments> {
         let head = pub_(*public)
             .append("fn ")
             .append(name)
-            .append(wrap_args(args.iter().map(|e| self.fn_arg(e))));
+            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
 
         // Add return annotation
         let head = match return_annotation {
@@ -508,7 +514,7 @@ impl<'comments> Formatter<'comments> {
         return_annotation: Option<&'a Annotation>,
         body: &'a UntypedExpr,
     ) -> Document<'a> {
-        let args = wrap_args(args.iter().map(|e| self.fn_arg(e))).group();
+        let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
             UntypedExpr::When { .. } => self.expr(body).force_break(),
             _ => self.expr(body),
@@ -715,13 +721,16 @@ impl<'comments> Formatter<'comments> {
         } else {
             match args {
                 [arg] if is_breakable(&arg.value) => name
-                    .append("(")
+                    .append(if arg.label.is_some() { "{" } else { "(" })
                     .append(self.pattern_call_arg(arg))
-                    .append(")")
+                    .append(if arg.label.is_some() { "}" } else { ")" })
                     .group(),
 
                 _ => name
-                    .append(wrap_args(args.iter().map(|a| self.pattern_call_arg(a))))
+                    .append(wrap_args(
+                        args.iter()
+                            .map(|a| (self.pattern_call_arg(a), a.label.is_some())),
+                    ))
                     .group(),
             }
         }
@@ -738,7 +747,7 @@ impl<'comments> Formatter<'comments> {
 
             _ => self
                 .expr(fun)
-                .append(wrap_args(args.iter().map(|a| self.call_arg(a))))
+                .append(wrap_args(args.iter().map(|a| (self.call_arg(a), false))))
                 .group(),
         }
     }
@@ -781,8 +790,8 @@ impl<'comments> Formatter<'comments> {
         use std::iter::once;
         let constructor_doc = self.expr(constructor);
         let spread_doc = "..".to_doc().append(self.expr(&spread.base));
-        let arg_docs = args.iter().map(|a| self.record_update_arg(a));
-        let all_arg_docs = once(spread_doc).chain(arg_docs);
+        let arg_docs = args.iter().map(|a| (self.record_update_arg(a), true));
+        let all_arg_docs = once((spread_doc, true)).chain(arg_docs);
         constructor_doc.append(wrap_args(all_arg_docs)).group()
     }
 
@@ -868,11 +877,11 @@ impl<'comments> Formatter<'comments> {
         } else if hole_in_first_position {
             // x |> fun(_, 2, 3)
             self.expr(fun)
-                .append(wrap_args(args.iter().skip(1).map(|a| self.call_arg(a))).group())
+                .append(wrap_args(args.iter().skip(1).map(|a| (self.call_arg(a), false))).group())
         } else {
             // x |> fun(1, _, 3)
             self.expr(fun)
-                .append(wrap_args(args.iter().map(|a| self.call_arg(a))).group())
+                .append(wrap_args(args.iter().map(|a| (self.call_arg(a), false))).group())
         }
     }
 
@@ -893,7 +902,7 @@ impl<'comments> Formatter<'comments> {
 
                 _ => self
                     .expr(fun)
-                    .append(wrap_args(args.iter().map(|a| self.call_arg(a))).group()),
+                    .append(wrap_args(args.iter().map(|a| (self.call_arg(a), false))).group()),
             },
 
             // The body of a capture being not a fn shouldn't be possible...
@@ -950,9 +959,12 @@ impl<'comments> Formatter<'comments> {
                             None => self.type_ast(annotation),
                         };
 
-                        commented(
-                            self.doc_comments(location.start).append(arg).group(),
-                            arg_comments,
+                        (
+                            commented(
+                                self.doc_comments(location.start).append(arg).group(),
+                                arg_comments,
+                            ),
+                            label.is_some(),
                         )
                     },
                 )))
@@ -982,7 +994,7 @@ impl<'comments> Formatter<'comments> {
                 name.to_doc()
             } else {
                 name.to_doc()
-                    .append(wrap_args(args.iter().map(|e| e.to_doc())))
+                    .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
                     .group()
             })
             .append(" {")
@@ -1021,7 +1033,7 @@ impl<'comments> Formatter<'comments> {
                 name.to_doc()
             } else {
                 name.to_doc()
-                    .append(wrap_args(args.iter().map(|e| e.to_doc())))
+                    .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
             })
     }
 
@@ -1049,10 +1061,13 @@ impl<'comments> Formatter<'comments> {
         printer: &mut tipo::pretty::Printer,
     ) -> Document<'a> {
         wrap_args(args.iter().map(|arg| {
-            arg.arg_name
-                .to_doc()
-                .append(": ".to_doc().append(printer.print(&arg.tipo)))
-                .group()
+            (
+                arg.arg_name
+                    .to_doc()
+                    .append(": ".to_doc().append(printer.print(&arg.tipo)))
+                    .group(),
+                false,
+            )
         }))
     }
 
@@ -1143,22 +1158,6 @@ impl<'comments> Formatter<'comments> {
         }
         .append(" ->")
         .append(self.case_clause_value(&clause.then))
-    }
-
-    pub fn external_type<'a>(
-        &mut self,
-        public: bool,
-        name: &'a str,
-        args: &'a [String],
-    ) -> Document<'a> {
-        pub_(public)
-            .append("external type ")
-            .append(name)
-            .append(if args.is_empty() {
-                nil()
-            } else {
-                wrap_args(args.iter().map(|e| e.to_doc()))
-            })
     }
 
     fn list<'a>(
@@ -1342,17 +1341,29 @@ impl<'a> Documentable<'a> for &'a BinOp {
 
 pub fn wrap_args<'a, I>(args: I) -> Document<'a>
 where
-    I: IntoIterator<Item = Document<'a>>,
+    I: IntoIterator<Item = (Document<'a>, bool)>,
 {
     let mut args = args.into_iter().peekable();
-    if args.peek().is_none() {
+
+    let curly = if let Some((_, uses_curly)) = args.peek() {
+        *uses_curly
+    } else {
         return "()".to_doc();
-    }
-    break_("(", "(")
+    };
+
+    let args = args.map(|a| a.0);
+
+    let ((open_broken, open_unbroken), close) = if curly {
+        ((" {", " { "), "}")
+    } else {
+        (("(", "("), ")")
+    };
+
+    break_(open_broken, open_unbroken)
         .append(join(args, break_(",", ", ")))
         .nest(INDENT)
-        .append(break_(",", ""))
-        .append(")")
+        .append(break_(",", if curly { " " } else { "" }))
+        .append(close)
 }
 
 pub fn wrap_fields<'a, I>(args: I) -> Document<'a>
@@ -1363,11 +1374,12 @@ where
     if args.peek().is_none() {
         return nil();
     }
-    break_(" ", " ")
-        .append(join(args, break_(",", ", ")))
+
+    line()
+        .append(join(args, ",".to_doc().append(line())))
         .nest(INDENT)
-        .append(break_(",", ""))
-        .append(" ")
+        .append(",")
+        .append(line())
 }
 
 pub fn wrap_args_with_spread<'a, I>(args: I) -> Document<'a>
