@@ -15,6 +15,7 @@ use error::ParseError;
 use extra::ModuleExtra;
 use token::Token;
 
+#[allow(dead_code)]
 enum DefinitionOrExtra {
     Definition(Box<ast::UntypedDefinition>),
     ModuleComment(Span),

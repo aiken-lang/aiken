@@ -50,10 +50,10 @@ pub enum Token {
     RArrow,     // '->'
     DotDot,     // '..'
     EndOfFile,
-    // Extra
-    CommentNormal,
-    CommentDoc,
-    CommentModule,
+    // Docs/Extra
+    Comment,
+    DocComment,
+    ModuleComment,
     EmptyLine,
     // Keywords (alphabetically):
     As,
@@ -124,9 +124,9 @@ impl fmt::Display for Token {
             Token::RArrow => "->",
             Token::DotDot => "..",
             Token::EndOfFile => "EOF",
-            Token::CommentNormal => "//",
-            Token::CommentDoc => "///",
-            Token::CommentModule => "////",
+            Token::Comment => "//",
+            Token::DocComment => "///",
+            Token::ModuleComment => "////",
             Token::EmptyLine => "EMPTYLINE",
             Token::As => "as",
             Token::Assert => "assert",
