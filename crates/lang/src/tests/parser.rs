@@ -316,7 +316,7 @@ fn module() {
                         }),
                     },
                     doc: None,
-                    location: Span::new((), 407..467),
+                    location: Span::new((), 407..431),
                     name: "add_one".to_string(),
                     public: true,
                     return_annotation: Some(ast::Annotation::Constructor {
@@ -326,10 +326,10 @@ fn module() {
                         arguments: vec![],
                     },),
                     return_type: (),
-                    end_position: 3,
+                    end_position: 466,
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 598,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::NamedLabeled {
                             name: "a".to_string(),
@@ -370,14 +370,14 @@ fn module() {
                         ],
                     },
                     doc: None,
-                    location: Span::new((), 481..599),
+                    location: Span::new((), 481..507),
                     name: "thing".to_string(),
                     public: true,
                     return_annotation: None,
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 839,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
                             name: "a".to_string(),
@@ -475,14 +475,14 @@ fn module() {
                         ],
                     },
                     doc: None,
-                    location: Span::new((), 613..840),
+                    location: Span::new((), 613..631),
                     name: "wow".to_string(),
                     public: true,
                     return_annotation: None,
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 1238,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
                             name: "a".to_string(),
@@ -642,14 +642,14 @@ fn module() {
                         ],
                     },
                     doc: None,
-                    location: Span::new((), 854..1239),
+                    location: Span::new((), 854..873),
                     name: "wow2".to_string(),
                     public: true,
                     return_annotation: None,
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 1377,
                     arguments: vec![],
                     body: expr::UntypedExpr::Sequence {
                         location: Span::new((), 1292..1364),
@@ -714,7 +714,7 @@ fn module() {
                         ],
                     },
                     doc: None,
-                    location: Span::new((), 1253..1378),
+                    location: Span::new((), 1253..1273),
                     name: "such".to_string(),
                     public: true,
                     return_annotation: Some(ast::Annotation::Constructor {
@@ -726,7 +726,7 @@ fn module() {
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 1402,
                     arguments: vec![],
                     body: expr::UntypedExpr::Todo {
                         kind: ast::TodoKind::EmptyFunction,
@@ -734,14 +734,14 @@ fn module() {
                         label: None,
                     },
                     doc: None,
-                    location: Span::new((), 1392..1403),
+                    location: Span::new((), 1392..1400),
                     name: "run".to_string(),
                     public: false,
                     return_annotation: None,
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 1477,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
                             name: "user".to_string(),
@@ -765,14 +765,14 @@ fn module() {
                         }),
                     },
                     doc: None,
-                    location: Span::new((), 1417..1478),
+                    location: Span::new((), 1417..1436),
                     name: "name".to_string(),
                     public: false,
                     return_annotation: None,
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 1655,
                     arguments: vec![],
                     body: expr::UntypedExpr::Sequence {
                         location: Span::new((), 1521..1642),
@@ -907,14 +907,14 @@ fn module() {
                         ],
                     },
                     doc: None,
-                    location: Span::new((), 1492..1656),
+                    location: Span::new((), 1492..1502),
                     name: "calls".to_string(),
                     public: false,
                     return_annotation: None,
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 1781,
                     arguments: vec![
                         ast::Arg {
                             arg_name: ast::ArgName::Named {
@@ -968,7 +968,7 @@ fn module() {
                         },],
                     },
                     doc: None,
-                    location: Span::new((), 1670..1782),
+                    location: Span::new((), 1670..1718),
                     name: "update_name".to_string(),
                     public: false,
                     return_annotation: Some(ast::Annotation::Constructor {
@@ -980,7 +980,7 @@ fn module() {
                     return_type: (),
                 },
                 ast::UntypedDefinition::Fn {
-                    end_position: 3,
+                    end_position: 2049,
                     arguments: vec![],
                     body: expr::UntypedExpr::If {
                         location: Span::new((), 1823..2036),
@@ -1049,7 +1049,7 @@ fn module() {
                         }),
                     },
                     doc: None,
-                    location: Span::new((), 1796..2050),
+                    location: Span::new((), 1796..1804),
                     name: "ifs".to_string(),
                     public: false,
                     return_annotation: None,
