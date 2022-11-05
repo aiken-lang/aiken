@@ -11,8 +11,11 @@ pub type Redeemer {
 }
 
 pub fn spend(datum: Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> Bool {
-  when rdmr is {
-    Buy -> True
-    Sell -> datum.something == "Aiken"
+  if datum.something == "Aiken" {
+    True
+  } else if datum.something == "Wow" {
+    True
+  } else {
+    False
   }
 }

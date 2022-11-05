@@ -601,7 +601,48 @@ impl<'comments> Formatter<'comments> {
 
         let document = match expr {
             UntypedExpr::ByteArray { .. } => todo!(),
-            UntypedExpr::If { .. } => todo!(),
+            UntypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => {
+                let first = branches.first();
+
+                break_("if", "if ")
+                    .append(self.wrap_expr(&first.condition))
+                    .nest(INDENT)
+                    .append(break_("", " "))
+                    .append("{")
+                    .group()
+                    .append(line())
+                    .nest(INDENT)
+                    .append(self.expr(&first.body))
+                    .append(line())
+                    .append("} ")
+                    .append(join(
+                        branches[1..].iter().map(|branch| {
+                            break_("else if", "else if ")
+                                .append(self.wrap_expr(&branch.condition))
+                                .nest(INDENT)
+                                .append(break_("", " "))
+                                .append("{")
+                                .group()
+                                .append(line())
+                                .nest(INDENT)
+                                .append(self.expr(&branch.body))
+                                .append(line())
+                                .append("} ")
+                        }),
+                        nil(),
+                    ))
+                    .append("else {")
+                    .group()
+                    .append(line().nest(INDENT))
+                    .append(self.expr(final_else))
+                    .append(line())
+                    .append("}")
+                    .force_break()
+            }
             UntypedExpr::Todo { label: None, .. } => "todo".to_doc(),
 
             UntypedExpr::Todo { label: Some(l), .. } => docvec!["todo(\"", l, "\")"],
