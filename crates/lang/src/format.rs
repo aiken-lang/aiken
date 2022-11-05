@@ -119,7 +119,7 @@ impl<'comments> Formatter<'comments> {
         end != 0
     }
 
-    fn definitions<'a>(&mut self, definitions: &'a [UntypedDefinition]) -> Vec<Document<'a>> {
+    fn definitions<'a>(&mut self, definitions: &'a [UntypedDefinition]) -> Document<'a> {
         let mut has_imports = false;
         let mut has_declarations = false;
         let mut imports = Vec::new();
@@ -161,11 +161,11 @@ impl<'comments> Formatter<'comments> {
             nil()
         };
 
-        vec![imports, sep, declarations]
+        docvec![imports, sep, declarations]
     }
 
     fn module<'a>(&mut self, module: &'a UntypedModule) -> Document<'a> {
-        let groups = join(self.definitions(&module.definitions), lines(2));
+        let groups = self.definitions(&module.definitions);
 
         // Now that `groups` has been collected, only freestanding comments (//)
         // and doc comments (///) remain. Freestanding comments aren't associated
