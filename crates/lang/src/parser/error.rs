@@ -2,7 +2,7 @@ use std::{collections::HashSet, fmt};
 
 use miette::Diagnostic;
 
-use crate::{ast::Span, token::Token};
+use crate::{ast::Span, parser::token::Token};
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 #[error("{}", .kind)]

@@ -435,7 +435,6 @@ impl UntypedExpr {
         let location = Span {
             start: self.location().start,
             end: next.location().end,
-            ..self.location()
         };
 
         match (self.clone(), next.clone()) {
@@ -507,5 +506,36 @@ impl UntypedExpr {
                 ..
             } => expressions.last().map(Self::location).unwrap_or(*location),
         }
+    }
+
+    pub fn start_byte_index(&self) -> usize {
+        match self {
+            Self::Sequence {
+                expressions,
+                location,
+                ..
+            } => expressions
+                .first()
+                .map(|e| e.start_byte_index())
+                .unwrap_or(location.start),
+            Self::PipeLine { expressions, .. } => expressions.first().start_byte_index(),
+            Self::Try { location, .. } | Self::Assignment { location, .. } => location.start,
+            _ => self.location().start,
+        }
+    }
+
+    pub fn binop_precedence(&self) -> u8 {
+        match self {
+            Self::BinOp { name, .. } => name.precedence(),
+            Self::PipeLine { .. } => 5,
+            _ => std::u8::MAX,
+        }
+    }
+
+    pub fn is_simple_constant(&self) -> bool {
+        matches!(
+            self,
+            Self::String { .. } | Self::Int { .. } | Self::ByteArray { .. }
+        )
     }
 }

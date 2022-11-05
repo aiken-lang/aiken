@@ -6,6 +6,7 @@ use std::{
 
 pub mod config;
 pub mod error;
+pub mod format;
 pub mod module;
 
 use aiken_lang::{ast::ModuleKind, builtins, tipo::TypeInfo, IdGenerator};
@@ -106,8 +107,8 @@ impl Project {
             kind,
         } in self.sources.drain(0..)
         {
-            match aiken_lang::parser::script(&code) {
-                Ok(mut ast) => {
+            match aiken_lang::parser::module(&code, kind) {
+                Ok((mut ast, _)) => {
                     // Store the name
                     ast.name = name.clone();
 

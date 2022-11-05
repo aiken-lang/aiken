@@ -30,10 +30,7 @@ where
     if let Err(err) = build_result {
         err.report();
 
-        miette::bail!(
-            "failed: {} error(s), {warning_count} warning(s)",
-            err.total(),
-        );
+        miette::bail!("failed: {} error(s), {warning_count} warning(s)", err.len(),);
     };
 
     println!("finished with {warning_count} warning(s)");

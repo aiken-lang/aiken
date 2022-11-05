@@ -1,3 +1,3 @@
 pub type ScriptContext {
-    thing: String
+  thing: String,
 }

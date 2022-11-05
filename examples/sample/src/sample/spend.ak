@@ -1,7 +1,8 @@
 use sample/context
 
 pub type Spend {
-    idk: Int
+  idk: Int,
 }
 
-pub type ScriptContext = context.ScriptContext(Spend)
+pub type ScriptContext =
+  context.ScriptContext(Spend)
