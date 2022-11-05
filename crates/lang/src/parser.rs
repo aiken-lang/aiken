@@ -226,6 +226,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
         .then(
             fn_param_parser()
                 .separated_by(just(Token::Comma))
+                .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                 .map_with_span(|arguments, span| (arguments, span)),
         )

@@ -53,7 +53,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn total(&self) -> usize {
+    pub fn len(&self) -> usize {
         match self {
             Error::List(errors) => errors.len(),
             _ => 1,
@@ -83,6 +83,33 @@ impl Error {
         }
 
         Error::List(errors)
+    }
+
+    pub fn append(self, next: Self) -> Self {
+        match (self, next) {
+            (Error::List(mut errors), Error::List(mut next_errors)) => {
+                errors.append(&mut next_errors);
+
+                Error::List(errors)
+            }
+            (Error::List(mut errors), rest) => {
+                errors.push(rest);
+
+                Error::List(errors)
+            }
+            (rest, Error::List(mut next_errors)) => {
+                let mut errors = vec![rest];
+
+                errors.append(&mut next_errors);
+
+                Error::List(errors)
+            }
+            (error, next_error) => Error::List(vec![error, next_error]),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Error::List(errors) if errors.is_empty())
     }
 }
 

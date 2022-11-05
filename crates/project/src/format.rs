@@ -77,7 +77,7 @@ fn format_files(files: Vec<String>) -> Result<(), Error> {
 
 fn unformatted_files(files: Vec<String>) -> Result<Vec<Unformatted>, Error> {
     let mut problem_files = Vec::with_capacity(files.len());
-    let mut errors = Vec::new();
+    let mut errors = Error::List(vec![]);
 
     for file_path in files {
         let path = PathBuf::from_str(&file_path).unwrap();
@@ -85,19 +85,18 @@ fn unformatted_files(files: Vec<String>) -> Result<Vec<Unformatted>, Error> {
         if path.is_dir() {
             for path in aiken_files_excluding_gitignore(&path) {
                 if let Err(err) = format_file(&mut problem_files, path) {
-                    errors.push(err);
+                    errors = errors.append(err);
                 };
             }
         } else if let Err(err) = format_file(&mut problem_files, path) {
-            println!("{:?}", err);
-            errors.push(err);
+            errors = errors.append(err);
         }
     }
 
     if errors.is_empty() {
         Ok(problem_files)
     } else {
-        Err(Error::List(errors))
+        Err(errors)
     }
 }
 

@@ -165,9 +165,9 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn module<'a>(&mut self, module: &'a UntypedModule) -> Document<'a> {
-        let groups = self.definitions(&module.definitions);
+        let defs = self.definitions(&module.definitions);
 
-        // Now that `groups` has been collected, only freestanding comments (//)
+        // Now that `defs` has been collected, only freestanding comments (//)
         // and doc comments (///) remain. Freestanding comments aren't associated
         // with any statement, and are moved to the bottom of the module.
         let doc_comments = join(
@@ -196,7 +196,7 @@ impl<'comments> Formatter<'comments> {
             nil()
         };
 
-        let non_empty = vec![module_comments, groups, doc_comments, comments]
+        let non_empty = vec![module_comments, defs, doc_comments, comments]
             .into_iter()
             .filter(|doc| !doc.is_empty());
 
@@ -753,10 +753,9 @@ impl<'comments> Formatter<'comments> {
                 subjects.iter().map(|s| self.wrap_expr(s)),
                 break_(",", ", "),
             ))
-            .append(break_(" is", " is "))
             .nest(INDENT)
             .append(break_("", " "))
-            .append("{")
+            .append("is {")
             .group();
 
         let clauses_doc = concat(

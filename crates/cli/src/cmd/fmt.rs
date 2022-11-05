@@ -24,7 +24,7 @@ pub fn exec(
     if let Err(err) = aiken_project::format::run(stdin, check, files) {
         err.report();
 
-        miette::bail!("failed: {} error(s)", err.total());
+        miette::bail!("failed: {} error(s)", err.len());
     };
 
     Ok(())
