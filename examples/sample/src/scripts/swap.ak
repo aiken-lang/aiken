@@ -11,8 +11,9 @@ pub type Redeemer {
 pub fn spend(datum: sample.Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> Bool {
 
   let y = 2
-  let x = 1
-  let a = datum.something.thing
-  let b = 2
-  b == 1
+  let x = datum.sc.signer
+  let a = datum.sc.signer.hash
+  let b = datum.rdmr
+  let c = 1
+  c == 1
 }
