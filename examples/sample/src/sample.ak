@@ -1,10 +1,22 @@
+
+pub type Signer {
+    hash: Int
+}
+
+
 pub type ScriptContext {
-    thing: ByteArray
+    signer: Signer
+}
+
+pub type Redeem {
+  Buy
+  Sell
 }
 
 pub type Datum {
-    something: ScriptContext, 
-    fin: Int  
+    fin: Int,
+    sc: ScriptContext,  
+    rdmr: Redeem,
 }
 
 pub fn eqInt(a: Int, b: Int) {
