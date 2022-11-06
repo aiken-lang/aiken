@@ -12,7 +12,7 @@ pub fn spend(datum: sample.Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> B
 
   let y = 2
   let x = 1
-  let a = datum.something
+  let a = datum.something.thing
   let b = 2
   b == 1
 }

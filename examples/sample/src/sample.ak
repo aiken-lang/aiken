@@ -3,7 +3,7 @@ pub type ScriptContext {
 }
 
 pub type Datum {
-    something: ByteArray, 
+    something: ScriptContext, 
     fin: Int  
 }
 

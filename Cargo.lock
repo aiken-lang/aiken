@@ -70,6 +70,7 @@ name = "aiken-lang"
 version = "0.0.24"
 dependencies = [
  "chumsky",
+ "indexmap",
  "itertools",
  "miette",
  "pretty_assertions",
