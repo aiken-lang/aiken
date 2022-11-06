@@ -9,7 +9,9 @@ use uplc::{
 };
 
 use crate::{
-    ast::{DataType, Function, ModuleConstant, Pattern, TypeAlias, TypedArg, Use},
+    ast::{
+        BinOp, DataType, Function, ModuleConstant, Pattern, TypeAlias, TypedArg, TypedPattern, Use,
+    },
     expr::TypedExpr,
     tipo::{self, ModuleValueConstructor, Type, ValueConstructorVariant},
 };
@@ -86,6 +88,7 @@ pub struct CodeGenerator<'a> {
     uplc_function_holder: Vec<(String, Term<Name>)>,
     uplc_function_holder_lookup: IndexMap<(String, String), (ScopeLevels, TypedExpr)>,
     uplc_data_holder_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
+    uplc_when_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
     uplc_data_usage_holder_lookup: IndexMap<(String, String), ScopeLevels>,
     functions: &'a HashMap<(String, String), &'a Function<Arc<tipo::Type>, TypedExpr>>,
     type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
@@ -106,6 +109,7 @@ impl<'a> CodeGenerator<'a> {
             uplc_function_holder: Vec::new(),
             uplc_function_holder_lookup: IndexMap::new(),
             uplc_data_holder_lookup: IndexMap::new(),
+            uplc_when_lookup: IndexMap::new(),
             uplc_data_usage_holder_lookup: IndexMap::new(),
             functions,
             type_aliases,
@@ -447,10 +451,7 @@ impl<'a> CodeGenerator<'a> {
                 pattern,
             } => todo!(),
             TypedExpr::When {
-                location,
-                tipo,
-                subjects,
-                clauses,
+                subjects, clauses, ..
             } => {
                 for clause in clauses {
                     for pattern in clause.pattern.iter() {
@@ -458,8 +459,11 @@ impl<'a> CodeGenerator<'a> {
                             pattern,
                             &clause.then,
                             scope_level.scope_increment_sequence(1),
-                        )
+                        );
                     }
+                }
+                for subject in subjects {
+                    self.recurse_scope_level(subject, scope_level.clone());
                 }
                 todo!()
             }
@@ -488,7 +492,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut current_var_name = "".to_string();
                 let mut module = "".to_string();
                 let mut current_record = *record.clone();
-                let mut current_scope = scope_level.clone();
+                let mut current_scope = scope_level;
                 while !is_var {
                     match current_record.clone() {
                         TypedExpr::Var {
@@ -599,7 +603,7 @@ impl<'a> CodeGenerator<'a> {
                         );
                     }
                 }
-                ModuleValueConstructor::Constant { literal, location } => todo!(),
+                ModuleValueConstructor::Constant { .. } => todo!(),
             },
             TypedExpr::Todo {
                 location,
@@ -616,9 +620,9 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn recurse_scope_level_pattern<Constructor, Type>(
+    fn recurse_scope_level_pattern(
         &mut self,
-        pattern: &Pattern<Constructor, Type>,
+        pattern: &TypedPattern,
         value: &TypedExpr,
         scope_level: ScopeLevels,
     ) {
@@ -653,6 +657,18 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
             } => {
                 self.recurse_scope_level(value, scope_level);
+
+                match &**tipo {
+                    Type::App {
+                        public,
+                        module,
+                        name,
+                        args,
+                    } => todo!(),
+                    _ => todo!(),
+                };
+
+                // self.data_types.get();
                 todo!()
             }
         }
@@ -667,10 +683,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::ByteArray { bytes, .. } => {
                 Term::Constant(Constant::ByteString(bytes.clone()))
             }
-            TypedExpr::Sequence {
-                location,
-                expressions,
-            } => {
+            TypedExpr::Sequence { expressions, .. } => {
                 for (i, exp) in expressions.iter().enumerate().rev() {
                     let mut term = self
                         .recurse_code_gen(exp, scope_level.scope_increment_sequence(i as i32 + 1));
@@ -685,19 +698,17 @@ impl<'a> CodeGenerator<'a> {
                 self.uplc_function_holder.pop().unwrap().1
             }
             TypedExpr::Pipeline {
-                location,
-                expressions,
+                expressions: _expressions,
+                ..
             } => todo!(),
             TypedExpr::Var {
-                location,
-                constructor,
-                name,
+                constructor, name, ..
             } => {
                 if name == "True" || name == "False" {
                     Term::Constant(Constant::Bool(name == "True"))
                 } else {
                     match constructor.variant.clone() {
-                        ValueConstructorVariant::LocalVariable { location } => Term::Var(Name {
+                        ValueConstructorVariant::LocalVariable { .. } => Term::Var(Name {
                             text: name.to_string(),
                             unique: 0.into(),
                         }),
@@ -739,12 +750,7 @@ impl<'a> CodeGenerator<'a> {
                 elements,
                 tail,
             } => todo!(),
-            TypedExpr::Call {
-                location,
-                tipo,
-                fun,
-                args,
-            } => {
+            TypedExpr::Call { fun, args, .. } => {
                 let mut term =
                     self.recurse_code_gen(fun, scope_level.scope_increment(args.len() as i32 + 1));
 
@@ -760,24 +766,15 @@ impl<'a> CodeGenerator<'a> {
                 term
             }
             TypedExpr::BinOp {
-                location,
-                tipo,
-                name,
-                left,
-                right,
+                name, left, right, ..
             } => {
                 let left_term = self.recurse_code_gen(left, scope_level.clone());
 
                 let right_term = self.recurse_code_gen(right, scope_level);
                 println!("NAME IS {name:#?}");
                 match name {
-                    Eq => match &*left.tipo() {
-                        Type::App {
-                            public,
-                            module,
-                            name,
-                            args,
-                        } => match name.as_str() {
+                    BinOp::Eq => match &*left.tipo() {
+                        Type::App { name, .. } => match name.as_str() {
                             "Int" => Term::Apply {
                                 function: Term::Apply {
                                     function: Term::Builtin(DefaultFunction::EqualsInteger).into(),
@@ -801,30 +798,24 @@ impl<'a> CodeGenerator<'a> {
                         Type::Fn { args, ret } => todo!(),
                         Type::Var { tipo } => todo!(),
                     },
-                    And => todo!(),
-                    Or => todo!(),
-                    NotEq => todo!(),
-                    LtInt => todo!(),
-                    LtEqInt => todo!(),
-                    GtEqInt => todo!(),
-                    GtInt => todo!(),
-                    AddInt => todo!(),
-                    SubInt => todo!(),
-                    MultInt => todo!(),
-                    DivInt => todo!(),
-                    ModInt => todo!(),
+                    BinOp::And => todo!(),
+                    BinOp::Or => todo!(),
+                    BinOp::NotEq => todo!(),
+                    BinOp::LtInt => todo!(),
+                    BinOp::LtEqInt => todo!(),
+                    BinOp::GtEqInt => todo!(),
+                    BinOp::GtInt => todo!(),
+                    BinOp::AddInt => todo!(),
+                    BinOp::SubInt => todo!(),
+                    BinOp::MultInt => todo!(),
+                    BinOp::DivInt => todo!(),
+                    BinOp::ModInt => todo!(),
                 }
             }
-            TypedExpr::Assignment {
-                location,
-                tipo,
-                value,
-                pattern,
-                kind,
-            } => match pattern {
-                Pattern::Int { location, value } => todo!(),
-                Pattern::String { location, value } => todo!(),
-                Pattern::Var { location, name } => Term::Apply {
+            TypedExpr::Assignment { value, pattern, .. } => match pattern {
+                Pattern::Int { .. } => todo!(),
+                Pattern::String { .. } => todo!(),
+                Pattern::Var { name, .. } => Term::Apply {
                     function: Term::Lambda {
                         parameter_name: Name {
                             text: name.to_string(),
@@ -848,7 +839,7 @@ impl<'a> CodeGenerator<'a> {
                     location,
                     pattern,
                 } => todo!(),
-                Pattern::Discard { name, location } => todo!(),
+                Pattern::Discard { .. } => todo!(),
                 Pattern::List {
                     location,
                     elements,
