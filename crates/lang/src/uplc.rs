@@ -1,5 +1,8 @@
-use std::{collections::HashMap, fmt::format, rc::Rc, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc};
 
+use indexmap::IndexMap;
+
+use itertools::Itertools;
 use uplc::{
     ast::{Constant, Name, Program, Term, Unique},
     builtins::DefaultFunction,
@@ -7,12 +10,12 @@ use uplc::{
 };
 
 use crate::{
-    ast::{self, DataType, Function, ModuleConstant, Pattern, TypeAlias, TypedArg, Use},
+    ast::{DataType, Function, ModuleConstant, Pattern, TypeAlias, TypedArg, Use},
     expr::TypedExpr,
     tipo::{self, ModuleValueConstructor, Type, ValueConstructorVariant},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ScopeLevels {
     scope_tracker: Vec<i32>,
 }
@@ -71,9 +74,9 @@ impl Default for ScopeLevels {
 
 pub struct CodeGenerator<'a> {
     uplc_function_holder: Vec<(String, Term<Name>)>,
-    uplc_function_holder_lookup: HashMap<(String, String), (ScopeLevels, TypedExpr)>,
-    uplc_data_holder_lookup: HashMap<(String, String, String), (ScopeLevels, TypedExpr)>,
-    uplc_data_usage_holder_lookup: HashMap<(String, String), ScopeLevels>,
+    uplc_function_holder_lookup: IndexMap<(String, String), (ScopeLevels, TypedExpr)>,
+    uplc_data_holder_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
+    uplc_data_usage_holder_lookup: IndexMap<(String, String), ScopeLevels>,
     functions: &'a HashMap<(String, String), &'a Function<Arc<tipo::Type>, TypedExpr>>,
     type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
     data_types: &'a HashMap<(String, String), &'a DataType<Arc<tipo::Type>>>,
@@ -91,9 +94,9 @@ impl<'a> CodeGenerator<'a> {
     ) -> Self {
         CodeGenerator {
             uplc_function_holder: Vec::new(),
-            uplc_function_holder_lookup: HashMap::new(),
-            uplc_data_holder_lookup: HashMap::new(),
-            uplc_data_usage_holder_lookup: HashMap::new(),
+            uplc_function_holder_lookup: IndexMap::new(),
+            uplc_data_holder_lookup: IndexMap::new(),
+            uplc_data_usage_holder_lookup: IndexMap::new(),
             functions,
             type_aliases,
             data_types,
@@ -366,13 +369,10 @@ impl<'a> CodeGenerator<'a> {
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
         match dbg!(body) {
-            TypedExpr::Int { value, .. } => {}
-            TypedExpr::String { value, .. } => {}
-            TypedExpr::ByteArray { bytes, .. } => {}
-            TypedExpr::Sequence {
-                location,
-                expressions,
-            } => {
+            TypedExpr::Int { .. } => {}
+            TypedExpr::String { .. } => {}
+            TypedExpr::ByteArray { .. } => {}
+            TypedExpr::Sequence { expressions, .. } => {
                 // let mut terms = Vec::new();
                 for (i, exp) in expressions.iter().enumerate().rev() {
                     self.recurse_scope_level(
@@ -386,10 +386,21 @@ impl<'a> CodeGenerator<'a> {
                 expressions,
             } => todo!(),
             TypedExpr::Var {
-                location,
-                constructor,
-                name,
-            } => {}
+                constructor, name, ..
+            } => match (constructor.variant.clone(), (*constructor.tipo).clone()) {
+                (ValueConstructorVariant::LocalVariable { .. }, Type::App { module, .. }) => {
+                    if let Some(val) = self
+                        .uplc_data_usage_holder_lookup
+                        .get(&(module.to_string(), name.clone()))
+                    {
+                        if scope_level.is_less_than(val) {
+                            self.uplc_data_usage_holder_lookup
+                                .insert((module, name.clone()), scope_level.scope_increment(1));
+                        }
+                    }
+                }
+                _ => todo!(),
+            },
             TypedExpr::Fn {
                 location,
                 tipo,
@@ -404,35 +415,20 @@ impl<'a> CodeGenerator<'a> {
                 elements,
                 tail,
             } => todo!(),
-            TypedExpr::Call {
-                location,
-                tipo,
-                fun,
-                args,
-            } => {
+            TypedExpr::Call { fun, args, .. } => {
                 self.recurse_scope_level(fun, scope_level.scope_increment(args.len() as i32 + 1));
 
                 for (i, arg) in args.iter().enumerate() {
                     self.recurse_scope_level(&arg.value, scope_level.scope_increment(i as i32 + 1));
                 }
             }
-            TypedExpr::BinOp {
-                location,
-                tipo,
-                name,
-                left,
-                right,
-            } => {
+            TypedExpr::BinOp { left, right, .. } => {
                 self.recurse_scope_level(left, scope_level.clone());
                 self.recurse_scope_level(right, scope_level);
             }
-            TypedExpr::Assignment {
-                location,
-                tipo,
-                value,
-                pattern,
-                kind,
-            } => self.recurse_scope_level_pattern(pattern, value, scope_level),
+            TypedExpr::Assignment { value, pattern, .. } => {
+                self.recurse_scope_level_pattern(pattern, value, scope_level)
+            }
             TypedExpr::Try {
                 location,
                 tipo,
@@ -455,6 +451,7 @@ impl<'a> CodeGenerator<'a> {
                         )
                     }
                 }
+                todo!()
             }
             //if statements increase scope due to branching.
             TypedExpr::If {
@@ -475,54 +472,80 @@ impl<'a> CodeGenerator<'a> {
                     self.recurse_scope_level(&branch.body, scope_level.scope_increment_sequence(1));
                 }
             }
-            a @ TypedExpr::RecordAccess { label, record, .. } => match &**record {
-                TypedExpr::Var {
-                    constructor, name, ..
-                } => match (constructor.variant.clone(), (*constructor.tipo).clone()) {
-                    (ValueConstructorVariant::LocalVariable { .. }, Type::App { module, .. }) => {
-                        if let Some(val) = self.uplc_data_holder_lookup.get(&(
-                            module.clone(),
-                            name.clone(),
-                            label.clone(),
-                        )) {
-                            if scope_level.is_less_than(&val.0) {
-                                self.uplc_data_holder_lookup.insert(
-                                    (module.clone(), name.clone(), label.clone()),
-                                    (scope_level.clone(), a.clone()),
-                                );
+            a @ TypedExpr::RecordAccess { label, record, .. } => {
+                self.recurse_scope_level(record, scope_level.scope_increment(1));
+                let mut is_var = false;
+                let mut current_var_name = "".to_string();
+                let mut module = "".to_string();
+                let mut current_record = *record.clone();
+                while !is_var {
+                    match current_record.clone() {
+                        TypedExpr::Var {
+                            constructor, name, ..
+                        } => match (
+                            constructor.clone().variant.clone(),
+                            (*constructor.tipo).clone(),
+                        ) {
+                            (
+                                ValueConstructorVariant::LocalVariable { .. },
+                                Type::App {
+                                    module: app_module, ..
+                                },
+                            ) => {
+                                current_var_name = if current_var_name.is_empty() {
+                                    name
+                                } else {
+                                    format!("{name}_field_{current_var_name}")
+                                };
+                                is_var = true;
+                                module = app_module.to_string();
                             }
-                        } else {
-                            self.uplc_data_holder_lookup.insert(
-                                (module.clone(), name.clone(), label.clone()),
-                                (scope_level.clone(), a.clone()),
-                            );
+                            _ => todo!(),
+                        },
+                        TypedExpr::RecordAccess { label, record, .. } => {
+                            current_var_name = if current_var_name.is_empty() {
+                                label.to_string()
+                            } else {
+                                format!("{label}_field_{current_var_name}")
+                            };
+                            current_record = *record.clone();
                         }
-
-                        if let Some(val) = self
-                            .uplc_data_usage_holder_lookup
-                            .get(&(module.clone(), name.clone()))
-                        {
-                            if scope_level.is_less_than(val) {
-                                self.uplc_data_usage_holder_lookup
-                                    .insert((module, name.clone()), scope_level);
-                            }
-                        } else {
-                            self.uplc_data_usage_holder_lookup
-                                .insert((module, name.clone()), scope_level);
-                        }
+                        _ => {}
                     }
-                    _ => todo!(),
-                },
-                _ => todo!(),
-            },
-            a @ TypedExpr::ModuleSelect {
-                location,
-                tipo,
-                label,
-                module_name,
-                module_alias,
-                constructor,
-            } => match constructor {
+                }
+
+                if let Some(val) = self.uplc_data_holder_lookup.get(&(
+                    module.to_string(),
+                    current_var_name.clone(),
+                    label.clone(),
+                )) {
+                    if scope_level.is_less_than(&val.0) {
+                        self.uplc_data_holder_lookup.insert(
+                            (module.to_string(), current_var_name.clone(), label.clone()),
+                            (scope_level.clone(), a.clone()),
+                        );
+                    }
+                } else {
+                    self.uplc_data_holder_lookup.insert(
+                        (module.to_string(), current_var_name.clone(), label.clone()),
+                        (scope_level.clone(), a.clone()),
+                    );
+                }
+
+                if let Some(val) = self
+                    .uplc_data_usage_holder_lookup
+                    .get(&(module.to_string(), current_var_name.clone()))
+                {
+                    if scope_level.is_less_than(val) {
+                        self.uplc_data_usage_holder_lookup
+                            .insert((module, current_var_name.clone()), scope_level);
+                    }
+                } else {
+                    self.uplc_data_usage_holder_lookup
+                        .insert((module, current_var_name), scope_level);
+                }
+            }
+            a @ TypedExpr::ModuleSelect { constructor, .. } => match constructor {
                 ModuleValueConstructor::Record {
                     name,
                     arity,
@@ -530,14 +553,11 @@ impl<'a> CodeGenerator<'a> {
                     field_map,
                     location,
                 } => todo!(),
-                ModuleValueConstructor::Fn {
-                    location,
-                    module,
-                    name,
-                } => {
-                    if !self
+                ModuleValueConstructor::Fn { module, name, .. } => {
+                    if self
                         .uplc_function_holder_lookup
-                        .contains_key(&(module.to_string(), name.to_string()))
+                        .get(&(module.to_string(), name.to_string()))
+                        .is_none()
                     {
                         let func_def = self
                             .functions
@@ -551,11 +571,9 @@ impl<'a> CodeGenerator<'a> {
 
                         self.uplc_function_holder_lookup.insert(
                             (module.to_string(), name.to_string()),
-                            (scope_level.clone(), a.clone()),
+                            (scope_level, a.clone()),
                         );
-                    }
-
-                    if scope_level.is_less_than(
+                    } else if scope_level.is_less_than(
                         &self
                             .uplc_function_holder_lookup
                             .get(&(module.to_string(), name.to_string()))
@@ -936,26 +954,49 @@ impl<'a> CodeGenerator<'a> {
                 }
                 self.maybe_insert_def(final_if_term, scope_level)
             }
-            TypedExpr::RecordAccess {
-                location,
-                tipo,
-                label,
-                index,
-                record,
-            } => match &**record {
-                TypedExpr::Var {
-                    constructor, name, ..
-                } => match (constructor.variant.clone(), (*constructor.tipo).clone()) {
-                    (ValueConstructorVariant::LocalVariable { .. }, Type::App { module, .. }) => {
-                        Term::Var(Name {
-                            text: format!("{name}_field_{label}"),
-                            unique: 0.into(),
-                        })
+            TypedExpr::RecordAccess { label, record, .. } => {
+                let mut is_var = false;
+                let mut current_var_name = "".to_string();
+                let mut current_record = *record.clone();
+                while !is_var {
+                    match current_record.clone() {
+                        TypedExpr::Var {
+                            constructor, name, ..
+                        } => match (
+                            constructor.clone().variant.clone(),
+                            (*constructor.tipo).clone(),
+                        ) {
+                            (
+                                ValueConstructorVariant::LocalVariable { .. },
+                                Type::App {
+                                    module: app_module, ..
+                                },
+                            ) => {
+                                current_var_name = if current_var_name.is_empty() {
+                                    name
+                                } else {
+                                    format!("{name}_field_{current_var_name}")
+                                };
+                                is_var = true;
+                            }
+                            _ => todo!(),
+                        },
+                        TypedExpr::RecordAccess { label, record, .. } => {
+                            current_var_name = if current_var_name.is_empty() {
+                                label.to_string()
+                            } else {
+                                format!("{label}_field_{current_var_name}")
+                            };
+                            current_record = *record.clone();
+                        }
+                        _ => {}
                     }
-                    _ => todo!(),
-                },
-                _ => todo!(),
-            },
+                }
+                Term::Var(Name {
+                    text: format!("{current_var_name}_field_{label}"),
+                    unique: 0.into(),
+                })
+            }
             TypedExpr::ModuleSelect {
                 location,
                 tipo,
@@ -1042,48 +1083,59 @@ impl<'a> CodeGenerator<'a> {
                     .into(),
                     argument: function_body.into(),
                 };
-                self.uplc_function_holder_lookup.remove(func);
+                self.uplc_function_holder_lookup.shift_remove(func);
             }
         }
 
-        for (key, (record_scope_level, expr)) in self.uplc_data_holder_lookup.clone().iter() {
-            if scope_level.is_less_than(record_scope_level) {
-                let local_var_name = &key.1;
-                let field = &key.2;
-                term = Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("{local_var_name}_field_{field}"),
-                            unique: 0.into(),
-                        },
-                        body: term.into(),
-                    }
-                    .into(),
-                    argument: Term::Apply {
-                        function: Term::Var(Name {
-                            text: "constr_field_get_arg".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                        argument: Term::Var(Name {
-                            text: format!("{local_var_name}_fields"),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
-                    .into(),
+        // Pull out all uplc data holder and data usage, Sort By Scope Level, Then
+        let mut data_holder: Vec<((String, String, String), (bool, ScopeLevels, u64))> = self
+            .uplc_data_holder_lookup
+            .iter()
+            .filter(|record_scope| scope_level.is_less_than(&record_scope.1 .0))
+            .map(|((module, name, label), (scope, expr))| {
+                let index = match expr {
+                    TypedExpr::RecordAccess { index, .. } => index,
+                    _ => todo!(),
                 };
-                self.uplc_data_holder_lookup.remove(key);
-            }
-        }
+                (
+                    (module.to_string(), name.to_string(), label.to_string()),
+                    (false, scope.clone(), *index),
+                )
+            })
+            .collect();
 
-        for (key, record_fields_scope) in self.uplc_data_usage_holder_lookup.clone().iter() {
-            if scope_level.is_less_than(record_fields_scope) {
-                let local_var_name = &key.1;
+        data_holder.extend(
+            self.uplc_data_usage_holder_lookup
+                .iter()
+                .filter(|record_scope| scope_level.is_less_than(&record_scope.1))
+                .map(|((module, name), scope)| {
+                    (
+                        (module.to_string(), name.to_string(), "".to_string()),
+                        (true, scope.clone(), 0),
+                    )
+                })
+                .collect::<Vec<((String, String, String), (bool, ScopeLevels, u64))>>(),
+        );
+        data_holder.sort_by(|b, d| {
+            if b.1 .1.is_less_than(&d.1 .1) {
+                Ordering::Less
+            } else if d.1 .1.is_less_than(&b.1 .1) {
+                Ordering::Greater
+            } else if b.1 .0 && !d.1 .0 {
+                Ordering::Less
+            } else if !b.1 .0 && d.1 .0 {
+                Ordering::Greater
+            } else {
+                Ordering::Equal
+            }
+        });
+
+        for (key @ (module, name, label), (is_data_usage, _, index)) in data_holder.iter() {
+            if *is_data_usage {
                 term = Term::Apply {
                     function: Term::Lambda {
                         parameter_name: Name {
-                            text: format!("{local_var_name}_fields"),
+                            text: format!("{name}_fields"),
                             unique: 0.into(),
                         },
                         body: term.into(),
@@ -1097,14 +1149,45 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .into(),
                         argument: Term::Var(Name {
-                            text: local_var_name.to_string(),
+                            text: name.to_string(),
                             unique: 0.into(),
                         })
                         .into(),
                     }
                     .into(),
                 };
-                self.uplc_data_usage_holder_lookup.remove(key);
+
+                self.uplc_data_usage_holder_lookup
+                    .shift_remove(&(module.clone(), name.clone()));
+            } else {
+                term = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: format!("{name}_field_{label}"),
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    }
+                    .into(),
+                    argument: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Var(Name {
+                                text: "constr_field_get_arg".to_string(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                            argument: Term::Var(Name {
+                                text: format!("{name}_fields"),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Constant(Constant::Integer(*index as i128)).into(),
+                    }
+                    .into(),
+                };
+                self.uplc_data_holder_lookup.shift_remove(key);
             }
         }
 
