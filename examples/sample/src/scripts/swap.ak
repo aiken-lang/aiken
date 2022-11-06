@@ -14,6 +14,10 @@ pub fn spend(datum: sample.Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> B
   let x = datum.sc.signer
   let a = datum.sc.signer.hash
   let b = datum.rdmr
-  let c = 1
-  c == 1
+
+  when b is {
+    sample.Buy  -> True
+    sample.Sell -> False
+  }
+  
 }
