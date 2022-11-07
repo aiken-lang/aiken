@@ -88,7 +88,7 @@ pub struct CodeGenerator<'a> {
     uplc_function_holder: Vec<(String, Term<Name>)>,
     uplc_function_holder_lookup: IndexMap<(String, String), (ScopeLevels, TypedExpr)>,
     uplc_data_holder_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
-    uplc_when_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
+    uplc_when_lookup: IndexMap<(String, String, String), ScopeLevels>,
     uplc_data_usage_holder_lookup: IndexMap<(String, String), ScopeLevels>,
     functions: &'a HashMap<(String, String), &'a Function<Arc<tipo::Type>, TypedExpr>>,
     type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
@@ -413,6 +413,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 }
+                (ValueConstructorVariant::Record { .. }, Type::App { .. }) => {}
                 _ => todo!(),
             },
             TypedExpr::Fn {
@@ -465,7 +466,6 @@ impl<'a> CodeGenerator<'a> {
                 for subject in subjects {
                     self.recurse_scope_level(subject, scope_level.clone());
                 }
-                todo!()
             }
             //if statements increase scope due to branching.
             TypedExpr::If {
@@ -626,9 +626,9 @@ impl<'a> CodeGenerator<'a> {
         value: &TypedExpr,
         scope_level: ScopeLevels,
     ) {
-        match pattern {
+        match dbg!(pattern) {
             Pattern::Int { .. } | Pattern::String { .. } | Pattern::Var { .. } => {
-                self.recurse_scope_level(value, scope_level);
+                self.recurse_scope_level(value, scope_level.scope_increment_sequence(1));
             }
 
             Pattern::VarUsage {
@@ -648,28 +648,83 @@ impl<'a> CodeGenerator<'a> {
                 tail,
             } => todo!(),
             Pattern::Constructor {
-                location,
-                name,
-                arguments,
-                module,
-                constructor,
-                with_spread,
+                name: constructor_name,
                 tipo,
+                arguments,
+                constructor,
+                module,
+                ..
             } => {
-                self.recurse_scope_level(value, scope_level);
+                self.recurse_scope_level(value, scope_level.scope_increment_sequence(1));
 
                 match &**tipo {
-                    Type::App {
-                        public,
-                        module,
-                        name,
-                        args,
-                    } => todo!(),
+                    Type::App { module, name, .. } => {
+                        if let Some(val) = self.uplc_when_lookup.get(&(
+                            module.to_string(),
+                            name.clone(),
+                            constructor_name.clone(),
+                        )) {
+                            if scope_level.is_less_than(&val, false) {
+                                self.uplc_when_lookup.insert(
+                                    (module.to_string(), name.clone(), constructor_name.clone()),
+                                    scope_level,
+                                );
+                            }
+                        } else {
+                            self.uplc_when_lookup.insert(
+                                (module.to_string(), name.clone(), constructor_name.clone()),
+                                scope_level,
+                            );
+                        }
+                    }
+                    Type::Fn { .. } => {
+                        let mapping_index = match constructor {
+                            tipo::PatternConstructor::Record { name, field_map } => {
+                                if let Some(fields_mapping) = field_map {
+                                    fields_mapping.fields.clone()
+                                } else {
+                                    HashMap::new()
+                                }
+                            }
+                        };
+                        let mut args = arguments.clone();
+                        let local_var_name = "";
+                        // arguments.iter().map(|x| {
+                        //     let name = match &x.value {
+                        //         Pattern::Var { location, name } => {
+                        //             if let Some(val) = self.uplc_data_holder_lookup.get(&(
+                        //                 module.to_string(),
+                        //                 .clone(),
+                        //                 label.clone(),
+                        //             )) {
+                        //                 if current_scope.is_less_than(&val.0, false) {
+                        //                     self.uplc_data_holder_lookup.insert(
+                        //                         (
+                        //                             module.to_string(),
+                        //                             current_var_name.clone(),
+                        //                             label.clone(),
+                        //                         ),
+                        //                         (current_scope.clone(), a.clone()),
+                        //                     );
+                        //                 }
+                        //             } else {
+                        //                 self.uplc_data_holder_lookup.insert(
+                        //                     (
+                        //                         module.to_string(),
+                        //                         current_var_name.clone(),
+                        //                         label.clone(),
+                        //                     ),
+                        //                     (current_scope.clone(), a.clone()),
+                        //                 );
+                        //             }
+                        //         }
+                        //         _ => todo!(),
+                        //     };
+                        // });
+                        todo!()
+                    }
                     _ => todo!(),
                 };
-
-                // self.data_types.get();
-                todo!()
             }
         }
     }
@@ -867,7 +922,58 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 subjects,
                 clauses,
-            } => todo!(),
+            } => {
+                let mut current_clauses = clauses.clone();
+                let mut new_current_clauses: Vec<(Vec<usize>, TypedExpr)> = current_clauses
+                    .iter()
+                    .map(|clause| {
+                        let mut final_keys = Vec::new();
+                        for pattern in clause.pattern.clone() {
+                            let key = match pattern {
+                                Pattern::Constructor { name, tipo, .. } => {
+                                    let key = match &*tipo {
+                                        Type::App { module, name, .. } => {
+                                            (module.clone(), name.clone())
+                                        }
+                                        Type::Fn { args, ret } => todo!(),
+                                        Type::Var { tipo } => todo!(),
+                                    };
+
+                                    let dt = self.data_types.get(&key).unwrap();
+
+                                    let index = dt.constructors.iter().position(|c| name == c.name);
+
+                                    // index.unwrap()
+                                    index.unwrap()
+                                }
+                                _ => todo!(),
+                            };
+                            final_keys.push(key);
+                        }
+                        (final_keys, clause.then.clone())
+                    })
+                    .collect();
+                let mut term = self.recurse_code_gen(
+                    &new_current_clauses.remove(new_current_clauses.len() - 1).1,
+                    scope_level.scope_increment_sequence(1),
+                );
+
+                for subject in subjects {}
+
+                // for clause in new_current_clauses.iter().rev() {
+                //     let branch_term =
+                //         self.recurse_code_gen(&clause.1, scope_level.scope_increment_sequence(1));
+
+                //     for index in clause.0 {
+                //         term = Term::Apply {
+                //             function: Term::Var { text: "co" },
+                //             argument: (),
+                //         }
+                //     }
+                // }
+
+                todo!();
+            }
             //if statements increase scope due to branching.
             TypedExpr::If {
                 branches,

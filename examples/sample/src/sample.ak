@@ -9,8 +9,8 @@ pub type ScriptContext {
 }
 
 pub type Redeem {
-  Buy
-  Sell
+  Buy 
+  Sell 
 }
 
 pub type Datum {
