@@ -27,3 +27,12 @@ pub fn eqString(a: ByteArray, b: ByteArray) {
     a == b
 }
 
+pub type Thing {
+    Some
+    None
+}
+
+pub type Other {
+    Wow
+    Yes
+}

@@ -11,8 +11,8 @@ struct Level(usize);
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Free Unique `{0}`")]
-    FreeUnique(Unique),
+    #[error("Free Unique {} with name {}", .0.unique, .0.text)]
+    FreeUnique(Name),
     #[error("Free Index `{0}`")]
     FreeIndex(DeBruijn),
 }
@@ -37,9 +37,9 @@ impl Converter {
         term: &Term<Name>,
     ) -> Result<Term<NamedDeBruijn>, Error> {
         let converted_term = match term {
-            Term::Var(Name { text, unique }) => Term::Var(NamedDeBruijn {
-                text: text.to_string(),
-                index: self.get_index(*unique)?,
+            Term::Var(name) => Term::Var(NamedDeBruijn {
+                text: name.text.to_string(),
+                index: self.get_index(name)?,
             }),
             Term::Delay(term) => Term::Delay(Rc::new(self.name_to_named_debruijn(term)?)),
             Term::Lambda {
@@ -48,7 +48,7 @@ impl Converter {
             } => {
                 self.declare_unique(parameter_name.unique);
 
-                let index = self.get_index(parameter_name.unique)?;
+                let index = self.get_index(parameter_name)?;
 
                 let name = NamedDeBruijn {
                     text: parameter_name.text.to_string(),
@@ -83,7 +83,7 @@ impl Converter {
 
     pub fn name_to_debruijn(&mut self, term: &Term<Name>) -> Result<Term<DeBruijn>, Error> {
         let converted_term = match term {
-            Term::Var(Name { unique, .. }) => Term::Var(self.get_index(*unique)?),
+            Term::Var(name) => Term::Var(self.get_index(name)?),
             Term::Delay(term) => Term::Delay(Rc::new(self.name_to_debruijn(term)?)),
             Term::Lambda {
                 parameter_name,
@@ -91,7 +91,7 @@ impl Converter {
             } => {
                 self.declare_unique(parameter_name.unique);
 
-                let name = self.get_index(parameter_name.unique)?;
+                let name = self.get_index(parameter_name)?;
 
                 self.start_scope();
 
@@ -316,16 +316,16 @@ impl Converter {
         }
     }
 
-    fn get_index(&mut self, unique: Unique) -> Result<DeBruijn, Error> {
+    fn get_index(&mut self, name: &Name) -> Result<DeBruijn, Error> {
         for scope in self.levels.iter().rev() {
-            if let Some(found_level) = scope.get(&unique) {
+            if let Some(found_level) = scope.get(&name.unique) {
                 let index = self.current_level.0 - found_level.0;
 
                 return Ok(index.into());
             }
         }
 
-        Err(Error::FreeUnique(unique))
+        Err(Error::FreeUnique(name.clone()))
     }
 
     fn get_unique(&mut self, index: DeBruijn) -> Result<Unique, Error> {

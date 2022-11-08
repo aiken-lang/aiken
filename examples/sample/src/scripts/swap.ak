@@ -16,8 +16,7 @@ pub fn spend(datum: sample.Datum, rdmr: Redeemer, ctx: spend.ScriptContext) -> B
   let b = datum.rdmr
 
   when b is {
-    sample.Buy | sample.Sell -> 1 == 1
+    sample.Buy -> 1 == 1
     sample.Sell ->  5 == 1
   }
-  
 }
