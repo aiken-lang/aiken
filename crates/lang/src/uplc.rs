@@ -88,7 +88,7 @@ pub struct CodeGenerator<'a> {
     uplc_function_holder: Vec<(String, Term<Name>)>,
     uplc_function_holder_lookup: IndexMap<(String, String), (ScopeLevels, TypedExpr)>,
     uplc_data_holder_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
-    uplc_when_lookup: IndexMap<(String, String, String), ScopeLevels>,
+    uplc_data_constr_lookup: IndexMap<(String, String), ScopeLevels>,
     uplc_data_usage_holder_lookup: IndexMap<(String, String), ScopeLevels>,
     functions: &'a HashMap<(String, String), &'a Function<Arc<tipo::Type>, TypedExpr>>,
     type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
@@ -109,7 +109,7 @@ impl<'a> CodeGenerator<'a> {
             uplc_function_holder: Vec::new(),
             uplc_function_holder_lookup: IndexMap::new(),
             uplc_data_holder_lookup: IndexMap::new(),
-            uplc_when_lookup: IndexMap::new(),
+            uplc_data_constr_lookup: IndexMap::new(),
             uplc_data_usage_holder_lookup: IndexMap::new(),
             functions,
             type_aliases,
@@ -160,202 +160,7 @@ impl<'a> CodeGenerator<'a> {
             .into(),
         };
 
-        //Apply constr arg getter to top level.
-
-        term = Term::Apply {
-            function: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_field_get_arg".to_string(),
-                    unique: 0.into(),
-                },
-                body: term.into(),
-            }
-            .into(),
-            argument: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_list".to_string(),
-                    unique: 0.into(),
-                },
-                body: Term::Lambda {
-                    parameter_name: Name {
-                        text: "arg_number".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "recurse".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Var(Name {
-                                            text: "recurse".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                        argument: Term::Var(Name {
-                                            text: "recurse".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-
-                                    // Start recursive with index 0 of list
-                                    argument: Term::Constant(Constant::Integer(0.into())).into(),
-                                }
-                                .into(),
-                                argument: Term::Var(Name {
-                                    text: "constr_list".to_string(),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-
-                        argument: Term::Lambda {
-                            parameter_name: Name {
-                                text: "self_recursor".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: Term::Lambda {
-                                parameter_name: Name {
-                                    text: "current_arg_number".to_string(),
-                                    unique: 0.into(),
-                                },
-                                body: Term::Lambda {
-                                    parameter_name: Name {
-                                        text: "list_of_constr_args".to_string(),
-                                        unique: 0.into(),
-                                    },
-                                    body: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Force(
-                                                        Term::Builtin(DefaultFunction::IfThenElse)
-                                                            .into(),
-                                                    )
-                                                    .into(),
-                                                    argument: Term::Apply {
-                                                        function: Term::Apply {
-                                                            function: Term::Builtin(
-                                                                DefaultFunction::EqualsInteger,
-                                                            )
-                                                            .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "arg_number".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: "current_arg_number".to_string(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Force(
-                                                    Term::Builtin(DefaultFunction::HeadList).into(),
-                                                )
-                                                .into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Lambda {
-                                                parameter_name: Name {
-                                                    text: "current_list_of_constr_args".to_string(),
-                                                    unique: 0.into(),
-                                                },
-                                                body: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Apply {
-                                                            function: Term::Var(Name {
-                                                                text: "self_recursor".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "self_recursor".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                        }
-                                                        .into(),
-
-                                                        argument: Term::Apply {
-                                                            function: Term::Apply {
-                                                                function: Term::Builtin(
-                                                                    DefaultFunction::AddInteger,
-                                                                )
-                                                                .into(),
-                                                                argument: Term::Var(Name {
-                                                                    text: "current_arg_number"
-                                                                        .to_string(),
-                                                                    unique: 0.into(),
-                                                                })
-                                                                .into(),
-                                                            }
-                                                            .into(),
-                                                            argument: Term::Constant(
-                                                                Constant::Integer(1.into()),
-                                                            )
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                    }
-                                                    .into(),
-
-                                                    argument: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Builtin(
-                                                                DefaultFunction::TailList,
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-
-                                                        argument: Term::Var(Name {
-                                                            text: "current_list_of_constr_args"
-                                                                .to_string(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                }
-                                                .into(),
-                                            }
-                                            .into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Var(Name {
-                                            text: "list_of_constr_args".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-            }
-            .into(),
-        };
+        term = self.add_arg_getter(term);
 
         for arg in arguments.iter().rev() {
             term = Term::Lambda {
@@ -628,7 +433,7 @@ impl<'a> CodeGenerator<'a> {
     ) {
         match dbg!(pattern) {
             Pattern::Int { .. } | Pattern::String { .. } | Pattern::Var { .. } => {
-                self.recurse_scope_level(value, scope_level.scope_increment_sequence(1));
+                self.recurse_scope_level(value, scope_level.clone());
             }
 
             Pattern::VarUsage {
@@ -659,22 +464,17 @@ impl<'a> CodeGenerator<'a> {
 
                 match &**tipo {
                     Type::App { module, name, .. } => {
-                        if let Some(val) = self.uplc_when_lookup.get(&(
-                            module.to_string(),
-                            name.clone(),
-                            constructor_name.clone(),
-                        )) {
-                            if scope_level.is_less_than(&val, false) {
-                                self.uplc_when_lookup.insert(
-                                    (module.to_string(), name.clone(), constructor_name.clone()),
-                                    scope_level,
-                                );
+                        if let Some(val) = self
+                            .uplc_data_constr_lookup
+                            .get(&(module.to_string(), name.clone()))
+                        {
+                            if scope_level.is_less_than(val, false) {
+                                self.uplc_data_constr_lookup
+                                    .insert((module.to_string(), name.clone()), scope_level);
                             }
                         } else {
-                            self.uplc_when_lookup.insert(
-                                (module.to_string(), name.clone(), constructor_name.clone()),
-                                scope_level,
-                            );
+                            self.uplc_data_constr_lookup
+                                .insert((module.to_string(), name.clone()), scope_level);
                         }
                     }
                     Type::Fn { .. } => {
@@ -826,7 +626,6 @@ impl<'a> CodeGenerator<'a> {
                 let left_term = self.recurse_code_gen(left, scope_level.clone());
 
                 let right_term = self.recurse_code_gen(right, scope_level);
-                println!("NAME IS {name:#?}");
                 match name {
                     BinOp::Eq => match &*left.tipo() {
                         Type::App { name, .. } => match name.as_str() {
@@ -918,61 +717,163 @@ impl<'a> CodeGenerator<'a> {
                 pattern,
             } => todo!(),
             TypedExpr::When {
-                location,
-                tipo,
-                subjects,
-                clauses,
+                subjects, clauses, ..
             } => {
-                let mut current_clauses = clauses.clone();
-                let mut new_current_clauses: Vec<(Vec<usize>, TypedExpr)> = current_clauses
+                let current_clauses = clauses.clone();
+                let mut data_type = "".to_string();
+                let mut current_module = "".to_string();
+                let mut total_constr_length = 0;
+                let mut new_current_clauses: Vec<(usize, TypedExpr)> = current_clauses
                     .iter()
                     .map(|clause| {
-                        let mut final_keys = Vec::new();
-                        for pattern in clause.pattern.clone() {
-                            let key = match pattern {
-                                Pattern::Constructor { name, tipo, .. } => {
-                                    let key = match &*tipo {
-                                        Type::App { module, name, .. } => {
-                                            (module.clone(), name.clone())
-                                        }
-                                        Type::Fn { args, ret } => todo!(),
-                                        Type::Var { tipo } => todo!(),
-                                    };
+                        let pattern = &clause.pattern[0];
+                        let index = match pattern {
+                            Pattern::Constructor {
+                                name, tipo, module, ..
+                            } => {
+                                let key = match &**tipo {
+                                    Type::App { module, name, .. } => {
+                                        (module.clone(), name.clone())
+                                    }
+                                    Type::Fn { .. } => todo!(),
+                                    Type::Var { .. } => todo!(),
+                                };
 
-                                    let dt = self.data_types.get(&key).unwrap();
+                                let dt = self.data_types.get(&key).unwrap();
 
-                                    let index = dt.constructors.iter().position(|c| name == c.name);
+                                let index =
+                                    dt.constructors.iter().position(|c| name.clone() == c.name);
+                                data_type = dt.name.clone();
+                                current_module = module.clone().unwrap_or_else(|| "".to_string());
+                                total_constr_length = dt.constructors.len();
 
-                                    // index.unwrap()
-                                    index.unwrap()
-                                }
-                                _ => todo!(),
-                            };
-                            final_keys.push(key);
-                        }
-                        (final_keys, clause.then.clone())
+                                index.unwrap_or(dt.constructors.len())
+                            }
+                            _ => todo!(),
+                        };
+                        (index, clause.then.clone())
                     })
                     .collect();
-                let mut term = self.recurse_code_gen(
-                    &new_current_clauses.remove(new_current_clauses.len() - 1).1,
-                    scope_level.scope_increment_sequence(1),
-                );
 
-                for subject in subjects {}
+                new_current_clauses.sort_by(|a, b| a.0.cmp(&b.0));
 
-                // for clause in new_current_clauses.iter().rev() {
-                //     let branch_term =
-                //         self.recurse_code_gen(&clause.1, scope_level.scope_increment_sequence(1));
+                let subject = &subjects[0];
+                let mut is_var = false;
+                let mut current_var_name = "".to_string();
+                let mut current_subject = subject.clone();
 
-                //     for index in clause.0 {
-                //         term = Term::Apply {
-                //             function: Term::Var { text: "co" },
-                //             argument: (),
-                //         }
-                //     }
-                // }
+                while !is_var {
+                    match current_subject.clone() {
+                        TypedExpr::Var {
+                            constructor, name, ..
+                        } => match (
+                            constructor.clone().variant.clone(),
+                            (*constructor.tipo).clone(),
+                        ) {
+                            (ValueConstructorVariant::LocalVariable { .. }, Type::App { .. }) => {
+                                current_var_name = if current_var_name.is_empty() {
+                                    name
+                                } else {
+                                    format!("{name}_field_{current_var_name}")
+                                };
+                                is_var = true;
+                            }
+                            _ => todo!(),
+                        },
+                        TypedExpr::RecordAccess { label, record, .. } => {
+                            current_var_name = if current_var_name.is_empty() {
+                                label.to_string()
+                            } else {
+                                format!("{label}_field_{current_var_name}")
+                            };
+                            current_subject = *record.clone();
+                        }
+                        _ => {}
+                    }
+                }
 
-                todo!();
+                let mut term = Term::Apply {
+                    function: Term::Var(Name {
+                        text: format!("choose_{current_module}_{data_type}_constr"),
+                        unique: 0.into(),
+                    })
+                    .into(),
+                    argument: Term::Var(Name {
+                        text: current_var_name,
+                        unique: 0.into(),
+                    })
+                    .into(),
+                };
+                let need_lam = total_constr_length - new_current_clauses.len() > 0;
+
+                let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
+                let mut new_current_clauses = new_current_clauses.to_vec();
+                let last_term =
+                    self.recurse_code_gen(&last.1, scope_level.scope_increment_sequence(1));
+
+                let mut current: Option<(usize, TypedExpr)> = None;
+                for index in 0..total_constr_length - 1 {
+                    if current.is_none() {
+                        current = new_current_clauses.pop();
+                    }
+                    if let Some(val) = current.clone() {
+                        if val.0 == index {
+                            let branch_term = self
+                                .recurse_code_gen(&val.1, scope_level.scope_increment_sequence(1));
+
+                            term = Term::Apply {
+                                function: term.into(),
+                                argument: Term::Delay(branch_term.into()).into(),
+                            };
+                        } else {
+                            term = Term::Apply {
+                                function: term.into(),
+                                argument: Term::Var(Name {
+                                    text: "last_constr_then".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
+                            }
+                        }
+                    } else {
+                        term = Term::Apply {
+                            function: term.into(),
+                            argument: Term::Var(Name {
+                                text: "last_constr_then".to_string(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                    }
+                }
+                if need_lam {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "last_constr_then".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: Term::Apply {
+                                function: term.into(),
+                                argument: Term::Var(Name {
+                                    text: "last_constr_then".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(last_term.into()).into(),
+                    }
+                } else {
+                    term = Term::Apply {
+                        function: term.into(),
+                        argument: Term::Delay(last_term.into()).into(),
+                    };
+                }
+
+                term
             }
             //if statements increase scope due to branching.
             TypedExpr::If {
@@ -1076,12 +977,7 @@ impl<'a> CodeGenerator<'a> {
                             constructor.clone().variant.clone(),
                             (*constructor.tipo).clone(),
                         ) {
-                            (
-                                ValueConstructorVariant::LocalVariable { .. },
-                                Type::App {
-                                    module: app_module, ..
-                                },
-                            ) => {
+                            (ValueConstructorVariant::LocalVariable { .. }, Type::App { .. }) => {
                                 current_var_name = if current_var_name.is_empty() {
                                     name
                                 } else {
@@ -1198,11 +1094,123 @@ impl<'a> CodeGenerator<'a> {
             }
         }
 
-        // Pull out all uplc data holder and data usage, Sort By Scope Level, Then
+        for (key, scope) in self.uplc_data_constr_lookup.clone().iter() {
+            if scope_level.is_less_than(scope, false) {
+                let data_constrs = *self.data_types.get(key).unwrap();
+                let mut constr_term = Term::Var(Name {
+                    text: "last_constructor_result".to_string(),
+                    unique: 0.into(),
+                });
+
+                let length = data_constrs.constructors.len();
+
+                for index in (0..length - 1).rev() {
+                    constr_term = Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Force(
+                                    Term::Builtin(DefaultFunction::IfThenElse).into(),
+                                )
+                                .into(),
+                                argument: Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::EqualsInteger)
+                                            .into(),
+                                        argument: Term::Constant(Constant::Integer(index as i128))
+                                            .into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Var(Name {
+                                        text: "constr_index".to_string(),
+                                        unique: 0.into(),
+                                    })
+                                    .into(),
+                                }
+                                .into(),
+                            }
+                            .into(),
+                            argument: Term::Var(Name {
+                                text: format!("constr_{index}_result"),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                        argument: constr_term.into(),
+                    }
+                }
+
+                constr_term = Term::Lambda {
+                    parameter_name: Name {
+                        text: "last_constructor_result".to_string(),
+                        unique: 0.into(),
+                    },
+                    body: Term::Force(constr_term.into()).into(),
+                };
+
+                for index in 0..length - 1 {
+                    constr_term = Term::Lambda {
+                        parameter_name: Name {
+                            text: format!("constr_{index}_result"),
+                            unique: 0.into(),
+                        },
+                        body: constr_term.into(),
+                    }
+                }
+                let data_type_name = data_constrs.name.clone();
+
+                constr_term = Term::Lambda {
+                    parameter_name: Name {
+                        text: "constr_data".to_string(),
+                        unique: 0.into(),
+                    },
+                    body: Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "constr_index".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: constr_term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::FstPair).into(),
+                            argument: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::UnConstrData).into(),
+                                argument: Term::Var(Name {
+                                    text: "constr_data".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                };
+                let module = &key.0;
+
+                term = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: format!("choose_{module}_{data_type_name}_constr"),
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    }
+                    .into(),
+                    argument: constr_term.into(),
+                };
+                self.uplc_data_constr_lookup.shift_remove(key);
+            }
+        }
+
+        // Pull out all uplc data holder and data usage, filter by Scope Level, Sort By Scope Depth, Then Apply
         let mut data_holder: Vec<((String, String, String), (bool, ScopeLevels, u64))> = self
             .uplc_data_usage_holder_lookup
             .iter()
-            .filter(|record_scope| scope_level.is_less_than(&record_scope.1, false))
+            .filter(|record_scope| scope_level.is_less_than(record_scope.1, false))
             .map(|((module, name), scope)| {
                 (
                     (module.to_string(), name.to_string(), "".to_string()),
@@ -1303,5 +1311,204 @@ impl<'a> CodeGenerator<'a> {
         }
 
         term
+    }
+
+    fn add_arg_getter(&self, term: Term<Name>) -> Term<Name> {
+        //Apply constr arg getter to top level.
+
+        Term::Apply {
+            function: Term::Lambda {
+                parameter_name: Name {
+                    text: "constr_field_get_arg".to_string(),
+                    unique: 0.into(),
+                },
+                body: term.into(),
+            }
+            .into(),
+            argument: Term::Lambda {
+                parameter_name: Name {
+                    text: "constr_list".to_string(),
+                    unique: 0.into(),
+                },
+                body: Term::Lambda {
+                    parameter_name: Name {
+                        text: "arg_number".to_string(),
+                        unique: 0.into(),
+                    },
+                    body: Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "recurse".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Var(Name {
+                                            text: "recurse".to_string(),
+                                            unique: 0.into(),
+                                        })
+                                        .into(),
+                                        argument: Term::Var(Name {
+                                            text: "recurse".to_string(),
+                                            unique: 0.into(),
+                                        })
+                                        .into(),
+                                    }
+                                    .into(),
+
+                                    // Start recursive with index 0 of list
+                                    argument: Term::Constant(Constant::Integer(0.into())).into(),
+                                }
+                                .into(),
+                                argument: Term::Var(Name {
+                                    text: "constr_list".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+
+                        argument: Term::Lambda {
+                            parameter_name: Name {
+                                text: "self_recursor".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: Term::Lambda {
+                                parameter_name: Name {
+                                    text: "current_arg_number".to_string(),
+                                    unique: 0.into(),
+                                },
+                                body: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: "list_of_constr_args".to_string(),
+                                        unique: 0.into(),
+                                    },
+                                    body: Term::Apply {
+                                        function: Term::Apply {
+                                            function: Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Force(
+                                                        Term::Builtin(DefaultFunction::IfThenElse)
+                                                            .into(),
+                                                    )
+                                                    .into(),
+                                                    argument: Term::Apply {
+                                                        function: Term::Apply {
+                                                            function: Term::Builtin(
+                                                                DefaultFunction::EqualsInteger,
+                                                            )
+                                                            .into(),
+                                                            argument: Term::Var(Name {
+                                                                text: "arg_number".to_string(),
+                                                                unique: 0.into(),
+                                                            })
+                                                            .into(),
+                                                        }
+                                                        .into(),
+                                                        argument: Term::Var(Name {
+                                                            text: "current_arg_number".to_string(),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Force(
+                                                    Term::Builtin(DefaultFunction::HeadList).into(),
+                                                )
+                                                .into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Lambda {
+                                                parameter_name: Name {
+                                                    text: "current_list_of_constr_args".to_string(),
+                                                    unique: 0.into(),
+                                                },
+                                                body: Term::Apply {
+                                                    function: Term::Apply {
+                                                        function: Term::Apply {
+                                                            function: Term::Var(Name {
+                                                                text: "self_recursor".to_string(),
+                                                                unique: 0.into(),
+                                                            })
+                                                            .into(),
+                                                            argument: Term::Var(Name {
+                                                                text: "self_recursor".to_string(),
+                                                                unique: 0.into(),
+                                                            })
+                                                            .into(),
+                                                        }
+                                                        .into(),
+
+                                                        argument: Term::Apply {
+                                                            function: Term::Apply {
+                                                                function: Term::Builtin(
+                                                                    DefaultFunction::AddInteger,
+                                                                )
+                                                                .into(),
+                                                                argument: Term::Var(Name {
+                                                                    text: "current_arg_number"
+                                                                        .to_string(),
+                                                                    unique: 0.into(),
+                                                                })
+                                                                .into(),
+                                                            }
+                                                            .into(),
+                                                            argument: Term::Constant(
+                                                                Constant::Integer(1.into()),
+                                                            )
+                                                            .into(),
+                                                        }
+                                                        .into(),
+                                                    }
+                                                    .into(),
+
+                                                    argument: Term::Apply {
+                                                        function: Term::Force(
+                                                            Term::Builtin(
+                                                                DefaultFunction::TailList,
+                                                            )
+                                                            .into(),
+                                                        )
+                                                        .into(),
+
+                                                        argument: Term::Var(Name {
+                                                            text: "current_list_of_constr_args"
+                                                                .to_string(),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                }
+                                                .into(),
+                                            }
+                                            .into(),
+                                        }
+                                        .into(),
+                                        argument: Term::Var(Name {
+                                            text: "list_of_constr_args".to_string(),
+                                            unique: 0.into(),
+                                        })
+                                        .into(),
+                                    }
+                                    .into(),
+                                }
+                                .into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                }
+                .into(),
+            }
+            .into(),
+        }
     }
 }
