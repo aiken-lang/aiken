@@ -105,7 +105,7 @@ pub struct DataType<T> {
     pub typed_parameters: Vec<T>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Use<PackageName> {
     pub as_name: Option<String>,
     pub location: Span,
@@ -141,21 +141,21 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
 impl<A, B, C, E> Definition<A, B, C, E> {
     pub fn location(&self) -> Span {
         match self {
-            Definition::Fn { location, .. }
-            | Definition::Use { location, .. }
-            | Definition::TypeAlias { location, .. }
-            | Definition::DataType { location, .. }
-            | Definition::ModuleConstant { location, .. } => *location,
+            Definition::Fn(Function { location, .. })
+            | Definition::Use(Use { location, .. })
+            | Definition::TypeAlias(TypeAlias { location, .. })
+            | Definition::DataType(DataType { location, .. })
+            | Definition::ModuleConstant(ModuleConstant { location, .. }) => *location,
         }
     }
 
     pub fn put_doc(&mut self, new_doc: String) {
         match self {
             Definition::Use { .. } => (),
-            Definition::Fn { doc, .. }
-            | Definition::TypeAlias { doc, .. }
-            | Definition::DataType { doc, .. }
-            | Definition::ModuleConstant { doc, .. } => {
+            Definition::Fn(Function { doc, .. })
+            | Definition::TypeAlias(TypeAlias { doc, .. })
+            | Definition::DataType(DataType { doc, .. })
+            | Definition::ModuleConstant(ModuleConstant { doc, .. }) => {
                 let _ = std::mem::replace(doc, Some(new_doc));
             }
         }

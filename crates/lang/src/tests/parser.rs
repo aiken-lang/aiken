@@ -3,8 +3,7 @@ use pretty_assertions::assert_eq;
 
 use crate::{
     ast::{self, DataType, Function, Span, TypeAlias, Use},
-    expr, lexer,
-    parser::module_parser,
+    expr, parser,
 };
 
 #[test]

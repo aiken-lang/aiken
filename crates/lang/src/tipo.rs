@@ -469,7 +469,7 @@ pub struct RecordAccessor {
     pub tipo: Arc<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatternConstructor {
     Record {
         name: String,

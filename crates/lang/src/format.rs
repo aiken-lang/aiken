@@ -4,10 +4,11 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant,
-        Definition, Pattern, RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span,
-        TypedArg, TypedConstant, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
-        UntypedDefinition, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, CAPTURE_VARIABLE,
+        Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
+        Definition, Function, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
+        RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant, UnqualifiedImport,
+        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition, UntypedModule,
+        UntypedPattern, UntypedRecordUpdateArg, Use, CAPTURE_VARIABLE,
     },
     docvec,
     expr::UntypedExpr,
@@ -205,7 +206,7 @@ impl<'comments> Formatter<'comments> {
 
     fn definition<'a>(&mut self, definition: &'a UntypedDefinition) -> Document<'a> {
         match definition {
-            Definition::Fn {
+            Definition::Fn(Function {
                 name,
                 arguments: args,
                 body,
@@ -213,17 +214,17 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 end_position,
                 ..
-            } => self.definition_fn(public, name, args, return_annotation, body, *end_position),
+            }) => self.definition_fn(public, name, args, return_annotation, body, *end_position),
 
-            Definition::TypeAlias {
+            Definition::TypeAlias(TypeAlias {
                 alias,
                 parameters: args,
                 annotation: resolved_type,
                 public,
                 ..
-            } => self.type_alias(*public, alias, args, resolved_type),
+            }) => self.type_alias(*public, alias, args, resolved_type),
 
-            Definition::DataType {
+            Definition::DataType(DataType {
                 name,
                 parameters,
                 public,
@@ -231,14 +232,14 @@ impl<'comments> Formatter<'comments> {
                 location,
                 opaque,
                 ..
-            } => self.data_type(*public, *opaque, name, parameters, constructors, location),
+            }) => self.data_type(*public, *opaque, name, parameters, constructors, location),
 
-            Definition::Use {
+            Definition::Use(Use {
                 module,
                 as_name,
                 unqualified,
                 ..
-            } => "use "
+            }) => "use "
                 .to_doc()
                 .append(Document::String(module.join("/")))
                 .append(if unqualified.is_empty() {
@@ -264,13 +265,13 @@ impl<'comments> Formatter<'comments> {
                     nil()
                 }),
 
-            Definition::ModuleConstant {
+            Definition::ModuleConstant(ModuleConstant {
                 public,
                 name,
                 annotation,
                 value,
                 ..
-            } => {
+            }) => {
                 let head = pub_(*public).append("const ").append(name.as_str());
                 let head = match annotation {
                     None => head,

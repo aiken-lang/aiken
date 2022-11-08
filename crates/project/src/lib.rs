@@ -347,10 +347,10 @@ impl Project {
                     if VALIDATOR_NAMES.contains(&name.as_str()) {
                         let mut generator = CodeGenerator::new(
                             &functions,
-                            &type_aliases,
+                            // &type_aliases,
                             &data_types,
-                            &imports,
-                            &constants,
+                            // &imports,
+                            // &constants,
                         );
 
                         let program = generator.generate(body, arguments);
