@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::{error::ParseError, parser::ast::Span, tipo};
+use aiken_lang::{ast::Span, parser::error::ParseError, tipo};
 use miette::{Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
 
 #[allow(dead_code)]

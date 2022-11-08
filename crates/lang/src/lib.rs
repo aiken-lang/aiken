@@ -10,7 +10,6 @@ pub mod format;
 pub mod parser;
 pub mod pretty;
 pub mod tipo;
-pub mod token;
 pub mod uplc;
 
 #[derive(Debug, Default, Clone)]

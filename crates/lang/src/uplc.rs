@@ -9,9 +9,7 @@ use uplc::{
 };
 
 use crate::{
-    ast::{
-        BinOp, DataType, Function, ModuleConstant, Pattern, TypeAlias, TypedArg, TypedPattern, Use,
-    },
+    ast::{BinOp, DataType, Function, Pattern, TypedArg, TypedPattern},
     expr::TypedExpr,
     tipo::{self, ModuleValueConstructor, Type, ValueConstructorVariant},
 };
@@ -91,19 +89,19 @@ pub struct CodeGenerator<'a> {
     uplc_data_constr_lookup: IndexMap<(String, String), ScopeLevels>,
     uplc_data_usage_holder_lookup: IndexMap<(String, String), ScopeLevels>,
     functions: &'a HashMap<(String, String), &'a Function<Arc<tipo::Type>, TypedExpr>>,
-    type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
+    // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
     data_types: &'a HashMap<(String, String), &'a DataType<Arc<tipo::Type>>>,
-    imports: &'a HashMap<(String, String), &'a Use<String>>,
-    constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
+    // imports: &'a HashMap<(String, String), &'a Use<String>>,
+    // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
 }
 
 impl<'a> CodeGenerator<'a> {
     pub fn new(
         functions: &'a HashMap<(String, String), &'a Function<Arc<tipo::Type>, TypedExpr>>,
-        type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
+        // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
         data_types: &'a HashMap<(String, String), &'a DataType<Arc<tipo::Type>>>,
-        imports: &'a HashMap<(String, String), &'a Use<String>>,
-        constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
+        // imports: &'a HashMap<(String, String), &'a Use<String>>,
+        // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
     ) -> Self {
         CodeGenerator {
             uplc_function_holder: Vec::new(),
@@ -112,10 +110,10 @@ impl<'a> CodeGenerator<'a> {
             uplc_data_constr_lookup: IndexMap::new(),
             uplc_data_usage_holder_lookup: IndexMap::new(),
             functions,
-            type_aliases,
+            // type_aliases,
             data_types,
-            imports,
-            constants,
+            // imports,
+            // constants,
         }
     }
 
