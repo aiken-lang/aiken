@@ -181,8 +181,8 @@ impl From<CheckedModules> for HashMap<String, CheckedModule> {
 }
 
 impl CheckedModules {
-    pub fn scripts(&self) -> impl Iterator<Item = &CheckedModule> {
-        self.0.values().filter(|module| module.kind.is_script())
+    pub fn scripts(&mut self) -> impl Iterator<Item = &mut CheckedModule> {
+        self.0.values_mut().filter(|module| module.kind.is_script())
     }
 
     pub fn into_scripts(self) -> impl Iterator<Item = CheckedModule> {
