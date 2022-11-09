@@ -14,6 +14,8 @@ pub struct Args {
 pub struct Creator {
     root: PathBuf,
     src: PathBuf,
+    scripts: PathBuf,
+    project: PathBuf,
     project_name: String,
 }
 
@@ -21,18 +23,26 @@ impl Creator {
     fn new(args: Args) -> Self {
         let root = args.name;
         let src = root.join("src");
+        let scripts = src.join("scripts");
         let project_name = root.clone().into_os_string().into_string().unwrap();
+        let project = src.join(&project_name);
         Self {
             root,
             src,
+            scripts,
+            project,
             project_name,
         }
     }
 
     fn run(&self) -> miette::Result<()> {
         fs::create_dir_all(&self.src).into_diagnostic()?;
+        fs::create_dir_all(&self.scripts).into_diagnostic()?;
+        fs::create_dir_all(&self.project).into_diagnostic()?;
 
         self.aiken_toml()?;
+        self.context()?;
+        self.project()?;
         self.always_true_script()?;
 
         Ok(())
@@ -40,11 +50,38 @@ impl Creator {
 
     fn always_true_script(&self) -> miette::Result<()> {
         write(
-            self.src.join("always_true.ak"),
+            self.scripts.join("always_true.ak"),
             indoc! {"
                 pub fn spend() -> Bool {
-                    true
+                    True
                 }            
+            "},
+        )
+    }
+
+    fn project(&self) -> miette::Result<()> {
+        write(
+            self.src.join(format!("{}.ak", self.project_name)),
+            indoc! {"
+                pub type Datum {
+                    something: String,
+                }          
+            "},
+        )
+    }
+
+    fn context(&self) -> miette::Result<()> {
+        write(
+            self.project.join("context.ak"),
+            indoc! {"
+                pub type ScriptContext(purpose) {
+                    tx_info: TxInfo,
+                    script_purpose: purpose,
+                }
+                
+                pub type TxInfo {
+                    idk: Int,
+                }       
             "},
         )
     }
