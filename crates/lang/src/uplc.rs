@@ -185,7 +185,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match dbg!(body) {
+        match body {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
@@ -393,7 +393,7 @@ impl<'a> CodeGenerator<'a> {
         value: &TypedExpr,
         scope_level: ScopeLevels,
     ) {
-        match dbg!(pattern) {
+        match pattern {
             Pattern::Int { .. } | Pattern::String { .. } | Pattern::Var { .. } => {
                 self.recurse_scope_level(value, scope_level);
             }
@@ -403,11 +403,11 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Discard { .. } => todo!(),
             Pattern::List { .. } => todo!(),
             Pattern::Constructor {
-                name: constructor_name,
+                // name: constructor_name,
                 tipo,
-                arguments,
-                constructor,
-                module,
+                // arguments,
+                // constructor,
+                // module,
                 ..
             } => {
                 self.recurse_scope_level(value, scope_level.scope_increment_sequence(1));
@@ -428,17 +428,17 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                     Type::Fn { .. } => {
-                        let mapping_index = match constructor {
-                            tipo::PatternConstructor::Record { name, field_map } => {
-                                if let Some(fields_mapping) = field_map {
-                                    fields_mapping.fields.clone()
-                                } else {
-                                    HashMap::new()
-                                }
-                            }
-                        };
-                        let mut args = arguments.clone();
-                        let local_var_name = "";
+                        // let mapping_index = match constructor {
+                        //     tipo::PatternConstructor::Record { name, field_map } => {
+                        //         if let Some(fields_mapping) = field_map {
+                        //             fields_mapping.fields.clone()
+                        //         } else {
+                        //             HashMap::new()
+                        //         }
+                        //     }
+                        // };
+                        // let mut args = arguments.clone();
+                        // let local_var_name = "";
                         // arguments.iter().map(|x| {
                         //     let name = match &x.value {
                         //         Pattern::Var { location, name } => {
@@ -480,7 +480,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn recurse_code_gen(&mut self, body: &TypedExpr, scope_level: ScopeLevels) -> Term<Name> {
-        match dbg!(body) {
+        match body {
             TypedExpr::Int { value, .. } => {
                 Term::Constant(Constant::Integer(value.parse::<i128>().unwrap()))
             }
@@ -1090,6 +1090,7 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Pull out all uplc data holder and data usage, filter by Scope Level, Sort By Scope Depth, Then Apply
+        #[allow(clippy::type_complexity)]
         let mut data_holder: Vec<((String, String, String), (bool, ScopeLevels, u64))> = self
             .uplc_data_usage_holder_lookup
             .iter()

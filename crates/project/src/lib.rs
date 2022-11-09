@@ -8,15 +8,22 @@ pub mod config;
 pub mod error;
 pub mod format;
 pub mod module;
+pub mod script;
 
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind},
+    ast::{Definition, Function, ModuleKind, TypedFunction},
     builtins,
     tipo::TypeInfo,
     uplc::CodeGenerator,
     IdGenerator,
 };
-use uplc::ast::{NamedDeBruijn, Program};
+use pallas::{
+    codec::minicbor,
+    ledger::{addresses::Address, primitives::babbage},
+};
+use pallas_traverse::ComputeHash;
+use script::Script;
+use serde_json::json;
 
 use crate::{
     config::Config,
@@ -88,7 +95,9 @@ impl Project {
         let scripts = self.validate_scripts(&mut checked_modules)?;
 
         if uplc_gen {
-            self.code_gen(scripts, &checked_modules)?;
+            let programs = self.code_gen(scripts, &checked_modules)?;
+
+            self.write_build_outputs(programs)?;
         }
 
         Ok(())
@@ -238,27 +247,19 @@ impl Project {
     fn validate_scripts(
         &self,
         checked_modules: &mut CheckedModules,
-    ) -> Result<Vec<CheckedModule>, Error> {
+    ) -> Result<Vec<(String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
         let mut scripts = Vec::new();
+        let mut indices_to_remove = Vec::new();
 
         for module in checked_modules.scripts() {
-            scripts.push(module.clone());
-
-            for def in module.ast.definitions() {
-                if let Definition::Fn(Function {
-                    arguments,
-                    location,
-                    name,
-                    return_type,
-                    ..
-                }) = def
-                {
-                    if VALIDATOR_NAMES.contains(&name.as_str()) {
+            for (index, def) in module.ast.definitions().enumerate() {
+                if let Definition::Fn(func_def) = def {
+                    if VALIDATOR_NAMES.contains(&func_def.name.as_str()) {
                         // validators must return a Bool
-                        if !return_type.is_bool() {
+                        if !func_def.return_type.is_bool() {
                             errors.push(Error::ValidatorMustReturnBool {
-                                location: *location,
+                                location: func_def.location,
                                 src: module.code.clone(),
                                 path: module.input_path.clone(),
                             })
@@ -266,35 +267,40 @@ impl Project {
 
                         // depending on name, validate the minimum number of arguments
                         // if too low, push a new error on to errors
-                        if [MINT, CERT, WITHDRAWL].contains(&name.as_str()) && arguments.len() < 2 {
+                        if [MINT, CERT, WITHDRAWL].contains(&func_def.name.as_str())
+                            && func_def.arguments.len() < 2
+                        {
                             errors.push(Error::WrongValidatorArity {
-                                location: *location,
+                                location: func_def.location,
                                 src: module.code.clone(),
                                 path: module.input_path.clone(),
-                                name: name.clone(),
+                                name: func_def.name.clone(),
                                 at_least: 2,
                             })
                         }
 
-                        if SPEND == name && arguments.len() < 3 {
+                        if SPEND == func_def.name && func_def.arguments.len() < 3 {
                             errors.push(Error::WrongValidatorArity {
-                                location: *location,
+                                location: func_def.location,
                                 src: module.code.clone(),
                                 path: module.input_path.clone(),
-                                name: name.clone(),
+                                name: func_def.name.clone(),
                                 at_least: 3,
                             })
                         }
+
+                        scripts.push((module.name.clone(), func_def.clone()));
+                        indices_to_remove.push(index);
                     }
                 }
+            }
+
+            for index in indices_to_remove.drain(0..) {
+                module.ast.definitions.remove(index);
             }
         }
 
         if errors.is_empty() {
-            for script in &scripts {
-                checked_modules.remove(&script.name);
-            }
-
             Ok(scripts)
         } else {
             Err(Error::List(errors))
@@ -303,9 +309,9 @@ impl Project {
 
     fn code_gen(
         &mut self,
-        scripts: Vec<CheckedModule>,
+        scripts: Vec<(String, TypedFunction)>,
         checked_modules: &CheckedModules,
-    ) -> Result<Vec<Program<NamedDeBruijn>>, Error> {
+    ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
         let mut functions = HashMap::new();
         let mut type_aliases = HashMap::new();
@@ -335,33 +341,104 @@ impl Project {
             }
         }
 
-        for script in scripts {
-            for def in script.ast.into_definitions() {
-                if let Definition::Fn(Function {
-                    arguments,
-                    name,
-                    body,
-                    ..
-                }) = def
-                {
-                    if VALIDATOR_NAMES.contains(&name.as_str()) {
-                        let mut generator = CodeGenerator::new(
-                            &functions,
-                            // &type_aliases,
-                            &data_types,
-                            // &imports,
-                            // &constants,
-                        );
+        for (module_name, func_def) in scripts {
+            let Function {
+                arguments,
+                name,
+                body,
+                ..
+            } = func_def;
 
-                        let program = generator.generate(body, arguments);
+            let mut generator = CodeGenerator::new(
+                &functions,
+                // &type_aliases,
+                &data_types,
+                // &imports,
+                // &constants,
+            );
 
-                        programs.push(program.try_into().unwrap());
-                    }
-                }
-            }
+            let program = generator.generate(body, arguments);
+
+            let script = Script::new(module_name, name, program.try_into().unwrap());
+
+            programs.push(script);
         }
 
         Ok(programs)
+    }
+
+    fn write_build_outputs(&self, programs: Vec<Script>) -> Result<(), Error> {
+        let assets = self.root.join("assets");
+
+        for script in programs {
+            let script_output_dir = assets.join(script.module).join(script.name);
+
+            fs::create_dir_all(&script_output_dir)?;
+
+            let cbor = script.program.to_cbor().unwrap();
+
+            // Create file containing just the script cbor hex
+            let script_path = script_output_dir.join("script.txt");
+
+            let cbor_hex = hex::encode(&cbor);
+
+            fs::write(script_path, &cbor_hex)?;
+
+            // Create the payment script JSON file
+            let payment_script_path = script_output_dir.join("payment_script.json");
+
+            let mut bytes = Vec::new();
+
+            let mut encoder = minicbor::Encoder::new(&mut bytes);
+
+            encoder.bytes(&cbor).unwrap();
+
+            let prefixed_cbor_hex = hex::encode(&bytes);
+
+            let payment_script = json!({
+                "type": "PlutusScriptV2",
+                "description": "Generated by Aiken",
+                "cborHex": prefixed_cbor_hex
+            });
+
+            fs::write(
+                payment_script_path,
+                serde_json::to_string_pretty(&payment_script).unwrap(),
+            )?;
+
+            // Create mainnet and testnet addresses
+            let plutus_script = babbage::PlutusV2Script(cbor.into());
+
+            let hash = plutus_script.compute_hash();
+
+            // mainnet
+            let mainnet_path = script_output_dir.join("mainnet.txt");
+            let mut mainnet_bytes: Vec<u8> = vec![0b01110001];
+
+            mainnet_bytes.extend(hash.iter());
+
+            let mainnet_addr = Address::from_bytes(&mainnet_bytes)
+                .unwrap()
+                .to_bech32()
+                .unwrap();
+
+            fs::write(mainnet_path, mainnet_addr)?;
+
+            // testnet
+            let testnet_path = script_output_dir.join("testnet.txt");
+            let mut testnet_bytes: Vec<u8> = vec![0b01110000];
+
+            testnet_bytes.extend(hash.iter());
+
+            let testnet_addr = Address::from_bytes(&testnet_bytes)
+                .unwrap()
+                .to_bech32()
+                .unwrap();
+
+            fs::write(testnet_path, testnet_addr)?;
+        }
+
+        Ok(())
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {

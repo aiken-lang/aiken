@@ -85,8 +85,11 @@ name = "aiken-project"
 version = "0.0.24"
 dependencies = [
  "aiken-lang",
+ "hex",
  "ignore",
  "miette",
+ "pallas",
+ "pallas-traverse",
  "petgraph",
  "regex",
  "serde",
@@ -602,6 +605,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 
 [[package]]
+name = "pallas"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a9a54e891592befe6d7da8e43dc61606b86375d7a094dd78cc4cdf32e26d779"
+dependencies = [
+ "pallas-addresses",
+ "pallas-codec",
+ "pallas-crypto",
+ "pallas-miniprotocols",
+ "pallas-multiplexer",
+ "pallas-primitives",
+ "pallas-traverse",
+]
+
+[[package]]
 name = "pallas-addresses"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -637,6 +655,34 @@ dependencies = [
  "pallas-codec",
  "rand_core",
  "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "pallas-miniprotocols"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "665d8bba23eaa69ce5715249d69c0b8c49c6034fc3f5ea4f010f9437d6fc7167"
+dependencies = [
+ "hex",
+ "itertools",
+ "log",
+ "pallas-codec",
+ "pallas-multiplexer",
+ "thiserror",
+]
+
+[[package]]
+name = "pallas-multiplexer"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe342b801c5954cfd31159bc68a38cb597e18d7a4ae89fc9397f5abcb5c5696"
+dependencies = [
+ "byteorder",
+ "hex",
+ "log",
+ "pallas-codec",
+ "rand",
  "thiserror",
 ]
 
@@ -956,6 +1002,7 @@ version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
 dependencies = [
+ "indexmap",
  "itoa",
  "ryu",
  "serde",

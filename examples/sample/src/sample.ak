@@ -1,38 +1,36 @@
-
 pub type Signer {
-    hash: Int
+  hash: Int,
 }
 
-
 pub type ScriptContext {
-    signer: Signer
+  signer: Signer,
 }
 
 pub type Redeem {
-  Buy 
-  Sell 
+  Buy
+  Sell
 }
 
 pub type Datum {
-    fin: Int,
-    sc: ScriptContext,  
-    rdmr: Redeem,
+  fin: Int,
+  sc: ScriptContext,
+  rdmr: Redeem,
 }
 
 pub fn eqInt(a: Int, b: Int) {
-    a == b
+  a == b
 }
 
 pub fn eqString(a: ByteArray, b: ByteArray) {
-    a == b
+  a == b
 }
 
 pub type Thing {
-    Some
-    None
+  Some
+  None
 }
 
 pub type Other {
-    Wow
-    Yes
+  Wow
+  Yes
 }

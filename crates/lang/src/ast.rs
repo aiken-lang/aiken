@@ -69,6 +69,8 @@ impl UntypedModule {
 pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 
+pub type TypedFunction = Function<Arc<Type>, TypedExpr>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function<T, Expr> {
     pub arguments: Vec<Arg<T>>,
