@@ -189,7 +189,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
-            TypedExpr::Sequence { expressions, .. } => {
+            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
                 // let mut terms = Vec::new();
                 for (i, exp) in expressions.iter().enumerate().rev() {
                     self.recurse_scope_level(
@@ -198,10 +198,7 @@ impl<'a> CodeGenerator<'a> {
                     );
                 }
             }
-            TypedExpr::Pipeline {
-                location,
-                expressions,
-            } => todo!(),
+
             TypedExpr::Var {
                 constructor, name, ..
             } => match (constructor.variant.clone(), (*constructor.tipo).clone()) {
@@ -219,20 +216,8 @@ impl<'a> CodeGenerator<'a> {
                 (ValueConstructorVariant::Record { .. }, Type::App { .. }) => {}
                 _ => todo!(),
             },
-            TypedExpr::Fn {
-                location,
-                tipo,
-                is_capture,
-                args,
-                body,
-                return_annotation,
-            } => todo!(),
-            TypedExpr::List {
-                location,
-                tipo,
-                elements,
-                tail,
-            } => todo!(),
+            TypedExpr::Fn { .. } => todo!(),
+            TypedExpr::List { .. } => todo!(),
             TypedExpr::Call { fun, args, .. } => {
                 self.recurse_scope_level(fun, scope_level.scope_increment(args.len() as i32 + 1));
 
@@ -247,13 +232,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Assignment { value, pattern, .. } => {
                 self.recurse_scope_level_pattern(pattern, value, scope_level)
             }
-            TypedExpr::Try {
-                location,
-                tipo,
-                value,
-                then,
-                pattern,
-            } => todo!(),
+            TypedExpr::Try { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
@@ -270,7 +249,7 @@ impl<'a> CodeGenerator<'a> {
                     self.recurse_scope_level(subject, scope_level.clone());
                 }
             }
-            //if statements increase scope due to branching.
+            // if statements increase scope due to branching.
             TypedExpr::If {
                 branches,
                 final_else,
@@ -365,13 +344,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             a @ TypedExpr::ModuleSelect { constructor, .. } => match constructor {
-                ModuleValueConstructor::Record {
-                    name,
-                    arity,
-                    tipo,
-                    field_map,
-                    location,
-                } => todo!(),
+                ModuleValueConstructor::Record { .. } => todo!(),
                 ModuleValueConstructor::Fn { module, name, .. } => {
                     if self
                         .uplc_function_holder_lookup
@@ -408,18 +381,9 @@ impl<'a> CodeGenerator<'a> {
                 }
                 ModuleValueConstructor::Constant { .. } => todo!(),
             },
-            TypedExpr::Todo {
-                location,
-                label,
-                tipo,
-            } => todo!(),
-            TypedExpr::RecordUpdate {
-                location,
-                tipo,
-                spread,
-                args,
-            } => todo!(),
-            TypedExpr::Negate { location, value } => todo!(),
+            TypedExpr::Todo { .. } => todo!(),
+            TypedExpr::RecordUpdate { .. } => todo!(),
+            TypedExpr::Negate { .. } => todo!(),
         }
     }
 
@@ -431,25 +395,13 @@ impl<'a> CodeGenerator<'a> {
     ) {
         match dbg!(pattern) {
             Pattern::Int { .. } | Pattern::String { .. } | Pattern::Var { .. } => {
-                self.recurse_scope_level(value, scope_level.clone());
+                self.recurse_scope_level(value, scope_level);
             }
 
-            Pattern::VarUsage {
-                location,
-                name,
-                tipo,
-            } => todo!(),
-            Pattern::Assign {
-                name,
-                location,
-                pattern,
-            } => todo!(),
-            Pattern::Discard { name, location } => todo!(),
-            Pattern::List {
-                location,
-                elements,
-                tail,
-            } => todo!(),
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => todo!(),
+            Pattern::List { .. } => todo!(),
             Pattern::Constructor {
                 name: constructor_name,
                 tipo,
@@ -536,7 +488,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::ByteArray { bytes, .. } => {
                 Term::Constant(Constant::ByteString(bytes.clone()))
             }
-            TypedExpr::Sequence { expressions, .. } => {
+            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
                 for (i, exp) in expressions.iter().enumerate().rev() {
                     let mut term = self
                         .recurse_code_gen(exp, scope_level.scope_increment_sequence(i as i32 + 1));
@@ -550,10 +502,6 @@ impl<'a> CodeGenerator<'a> {
 
                 self.uplc_function_holder.pop().unwrap().1
             }
-            TypedExpr::Pipeline {
-                expressions: _expressions,
-                ..
-            } => todo!(),
             TypedExpr::Var {
                 constructor, name, ..
             } => {
@@ -565,44 +513,14 @@ impl<'a> CodeGenerator<'a> {
                             text: name.to_string(),
                             unique: 0.into(),
                         }),
-                        ValueConstructorVariant::ModuleConstant {
-                            location,
-                            module,
-                            literal,
-                        } => todo!(),
-                        ValueConstructorVariant::ModuleFn {
-                            name,
-                            field_map,
-                            module,
-                            arity,
-                            location,
-                            builtin,
-                        } => todo!(),
-                        ValueConstructorVariant::Record {
-                            name,
-                            arity,
-                            field_map,
-                            location,
-                            module,
-                            constructors_count,
-                        } => todo!(),
+                        ValueConstructorVariant::ModuleConstant { .. } => todo!(),
+                        ValueConstructorVariant::ModuleFn { .. } => todo!(),
+                        ValueConstructorVariant::Record { .. } => todo!(),
                     }
                 }
             }
-            TypedExpr::Fn {
-                location,
-                tipo,
-                is_capture,
-                args,
-                body,
-                return_annotation,
-            } => todo!(),
-            TypedExpr::List {
-                location,
-                tipo,
-                elements,
-                tail,
-            } => todo!(),
+            TypedExpr::Fn { .. } => todo!(),
+            TypedExpr::List { .. } => todo!(),
             TypedExpr::Call { fun, args, .. } => {
                 let mut term =
                     self.recurse_code_gen(fun, scope_level.scope_increment(args.len() as i32 + 1));
@@ -624,6 +542,7 @@ impl<'a> CodeGenerator<'a> {
                 let left_term = self.recurse_code_gen(left, scope_level.clone());
 
                 let right_term = self.recurse_code_gen(right, scope_level);
+
                 match name {
                     BinOp::Eq => match &*left.tipo() {
                         Type::App { name, .. } => match name.as_str() {
@@ -645,10 +564,20 @@ impl<'a> CodeGenerator<'a> {
                                 argument: right_term.into(),
                             },
 
+                            "ByteArray" => Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::EqualsByteString)
+                                        .into(),
+                                    argument: left_term.into(),
+                                }
+                                .into(),
+                                argument: right_term.into(),
+                            },
+
                             _ => todo!(),
                         },
-                        Type::Fn { args, ret } => todo!(),
-                        Type::Var { tipo } => todo!(),
+                        Type::Fn { .. } => todo!(),
+                        Type::Var { .. } => todo!(),
                     },
                     BinOp::And => todo!(),
                     BinOp::Or => todo!(),
@@ -681,46 +610,24 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                 },
 
-                Pattern::VarUsage {
-                    location,
-                    name,
-                    tipo,
-                } => todo!(),
-                Pattern::Assign {
-                    name,
-                    location,
-                    pattern,
-                } => todo!(),
+                Pattern::VarUsage { .. } => todo!(),
+                Pattern::Assign { .. } => todo!(),
                 Pattern::Discard { .. } => todo!(),
-                Pattern::List {
-                    location,
-                    elements,
-                    tail,
-                } => todo!(),
-                Pattern::Constructor {
-                    location,
-                    name,
-                    arguments,
-                    module,
-                    constructor,
-                    with_spread,
-                    tipo,
-                } => todo!(),
+                Pattern::List { .. } => todo!(),
+                Pattern::Constructor { .. } => todo!(),
             },
-            TypedExpr::Try {
-                location,
-                tipo,
-                value,
-                then,
-                pattern,
-            } => todo!(),
+            TypedExpr::Try { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
                 let current_clauses = clauses.clone();
+
                 let mut data_type = "".to_string();
+
                 let mut current_module = "".to_string();
+
                 let mut total_constr_length = 0;
+
                 let mut new_current_clauses: Vec<(usize, TypedExpr)> = current_clauses
                     .iter()
                     .map(|clause| {
@@ -756,8 +663,11 @@ impl<'a> CodeGenerator<'a> {
                 new_current_clauses.sort_by(|a, b| a.0.cmp(&b.0));
 
                 let subject = &subjects[0];
+
                 let mut is_var = false;
+
                 let mut current_var_name = "".to_string();
+
                 let mut current_subject = subject.clone();
 
                 while !is_var {
@@ -873,7 +783,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term
             }
-            //if statements increase scope due to branching.
+            // if statements increase scope due to branching.
             TypedExpr::If {
                 branches,
                 final_else,
@@ -932,7 +842,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 } else {
-                    //TODO: for multi branch if statements we can insert function definitions between branches
+                    // TODO: for multi branch if statements we can insert function definitions between branches
                     for branch in branches {
                         let condition_term = self.recurse_code_gen(
                             &branch.condition,
@@ -961,6 +871,7 @@ impl<'a> CodeGenerator<'a> {
                         );
                     }
                 }
+
                 self.maybe_insert_def(final_if_term, scope_level)
             }
             TypedExpr::RecordAccess { label, record, .. } => {
@@ -1001,43 +912,17 @@ impl<'a> CodeGenerator<'a> {
                     unique: 0.into(),
                 })
             }
-            TypedExpr::ModuleSelect {
-                location,
-                tipo,
-                label,
-                module_name,
-                module_alias,
-                constructor,
-            } => match constructor {
-                ModuleValueConstructor::Record {
-                    name,
-                    arity,
-                    tipo,
-                    field_map,
-                    location,
-                } => todo!(),
-                ModuleValueConstructor::Fn {
-                    location,
-                    module,
-                    name,
-                } => Term::Var(Name {
+            TypedExpr::ModuleSelect { constructor, .. } => match constructor {
+                ModuleValueConstructor::Record { .. } => todo!(),
+                ModuleValueConstructor::Fn { module, name, .. } => Term::Var(Name {
                     text: format!("{module}_{name}"),
                     unique: 0.into(),
                 }),
-                ModuleValueConstructor::Constant { literal, location } => todo!(),
+                ModuleValueConstructor::Constant { .. } => todo!(),
             },
-            TypedExpr::Todo {
-                location,
-                label,
-                tipo,
-            } => todo!(),
-            TypedExpr::RecordUpdate {
-                location,
-                tipo,
-                spread,
-                args,
-            } => todo!(),
-            TypedExpr::Negate { location, value } => todo!(),
+            TypedExpr::Todo { .. } => todo!(),
+            TypedExpr::RecordUpdate { .. } => todo!(),
+            TypedExpr::Negate { .. } => todo!(),
         }
     }
 
@@ -1312,8 +1197,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn add_arg_getter(&self, term: Term<Name>) -> Term<Name> {
-        //Apply constr arg getter to top level.
-
+        // Apply constr arg getter to top level.
         Term::Apply {
             function: Term::Lambda {
                 parameter_name: Name {
