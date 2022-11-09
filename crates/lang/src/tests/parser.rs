@@ -294,7 +294,7 @@ fn module() {
                     tipo: (),
                 }),
                 ast::UntypedDefinition::Fn(Function {
-                    end_position: 0,
+                    end_position: 466,
                     arguments: vec![ast::Arg {
                         arg_name: ast::ArgName::Named {
                             name: "a".to_string(),
