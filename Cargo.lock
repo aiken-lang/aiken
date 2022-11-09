@@ -57,6 +57,7 @@ dependencies = [
  "clap",
  "hex",
  "ignore",
+ "indoc",
  "miette",
  "pallas-addresses",
  "pallas-codec",
@@ -486,6 +487,12 @@ dependencies = [
  "autocfg",
  "hashbrown",
 ]
+
+[[package]]
+name = "indoc"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adab1eaa3408fb7f0c777a73e7465fd5656136fc93b670eb6df3c88c2c1344e3"
 
 [[package]]
 name = "instant"

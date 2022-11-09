@@ -1,3 +1,4 @@
+use indoc::{formatdoc, indoc};
 use miette::IntoDiagnostic;
 use std::fs;
 use std::io::Write;
@@ -21,10 +22,10 @@ impl Creator {
         let root = args.name;
         let src = root.join("src");
         let project_name = root.clone().into_os_string().into_string().unwrap();
-        Self{
+        Self {
             root,
             src,
-            project_name
+            project_name,
         }
     }
 
@@ -39,31 +40,29 @@ impl Creator {
 
     fn always_true_script(&self) -> miette::Result<()> {
         write(
-            self.src.join("always_true.ak"), 
-            "
-pub fn spend() -> Bool {
-    true
-}            
-"
+            self.src.join("always_true.ak"),
+            indoc! {"
+                pub fn spend() -> Bool {
+                    true
+                }            
+            "},
         )
     }
 
     fn aiken_toml(&self) -> miette::Result<()> {
         write(
             self.root.join("aiken.toml"),
-            &format!(
+            &formatdoc! {
                 r#"name = "{name}"
-version = "0.1.0"
-licences = ["Apache-2.0"]
-description = "Aiken contracts"
+                version = "0.1.0"
+                licences = ["Apache-2.0"]
+                description = "Aiken contracts"
 
-[dependencies]
-aiken = "~> {aiken}"
+                [dependencies]
 
-"#,
+                "#,
                 name = self.project_name,
-                aiken = "0.0.24",
-            ),
+            },
         )
     }
 }
@@ -72,7 +71,6 @@ fn write(path: PathBuf, contents: &str) -> miette::Result<()> {
     let mut f = fs::File::create(&path).into_diagnostic()?;
 
     f.write_all(contents.as_bytes()).into_diagnostic()?;
-    
     Ok(())
 }
 
@@ -80,7 +78,7 @@ pub fn exec(args: Args) -> miette::Result<()> {
     if !args.name.exists() {
         let creator = Creator::new(args);
         creator.run()?;
-    } 
+    }
 
     Ok(())
 }
