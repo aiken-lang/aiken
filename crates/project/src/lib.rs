@@ -92,10 +92,10 @@ impl Project {
 
         let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
 
-        let scripts = self.validate_scripts(&mut checked_modules)?;
+        let validators = self.validate_validators(&mut checked_modules)?;
 
         if uplc_gen {
-            let programs = self.code_gen(scripts, &checked_modules)?;
+            let programs = self.code_gen(validators, &checked_modules)?;
 
             self.write_build_outputs(programs)?;
         }
@@ -105,9 +105,9 @@ impl Project {
 
     fn read_source_files(&mut self) -> Result<(), Error> {
         let lib = self.root.join("lib");
-        let scripts = self.root.join("validators");
+        let validators = self.root.join("validators");
 
-        self.aiken_files(&scripts, ModuleKind::Script)?;
+        self.aiken_files(&validators, ModuleKind::Validator)?;
         self.aiken_files(&lib, ModuleKind::Lib)?;
 
         Ok(())
@@ -233,15 +233,15 @@ impl Project {
         Ok(modules.into())
     }
 
-    fn validate_scripts(
+    fn validate_validators(
         &self,
         checked_modules: &mut CheckedModules,
     ) -> Result<Vec<(String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
-        let mut scripts = Vec::new();
+        let mut validators = Vec::new();
         let mut indices_to_remove = Vec::new();
 
-        for module in checked_modules.scripts() {
+        for module in checked_modules.validators() {
             for (index, def) in module.ast.definitions().enumerate() {
                 if let Definition::Fn(func_def) = def {
                     if VALIDATOR_NAMES.contains(&func_def.name.as_str()) {
@@ -278,7 +278,7 @@ impl Project {
                             })
                         }
 
-                        scripts.push((module.name.clone(), func_def.clone()));
+                        validators.push((module.name.clone(), func_def.clone()));
                         indices_to_remove.push(index);
                     }
                 }
@@ -290,7 +290,7 @@ impl Project {
         }
 
         if errors.is_empty() {
-            Ok(scripts)
+            Ok(validators)
         } else {
             Err(Error::List(errors))
         }
@@ -298,7 +298,7 @@ impl Project {
 
     fn code_gen(
         &mut self,
-        scripts: Vec<(String, TypedFunction)>,
+        validators: Vec<(String, TypedFunction)>,
         checked_modules: &CheckedModules,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
@@ -330,7 +330,7 @@ impl Project {
             }
         }
 
-        for (module_name, func_def) in scripts {
+        for (module_name, func_def) in validators {
             let Function {
                 arguments,
                 name,
