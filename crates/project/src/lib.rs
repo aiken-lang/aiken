@@ -104,22 +104,11 @@ impl Project {
     }
 
     fn read_source_files(&mut self) -> Result<(), Error> {
-        let lib = self.root.join(format!("src/{}", self.config.name));
-        let scripts = self.root.join("src/scripts");
+        let lib = self.root.join("lib");
+        let scripts = self.root.join("validators");
 
-        self.read_root_lib_file()?;
         self.aiken_files(&scripts, ModuleKind::Script)?;
         self.aiken_files(&lib, ModuleKind::Lib)?;
-
-        Ok(())
-    }
-
-    fn read_root_lib_file(&mut self) -> Result<(), Error> {
-        let root_lib_path = self.root.join(format!("src/{}.ak", self.config.name));
-
-        if root_lib_path.exists() {
-            self.add_module(root_lib_path, &self.root.join("src"), ModuleKind::Lib)?;
-        }
 
         Ok(())
     }
@@ -458,7 +447,7 @@ impl Project {
     }
 
     fn add_module(&mut self, path: PathBuf, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
-        let name = self.module_name(dir, &path, kind);
+        let name = self.module_name(dir, &path);
         let code = fs::read_to_string(&path).map_err(|error| Error::FileIo {
             path: path.clone(),
             error,
@@ -474,12 +463,7 @@ impl Project {
         Ok(())
     }
 
-    fn module_name(
-        &self,
-        package_path: &Path,
-        full_module_path: &Path,
-        kind: ModuleKind,
-    ) -> String {
+    fn module_name(&self, package_path: &Path, full_module_path: &Path) -> String {
         // ../../{config.name}/module.ak
 
         // module.ak
@@ -498,14 +482,7 @@ impl Project {
             .to_string();
 
         // normalise windows paths
-        let name = name.replace('\\', "/");
-
-        // project_name/module
-        if kind.is_lib() && name != self.config.name {
-            format!("{}/{}", self.config.name, name)
-        } else {
-            name
-        }
+        name.replace('\\', "/")
     }
 }
 
