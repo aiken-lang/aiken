@@ -42,7 +42,7 @@ fn module() {
                 a + 2
                 |> add_one
                 |> add_one
-        
+
               let thing = [ 1, 2, a ]
 
               let idk = thing
@@ -53,7 +53,7 @@ fn module() {
             pub fn wow2(a: Int){
               let b = {
                 let x = 4
-                 
+
                 x + 5
               }
 
@@ -61,7 +61,7 @@ fn module() {
                 1, 2 -> 3
                 1 | 4, 5 -> {
                   let amazing = 5
-                  
+
                   amazing
                 }
                 3 -> 9
@@ -106,13 +106,13 @@ fn module() {
             }
         "#;
 
-    let (module, _extra) = parser::module(code, ast::ModuleKind::Script).unwrap();
+    let (module, _extra) = parser::module(code, ast::ModuleKind::Validator).unwrap();
 
     assert_eq!(
         module,
         ast::UntypedModule {
             docs: vec![],
-            kind: ast::ModuleKind::Script,
+            kind: ast::ModuleKind::Validator,
             name: "".to_string(),
             type_info: (),
             definitions: vec![

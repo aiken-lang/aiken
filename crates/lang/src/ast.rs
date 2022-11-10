@@ -17,12 +17,12 @@ pub type UntypedModule = Module<(), UntypedDefinition>;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ModuleKind {
     Lib,
-    Script,
+    Validator,
 }
 
 impl ModuleKind {
-    pub fn is_script(&self) -> bool {
-        matches!(self, ModuleKind::Script)
+    pub fn is_validator(&self) -> bool {
+        matches!(self, ModuleKind::Validator)
     }
 
     pub fn is_lib(&self) -> bool {
