@@ -160,6 +160,23 @@ impl<'a> CodeGenerator<'a> {
 
         term = self.add_arg_getter(term);
 
+        term = Term::Force(
+            Term::Apply {
+                function: Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Force(Term::Builtin(DefaultFunction::IfThenElse).into())
+                            .into(),
+                        argument: term,
+                    }
+                    .into(),
+                    argument: Term::Delay(Term::Constant(Constant::Unit).into()).into(),
+                }
+                .into(),
+                argument: Term::Delay(Term::Error.into()).into(),
+            }
+            .into(),
+        );
+
         for arg in arguments.iter().rev() {
             term = Term::Lambda {
                 parameter_name: uplc::ast::Name {
@@ -223,7 +240,7 @@ impl<'a> CodeGenerator<'a> {
                 self.recurse_scope_level(fun, scope_level.scope_increment(args.len() as i32 + 1));
 
                 for (i, arg) in args.iter().enumerate() {
-                    self.recurse_scope_level(&arg.value, scope_level.scope_increment(i as i32 + 1));
+                    self.recurse_scope_level(&arg.value, scope_level.clone());
                 }
             }
             TypedExpr::BinOp { left, right, .. } => {
@@ -540,11 +557,10 @@ impl<'a> CodeGenerator<'a> {
                         .get(&(module.to_string(), name.to_string()))
                         .unwrap();
 
-                    println!("DATATYPES ARE {data_type:#?}");
                     let constr = data_type
                         .constructors
                         .iter()
-                        .find(|x| x.name == constr_name.to_string())
+                        .find(|x| x.name == *constr_name)
                         .unwrap();
 
                     let arg_to_data: Vec<(bool, Term<Name>)> = constr
