@@ -3,8 +3,17 @@ use sample/mint
 use sample/spend
 
 pub type Redeemer {
-  Buy { id: Int }
-  Sell(Int)
+  signer: ByteArray,
+  amount: Int
+}
+
+pub type Reen {
+  Buy{
+    signer: ByteArray,
+    amount: Int
+  }
+  Sell
+ 
 }
 
 pub fn spend(
@@ -12,12 +21,9 @@ pub fn spend(
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
-  let y = 2
-  let x = datum.sc.signer
-  let a = datum.sc.signer.hash
-  let b = datum.rdmr
-  when b is {
-    sample.Buy -> 1 == 1
-    sample.Sell -> 5 == 1
-  }
+  let x = rdmr.amount
+  let z = Buy(rdmr.signer, 55) 
+
+
+  True
 }
