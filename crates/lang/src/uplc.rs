@@ -214,6 +214,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 (ValueConstructorVariant::Record { .. }, Type::App { .. }) => {}
+                (ValueConstructorVariant::Record { .. }, Type::Fn { .. }) => {}
                 _ => todo!(),
             },
             TypedExpr::Fn { .. } => todo!(),
@@ -508,7 +509,7 @@ impl<'a> CodeGenerator<'a> {
                 if name == "True" || name == "False" {
                     Term::Constant(Constant::Bool(name == "True"))
                 } else {
-                    match constructor.variant.clone() {
+                    match dbg!(constructor.variant.clone()) {
                         ValueConstructorVariant::LocalVariable { .. } => Term::Var(Name {
                             text: name.to_string(),
                             unique: 0.into(),
@@ -521,20 +522,93 @@ impl<'a> CodeGenerator<'a> {
             }
             TypedExpr::Fn { .. } => todo!(),
             TypedExpr::List { .. } => todo!(),
-            TypedExpr::Call { fun, args, .. } => {
-                let mut term =
-                    self.recurse_code_gen(fun, scope_level.scope_increment(args.len() as i32 + 1));
+            TypedExpr::Call {
+                fun, args, tipo, ..
+            } => {
+                if let (
+                    Type::App { module, name, .. },
+                    TypedExpr::Var {
+                        name: constr_name, ..
+                    },
+                ) = (&**tipo, &**fun)
+                {
+                    let mut term: Term<Name> =
+                        Term::Constant(Constant::ProtoList(uplc::ast::Type::Data, vec![]));
 
-                for (i, arg) in args.iter().enumerate() {
-                    term = Term::Apply {
-                        function: term.into(),
-                        argument: self
-                            .recurse_code_gen(&arg.value, scope_level.scope_increment(i as i32 + 1))
+                    let data_type = self
+                        .data_types
+                        .get(&(module.to_string(), name.to_string()))
+                        .unwrap();
+
+                    println!("DATATYPES ARE {data_type:#?}");
+                    let constr = data_type
+                        .constructors
+                        .iter()
+                        .find(|x| x.name == constr_name.to_string())
+                        .unwrap();
+
+                    let arg_to_data: Vec<(bool, Term<Name>)> = constr
+                        .arguments
+                        .iter()
+                        .map(|x| {
+                            if let Type::App { name, .. } = &*x.tipo {
+                                if name == "ByteArray" {
+                                    (true, Term::Builtin(DefaultFunction::BData))
+                                } else if name == "Int" {
+                                    (true, Term::Builtin(DefaultFunction::IData))
+                                } else {
+                                    (false, Term::Constant(Constant::Unit))
+                                }
+                            } else {
+                                unreachable!()
+                            }
+                        })
+                        .collect();
+
+                    for (i, arg) in args.iter().enumerate().rev() {
+                        let arg_term = self.recurse_code_gen(
+                            &arg.value,
+                            scope_level.scope_increment(i as i32 + 1),
+                        );
+
+                        term = Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Force(
+                                    Term::Builtin(DefaultFunction::MkCons).into(),
+                                )
+                                .into(),
+                                argument: if arg_to_data[i].0 {
+                                    Term::Apply {
+                                        function: arg_to_data[i].1.clone().into(),
+                                        argument: arg_term.into(),
+                                    }
+                                    .into()
+                                } else {
+                                    arg_term.into()
+                                },
+                            }
                             .into(),
-                    };
-                }
+                            argument: term.into(),
+                        };
+                    }
+                    term
+                } else {
+                    let mut term = self
+                        .recurse_code_gen(fun, scope_level.scope_increment(args.len() as i32 + 1));
 
-                term
+                    for (i, arg) in args.iter().enumerate() {
+                        term = Term::Apply {
+                            function: term.into(),
+                            argument: self
+                                .recurse_code_gen(
+                                    &arg.value,
+                                    scope_level.scope_increment(i as i32 + 1),
+                                )
+                                .into(),
+                        };
+                    }
+                    term
+                }
             }
             TypedExpr::BinOp {
                 name, left, right, ..
