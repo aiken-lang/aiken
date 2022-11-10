@@ -8,6 +8,14 @@ pub fn length(bytes: ByteArray) -> Int {
   builtin.lengthOfByteArray(bytes)
 }
 
+pub fn is_empty(bytes: ByteArray) -> Bool {
+  builtin.emptyByteArray(bytes)
+}
+
 pub fn concat(left front: ByteArray, right back: ByteArray) -> ByteArray {
   builtin.appendByteArray(front, back)
+}
+
+pub fn prepend(rest: ByteArray, byte: Int) -> ByteArray {
+  builtin.consByteArray(byte, rest)
 }
