@@ -73,7 +73,7 @@ fn main_loop(connection: Connection, _params: InitializeParams) -> Result<(), Er
                 connection.sender.send(Message::Response(response))?;
             }
             Message::Response(_) => todo!(),
-            Message::Notification(_) => todo!(),
+            Message::Notification(notif) => tracing::debug!("Get notification: {:#?}", notif),
         }
     }
 
