@@ -166,7 +166,7 @@ impl<'a> CodeGenerator<'a> {
                     function: Term::Apply {
                         function: Term::Force(Term::Builtin(DefaultFunction::IfThenElse).into())
                             .into(),
-                        argument: term,
+                        argument: term.into(),
                     }
                     .into(),
                     argument: Term::Delay(Term::Constant(Constant::Unit).into()).into(),
