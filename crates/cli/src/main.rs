@@ -1,4 +1,4 @@
-use aiken::cmd::{build, check, fmt, new, tx, uplc};
+use aiken::cmd::{build, check, fmt, lsp, new, tx, uplc};
 use clap::Parser;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
@@ -11,6 +11,9 @@ pub enum Cmd {
     Fmt(fmt::Args),
     Build(build::Args),
     Check(check::Args),
+
+    #[clap(hide = true)]
+    Lsp(lsp::Args),
 
     #[clap(subcommand)]
     Tx(tx::Cmd),
@@ -32,6 +35,7 @@ fn main() -> miette::Result<()> {
         Cmd::Fmt(args) => fmt::exec(args),
         Cmd::Build(args) => build::exec(args),
         Cmd::Check(args) => check::exec(args),
+        Cmd::Lsp(args) => lsp::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
     }

@@ -1,0 +1,22 @@
+[package]
+name = "aiken-lsp"
+version = "0.0.0"
+edition = "2021"
+description = "Cardano smart contract language and toolchain"
+repository = "https://github.com/txpipe/aiken"
+homepage = "https://github.com/txpipe/aiken"
+license = "Apache-2.0"
+authors = ["Lucas Rosa <x@rvcas.dev>"]
+
+
+[dependencies]
+aiken-lang = { path = '../lang', version = "0.0.24" }
+aiken-project = { path = '../project', version = "0.0.24" }
+crossbeam-channel = "0.5.6"
+lsp-server = "0.6.0"
+lsp-types = "0.93.2"
+miette = "5.4.1"
+serde = "1.0.147"
+serde_json = "1.0.87"
+thiserror = "1.0.37"
+tracing = "0.1.37"
