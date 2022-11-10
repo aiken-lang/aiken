@@ -14,12 +14,13 @@ clap = { version = "3.1.14", features = ["derive"] }
 hex = "0.4.3"
 ignore = "0.4.18"
 miette = { version = "5.3.0", features = ["fancy"] }
-pallas-addresses = "0.14.0-alpha.3"
-pallas-codec = "0.14.0-alpha.3"
-pallas-crypto = "0.14.0-alpha.3"
-pallas-primitives = "0.14.0-alpha.3"
-pallas-traverse = "0.14.0-alpha.3"
+pallas-addresses = "0.14.0"
+pallas-codec = "0.14.0"
+pallas-crypto = "0.14.0"
+pallas-primitives = "0.14.0"
+pallas-traverse = "0.14.0"
 
 aiken-lang = { path = "../lang", version = "0.0.24" }
+aiken-lsp = { path = "../lsp", version = "0.0.0" }
 aiken-project = { path = '../project', version = "0.0.24" }
 uplc = { path = '../uplc', version = "0.0.24" }
