@@ -649,7 +649,7 @@ impl<'a> CodeGenerator<'a> {
                                 let index =
                                     dt.constructors.iter().position(|c| name.clone() == c.name);
                                 data_type = dt.name.clone();
-                                current_module = module.clone().unwrap_or_else(|| "".to_string());
+                                current_module = module.clone().unwrap_or_default();
                                 total_constr_length = dt.constructors.len();
 
                                 index.unwrap_or(dt.constructors.len())

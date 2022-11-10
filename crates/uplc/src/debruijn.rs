@@ -214,6 +214,7 @@ impl Converter {
         Ok(converted_term)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     pub fn named_debruijn_to_debruijn(&mut self, term: &Term<NamedDeBruijn>) -> Term<DeBruijn> {
         match term {
             Term::Var(name) => Term::Var(name.clone().into()),
@@ -236,6 +237,7 @@ impl Converter {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     pub fn debruijn_to_named_debruijn(&mut self, term: &Term<DeBruijn>) -> Term<NamedDeBruijn> {
         match term {
             Term::Var(name) => Term::Var((*name).into()),
@@ -258,6 +260,7 @@ impl Converter {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     pub fn fake_named_debruijn_to_named_debruijn(
         &mut self,
         term: &Term<FakeNamedDeBruijn>,
@@ -287,6 +290,7 @@ impl Converter {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     pub fn named_debruijn_to_fake_named_debruijn(
         &mut self,
         term: &Term<NamedDeBruijn>,

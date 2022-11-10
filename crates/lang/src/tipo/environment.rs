@@ -1093,6 +1093,7 @@ impl<'a> Environment<'a> {
     /// Any unbound type variables will be linked to the other type as they are the same.
     ///
     /// It two types are found to not be the same an error is returned.
+    #[allow(clippy::only_used_in_recursion)]
     pub fn unify(&mut self, t1: Arc<Type>, t2: Arc<Type>, location: Span) -> Result<(), Error> {
         if t1 == t2 {
             return Ok(());
@@ -1536,6 +1537,7 @@ fn get_compatible_record_fields<A>(
 
 /// Takes a level and a type and turns all type variables within the type that have
 /// level higher than the input level into generalized (polymorphic) type variables.
+#[allow(clippy::only_used_in_recursion)]
 pub(crate) fn generalise(t: Arc<Type>, ctx_level: usize) -> Arc<Type> {
     match t.deref() {
         Type::Var { tipo } => match tipo.borrow().deref() {
