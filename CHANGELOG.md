@@ -2,6 +2,21 @@
 
 ## [next] - 2022-MM-DD
 
+### Added
+
+**aiken**: new `lsp` command
+**aiken**: new `fmt` command
+**aiken**: `build` command now works and outputs assets
+**aiken-lang**: formatter for `UntypedExpr`
+**aiken-lang**: uplc code gen
+**aiken-project**: validate if validator function return bool
+**aiken-project**: validate if validator function has minimum number of arguments
+**aiken-lsp**: new crate that contains the aiken language server
+
+### Changed
+
+**uplc**: `Converter::get_index` now takes the full name to provide better error messages for `Error::FreeUnique`
+
 ## [v0.0.24] - 2022-11-04
 
 ### Changed
