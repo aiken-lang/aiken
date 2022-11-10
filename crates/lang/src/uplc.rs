@@ -239,7 +239,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Call { fun, args, .. } => {
                 self.recurse_scope_level(fun, scope_level.scope_increment(args.len() as i32 + 1));
 
-                for (i, arg) in args.iter().enumerate() {
+                for arg in args.iter() {
                     self.recurse_scope_level(&arg.value, scope_level.clone());
                 }
             }
