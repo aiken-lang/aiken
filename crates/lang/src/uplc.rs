@@ -84,7 +84,7 @@ impl Default for ScopeLevels {
 
 pub struct CodeGenerator<'a> {
     uplc_function_holder: Vec<(String, Term<Name>)>,
-    uplc_function_holder_lookup: IndexMap<(String, String), (ScopeLevels, TypedExpr)>,
+    uplc_function_holder_lookup: IndexMap<(String, String), ScopeLevels>,
     uplc_data_holder_lookup: IndexMap<(String, String, String), (ScopeLevels, TypedExpr)>,
     uplc_data_constr_lookup: IndexMap<(String, String), ScopeLevels>,
     uplc_data_usage_holder_lookup: IndexMap<(String, String), ScopeLevels>,
@@ -232,6 +232,34 @@ impl<'a> CodeGenerator<'a> {
                 }
                 (ValueConstructorVariant::Record { .. }, Type::App { .. }) => {}
                 (ValueConstructorVariant::Record { .. }, Type::Fn { .. }) => {}
+                (ValueConstructorVariant::ModuleFn { name, module, .. }, Type::Fn { .. }) => {
+                    if self
+                        .uplc_function_holder_lookup
+                        .get(&(module.to_string(), name.to_string()))
+                        .is_none()
+                    {
+                        let func_def = self
+                            .functions
+                            .get(&(module.to_string(), name.to_string()))
+                            .unwrap();
+
+                        self.recurse_scope_level(
+                            &func_def.body,
+                            scope_level.scope_increment(func_def.arguments.len() as i32 + 1),
+                        );
+
+                        self.uplc_function_holder_lookup
+                            .insert((module, name), scope_level);
+                    } else if scope_level.is_less_than(
+                        self.uplc_function_holder_lookup
+                            .get(&(module.to_string(), name.to_string()))
+                            .unwrap(),
+                        false,
+                    ) {
+                        self.uplc_function_holder_lookup
+                            .insert((module, name), scope_level);
+                    }
+                }
                 _ => todo!(),
             },
             TypedExpr::Fn { .. } => todo!(),
@@ -361,7 +389,7 @@ impl<'a> CodeGenerator<'a> {
                         .insert((module, current_var_name), current_scope);
                 }
             }
-            a @ TypedExpr::ModuleSelect { constructor, .. } => match constructor {
+            TypedExpr::ModuleSelect { constructor, .. } => match constructor {
                 ModuleValueConstructor::Record { .. } => todo!(),
                 ModuleValueConstructor::Fn { module, name, .. } => {
                     if self
@@ -379,22 +407,16 @@ impl<'a> CodeGenerator<'a> {
                             scope_level.scope_increment(func_def.arguments.len() as i32 + 1),
                         );
 
-                        self.uplc_function_holder_lookup.insert(
-                            (module.to_string(), name.to_string()),
-                            (scope_level, a.clone()),
-                        );
+                        self.uplc_function_holder_lookup
+                            .insert((module.to_string(), name.to_string()), scope_level);
                     } else if scope_level.is_less_than(
-                        &self
-                            .uplc_function_holder_lookup
+                        self.uplc_function_holder_lookup
                             .get(&(module.to_string(), name.to_string()))
-                            .unwrap()
-                            .0,
+                            .unwrap(),
                         false,
                     ) {
-                        self.uplc_function_holder_lookup.insert(
-                            (module.to_string(), name.to_string()),
-                            (scope_level, a.clone()),
-                        );
+                        self.uplc_function_holder_lookup
+                            .insert((module.to_string(), name.to_string()), scope_level);
                     }
                 }
                 ModuleValueConstructor::Constant { .. } => todo!(),
@@ -424,7 +446,7 @@ impl<'a> CodeGenerator<'a> {
                 // name: constructor_name,
                 tipo,
                 // arguments,
-                // constructor,
+                constructor: _constructor,
                 // module,
                 ..
             } => {
@@ -526,7 +548,7 @@ impl<'a> CodeGenerator<'a> {
                 if name == "True" || name == "False" {
                     Term::Constant(Constant::Bool(name == "True"))
                 } else {
-                    match dbg!(constructor.variant.clone()) {
+                    match constructor.variant.clone() {
                         ValueConstructorVariant::LocalVariable { .. } => Term::Var(Name {
                             text: name.to_string(),
                             unique: 0.into(),
@@ -1211,14 +1233,11 @@ impl<'a> CodeGenerator<'a> {
         scope_level: ScopeLevels,
     ) -> Term<Name> {
         let mut term = current_term;
+
+        // attempt to insert function definitions where needed
         for func in self.uplc_function_holder_lookup.clone().keys() {
             if scope_level.is_less_than(
-                &self
-                    .uplc_function_holder_lookup
-                    .clone()
-                    .get(func)
-                    .unwrap()
-                    .0,
+                self.uplc_function_holder_lookup.clone().get(func).unwrap(),
                 false,
             ) {
                 let func_def = self
@@ -1370,14 +1389,14 @@ impl<'a> CodeGenerator<'a> {
 
         // Pull out all uplc data holder and data usage, filter by Scope Level, Sort By Scope Depth, Then Apply
         #[allow(clippy::type_complexity)]
-        let mut data_holder: Vec<((String, String, String), (bool, ScopeLevels, u64))> = self
+        let mut data_holder: Vec<((String, String, String), (ScopeLevels, i128))> = self
             .uplc_data_usage_holder_lookup
             .iter()
             .filter(|record_scope| scope_level.is_less_than(record_scope.1, false))
             .map(|((module, name), scope)| {
                 (
                     (module.to_string(), name.to_string(), "".to_string()),
-                    (true, scope.clone(), 0),
+                    (scope.clone(), -1),
                 )
             })
             .collect();
@@ -1393,27 +1412,27 @@ impl<'a> CodeGenerator<'a> {
                     };
                     (
                         (module.to_string(), name.to_string(), label.to_string()),
-                        (false, scope.clone(), *index),
+                        (scope.clone(), *index as i128),
                     )
                 })
-                .collect::<Vec<((String, String, String), (bool, ScopeLevels, u64))>>(),
+                .collect::<Vec<((String, String, String), (ScopeLevels, i128))>>(),
         );
-        data_holder.sort_by(|b, d| {
-            if b.1 .1.is_less_than(&d.1 .1, true) {
+        data_holder.sort_by(|item1, item2| {
+            if item1.1 .0.is_less_than(&item2.1 .0, true) {
                 Ordering::Less
-            } else if d.1 .1.is_less_than(&b.1 .1, true) {
+            } else if item2.1 .0.is_less_than(&item1.1 .0, true) {
                 Ordering::Greater
-            } else if b.1 .0 && !d.1 .0 {
+            } else if item1.1 .1 < item2.1 .1 {
                 Ordering::Less
-            } else if d.1 .0 && !b.1 .0 {
+            } else if item2.1 .1 < item1.1 .1 {
                 Ordering::Greater
             } else {
                 Ordering::Equal
             }
         });
 
-        for (key @ (module, name, label), (is_data_usage, _, index)) in data_holder.iter().rev() {
-            if *is_data_usage {
+        for (key @ (module, name, label), (_, index)) in data_holder.iter().rev() {
+            if index < &0 {
                 term = Term::Apply {
                     function: Term::Lambda {
                         parameter_name: Name {
