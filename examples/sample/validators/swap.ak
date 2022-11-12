@@ -21,8 +21,7 @@ pub fn spend(
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
-  let x = rdmr.amount
-  let z = Buy(rdmr.signer, 55) 
+  1 % 2 != 3 || 5 / 4 - 2 != 0
 
 
   True

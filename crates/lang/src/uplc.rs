@@ -669,18 +669,207 @@ impl<'a> CodeGenerator<'a> {
                         Type::Fn { .. } => todo!(),
                         Type::Var { .. } => todo!(),
                     },
-                    BinOp::And => todo!(),
-                    BinOp::Or => todo!(),
-                    BinOp::NotEq => todo!(),
-                    BinOp::LtInt => todo!(),
-                    BinOp::LtEqInt => todo!(),
-                    BinOp::GtEqInt => todo!(),
-                    BinOp::GtInt => todo!(),
-                    BinOp::AddInt => todo!(),
-                    BinOp::SubInt => todo!(),
-                    BinOp::MultInt => todo!(),
-                    BinOp::DivInt => todo!(),
-                    BinOp::ModInt => todo!(),
+                    BinOp::And => Term::Force(
+                        Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Force(
+                                        Term::Builtin(DefaultFunction::IfThenElse).into(),
+                                    )
+                                    .into(),
+                                    argument: left_term.into(),
+                                }
+                                .into(),
+                                argument: Term::Delay(
+                                    Term::Apply {
+                                        function: Term::Apply {
+                                            function: Term::Apply {
+                                                function: Term::Force(
+                                                    Term::Builtin(DefaultFunction::IfThenElse)
+                                                        .into(),
+                                                )
+                                                .into(),
+                                                argument: right_term.into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Constant(Constant::Bool(true)).into(),
+                                        }
+                                        .into(),
+                                        argument: Term::Constant(Constant::Bool(false)).into(),
+                                    }
+                                    .into(),
+                                )
+                                .into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(Term::Constant(Constant::Bool(false)).into())
+                                .into(),
+                        }
+                        .into(),
+                    ),
+                    BinOp::Or => Term::Force(
+                        Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Force(
+                                        Term::Builtin(DefaultFunction::IfThenElse).into(),
+                                    )
+                                    .into(),
+                                    argument: left_term.into(),
+                                }
+                                .into(),
+                                argument: Term::Delay(Term::Constant(Constant::Bool(true)).into())
+                                    .into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(
+                                Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Apply {
+                                            function: Term::Force(
+                                                Term::Builtin(DefaultFunction::IfThenElse).into(),
+                                            )
+                                            .into(),
+                                            argument: right_term.into(),
+                                        }
+                                        .into(),
+                                        argument: Term::Constant(Constant::Bool(true)).into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Constant(Constant::Bool(false)).into(),
+                                }
+                                .into(),
+                            )
+                            .into(),
+                        }
+                        .into(),
+                    ),
+                    BinOp::NotEq => match &*left.tipo() {
+                        Type::App { name, .. } => {
+                            let equality = match name.as_str() {
+                                "Int" => Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::EqualsInteger)
+                                            .into(),
+                                        argument: left_term.into(),
+                                    }
+                                    .into(),
+                                    argument: right_term.into(),
+                                },
+
+                                "String" => Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::EqualsString)
+                                            .into(),
+                                        argument: left_term.into(),
+                                    }
+                                    .into(),
+                                    argument: right_term.into(),
+                                },
+
+                                "ByteArray" => Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::EqualsByteString)
+                                            .into(),
+                                        argument: left_term.into(),
+                                    }
+                                    .into(),
+                                    argument: right_term.into(),
+                                },
+
+                                _ => todo!(),
+                            };
+                            Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Force(
+                                            Term::Builtin(DefaultFunction::IfThenElse).into(),
+                                        )
+                                        .into(),
+                                        argument: equality.into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Constant(Constant::Bool(false)).into(),
+                                }
+                                .into(),
+                                argument: Term::Constant(Constant::Bool(true)).into(),
+                            }
+                        }
+                        Type::Fn { .. } => todo!(),
+                        Type::Var { .. } => todo!(),
+                    },
+                    BinOp::LtInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
+                    BinOp::LtEqInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
+                    BinOp::GtEqInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
+                            argument: right_term.into(),
+                        }
+                        .into(),
+                        argument: left_term.into(),
+                    },
+                    BinOp::GtInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
+                            argument: right_term.into(),
+                        }
+                        .into(),
+                        argument: left_term.into(),
+                    },
+                    BinOp::AddInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::AddInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
+                    BinOp::SubInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::SubtractInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
+                    BinOp::MultInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::MultiplyInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
+                    BinOp::DivInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::DivideInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
+                    BinOp::ModInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::ModInteger).into(),
+                            argument: left_term.into(),
+                        }
+                        .into(),
+                        argument: right_term.into(),
+                    },
                 }
             }
             TypedExpr::Assignment { value, pattern, .. } => match pattern {
