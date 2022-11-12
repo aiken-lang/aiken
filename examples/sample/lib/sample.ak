@@ -1,5 +1,5 @@
 pub type Signer {
-  hash: Int,
+  hash: ByteArray,
 }
 
 pub type ScriptContext {
