@@ -10,7 +10,7 @@ about: Create a bug report
 
 - [ ] Linux / Ubuntu
 - [ ] Linux / Other
-- [ ] OSX
+- [ ] macOS
 - [ ] Windows
 
 #### Describe what the problem is? 
