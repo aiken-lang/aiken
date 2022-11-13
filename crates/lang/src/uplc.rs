@@ -218,50 +218,90 @@ impl<'a> CodeGenerator<'a> {
 
             TypedExpr::Var {
                 constructor, name, ..
-            } => match (constructor.variant.clone(), (*constructor.tipo).clone()) {
-                (ValueConstructorVariant::LocalVariable { .. }, Type::App { module, .. }) => {
-                    if let Some(val) = self
-                        .uplc_data_usage_holder_lookup
-                        .get(&(module.to_string(), name.clone()))
-                    {
-                        if scope_level.is_less_than(val, false) {
-                            self.uplc_data_usage_holder_lookup
-                                .insert((module, name.clone()), scope_level);
+            } => {
+                match constructor.variant.clone() {
+                    ValueConstructorVariant::LocalVariable { .. } => {
+                        let mut is_app_type = false;
+                        let mut current_tipo: Type = (*constructor.tipo).clone();
+                        let mut current_module = "".to_string();
+                        while !is_app_type {
+                            match current_tipo.clone() {
+                                Type::App { module, .. } => {
+                                    is_app_type = true;
+
+                                    current_module = module.clone();
+                                }
+                                Type::Fn { .. } => todo!(),
+                                Type::Var { tipo } => {
+                                    let x = tipo.borrow().clone();
+
+                                    match x {
+                                        tipo::TypeVar::Unbound { .. } => todo!(),
+                                        tipo::TypeVar::Link { tipo } => {
+                                            current_tipo = (*tipo).clone();
+                                        }
+                                        tipo::TypeVar::Generic { .. } => todo!(),
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(val) = self
+                            .uplc_data_usage_holder_lookup
+                            .get(&(current_module.to_string(), name.clone()))
+                        {
+                            if scope_level.is_less_than(val, false) {
+                                self.uplc_data_usage_holder_lookup
+                                    .insert((current_module, name.clone()), scope_level);
+                            }
                         }
                     }
-                }
-                (ValueConstructorVariant::Record { .. }, Type::App { .. }) => {}
-                (ValueConstructorVariant::Record { .. }, Type::Fn { .. }) => {}
-                (ValueConstructorVariant::ModuleFn { name, module, .. }, Type::Fn { .. }) => {
-                    if self
-                        .uplc_function_holder_lookup
-                        .get(&(module.to_string(), name.to_string()))
-                        .is_none()
-                    {
-                        let func_def = self
-                            .functions
+                    ValueConstructorVariant::ModuleConstant { .. } => todo!(),
+                    ValueConstructorVariant::ModuleFn { name, module, .. } => {
+                        if self
+                            .uplc_function_holder_lookup
                             .get(&(module.to_string(), name.to_string()))
-                            .unwrap();
+                            .is_none()
+                        {
+                            let func_def = self
+                                .functions
+                                .get(&(module.to_string(), name.to_string()))
+                                .unwrap();
 
-                        self.recurse_scope_level(
-                            &func_def.body,
-                            scope_level.scope_increment(func_def.arguments.len() as i32 + 1),
-                        );
+                            self.recurse_scope_level(
+                                &func_def.body,
+                                scope_level
+                                    .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
+                            );
 
-                        self.uplc_function_holder_lookup
-                            .insert((module, name), scope_level);
-                    } else if scope_level.is_less_than(
-                        self.uplc_function_holder_lookup
-                            .get(&(module.to_string(), name.to_string()))
-                            .unwrap(),
-                        false,
-                    ) {
-                        self.uplc_function_holder_lookup
-                            .insert((module, name), scope_level);
+                            self.uplc_function_holder_lookup
+                                .insert((module, name), scope_level);
+                        } else if scope_level.is_less_than(
+                            self.uplc_function_holder_lookup
+                                .get(&(module.to_string(), name.to_string()))
+                                .unwrap(),
+                            false,
+                        ) {
+                            let func_def = self
+                                .functions
+                                .get(&(module.to_string(), name.to_string()))
+                                .unwrap();
+
+                            self.uplc_function_holder_lookup.insert(
+                                (module, name),
+                                scope_level
+                                    .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
+                            );
+                        }
                     }
-                }
-                _ => todo!(),
-            },
+                    ValueConstructorVariant::Record { .. } => {
+                        match &*constructor.tipo {
+                            Type::App { .. } => {}
+                            Type::Fn { .. } | Type::Var { .. } => {}
+                        };
+                    }
+                };
+            }
             TypedExpr::Fn { .. } => todo!(),
             TypedExpr::List { .. } => todo!(),
             TypedExpr::Call { fun, args, .. } => {
@@ -276,7 +316,7 @@ impl<'a> CodeGenerator<'a> {
                 self.recurse_scope_level(right, scope_level);
             }
             TypedExpr::Assignment { value, pattern, .. } => {
-                self.recurse_scope_level_pattern(pattern, value, scope_level)
+                self.recurse_scope_level_pattern(pattern, value, scope_level.scope_increment(1))
             }
             TypedExpr::Try { .. } => todo!(),
             TypedExpr::When {
@@ -404,7 +444,8 @@ impl<'a> CodeGenerator<'a> {
 
                         self.recurse_scope_level(
                             &func_def.body,
-                            scope_level.scope_increment(func_def.arguments.len() as i32 + 1),
+                            scope_level
+                                .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
                         );
 
                         self.uplc_function_holder_lookup
@@ -415,8 +456,16 @@ impl<'a> CodeGenerator<'a> {
                             .unwrap(),
                         false,
                     ) {
-                        self.uplc_function_holder_lookup
-                            .insert((module.to_string(), name.to_string()), scope_level);
+                        let func_def = self
+                            .functions
+                            .get(&(module.to_string(), name.to_string()))
+                            .unwrap();
+
+                        self.uplc_function_holder_lookup.insert(
+                            (module.to_string(), name.to_string()),
+                            scope_level
+                                .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
+                        );
                     }
                 }
                 ModuleValueConstructor::Constant { .. } => todo!(),
@@ -533,8 +582,8 @@ impl<'a> CodeGenerator<'a> {
                     let mut term = self
                         .recurse_code_gen(exp, scope_level.scope_increment_sequence(i as i32 + 1));
 
-                    term =
-                        self.maybe_insert_def(term, scope_level.scope_increment_sequence(i as i32));
+                    term = self
+                        .maybe_insert_def(term, scope_level.scope_increment_sequence(i as i32 + 1));
 
                     self.uplc_function_holder
                         .push(("".to_string(), term.clone()));
@@ -554,7 +603,10 @@ impl<'a> CodeGenerator<'a> {
                             unique: 0.into(),
                         }),
                         ValueConstructorVariant::ModuleConstant { .. } => todo!(),
-                        ValueConstructorVariant::ModuleFn { .. } => todo!(),
+                        ValueConstructorVariant::ModuleFn { module, name, .. } => Term::Var(Name {
+                            text: format!("{module}_{name}"),
+                            unique: 0.into(),
+                        }),
                         ValueConstructorVariant::Record { .. } => todo!(),
                     }
                 }
@@ -907,7 +959,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                     argument: self
-                        .recurse_code_gen(value, scope_level.scope_increment_sequence(1))
+                        .recurse_code_gen(value, scope_level.scope_increment(1))
                         .into(),
                 },
 
