@@ -20,6 +20,8 @@ pallas-codec = "0.14.0"
 pallas-crypto = "0.14.0"
 pallas-primitives = "0.14.0"
 pallas-traverse = "0.14.0"
+regex = "1.5.4"
+thiserror = "1.0.31"
 
 aiken-lang = { path = "../lang", version = "0.0.24" }
 aiken-lsp = { path = "../lsp", version = "0.0.0" }
