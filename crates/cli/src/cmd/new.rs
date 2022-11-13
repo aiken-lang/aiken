@@ -4,6 +4,8 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
+use super::error::{Error, InvalidProjectNameReason};
+
 #[derive(clap::Args)]
 /// Create a new Aiken project
 pub struct Args {
@@ -20,11 +22,11 @@ pub struct Creator {
 }
 
 impl Creator {
-    fn new(args: Args) -> Self {
+    fn new(args: Args, project_name: String) -> Self {
         let root = args.name;
         let src = root.join("src");
         let scripts = src.join("scripts");
-        let project_name = root.clone().into_os_string().into_string().unwrap();
+        let project_name = project_name;
         let project = src.join(&project_name);
         Self {
             root,
@@ -111,9 +113,37 @@ fn write(path: PathBuf, contents: &str) -> miette::Result<()> {
     Ok(())
 }
 
+fn validate_name(name: &str) -> Result<(), Error> {
+    if name.starts_with("aiken_") {
+        Err(Error::InvalidProjectName {
+            name: name.to_string(),
+            reason: InvalidProjectNameReason::AikenPrefix,
+        })
+    } else if name == "aiken" {
+        Err(Error::InvalidProjectName {
+            name: name.to_string(),
+            reason: InvalidProjectNameReason::AikenReservedModule,
+        })
+    } else if !regex::Regex::new("^[a-z][a-z0-9_]*$")
+        .expect("new name regex could not be compiled")
+        .is_match(name)
+    {
+        Err(Error::InvalidProjectName {
+            name: name.to_string(),
+            reason: InvalidProjectNameReason::Format,
+        })
+    } else {
+        Ok(())
+    }
+}
+
 pub fn exec(args: Args) -> miette::Result<()> {
     if !args.name.exists() {
-        let creator = Creator::new(args);
+        let project_name = args.name.clone().into_os_string().into_string().unwrap();
+
+        validate_name(&project_name).into_diagnostic()?;
+
+        let creator = Creator::new(args, project_name);
         creator.run()?;
     }
 
