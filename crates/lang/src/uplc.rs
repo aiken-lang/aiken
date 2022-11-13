@@ -202,7 +202,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match body {
+        match dbg!(body) {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
@@ -1441,14 +1441,14 @@ impl<'a> CodeGenerator<'a> {
 
         // Pull out all uplc data holder and data usage, filter by Scope Level, Sort By Scope Depth, Then Apply
         #[allow(clippy::type_complexity)]
-        let mut data_holder: Vec<((String, String, String), (ScopeLevels, i128))> = self
+        let mut data_holder: Vec<((String, String, String), (ScopeLevels, i128, String))> = self
             .uplc_data_usage_holder_lookup
             .iter()
             .filter(|record_scope| scope_level.is_less_than(record_scope.1, false))
             .map(|((module, name), scope)| {
                 (
                     (module.to_string(), name.to_string(), "".to_string()),
-                    (scope.clone(), -1),
+                    (scope.clone(), -1, "".to_string()),
                 )
             })
             .collect();
@@ -1458,16 +1458,26 @@ impl<'a> CodeGenerator<'a> {
                 .iter()
                 .filter(|record_scope| scope_level.is_less_than(&record_scope.1 .0, false))
                 .map(|((module, name, label), (scope, expr))| {
-                    let index = match expr {
-                        TypedExpr::RecordAccess { index, .. } => index,
+                    let index_type = match expr {
+                        TypedExpr::RecordAccess { index, tipo, .. } => {
+                            let tipo = &**tipo;
+
+                            let name = match tipo {
+                                Type::App { name, .. } => name,
+                                Type::Fn { .. } => todo!(),
+                                Type::Var { .. } => todo!(),
+                            };
+                            (index, name.clone())
+                        }
                         _ => todo!(),
                     };
+
                     (
                         (module.to_string(), name.to_string(), label.to_string()),
-                        (scope.clone(), *index as i128),
+                        (scope.clone(), *index_type.0 as i128, index_type.1),
                     )
                 })
-                .collect::<Vec<((String, String, String), (ScopeLevels, i128))>>(),
+                .collect::<Vec<((String, String, String), (ScopeLevels, i128, String))>>(),
         );
         data_holder.sort_by(|item1, item2| {
             if item1.1 .0.is_less_than(&item2.1 .0, true) {
@@ -1483,7 +1493,7 @@ impl<'a> CodeGenerator<'a> {
             }
         });
 
-        for (key @ (module, name, label), (_, index)) in data_holder.iter().rev() {
+        for (key @ (module, name, label), (_, index, tipo)) in data_holder.iter().rev() {
             if index < &0 {
                 term = Term::Apply {
                     function: Term::Lambda {
@@ -1513,6 +1523,35 @@ impl<'a> CodeGenerator<'a> {
                 self.uplc_data_usage_holder_lookup
                     .shift_remove(&(module.clone(), name.clone()));
             } else {
+                let var_term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Var(Name {
+                            text: "constr_field_get_arg".to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: Term::Var(Name {
+                            text: format!("{name}_fields"),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                    .into(),
+                    argument: Term::Constant(Constant::Integer(*index as i128)).into(),
+                };
+
+                let type_conversion = match tipo.as_str() {
+                    "ByteArray" => Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnBData).into(),
+                        argument: var_term.into(),
+                    },
+                    "Int" => Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnIData).into(),
+                        argument: var_term.into(),
+                    },
+                    _ => var_term,
+                };
+
                 term = Term::Apply {
                     function: Term::Lambda {
                         parameter_name: Name {
@@ -1522,23 +1561,7 @@ impl<'a> CodeGenerator<'a> {
                         body: term.into(),
                     }
                     .into(),
-                    argument: Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Var(Name {
-                                text: "constr_field_get_arg".to_string(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                            argument: Term::Var(Name {
-                                text: format!("{name}_fields"),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                        argument: Term::Constant(Constant::Integer(*index as i128)).into(),
-                    }
-                    .into(),
+                    argument: type_conversion.into(),
                 };
                 self.uplc_data_holder_lookup.shift_remove(key);
             }
