@@ -7,8 +7,11 @@
 - **aiken**: new `lsp` command
 - **aiken**: new `fmt` command
 - **aiken**: `build` command now works and outputs assets
+- **aiken**: validate project name on `aiken new`
 - **aiken-lang**: formatter for `UntypedExpr`
 - **aiken-lang**: uplc code gen
+- **aiken-lang**: add `Data` to prelude
+- **aiken-lang**: allow `Data` to unify with anything that's not in the prelude
 - **aiken-project**: validate if validator function return bool
 - **aiken-project**: validate if validator function has minimum number of arguments
 - **aiken-lsp**: new crate that contains the aiken language server
