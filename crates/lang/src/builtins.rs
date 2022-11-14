@@ -13,13 +13,14 @@ use crate::{
     IdGenerator,
 };
 
-const BYTE_ARRAY: &str = "ByteArray";
-const BOOL: &str = "Bool";
-const INT: &str = "Int";
-const LIST: &str = "List";
-const NIL: &str = "Nil";
-const RESULT: &str = "Result";
-const STRING: &str = "String";
+pub const BYTE_ARRAY: &str = "ByteArray";
+pub const BOOL: &str = "Bool";
+pub const INT: &str = "Int";
+pub const DATA: &str = "Data";
+pub const LIST: &str = "List";
+pub const NIL: &str = "Nil";
+pub const RESULT: &str = "Result";
+pub const STRING: &str = "String";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -40,6 +41,18 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor {
             parameters: vec![],
             tipo: int(),
+            location: Span::empty(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // Data
+    prelude.types.insert(
+        DATA.to_string(),
+        TypeConstructor {
+            parameters: vec![],
+            tipo: data(),
             location: Span::empty(),
             module: "".to_string(),
             public: true,
@@ -372,14 +385,12 @@ pub fn from_default_function(
         DefaultFunction::UnIData => None,
         DefaultFunction::UnBData => None,
         DefaultFunction::EqualsData => {
-            let arg = generic_var(id_gen.next());
-
-            let tipo = function(vec![arg.clone(), arg], bool());
+            let tipo = function(vec![data(), data()], bool());
 
             Some((tipo, 1))
         }
         DefaultFunction::SerialiseData => {
-            let tipo = function(vec![generic_var(id_gen.next())], byte_array());
+            let tipo = function(vec![data()], byte_array());
 
             Some((tipo, 1))
         }
@@ -407,6 +418,15 @@ pub fn int() -> Arc<Type> {
     Arc::new(Type::App {
         public: true,
         name: INT.to_string(),
+        module: "".to_string(),
+        args: vec![],
+    })
+}
+
+pub fn data() -> Arc<Type> {
+    Arc::new(Type::App {
+        public: true,
+        name: DATA.to_string(),
         module: "".to_string(),
         args: vec![],
     })
