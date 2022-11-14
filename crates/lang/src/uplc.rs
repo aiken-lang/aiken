@@ -120,6 +120,17 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate(&mut self, body: TypedExpr, arguments: Vec<TypedArg>) -> Program<Name> {
         self.recurse_scope_level(&body, ScopeLevels::new());
 
+        self.uplc_function_holder_lookup
+            .sort_by(|_key1, value1, _key2, value2| {
+                if value1.is_less_than(value2, true) {
+                    Ordering::Less
+                } else if value2.is_less_than(value1, true) {
+                    Ordering::Greater
+                } else {
+                    Ordering::Equal
+                }
+            });
+
         let mut term = self.recurse_code_gen(&body, ScopeLevels::new());
 
         // Apply constr exposer to top level.
@@ -202,7 +213,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match dbg!(body) {
+        match body {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
@@ -221,17 +232,19 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 match constructor.variant.clone() {
                     ValueConstructorVariant::LocalVariable { .. } => {
-                        let mut is_app_type = false;
+                        let mut is_done_loop = false;
                         let mut current_tipo: Type = (*constructor.tipo).clone();
                         let mut current_module = "".to_string();
-                        while !is_app_type {
+                        while !is_done_loop {
                             match current_tipo.clone() {
                                 Type::App { module, .. } => {
-                                    is_app_type = true;
+                                    is_done_loop = true;
 
                                     current_module = module.clone();
                                 }
-                                Type::Fn { .. } => todo!(),
+                                Type::Fn { .. } => {
+                                    is_done_loop = true;
+                                }
                                 Type::Var { tipo } => {
                                     let x = tipo.borrow().clone();
 
@@ -268,11 +281,7 @@ impl<'a> CodeGenerator<'a> {
                                 .get(&(module.to_string(), name.to_string()))
                                 .unwrap();
 
-                            self.recurse_scope_level(
-                                &func_def.body,
-                                scope_level
-                                    .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
-                            );
+                            self.recurse_scope_level(&func_def.body, scope_level.clone());
 
                             self.uplc_function_holder_lookup
                                 .insert((module, name), scope_level);
@@ -282,16 +291,8 @@ impl<'a> CodeGenerator<'a> {
                                 .unwrap(),
                             false,
                         ) {
-                            let func_def = self
-                                .functions
-                                .get(&(module.to_string(), name.to_string()))
-                                .unwrap();
-
-                            self.uplc_function_holder_lookup.insert(
-                                (module, name),
-                                scope_level
-                                    .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
-                            );
+                            self.uplc_function_holder_lookup
+                                .insert((module, name), scope_level);
                         }
                     }
                     ValueConstructorVariant::Record { .. } => {
@@ -305,10 +306,13 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Fn { .. } => todo!(),
             TypedExpr::List { .. } => todo!(),
             TypedExpr::Call { fun, args, .. } => {
-                self.recurse_scope_level(fun, scope_level.scope_increment(args.len() as i32 + 1));
+                self.recurse_scope_level(fun, scope_level.scope_increment(1));
 
-                for arg in args.iter() {
-                    self.recurse_scope_level(&arg.value, scope_level.clone());
+                for (index, arg) in args.iter().enumerate() {
+                    self.recurse_scope_level(
+                        &arg.value,
+                        scope_level.scope_increment(index as i32 + 2),
+                    );
                 }
             }
             TypedExpr::BinOp { left, right, .. } => {
@@ -626,65 +630,78 @@ impl<'a> CodeGenerator<'a> {
                     let mut term: Term<Name> =
                         Term::Constant(Constant::ProtoList(uplc::ast::Type::Data, vec![]));
 
-                    let data_type = self
-                        .data_types
-                        .get(&(module.to_string(), name.to_string()))
-                        .unwrap();
+                    if let Some(data_type) =
+                        self.data_types.get(&(module.to_string(), name.to_string()))
+                    {
+                        let constr = data_type
+                            .constructors
+                            .iter()
+                            .find(|x| x.name == *constr_name)
+                            .unwrap();
 
-                    let constr = data_type
-                        .constructors
-                        .iter()
-                        .find(|x| x.name == *constr_name)
-                        .unwrap();
-
-                    let arg_to_data: Vec<(bool, Term<Name>)> = constr
-                        .arguments
-                        .iter()
-                        .map(|x| {
-                            if let Type::App { name, .. } = &*x.tipo {
-                                if name == "ByteArray" {
-                                    (true, Term::Builtin(DefaultFunction::BData))
-                                } else if name == "Int" {
-                                    (true, Term::Builtin(DefaultFunction::IData))
-                                } else {
-                                    (false, Term::Constant(Constant::Unit))
-                                }
-                            } else {
-                                unreachable!()
-                            }
-                        })
-                        .collect();
-
-                    for (i, arg) in args.iter().enumerate().rev() {
-                        let arg_term = self.recurse_code_gen(
-                            &arg.value,
-                            scope_level.scope_increment(i as i32 + 1),
-                        );
-
-                        term = Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Force(
-                                    Term::Builtin(DefaultFunction::MkCons).into(),
-                                )
-                                .into(),
-                                argument: if arg_to_data[i].0 {
-                                    Term::Apply {
-                                        function: arg_to_data[i].1.clone().into(),
-                                        argument: arg_term.into(),
+                        let arg_to_data: Vec<(bool, Term<Name>)> = constr
+                            .arguments
+                            .iter()
+                            .map(|x| {
+                                if let Type::App { name, .. } = &*x.tipo {
+                                    if name == "ByteArray" {
+                                        (true, Term::Builtin(DefaultFunction::BData))
+                                    } else if name == "Int" {
+                                        (true, Term::Builtin(DefaultFunction::IData))
+                                    } else {
+                                        (false, Term::Constant(Constant::Unit))
                                     }
-                                    .into()
                                 } else {
-                                    arg_term.into()
-                                },
-                            }
-                            .into(),
-                            argument: term.into(),
-                        };
+                                    unreachable!()
+                                }
+                            })
+                            .collect();
+
+                        for (i, arg) in args.iter().enumerate().rev() {
+                            let arg_term = self.recurse_code_gen(
+                                &arg.value,
+                                scope_level.scope_increment(i as i32 + 1),
+                            );
+
+                            term = Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Force(
+                                        Term::Builtin(DefaultFunction::MkCons).into(),
+                                    )
+                                    .into(),
+                                    argument: if arg_to_data[i].0 {
+                                        Term::Apply {
+                                            function: arg_to_data[i].1.clone().into(),
+                                            argument: arg_term.into(),
+                                        }
+                                        .into()
+                                    } else {
+                                        arg_term.into()
+                                    },
+                                }
+                                .into(),
+                                argument: term.into(),
+                            };
+                        }
+                        term
+                    } else {
+                        let mut term = self.recurse_code_gen(fun, scope_level.scope_increment(1));
+
+                        for (i, arg) in args.iter().enumerate() {
+                            term = Term::Apply {
+                                function: term.into(),
+                                argument: self
+                                    .recurse_code_gen(
+                                        &arg.value,
+                                        scope_level.scope_increment(i as i32 + 2),
+                                    )
+                                    .into(),
+                            };
+                        }
+                        term
                     }
-                    term
                 } else {
-                    let mut term = self
-                        .recurse_code_gen(fun, scope_level.scope_increment(args.len() as i32 + 1));
+                    let mut term = self.recurse_code_gen(fun, scope_level.scope_increment(1));
 
                     for (i, arg) in args.iter().enumerate() {
                         term = Term::Apply {
@@ -692,7 +709,7 @@ impl<'a> CodeGenerator<'a> {
                             argument: self
                                 .recurse_code_gen(
                                     &arg.value,
-                                    scope_level.scope_increment(i as i32 + 1),
+                                    scope_level.scope_increment(i as i32 + 2),
                                 )
                                 .into(),
                         };

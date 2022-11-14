@@ -16,16 +16,20 @@ pub type Reen {
  
 }
 
-pub fn twice(f: fn(Int) -> Int, x: Int) -> Int {
-  f(f(x))
+pub fn twice(f: fn(Int) -> Int, initial: Int) -> Int {
+  f(f(initial))
 }
 
-pub fn add_one(x: Int) -> Int {
-  x + 1
+pub fn add_one(value: Int) -> Int {
+  value + 1
 }
 
 pub fn add_two(x: Int) -> Int {
   twice(add_one, x)
+}
+
+pub fn final_check(z: Int){
+  z < 4
 }
 
 pub fn spend(
@@ -33,11 +37,10 @@ pub fn spend(
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
- let x = rdmr.signer 
- let z = datum.sc.signer.hash
- let y = datum.sc
+
  let a = datum.fin
 
- a > 0 && z == x 
-
+ a 
+ |> add_two 
+ |> final_check
 }
