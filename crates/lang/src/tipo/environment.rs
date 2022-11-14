@@ -12,7 +12,7 @@ use crate::{
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
         UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
     },
-    builtins::{function, generic_var, unbound_var},
+    builtins::{self, function, generic_var, unbound_var},
     tipo::fields::FieldMap,
     IdGenerator,
 };
@@ -28,6 +28,14 @@ use super::{
 pub struct ScopeResetData {
     local_values: HashMap<String, ValueConstructor>,
 }
+
+const EXCLUDE_DATA_UNIFY: [&str; 5] = [
+    builtins::INT,
+    builtins::BYTE_ARRAY,
+    builtins::STRING,
+    builtins::BOOL,
+    builtins::LIST,
+];
 
 #[derive(Debug)]
 pub struct Environment<'a> {
@@ -1097,6 +1105,18 @@ impl<'a> Environment<'a> {
     pub fn unify(&mut self, t1: Arc<Type>, t2: Arc<Type>, location: Span) -> Result<(), Error> {
         if t1 == t2 {
             return Ok(());
+        }
+
+        if let (Type::App { name: name1, .. }, Type::App { name: name2, .. }) =
+            (t1.deref(), t2.deref())
+        {
+            if name1 == "Data" && !EXCLUDE_DATA_UNIFY.contains(&name2.as_str()) {
+                return Ok(());
+            }
+
+            if name2 == "Data" && !EXCLUDE_DATA_UNIFY.contains(&name1.as_str()) {
+                return Ok(());
+            }
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
