@@ -2,6 +2,8 @@
 
 ## [next] - 2022-MM-DD
 
+## [v0.0.25] - 2022-11-14
+
 ### Added
 
 - **aiken**: new `lsp` command
