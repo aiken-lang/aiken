@@ -77,6 +77,7 @@ pub enum ErrorKind {
     #[error("unclosed {start}")]
     Unclosed {
         start: Pattern,
+        #[label]
         before_span: Span,
         before: Option<Pattern>,
     },

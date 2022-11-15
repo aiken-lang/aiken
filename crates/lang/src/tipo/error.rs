@@ -55,7 +55,9 @@ pub enum Error {
 
     #[error("duplicate type name {name}")]
     DuplicateTypeName {
+        #[label]
         location: Span,
+        #[label]
         previous_location: Span,
         name: String,
     },
@@ -79,6 +81,7 @@ pub enum Error {
 
     #[error("{name} has incorrect type arity expected {expected} but given {given}")]
     IncorrectTypeArity {
+        #[label]
         location: Span,
         name: String,
         expected: usize,
