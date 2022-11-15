@@ -7,22 +7,13 @@ pub mod lexer;
 pub mod token;
 
 use crate::{
-    ast::{self, BinOp, Span, TodoKind, CAPTURE_VARIABLE},
+    ast::{self, BinOp, Span, TodoKind, UntypedDefinition, CAPTURE_VARIABLE},
     expr,
 };
 
 use error::ParseError;
 use extra::ModuleExtra;
 use token::Token;
-
-#[allow(dead_code)]
-enum DefinitionOrExtra {
-    Definition(Box<ast::UntypedDefinition>),
-    ModuleComment(Span),
-    DocComment(Span),
-    Comment(Span),
-    EmptyLine(usize),
-}
 
 pub fn module(
     src: &str,
@@ -37,21 +28,33 @@ pub fn module(
         src.chars().enumerate().map(|(i, c)| (c, span(i))),
     ))?;
 
-    let module_data =
-        module_parser().parse(chumsky::Stream::from_iter(span(len), tokens.into_iter()))?;
-
-    let mut definitions = Vec::new();
     let mut extra = ModuleExtra::new();
 
-    for data in module_data {
-        match data {
-            DefinitionOrExtra::Definition(def) => definitions.push(*def),
-            DefinitionOrExtra::ModuleComment(c) => extra.module_comments.push(c),
-            DefinitionOrExtra::DocComment(c) => extra.doc_comments.push(c),
-            DefinitionOrExtra::Comment(c) => extra.comments.push(c),
-            DefinitionOrExtra::EmptyLine(e) => extra.empty_lines.push(e),
+    let tokens = tokens.into_iter().filter(|(token, span)| match token {
+        Token::ModuleComment => {
+            extra.module_comments.push(*span);
+
+            false
         }
-    }
+        Token::DocComment => {
+            extra.doc_comments.push(*span);
+
+            false
+        }
+        Token::Comment => {
+            extra.comments.push(*span);
+
+            false
+        }
+        Token::EmptyLine => {
+            extra.empty_lines.push(span.end);
+
+            false
+        }
+        _ => true,
+    });
+
+    let definitions = module_parser().parse(chumsky::Stream::from_iter(span(len), tokens))?;
 
     let module = ast::UntypedModule {
         kind,
@@ -64,18 +67,12 @@ pub fn module(
     Ok((module, extra))
 }
 
-fn module_parser() -> impl Parser<Token, Vec<DefinitionOrExtra>, Error = ParseError> {
+fn module_parser() -> impl Parser<Token, Vec<UntypedDefinition>, Error = ParseError> {
     choice((
-        import_parser()
-            .map(Box::new)
-            .map(DefinitionOrExtra::Definition),
-        data_parser()
-            .map(Box::new)
-            .map(DefinitionOrExtra::Definition),
-        type_alias_parser()
-            .map(Box::new)
-            .map(DefinitionOrExtra::Definition),
-        fn_parser().map(Box::new).map(DefinitionOrExtra::Definition),
+        import_parser(),
+        data_parser(),
+        type_alias_parser(),
+        fn_parser(),
     ))
     .repeated()
     .then_ignore(end())
