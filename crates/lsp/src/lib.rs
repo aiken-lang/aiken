@@ -5,6 +5,7 @@ use lsp_types::{
 };
 
 pub mod error;
+mod line_numbers;
 pub mod server;
 
 use error::Error;
@@ -48,7 +49,7 @@ fn capabilities() -> ServerCapabilities {
                 })),
             },
         )),
-        definition_provider: Some(OneOf::Left(true)),
+        // definition_provider: Some(OneOf::Left(true)),
         document_formatting_provider: Some(OneOf::Left(true)),
         ..Default::default()
     }

@@ -26,4 +26,7 @@ pub enum Error {
     #[error(transparent)]
     #[diagnostic(code(aiken::lsp::send))]
     Send(#[from] SendError<Message>),
+    #[error(transparent)]
+    #[diagnostic(code(aiken::lsp::send))]
+    PathToUri(#[from] url::ParseError),
 }

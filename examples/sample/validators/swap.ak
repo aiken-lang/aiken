@@ -4,16 +4,12 @@ use sample/spend
 
 pub type Redeemer {
   signer: ByteArray,
-  amount: Int
+  amount: Int,
 }
 
 pub type Reen {
-  Buy{
-    signer: ByteArray,
-    amount: Int
-  }
+  Buy { signer: ByteArray, amount: Int }
   Sell
- 
 }
 
 pub fn twice(f: fn(Int) -> Int, initial: Int) -> Int {
@@ -28,7 +24,7 @@ pub fn add_two(x: Int) -> Int {
   twice(add_one, x)
 }
 
-pub fn final_check(z: Int){
+pub fn final_check(z: Int) {
   z < 4
 }
 
@@ -37,10 +33,8 @@ pub fn spend(
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
-
- let a = datum.fin
-
- a 
- |> add_two 
- |> final_check
+  let a = datum.fin
+  a
+  |> add_two
+  |> final_check
 }

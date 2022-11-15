@@ -127,6 +127,36 @@ impl Error {
     pub fn is_empty(&self) -> bool {
         matches!(self, Error::List(errors) if errors.is_empty())
     }
+
+    pub fn path(&self) -> Option<PathBuf> {
+        match self {
+            Error::DuplicateModule { second, .. } => Some(second.to_path_buf()),
+            Error::FileIo { .. } => None,
+            Error::Format { .. } => None,
+            Error::StandardIo(_) => None,
+            Error::ImportCycle { .. } => None,
+            Error::List(_) => None,
+            Error::Parse { path, .. } => Some(path.to_path_buf()),
+            Error::Type { path, .. } => Some(path.to_path_buf()),
+            Error::ValidatorMustReturnBool { path, .. } => Some(path.to_path_buf()),
+            Error::WrongValidatorArity { path, .. } => Some(path.to_path_buf()),
+        }
+    }
+
+    pub fn src(&self) -> Option<String> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::Format { .. } => None,
+            Error::StandardIo(_) => None,
+            Error::ImportCycle { .. } => None,
+            Error::List(_) => None,
+            Error::Parse { src, .. } => Some(src.to_string()),
+            Error::Type { src, .. } => Some(src.to_string()),
+            Error::ValidatorMustReturnBool { src, .. } => Some(src.to_string()),
+            Error::WrongValidatorArity { src, .. } => Some(src.to_string()),
+        }
+    }
 }
 
 impl Debug for Error {
@@ -149,6 +179,10 @@ impl Debug for Error {
 }
 
 impl Diagnostic for Error {
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Error)
+    }
+
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Error::DuplicateModule { .. } => Some(Box::new("aiken::module::duplicate")),
@@ -233,6 +267,10 @@ pub enum Warning {
 }
 
 impl Diagnostic for Warning {
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Warning)
+    }
+
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
             Warning::Type { src, .. } => Some(src),
