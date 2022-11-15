@@ -9,7 +9,9 @@ use aiken_lang::{ast::ModuleKind, parser};
 use aiken_project::{config, error::Error as ProjectError};
 use lsp_server::{Connection, Message};
 use lsp_types::{
-    notification::{DidChangeTextDocument, Notification, PublishDiagnostics, ShowMessage},
+    notification::{
+        DidChangeTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics, ShowMessage,
+    },
     request::{Formatting, Request},
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
@@ -153,6 +155,13 @@ impl Server {
         notification: lsp_server::Notification,
     ) -> Result<(), ServerError> {
         match notification.method.as_str() {
+            DidSaveTextDocument::METHOD => {
+                let params = cast_notification::<DidSaveTextDocument>(notification)?;
+
+                self.edited.remove(params.text_document.uri.path());
+
+                Ok(())
+            }
             DidChangeTextDocument::METHOD => {
                 let params = cast_notification::<DidChangeTextDocument>(notification)?;
 
@@ -268,7 +277,6 @@ impl Server {
     /// If the Aiken diagnostic cannot be converted to LSP diagnostic (due to it
     /// not having a location) it is stored as a message suitable for use with
     /// the `showMessage` notification instead.
-    ///
     fn process_diagnostic(&mut self, error: ProjectError) -> Result<(), ServerError> {
         let (severity, typ) = match error.severity() {
             Some(severity) => match severity {
