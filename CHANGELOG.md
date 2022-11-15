@@ -2,6 +2,11 @@
 
 ## [next] - 2022-MM-DD
 
+### Added
+
+- **aiken-lsp**: handle `DidSaveTextDocument` notification
+- **aiken-lsp**: convert errors into `lsp_types::Diagnostic`
+
 ## [v0.0.25] - 2022-11-14
 
 ### Added
