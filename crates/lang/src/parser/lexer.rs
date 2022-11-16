@@ -5,7 +5,7 @@ use crate::ast::Span;
 use super::{error::ParseError, token::Token};
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
-    let int = text::int(10).map(|value| Token::Int { value });
+    let int = choice((text::int(10), text::int(16))).map(|value| Token::Int { value });
 
     let op = choice((
         just("==").to(Token::EqualEqual),
@@ -30,6 +30,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just("||").to(Token::VbarVbar),
         just('|').to(Token::Vbar),
         just("&&").to(Token::AmperAmper),
+        just("\n\n").to(Token::EmptyLine),
     ));
 
     let grouping = choice((
@@ -95,32 +96,39 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         }
     });
 
-    let token = choice((keyword, int, op, grouping, string))
-        .or(any().map(Token::Error).validate(|t, span, emit| {
-            emit(ParseError::expected_input_found(
-                span,
-                None,
-                Some(t.clone()),
-            ));
-            t
-        }))
-        .map_with_span(move |token, span| (token, span))
-        .padded()
-        .recover_with(skip_then_retry_until([]));
+    let module_comments =
+        just("////").ignore_then(take_until(text::newline()).to(Token::ModuleComment));
+
+    let doc_comments = just("///")
+        .ignore_then(take_until(text::newline()))
+        .to(Token::DocComment);
 
     let comments = just("//")
-        .then_ignore(
-            just('(')
-                .ignore_then(take_until(just(")#")).ignored())
-                .or(none_of('\n').ignored().repeated().ignored()),
-        )
-        .padded()
-        .ignored()
-        .repeated();
+        .ignore_then(take_until(text::newline()))
+        .to(Token::Comment);
 
-    token
-        .padded_by(comments)
-        .repeated()
-        .padded()
-        .then_ignore(end())
+    choice((
+        module_comments,
+        doc_comments,
+        comments,
+        keyword,
+        int,
+        op,
+        grouping,
+        string,
+    ))
+    .or(any().map(Token::Error).validate(|t, span, emit| {
+        emit(ParseError::expected_input_found(
+            span,
+            None,
+            Some(t.clone()),
+        ));
+        t
+    }))
+    .map_with_span(move |token, span| (token, span))
+    .padded()
+    .recover_with(skip_then_retry_until([]))
+    .repeated()
+    .padded()
+    .then_ignore(end())
 }
