@@ -1,3 +1,6 @@
-pub fn spend(d: Nil, r: Nil, ctx: Nil) -> Bool {
+use aiken/context.{ScriptContext}
+use aiken/context/mint.{Mint}
+
+pub fn mint(d: Nil, r: Nil, ctx: ScriptContext(Mint)) -> Bool {
   True
 }

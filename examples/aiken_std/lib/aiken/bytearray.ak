@@ -9,7 +9,7 @@ pub fn length(bytes: ByteArray) -> Int {
 }
 
 pub fn is_empty(bytes: ByteArray) -> Bool {
-  builtin.emptyByteArray(bytes)
+  length(bytes) == 0
 }
 
 pub fn concat(left front: ByteArray, right back: ByteArray) -> ByteArray {
