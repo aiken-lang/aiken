@@ -13,6 +13,22 @@ pub type ScriptPurpose {
   Certify(Certificate)
 }
 
+pub type BoundValue(value) {
+  NegativeInfinity
+  Finite(value)
+  PositiveInfinity
+}
+
+pub type Bound(value) {
+  value: BoundValue(value),
+  is_inclusive: Bool,
+}
+
+pub type Interval(value) {
+  lower_bound: Bound(value),
+  upper_bound: Bound(value),
+}
+
 pub type Transaction {
   inputs: List(Input),
   reference_inputs: List(Input),
@@ -21,7 +37,7 @@ pub type Transaction {
   mint: Value,
   certificates: List(Certificate),
   withdrawals: List(Pair(StakeCredential, Int)),
-  validity_range: Nil,
+  validity_range: Interval(Int),
   extra_signatories: Nil,
   redeemers: List(Nil),
   datums: List(Pair(Hash(Data), Data)),
