@@ -33,8 +33,10 @@ pub fn spend(
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
-  let a = datum.fin
-  a
-  |> add_two
-  |> final_check
+  let x = datum.rdmr
+  when x is {
+    sample.Buy(tipo1, fin) -> fin > 0
+    sample.Sell(twice, find: fin) -> fin > 0
+    sample.Hold(some) -> some > 0
+  }
 }

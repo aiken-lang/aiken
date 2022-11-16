@@ -7,8 +7,9 @@ pub type ScriptContext {
 }
 
 pub type Redeem {
-  Buy
-  Sell
+  Buy { tipo: ByteArray, fin: Int }
+  Sell { twice: ByteArray, find: Int }
+  Hold(Int)
 }
 
 pub type Datum {
