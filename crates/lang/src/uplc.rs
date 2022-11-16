@@ -207,8 +207,6 @@ impl<'a> CodeGenerator<'a> {
 
         interner.program(&mut program);
 
-        println!("{}", program.to_pretty());
-
         program
     }
 
@@ -506,7 +504,7 @@ impl<'a> CodeGenerator<'a> {
                             TypedExpr::Var {
                                 name, constructor, ..
                             } => (name, constructor.tipo.clone()),
-                            _ => todo!(),
+                            rest => todo!("implement: {:#?}", rest),
                         };
 
                         let mut type_name = "".to_string();
