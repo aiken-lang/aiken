@@ -9,7 +9,8 @@ pub type Hash(a) =
 pub type ScriptPurpose {
   Mint(PolicyId)
   Spend(OutputReference)
-  Withdrawal(Nil)
+  Withdrawal(StakeCredential)
+  Certify(Certificate)
 }
 
 pub type Transaction {
@@ -18,8 +19,8 @@ pub type Transaction {
   outputs: List(Nil),
   fee: Value,
   mint: Value,
-  certificates: List(Nil),
-  withdrawals: List(Nil),
+  certificates: List(Certificate),
+  withdrawals: List(Pair(StakeCredential, Int)),
   validity_range: Nil,
   extra_signatories: Nil,
   redeemers: List(Nil),
@@ -43,6 +44,15 @@ pub type OutputReference {
 pub type PolicyId =
   ByteArray
 
+pub type StakeCredential =
+  Nil
+
+pub type VerificationKey =
+  Nil
+
+pub type PoolId =
+  Hash(VerificationKey)
+
 pub type Output =
   Nil
 
@@ -54,3 +64,13 @@ pub type Pair(a, b) =
 
 pub type Value =
   List(Pair(PolicyId, List(Pair(AssetName, Int))))
+
+pub type Certificate {
+  CredentialRegistration { delegator: StakeCredential }
+  CredentialDeregistration { delegator: StakeCredential }
+  CredentialDelegation { delegator: StakeCredential, delegatee: PoolId }
+  PoolRegistration { pool_id: PoolId, vrf: Hash(VerificationKey) }
+  PoolDeregistration { pool_id: PoolId, epoch: Int }
+  Governance
+  TreasuryMovement
+}
