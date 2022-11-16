@@ -9,7 +9,7 @@ use uplc::{
 };
 
 use crate::{
-    ast::{BinOp, DataType, Function, Pattern, TypedArg, TypedPattern},
+    ast::{BinOp, DataType, Function, Pattern, Span, TypedArg, TypedPattern},
     expr::TypedExpr,
     tipo::{self, ModuleValueConstructor, Type, ValueConstructorVariant},
 };
@@ -120,6 +120,12 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate(&mut self, body: TypedExpr, arguments: Vec<TypedArg>) -> Program<Name> {
         self.recurse_scope_level(&body, ScopeLevels::new());
 
+        println!(
+            "DATA USAGE HOLDER IS {:#?}",
+            self.uplc_data_usage_holder_lookup
+        );
+        println!("DATA HOLDER IS {:#?}", self.uplc_data_holder_lookup);
+
         self.uplc_function_holder_lookup
             .sort_by(|_key1, value1, _key2, value2| {
                 if value1.is_less_than(value2, true) {
@@ -213,7 +219,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match body {
+        match dbg!(body) {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
@@ -264,6 +270,10 @@ impl<'a> CodeGenerator<'a> {
                             .get(&(current_module.to_string(), name.clone()))
                         {
                             if scope_level.is_less_than(val, false) {
+                                println!(
+                                    "DATA USAGE HOLDER CHANGED 1 IS {:#?}",
+                                    self.uplc_data_usage_holder_lookup
+                                );
                                 self.uplc_data_usage_holder_lookup
                                     .insert((current_module, name.clone()), scope_level);
                             }
@@ -319,9 +329,12 @@ impl<'a> CodeGenerator<'a> {
                 self.recurse_scope_level(left, scope_level.clone());
                 self.recurse_scope_level(right, scope_level);
             }
-            TypedExpr::Assignment { value, pattern, .. } => {
-                self.recurse_scope_level_pattern(pattern, value, scope_level.scope_increment(1))
-            }
+            TypedExpr::Assignment { value, pattern, .. } => self.recurse_scope_level_pattern(
+                pattern,
+                value,
+                scope_level.scope_increment(1),
+                &vec![],
+            ),
             TypedExpr::Try { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
@@ -332,6 +345,7 @@ impl<'a> CodeGenerator<'a> {
                             pattern,
                             &clause.then,
                             scope_level.scope_increment_sequence(1),
+                            subjects,
                         );
                     }
                 }
@@ -425,6 +439,10 @@ impl<'a> CodeGenerator<'a> {
                     .get(&(module.to_string(), current_var_name.clone()))
                 {
                     if current_scope.is_less_than(val, false) {
+                        println!(
+                            "DATA USAGE HOLDER CHANGED 2 IS {:#?}",
+                            self.uplc_data_usage_holder_lookup
+                        );
                         self.uplc_data_usage_holder_lookup
                             .insert((module, current_var_name), current_scope);
                     }
@@ -485,8 +503,9 @@ impl<'a> CodeGenerator<'a> {
         pattern: &TypedPattern,
         value: &TypedExpr,
         scope_level: ScopeLevels,
+        vars: &Vec<TypedExpr>,
     ) {
-        match pattern {
+        match dbg!(pattern) {
             Pattern::Int { .. } | Pattern::String { .. } | Pattern::Var { .. } => {
                 self.recurse_scope_level(value, scope_level);
             }
@@ -496,11 +515,11 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Discard { .. } => todo!(),
             Pattern::List { .. } => todo!(),
             Pattern::Constructor {
-                // name: constructor_name,
+                name: constructor_name,
                 tipo,
-                // arguments,
-                constructor: _constructor,
-                // module,
+                arguments,
+                constructor,
+                module,
                 ..
             } => {
                 self.recurse_scope_level(value, scope_level.scope_increment_sequence(1));
@@ -521,50 +540,159 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                     Type::Fn { .. } => {
-                        // let mapping_index = match constructor {
-                        //     tipo::PatternConstructor::Record { name, field_map } => {
-                        //         if let Some(fields_mapping) = field_map {
-                        //             fields_mapping.fields.clone()
-                        //         } else {
-                        //             HashMap::new()
-                        //         }
-                        //     }
-                        // };
-                        // let mut args = arguments.clone();
-                        // let local_var_name = "";
-                        // arguments.iter().map(|x| {
-                        //     let name = match &x.value {
-                        //         Pattern::Var { location, name } => {
-                        //             if let Some(val) = self.uplc_data_holder_lookup.get(&(
-                        //                 module.to_string(),
-                        //                 .clone(),
-                        //                 label.clone(),
-                        //             )) {
-                        //                 if current_scope.is_less_than(&val.0, false) {
-                        //                     self.uplc_data_holder_lookup.insert(
-                        //                         (
-                        //                             module.to_string(),
-                        //                             current_var_name.clone(),
-                        //                             label.clone(),
-                        //                         ),
-                        //                         (current_scope.clone(), a.clone()),
-                        //                     );
-                        //                 }
-                        //             } else {
-                        //                 self.uplc_data_holder_lookup.insert(
-                        //                     (
-                        //                         module.to_string(),
-                        //                         current_var_name.clone(),
-                        //                         label.clone(),
-                        //                     ),
-                        //                     (current_scope.clone(), a.clone()),
-                        //                 );
-                        //             }
-                        //         }
-                        //         _ => todo!(),
-                        //     };
-                        // });
-                        todo!()
+                        let mut mapping_index: IndexMap<String, usize> = IndexMap::new();
+
+                        match constructor {
+                            tipo::PatternConstructor::Record {
+                                name: _name,
+                                field_map,
+                            } => {
+                                if let Some(fields_mapping) = field_map {
+                                    mapping_index.extend(fields_mapping.fields.clone());
+                                    mapping_index
+                                        .sort_by(|_, value1, _, value2| value1.cmp(value2));
+                                    mapping_index.reverse();
+                                }
+                            }
+                        };
+
+                        println!("MAPPING INDEX IS {mapping_index:?}");
+
+                        let module = module.clone().unwrap();
+                        // TODO: support multiple subjects
+                        let (var_name, tipo) = match &vars[0] {
+                            TypedExpr::Var {
+                                name, constructor, ..
+                            } => (name, constructor.tipo.clone()),
+                            _ => todo!(),
+                        };
+
+                        let mut type_name = "".to_string();
+                        let mut is_app = false;
+                        let current_tipo = &*tipo;
+                        while !is_app {
+                            match current_tipo {
+                                Type::App { name, .. } => {
+                                    type_name = name.to_string();
+                                    is_app = true;
+                                }
+                                _ => todo!(),
+                            };
+                        }
+
+                        for (ind, arg) in arguments.iter().rev().enumerate() {
+                            let (label, index) = if let Some(arg_label) = &arg.label {
+                                (
+                                    arg_label.to_string(),
+                                    mapping_index.remove(arg_label).unwrap() as u64,
+                                )
+                            } else {
+                                let arg_field =
+                                    mapping_index.pop().unwrap_or((format!("{ind}"), ind));
+                                (arg_field.0, arg_field.1 as u64)
+                            };
+
+                            match &arg.value {
+                                Pattern::Var {
+                                    name: field_name, ..
+                                } => {
+                                    let record_access = TypedExpr::RecordAccess {
+                                        location: Span::empty(),
+                                        tipo: Type::App {
+                                            public: true,
+                                            module: module.clone(),
+                                            name: constructor_name.to_string(),
+                                            args: vec![],
+                                        }
+                                        .into(),
+                                        label: field_name.clone(),
+                                        index,
+                                        record: TypedExpr::Var {
+                                            location: Span::empty(),
+                                            constructor: tipo::ValueConstructor {
+                                                public: false,
+                                                variant: ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                                tipo: Type::App {
+                                                    public: true,
+                                                    module: module.clone(),
+                                                    name: type_name.clone(),
+                                                    args: vec![],
+                                                }
+                                                .into(),
+                                            },
+                                            name: var_name.clone(),
+                                        }
+                                        .into(),
+                                    };
+
+                                    if let Some(val) = self.uplc_data_holder_lookup.get(&(
+                                        module.to_string(),
+                                        var_name.clone(),
+                                        label.clone(),
+                                    )) {
+                                        if scope_level.is_less_than(&val.0, false) {
+                                            self.uplc_data_holder_lookup.insert(
+                                                (
+                                                    module.to_string(),
+                                                    var_name.clone(),
+                                                    label.clone(),
+                                                ),
+                                                (
+                                                    scope_level.scope_increment(1),
+                                                    record_access.clone(),
+                                                ),
+                                            );
+                                        }
+                                    } else {
+                                        self.uplc_data_holder_lookup.insert(
+                                            (module.to_string(), var_name.clone(), label.clone()),
+                                            (scope_level.scope_increment(1), record_access.clone()),
+                                        );
+                                    }
+
+                                    if let Some(val) = self
+                                        .uplc_data_usage_holder_lookup
+                                        .get(&(module.to_string(), var_name.clone()))
+                                    {
+                                        if scope_level.is_less_than(val, false) {
+                                            println!(
+                                                "DATA USAGE HOLDER CHANGED 3 IS {:#?}",
+                                                self.uplc_data_usage_holder_lookup
+                                            );
+                                            self.uplc_data_usage_holder_lookup.insert(
+                                                (module.to_string(), var_name.clone()),
+                                                scope_level.clone(),
+                                            );
+                                        }
+                                    } else {
+                                        self.uplc_data_usage_holder_lookup.insert(
+                                            (module.to_string(), var_name.clone()),
+                                            scope_level.clone(),
+                                        );
+                                    }
+
+                                    if let Some(val) = self
+                                        .uplc_data_constr_lookup
+                                        .get(&(module.to_string(), type_name.clone()))
+                                    {
+                                        if scope_level.is_less_than(val, false) {
+                                            self.uplc_data_constr_lookup.insert(
+                                                (module.to_string(), type_name.clone()),
+                                                scope_level.clone(),
+                                            );
+                                        }
+                                    } else {
+                                        self.uplc_data_constr_lookup.insert(
+                                            (module.to_string(), type_name.clone()),
+                                            scope_level.clone(),
+                                        );
+                                    }
+                                }
+                                _ => todo!(),
+                            };
+                        }
                     }
                     _ => todo!(),
                 };
@@ -1006,13 +1134,21 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Constructor {
                                 name, tipo, module, ..
                             } => {
-                                let key = match &**tipo {
-                                    Type::App { module, name, .. } => {
-                                        (module.clone(), name.clone())
-                                    }
-                                    Type::Fn { .. } => todo!(),
-                                    Type::Var { .. } => todo!(),
-                                };
+                                let mut is_app = false;
+                                let mut tipo = &**tipo;
+                                let mut key: (String, String) = ("".to_string(), "".to_string());
+                                while !is_app {
+                                    match tipo {
+                                        Type::App { module, name, .. } => {
+                                            is_app = true;
+                                            key = (module.clone(), name.clone());
+                                        }
+                                        Type::Fn { ret, .. } => {
+                                            tipo = ret;
+                                        }
+                                        _ => todo!(),
+                                    };
+                                }
 
                                 let dt = self.data_types.get(&key).unwrap();
 
@@ -1031,6 +1167,8 @@ impl<'a> CodeGenerator<'a> {
                     .collect();
 
                 new_current_clauses.sort_by(|a, b| a.0.cmp(&b.0));
+
+                println!("NEW CURRENT CLAUSES {new_current_clauses:?}");
 
                 let subject = &subjects[0];
 
@@ -1085,15 +1223,20 @@ impl<'a> CodeGenerator<'a> {
                 let need_lam = total_constr_length - new_current_clauses.len() > 0;
 
                 let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
+
                 let mut new_current_clauses = new_current_clauses.to_vec();
+                new_current_clauses.reverse();
                 let last_term =
                     self.recurse_code_gen(&last.1, scope_level.scope_increment_sequence(1));
+
+                println!("NEW CURRENT CLAUSES AFTER SPLIT {new_current_clauses:?}");
 
                 let mut current: Option<(usize, TypedExpr)> = None;
                 for index in 0..total_constr_length - 1 {
                     if current.is_none() {
                         current = new_current_clauses.pop();
                     }
+                    println!("CURRENT IS {current:?}");
                     if let Some(val) = current.clone() {
                         if val.0 == index {
                             let branch_term = self
@@ -1103,6 +1246,7 @@ impl<'a> CodeGenerator<'a> {
                                 function: term.into(),
                                 argument: Term::Delay(branch_term.into()).into(),
                             };
+                            current = None;
                         } else {
                             term = Term::Apply {
                                 function: term.into(),
@@ -1398,7 +1542,7 @@ impl<'a> CodeGenerator<'a> {
                     body: Term::Force(constr_term.into()).into(),
                 };
 
-                for index in 0..length - 1 {
+                for index in (0..length - 1).rev() {
                     constr_term = Term::Lambda {
                         parameter_name: Name {
                             text: format!("constr_{index}_result"),
