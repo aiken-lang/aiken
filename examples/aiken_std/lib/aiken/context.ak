@@ -3,6 +3,15 @@ pub type ScriptContext(purpose) {
   purpose: purpose,
 }
 
+pub type Hash(a) =
+  ByteArray
+
+pub type ScriptPurpose {
+  Mint(PolicyId)
+  Spend(OutputReference)
+  Withdrawal(Nil)
+}
+
 pub type Transaction {
   inputs: List(Input),
   reference_inputs: List(Input),
@@ -14,12 +23,12 @@ pub type Transaction {
   validity_range: Nil,
   extra_signatories: Nil,
   redeemers: List(Nil),
-  datums: List(Nil),
+  datums: List(Pair(Hash(Data), Data)),
   id: TransactionId,
 }
 
 pub type TransactionId =
-  ByteArray
+  Hash(Transaction)
 
 pub type Input {
   output_reference: OutputReference,
