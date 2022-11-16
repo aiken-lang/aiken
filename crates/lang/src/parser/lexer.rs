@@ -96,36 +96,39 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         }
     });
 
-    let module_comments =
-        just("////").ignore_then(take_until(text::newline()).to(Token::ModuleComment));
+    let module_comments = just("////").ignore_then(
+        take_until(text::newline().rewind())
+            .to(Token::ModuleComment)
+            .map_with_span(|token, span| (token, span)),
+    );
 
-    let doc_comments = just("///")
-        .ignore_then(take_until(text::newline()))
-        .to(Token::DocComment);
+    let doc_comments = just("///").ignore_then(
+        take_until(text::newline().rewind())
+            .to(Token::DocComment)
+            .map_with_span(|token, span| (token, span)),
+    );
 
-    let comments = just("//")
-        .ignore_then(take_until(text::newline()))
-        .to(Token::Comment);
+    let comments = just("//").ignore_then(
+        take_until(text::newline().rewind())
+            .to(Token::Comment)
+            .map_with_span(|token, span| (token, span)),
+    );
 
     choice((
         module_comments,
         doc_comments,
         comments,
-        keyword,
-        int,
-        op,
-        grouping,
-        string,
+        choice((keyword, int, op, grouping, string))
+            .or(any().map(Token::Error).validate(|t, span, emit| {
+                emit(ParseError::expected_input_found(
+                    span,
+                    None,
+                    Some(t.clone()),
+                ));
+                t
+            }))
+            .map_with_span(|token, span| (token, span)),
     ))
-    .or(any().map(Token::Error).validate(|t, span, emit| {
-        emit(ParseError::expected_input_found(
-            span,
-            None,
-            Some(t.clone()),
-        ));
-        t
-    }))
-    .map_with_span(move |token, span| (token, span))
     .padded()
     .recover_with(skip_then_retry_until([]))
     .repeated()

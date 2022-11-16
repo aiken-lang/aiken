@@ -44,6 +44,7 @@ pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, sr
         .pretty_print(80, writer);
 }
 
+#[derive(Debug)]
 struct Intermediate<'a> {
     comments: Vec<Comment<'a>>,
     doc_comments: Vec<Comment<'a>>,
