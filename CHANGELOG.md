@@ -8,6 +8,8 @@
 - **aiken-lsp**: convert errors into `lsp_types::Diagnostic`
 - **aiken-lang**: doc comment parsing
 - **aiken-lang**: code generation for pattern matching expressions
+- **aiken-lang**: extended script context
+- **aiken-lang**: added Option to builtins
 
 ## [v0.0.25] - 2022-11-14
 
