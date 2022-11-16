@@ -21,6 +21,7 @@ pub const LIST: &str = "List";
 pub const NIL: &str = "Nil";
 pub const RESULT: &str = "Result";
 pub const STRING: &str = "String";
+pub const OPTION: &str = "Option";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -218,6 +219,60 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 name: "Error".to_string(),
                 field_map: None::<FieldMap>,
                 arity: 1,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    // Option(value, none)
+    let option_value = generic_var(id_gen.next());
+    let option_none = generic_var(id_gen.next());
+
+    prelude.types.insert(
+        OPTION.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![option_value.clone(), option_none.clone()],
+            tipo: option(option_value, option_none),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    prelude.types_constructors.insert(
+        OPTION.to_string(),
+        vec!["Some".to_string(), "None".to_string()],
+    );
+
+    let some = generic_var(id_gen.next());
+    let none = generic_var(id_gen.next());
+    let _ = prelude.values.insert(
+        "Some".to_string(),
+        ValueConstructor::public(
+            function(vec![some.clone()], option(some, none)),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Some".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 1,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    let some = generic_var(id_gen.next());
+    let none = generic_var(id_gen.next());
+    let _ = prelude.values.insert(
+        "None".to_string(),
+        ValueConstructor::public(
+            function(vec![none.clone()], option(some, none)),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "None".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
                 location: Span::empty(),
                 constructors_count: 2,
             },
@@ -481,6 +536,15 @@ pub fn result(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::App {
         public: true,
         name: RESULT.to_string(),
+        module: "".to_string(),
+        args: vec![a, e],
+    })
+}
+
+pub fn option(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::App {
+        public: true,
+        name: OPTION.to_string(),
         module: "".to_string(),
         args: vec![a, e],
     })

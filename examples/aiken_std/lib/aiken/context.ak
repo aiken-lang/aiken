@@ -13,6 +13,9 @@ pub type ScriptPurpose {
   Certify(Certificate)
 }
 
+pub type Redeemer = 
+  Data
+
 pub type BoundValue(value) {
   NegativeInfinity
   Finite(value)
@@ -32,20 +35,21 @@ pub type Interval(value) {
 pub type Transaction {
   inputs: List(Input),
   reference_inputs: List(Input),
-  outputs: List(Nil),
+  outputs: List(Output),
   fee: Value,
   mint: Value,
   certificates: List(Certificate),
   withdrawals: List(Pair(StakeCredential, Int)),
   validity_range: Interval(Int),
-  extra_signatories: Nil,
-  redeemers: List(Nil),
+  extra_signatories: List(PublicKeyHash),
+  redeemers: List(Pair(ScriptPurpose, Redeemer)),
   datums: List(Pair(Hash(Data), Data)),
   id: TransactionId,
 }
 
-pub type TransactionId =
-  Hash(Transaction)
+pub type TransactionId = {
+  hash: Hash(Transaction)
+}
 
 pub type Input {
   output_reference: OutputReference,
@@ -60,17 +64,45 @@ pub type OutputReference {
 pub type PolicyId =
   ByteArray
 
-pub type StakeCredential =
-  Nil
+pub type StakeCredential = {
+  StakeHash(Credential)
+  StakePointer(Int, Int, Int)
+}
+
+pub type Credential = {
+  PublicKeyCredential(PublicKeyHash)
+  ScriptCredential(ScriptHash)
+}
 
 pub type VerificationKey =
   Nil
 
+pub type ScriptHash =
+  ByteArray
+
+pub type PublicKeyHash =
+  Hash(VerificationKey)
+
 pub type PoolId =
   Hash(VerificationKey)
 
-pub type Output =
-  Nil
+pub type Output = {
+  address: Address,
+  value: Value,
+  datum: DatumOption,
+  reference_script: Option(ScriptHash),
+}
+
+pub type Address = {
+  payment_credential: Credential,
+  stake_credential: Option(StakeCredential),
+}
+
+pub type DatumOption = {
+  NoDatum
+  DatumHash(Hash(Data))
+  Datum(Data)
+}
 
 pub type AssetName =
   ByteArray
