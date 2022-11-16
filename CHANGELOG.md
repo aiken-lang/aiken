@@ -6,6 +6,8 @@
 
 - **aiken-lsp**: handle `DidSaveTextDocument` notification
 - **aiken-lsp**: convert errors into `lsp_types::Diagnostic`
+- **aiken-lang**: doc comment parsing
+- **aiken-lang**: code generation for pattern matching expressions
 
 ## [v0.0.25] - 2022-11-14
 
