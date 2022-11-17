@@ -10,6 +10,7 @@
 - **aiken-lang**: code generation for pattern matching expressions
 - **aiken-lang**: extended script context
 - **aiken-lang**: added Option to builtins
+- **aiken-lang**: properly handle record parsing and sugar in patterns
 
 ## [v0.0.25] - 2022-11-14
 
