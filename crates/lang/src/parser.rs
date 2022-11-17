@@ -913,12 +913,6 @@ pub fn pub_parser() -> impl Parser<Token, (), Error = ParseError> {
 
 pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
     recursive(|r| {
-        let no_label = r.clone().map_with_span(|pattern, span| ast::CallArg {
-            location: span,
-            value: pattern,
-            label: None,
-        });
-
         let record_constructor_pattern_arg_parser = choice((
             select! {Token::Name {name} => name}
                 .then_ignore(just(Token::Colon))
@@ -928,7 +922,19 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     label: Some(name),
                     value: pattern,
                 }),
-            no_label.clone(),
+            r.clone().map_with_span(|pattern, span| {
+                let label = if let ast::UntypedPattern::Var { name, .. } = &pattern {
+                    Some(name.clone())
+                } else {
+                    None
+                };
+
+                ast::CallArg {
+                    location: span,
+                    value: pattern,
+                    label,
+                }
+            }),
         ))
         .separated_by(just(Token::Comma))
         .allow_trailing()
@@ -940,7 +946,13 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
         )
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
-        let tuple_constructor_pattern_arg_parser = no_label
+        let tuple_constructor_pattern_arg_parser = r
+            .clone()
+            .map_with_span(|pattern, span| ast::CallArg {
+                location: span,
+                value: pattern,
+                label: None,
+            })
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .then(
