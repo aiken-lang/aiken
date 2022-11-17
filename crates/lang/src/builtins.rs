@@ -171,70 +171,15 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         },
     );
 
-    // Result(value, error)
-    let result_value = generic_var(id_gen.next());
-    let result_error = generic_var(id_gen.next());
-
-    prelude.types.insert(
-        RESULT.to_string(),
-        TypeConstructor {
-            location: Span::empty(),
-            parameters: vec![result_value.clone(), result_error.clone()],
-            tipo: result(result_value, result_error),
-            module: "".to_string(),
-            public: true,
-        },
-    );
-
-    prelude.types_constructors.insert(
-        RESULT.to_string(),
-        vec!["Ok".to_string(), "Err".to_string()],
-    );
-
-    let ok = generic_var(id_gen.next());
-    let error = generic_var(id_gen.next());
-    let _ = prelude.values.insert(
-        "Ok".to_string(),
-        ValueConstructor::public(
-            function(vec![ok.clone()], result(ok, error)),
-            ValueConstructorVariant::Record {
-                module: "".into(),
-                name: "Ok".to_string(),
-                field_map: None::<FieldMap>,
-                arity: 1,
-                location: Span::empty(),
-                constructors_count: 2,
-            },
-        ),
-    );
-
-    let ok = generic_var(id_gen.next());
-    let error = generic_var(id_gen.next());
-    let _ = prelude.values.insert(
-        "Error".to_string(),
-        ValueConstructor::public(
-            function(vec![error.clone()], result(ok, error)),
-            ValueConstructorVariant::Record {
-                module: "".into(),
-                name: "Error".to_string(),
-                field_map: None::<FieldMap>,
-                arity: 1,
-                location: Span::empty(),
-                constructors_count: 2,
-            },
-        ),
-    );
-
-    // Option(value, none)
+    // Option(value)
     let option_value = generic_var(id_gen.next());
-    let option_none = generic_var(id_gen.next());
 
     prelude.types.insert(
         OPTION.to_string(),
         TypeConstructor {
             location: Span::empty(),
-            parameters: vec![option_value.clone(), option_none.clone()],
-            tipo: option(option_value, option_none),
+            parameters: vec![option_value.clone()],
+            tipo: option(option_value),
             module: "".to_string(),
             public: true,
         },
@@ -246,11 +191,11 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     );
 
     let some = generic_var(id_gen.next());
-    let none = generic_var(id_gen.next());
-    let _ = prelude.values.insert(
+
+    prelude.values.insert(
         "Some".to_string(),
         ValueConstructor::public(
-            function(vec![some.clone()], option(some, none)),
+            function(vec![some.clone()], option(some)),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Some".to_string(),
@@ -263,11 +208,11 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     );
 
     let some = generic_var(id_gen.next());
-    let none = generic_var(id_gen.next());
-    let _ = prelude.values.insert(
+
+    prelude.values.insert(
         "None".to_string(),
         ValueConstructor::public(
-            function(vec![none.clone()], option(some, none)),
+            option(some),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "None".to_string(),
@@ -541,12 +486,12 @@ pub fn result(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
     })
 }
 
-pub fn option(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
+pub fn option(a: Arc<Type>) -> Arc<Type> {
     Arc::new(Type::App {
         public: true,
         name: OPTION.to_string(),
         module: "".to_string(),
-        args: vec![a, e],
+        args: vec![a],
     })
 }
 
