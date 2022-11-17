@@ -575,6 +575,7 @@ pub enum Pattern<Constructor, Type> {
 
     /// The constructor for a custom type. Starts with an uppercase letter.
     Constructor {
+        is_record: bool,
         location: Span,
         name: String,
         arguments: Vec<CallArg<Self>>,

@@ -913,7 +913,13 @@ pub fn pub_parser() -> impl Parser<Token, (), Error = ParseError> {
 
 pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
     recursive(|r| {
-        let constructor_pattern_arg_parser = choice((
+        let no_label = r.clone().map_with_span(|pattern, span| ast::CallArg {
+            location: span,
+            value: pattern,
+            label: None,
+        });
+
+        let record_constructor_pattern_arg_parser = choice((
             select! {Token::Name {name} => name}
                 .then_ignore(just(Token::Colon))
                 .then(r.clone())
@@ -922,14 +928,19 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     label: Some(name),
                     value: pattern,
                 }),
-            r.map_with_span(|pattern, span| ast::CallArg {
-                location: span,
-                value: pattern,
-                label: None,
-            }),
-        ));
+            no_label.clone(),
+        ))
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .then(
+            just(Token::DotDot)
+                .then_ignore(just(Token::Comma).or_not())
+                .ignored()
+                .or_not(),
+        )
+        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
-        let constructor_pattern_args_parser = constructor_pattern_arg_parser
+        let tuple_constructor_pattern_arg_parser = no_label
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .then(
@@ -938,13 +949,18 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     .ignored()
                     .or_not(),
             )
-            .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-            .or_not()
-            .map(|opt_args| {
-                opt_args
-                    .map(|(a, b)| (a, b.is_some()))
-                    .unwrap_or_else(|| (vec![], false))
-            });
+            .delimited_by(just(Token::LeftParen), just(Token::RightParen));
+
+        let constructor_pattern_args_parser = choice((
+            record_constructor_pattern_arg_parser.map(|a| (a, true)),
+            tuple_constructor_pattern_arg_parser.map(|a| (a, false)),
+        ))
+        .or_not()
+        .map(|opt_args| {
+            opt_args
+                .map(|((a, b), c)| (a, b.is_some(), c))
+                .unwrap_or_else(|| (vec![], false, false))
+        });
 
         let constructor_pattern_parser =
             select! {Token::UpName { name } => name}.then(constructor_pattern_args_parser);
@@ -957,8 +973,9 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                         .or_not(),
                 )
                 .map_with_span(|(name, opt_pattern), span| {
-                    if let Some((c_name, (arguments, with_spread))) = opt_pattern {
+                    if let Some((c_name, (arguments, with_spread, is_record))) = opt_pattern {
                         ast::UntypedPattern::Constructor {
+                            is_record,
                             location: span,
                             name: c_name,
                             arguments,
@@ -974,17 +991,20 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                         }
                     }
                 }),
-            constructor_pattern_parser.map_with_span(|(name, (arguments, with_spread)), span| {
-                ast::UntypedPattern::Constructor {
-                    location: span,
-                    name,
-                    arguments,
-                    module: None,
-                    constructor: (),
-                    with_spread,
-                    tipo: (),
-                }
-            }),
+            constructor_pattern_parser.map_with_span(
+                |(name, (arguments, with_spread, is_record)), span| {
+                    ast::UntypedPattern::Constructor {
+                        is_record,
+                        location: span,
+                        name,
+                        arguments,
+                        module: None,
+                        constructor: (),
+                        with_spread,
+                        tipo: (),
+                    }
+                },
+            ),
             select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
                 ast::UntypedPattern::Discard {
                     name,

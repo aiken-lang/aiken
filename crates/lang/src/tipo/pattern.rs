@@ -409,6 +409,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 name,
                 arguments: mut pattern_args,
                 with_spread,
+                is_record,
                 ..
             } => {
                 // Register the value as seen for detection of unused values
@@ -525,6 +526,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 constructor,
                                 with_spread,
                                 tipo: instantiated_constructor_type,
+                                is_record,
                             })
                         } else {
                             Err(Error::IncorrectArity {
@@ -552,6 +554,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 constructor,
                                 with_spread,
                                 tipo: instantiated_constructor_type,
+                                is_record,
                             })
                         } else {
                             Err(Error::IncorrectArity {

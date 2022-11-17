@@ -737,6 +737,7 @@ impl<'comments> Formatter<'comments> {
         args: &'a [CallArg<UntypedPattern>],
         module: &'a Option<String>,
         with_spread: bool,
+        is_record: bool,
     ) -> Document<'a> {
         fn is_breakable(expr: &UntypedPattern) -> bool {
             match expr {
@@ -754,25 +755,32 @@ impl<'comments> Formatter<'comments> {
         };
 
         if args.is_empty() && with_spread {
-            name.append("(..)")
+            if is_record {
+                name.append("{..}")
+            } else {
+                name.append("(..)")
+            }
         } else if args.is_empty() {
             name
         } else if with_spread {
-            name.append(wrap_args_with_spread(
-                args.iter().map(|a| self.pattern_call_arg(a)),
-            ))
+            let wrapped_args = if is_record {
+                wrap_fields_with_spread(args.iter().map(|a| self.pattern_call_arg(a)))
+            } else {
+                wrap_args_with_spread(args.iter().map(|a| self.pattern_call_arg(a)))
+            };
+
+            name.append(wrapped_args)
         } else {
             match args {
                 [arg] if is_breakable(&arg.value) => name
-                    .append(if arg.label.is_some() { "{" } else { "(" })
+                    .append(if is_record { "{" } else { "(" })
                     .append(self.pattern_call_arg(arg))
-                    .append(if arg.label.is_some() { "}" } else { ")" })
+                    .append(if is_record { "}" } else { ")" })
                     .group(),
 
                 _ => name
                     .append(wrap_args(
-                        args.iter()
-                            .map(|a| (self.pattern_call_arg(a), a.label.is_some())),
+                        args.iter().map(|a| (self.pattern_call_arg(a), is_record)),
                     ))
                     .group(),
             }
@@ -1254,8 +1262,9 @@ impl<'comments> Formatter<'comments> {
                 arguments: args,
                 module,
                 with_spread,
+                is_record,
                 ..
-            } => self.pattern_constructor(name, args, module, *with_spread),
+            } => self.pattern_constructor(name, args, module, *with_spread, *is_record),
         };
         commented(doc, comments)
     }
@@ -1396,10 +1405,10 @@ where
 
     let args = args.map(|a| a.0);
 
-    let ((open_broken, open_unbroken), close) = if curly {
-        ((" {", " { "), "}")
+    let (open_broken, open_unbroken, close) = if curly {
+        (" {", " { ", "}")
     } else {
-        (("(", "("), ")")
+        ("(", "(", ")")
     };
 
     break_(open_broken, open_unbroken)
@@ -1441,6 +1450,25 @@ where
         .nest(INDENT)
         .append(break_(",", ""))
         .append(")")
+        .group()
+}
+
+pub fn wrap_fields_with_spread<'a, I>(args: I) -> Document<'a>
+where
+    I: IntoIterator<Item = Document<'a>>,
+{
+    let mut args = args.into_iter().peekable();
+    if args.peek().is_none() {
+        return "()".to_doc();
+    }
+
+    break_(" {", " { ")
+        .append(join(args, break_(",", ", ")))
+        .append(break_(",", ", "))
+        .append("..")
+        .nest(INDENT)
+        .append(break_("", " "))
+        .append("}")
         .group()
 }
 
