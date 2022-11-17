@@ -1270,6 +1270,12 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn pattern_call_arg<'a>(&mut self, arg: &'a CallArg<UntypedPattern>) -> Document<'a> {
+        if let (UntypedPattern::Var { name, .. }, Some(label)) = (&arg.value, &arg.label) {
+            if name == label {
+                return self.pattern(&arg.value);
+            }
+        }
+
         arg.label
             .as_ref()
             .map(|s| s.to_doc().append(": "))

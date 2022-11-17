@@ -35,8 +35,8 @@ pub fn spend(
 ) -> Bool {
   let x = datum.rdmr
   when x is {
-    sample.Buy { fin: fin, .. } -> fin > 0
-    sample.Sell { find: fin, .. } -> fin > 0
+    sample.Buy { fin, .. } -> fin > 0
+    sample.Sell { find, .. } -> find > 0
     sample.Hold(some) -> some > 0
   }
 }
