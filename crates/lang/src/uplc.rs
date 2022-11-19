@@ -740,6 +740,7 @@ impl<'a> CodeGenerator<'a> {
                                         );
                                     }
                                 }
+                                Pattern::Discard { .. } => {}
                                 _ => todo!(),
                             };
                         }
