@@ -1,5 +1,5 @@
 #[derive(clap::Args)]
-/// Create a new Aiken project
+/// Format an Aiken project
 pub struct Args {
     /// Files to format
     #[clap(default_value = ".")]
