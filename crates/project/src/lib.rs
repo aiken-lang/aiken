@@ -14,7 +14,7 @@ use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedFunction},
     builtins,
     tipo::TypeInfo,
-    uplc::CodeGenerator,
+    uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
     IdGenerator,
 };
 use pallas::{
@@ -312,13 +312,25 @@ impl Project {
             for def in module.ast.definitions() {
                 match def {
                     Definition::Fn(func) => {
-                        functions.insert((module.name.clone(), func.name.clone()), func);
+                        functions.insert(
+                            FunctionAccessKey {
+                                module_name: module.name.clone(),
+                                function_name: func.name.clone(),
+                            },
+                            func,
+                        );
                     }
                     Definition::TypeAlias(ta) => {
                         type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
                     }
                     Definition::DataType(dt) => {
-                        data_types.insert((module.name.clone(), dt.name.clone()), dt);
+                        data_types.insert(
+                            DataTypeKey {
+                                module_name: module.name.clone(),
+                                defined_type: dt.name.clone(),
+                            },
+                            dt,
+                        );
                     }
                     Definition::Use(import) => {
                         imports.insert((module.name.clone(), import.module.join("/")), import);
