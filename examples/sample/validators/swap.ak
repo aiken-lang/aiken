@@ -34,9 +34,7 @@ pub fn spend(
   ctx: spend.ScriptContext,
 ) -> Bool {
   let x = datum.rdmr
-  when x is {
-    sample.Buy { fin, .. } -> fin > 0
-    sample.Sell { find, .. } -> find > 0
-    sample.Hold(some) -> some > 0
-  }
+  let y = [datum.fin, 2, 3]
+  let z = [1, ..y]
+  True
 }

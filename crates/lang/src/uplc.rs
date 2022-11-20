@@ -3,7 +3,7 @@ use std::{cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc};
 use indexmap::IndexMap;
 
 use uplc::{
-    ast::{Constant, Name, Program, Term, Unique},
+    ast::{Constant, Name, Program, Term, Type as UplcType, Unique},
     builtins::DefaultFunction,
     parser::interner::Interner,
 };
@@ -317,7 +317,14 @@ impl<'a> CodeGenerator<'a> {
                 };
             }
             TypedExpr::Fn { .. } => todo!(),
-            TypedExpr::List { .. } => todo!(),
+            TypedExpr::List { elements, tail, .. } => {
+                for element in elements {
+                    self.recurse_scope_level(element, scope_level.clone());
+                }
+                if let Some(tail_element) = tail {
+                    self.recurse_scope_level(&*tail_element, scope_level)
+                }
+            }
             TypedExpr::Call { fun, args, .. } => {
                 self.recurse_scope_level(fun, scope_level.scope_increment(1));
 
@@ -795,7 +802,85 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             TypedExpr::Fn { .. } => todo!(),
-            TypedExpr::List { .. } => todo!(),
+            TypedExpr::List {
+                elements,
+                tail,
+                tipo,
+                ..
+            } => {
+                let mut type_list = vec![];
+                let mut is_final_type = false;
+                // TODO use lifetimes instead of clone
+                // Skip first type since we know we have a list
+                let mut current_tipo = match (&**tipo).clone() {
+                    Type::App { args, .. } => (*args[0]).clone(),
+                    Type::Fn { .. } => todo!(),
+                    Type::Var { .. } => todo!(),
+                };
+                while !is_final_type {
+                    match current_tipo.clone() {
+                        Type::App { name, args, .. } => {
+                            if args.is_empty() {
+                                type_list.push(name);
+                                is_final_type = true;
+                            } else {
+                                type_list.push(name);
+                                current_tipo = (&*args[0]).clone();
+                            }
+                        }
+                        Type::Fn { .. } => todo!(),
+                        Type::Var { tipo } => match (*tipo).borrow().clone() {
+                            tipo::TypeVar::Unbound { .. } => todo!(),
+                            tipo::TypeVar::Link { tipo } => {
+                                current_tipo = (&*tipo).clone();
+                            }
+                            tipo::TypeVar::Generic { .. } => todo!(),
+                        },
+                    };
+                }
+
+                let mut list_term = if let Some(tail_list) = tail {
+                    // Get list of tail items
+                    self.recurse_code_gen(&*tail_list, scope_level.clone())
+                } else {
+                    // Or get empty list of correct type
+                    let mut current_type = vec![];
+                    for type_name in type_list.into_iter().rev() {
+                        match type_name.as_str() {
+                            "ByteArray" => current_type.push(UplcType::ByteString),
+                            "Int" => current_type.push(UplcType::Integer),
+                            "String" => current_type.push(UplcType::String),
+                            "Bool" => current_type.push(UplcType::Bool),
+                            "List" => {
+                                if let Some(prev_type) = current_type.pop() {
+                                    current_type.push(UplcType::List(prev_type.into()));
+                                } else {
+                                    unreachable!()
+                                }
+                            }
+                            "Pair" => todo!(),
+                            _ => current_type.push(UplcType::Data),
+                        };
+                    }
+                    Term::Constant(Constant::ProtoList(current_type.pop().unwrap(), vec![]))
+                };
+
+                // use mkCons to prepend all elements in reverse
+                for element in elements.iter().rev() {
+                    let element_term = self.recurse_code_gen(element, scope_level.clone());
+
+                    list_term = Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Force(Term::Builtin(DefaultFunction::MkCons).into())
+                                .into(),
+                            argument: element_term.into(),
+                        }
+                        .into(),
+                        argument: list_term.into(),
+                    }
+                }
+                list_term
+            }
             TypedExpr::Call {
                 fun, args, tipo, ..
             } => {
