@@ -1035,6 +1035,23 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     value,
                 }
             }),
+            just(Token::LeftSquare)
+                .ignore_then(r.clone().separated_by(just(Token::Comma)))
+                .then(choice((
+                    just(Token::Comma).ignore_then(
+                        just(Token::DotDot)
+                            .ignore_then(r.clone())
+                            .map(Box::new)
+                            .or_not(),
+                    ),
+                    just(Token::Comma).ignored().or_not().map(|_| None),
+                )))
+                .then_ignore(just(Token::RightSquare))
+                .map_with_span(|(elements, tail), span| ast::UntypedPattern::List {
+                    location: span,
+                    elements,
+                    tail,
+                }),
         ))
         .then(
             just(Token::As)
