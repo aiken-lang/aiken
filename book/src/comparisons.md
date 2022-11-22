@@ -22,11 +22,11 @@ of a smart contract and it is this low level representation that actually gets e
 
 **So what am I writing when I write Plutus?**
 
-Plutus as most people know it looks like Haskell. You even use Haskell tooling like cabal for it. Even so, you are technically not writing Haskell. Plutus or more specifically [PlutusTx](https://github.com/input-output-hk/plutus/tree/master/plutus-tx-plugin), is a plugin for template Haskell. This means that code that you write is consumed by this plugin and then transformed into Untyped Plutus Core. Essentially, the Haskell parser and typechecker are hijacked which results in not needing to write new custom ones. What you end up with is a kind of DSL that looks and feels like Haskell but the target runtime is not GHC.
+Plutus as most people know it looks like Haskell. You even use Haskell tooling like cabal for it. Even so, you are technically not writing Haskell. Plutus or more specifically [PlutusTx](https://github.com/input-output-hk/plutus/tree/master/plutus-tx-plugin), is a plugin for GHC. This means that code that you write is consumed by this plugin and then transformed into Untyped Plutus Core. Essentially, the Haskell parser and typechecker are hijacked which results in not needing to write new custom ones. What you end up with is a kind of DSL that looks and feels like Haskell but the target runtime is not GHC.
 
 ## The Alternatives
 
-Now that we've got that misconception out of the way it should be possible to see how
+Now that this misconception is out of the way it should be possible to see how
 other new languages can be created that ultimately compile to Untyped Plutus Core. The
 current alternatives range from full blown new languages to embedded DSLs. Here is a list of the
 main ones:
