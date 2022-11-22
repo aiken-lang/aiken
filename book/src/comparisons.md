@@ -1,7 +1,7 @@
 # Comparisons
 
-Within the Cardano community there has been a florishing ecosystem
-of alternative langauges for writing smart contracts. So naturally, one might ask about
+Within the Cardano community there has been a flourishing ecosystem
+of alternative languages for writing smart contracts. So naturally, one might ask about
 the differences between these and which they should use for their use case. There is
 also a big misconception about how writing smart contracts actually works on Cardano. In this document,
 we'll list some of the main alternatives along with their differences and similarities. Before we get into this though, let's discuss the misconception first so everyone is on the same page.
