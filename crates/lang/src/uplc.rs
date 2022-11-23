@@ -88,7 +88,7 @@ pub struct ConstrFieldKey {
     pub field_name: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct DataTypeKey {
     pub module_name: String,
     pub defined_type: String,
@@ -238,6 +238,8 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
+        println!("{}", program.to_pretty());
+
         let mut interner = Interner::new();
 
         interner.program(&mut program);
@@ -246,7 +248,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match body {
+        match dbg!(body) {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
@@ -535,15 +537,17 @@ impl<'a> CodeGenerator<'a> {
         scope_level: ScopeLevels,
         vars: &[TypedExpr],
     ) {
-        match pattern {
-            Pattern::Int { .. } | Pattern::String { .. } | Pattern::Var { .. } => {
+        match dbg!(pattern) {
+            Pattern::Int { .. }
+            | Pattern::String { .. }
+            | Pattern::Var { .. }
+            | Pattern::List { .. }
+            | Pattern::Discard { .. } => {
                 self.recurse_scope_level(value, scope_level);
             }
 
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => todo!(),
-            Pattern::List { .. } => todo!(),
             Pattern::Constructor {
                 name: constructor_name,
                 tipo,
@@ -1300,7 +1304,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut total_constr_length = 0;
                 let pattern = &clauses[0].pattern[0];
 
-                let key = match pattern {
+                let key = match dbg!(pattern) {
                     Pattern::Constructor { tipo, .. } => {
                         let mut is_app = false;
                         let mut tipo = &**tipo;
@@ -1322,45 +1326,233 @@ impl<'a> CodeGenerator<'a> {
                             };
                         }
 
-                        key
+                        Some(key)
                     }
+                    Pattern::List { .. } => None,
+                    Pattern::Discard { .. } => None,
                     _ => todo!(),
                 };
 
-                let dt = self.data_types.get(&key).unwrap();
-                let data_type = &dt.name;
-                let mut new_current_clauses: Vec<(usize, Term<Name>)> = current_clauses
-                    .iter()
-                    .map(|clause| {
-                        let pattern = &clause.pattern[0];
-                        let pair = match pattern {
-                            Pattern::Constructor { name, module, .. } => {
-                                let index =
-                                    dt.constructors.iter().position(|c| name.clone() == c.name);
+                if let Some(key) = key {
+                    let dt = self.data_types.get(&key).unwrap();
+                    let data_type = &dt.name;
+                    let mut new_current_clauses: Vec<(usize, Term<Name>)> = current_clauses
+                        .iter()
+                        .map(|clause| {
+                            let pattern = &clause.pattern[0];
+                            let pair = match pattern {
+                                Pattern::Constructor { name, module, .. } => {
+                                    let index =
+                                        dt.constructors.iter().position(|c| name.clone() == c.name);
+                                    let mut current_term = self.recurse_code_gen(
+                                        &clause.then,
+                                        scope_level.scope_increment_sequence(1),
+                                    );
+                                    if let Some(ind) = index {
+                                        for (index, field) in
+                                            dt.constructors[ind].arguments.iter().enumerate()
+                                        {
+                                            let label =
+                                                field.clone().label.unwrap_or(format!("{index}"));
 
+                                            if let Some(ScopedExpr {
+                                                expr: TypedExpr::Assignment { pattern, .. },
+                                                ..
+                                            }) =
+                                                self.uplc_data_holder_lookup.get(&ConstrFieldKey {
+                                                    local_var: current_var_name.to_string(),
+                                                    field_name: label.clone(),
+                                                })
+                                            {
+                                                let var_name = match pattern {
+                                                    Pattern::Var { name, .. } => name,
+                                                    _ => todo!(),
+                                                };
+
+                                                current_term = Term::Apply {
+                                                    function: Term::Lambda {
+                                                        parameter_name: Name {
+                                                            text: var_name.to_string(),
+                                                            unique: 0.into(),
+                                                        },
+                                                        body: current_term.into(),
+                                                    }
+                                                    .into(),
+                                                    argument: Term::Var(Name {
+                                                        text: format!(
+                                                            "{current_var_name}_field_{label}"
+                                                        ),
+                                                        unique: 0.into(),
+                                                    })
+                                                    .into(),
+                                                };
+                                            }
+                                        }
+                                    }
+
+                                    current_module = module.clone().unwrap_or_default();
+                                    total_constr_length = dt.constructors.len();
+
+                                    (index.unwrap_or(dt.constructors.len()), current_term)
+                                }
+                                _ => todo!(),
+                            };
+                            pair
+                        })
+                        .collect();
+
+                    new_current_clauses.sort_by(|a, b| a.0.cmp(&b.0));
+
+                    let mut term = Term::Apply {
+                        function: Term::Var(Name {
+                            text: format!("choose_{current_module}_{data_type}_constr"),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: Term::Var(Name {
+                            text: current_var_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    };
+                    let need_lam = total_constr_length - new_current_clauses.len() > 0;
+
+                    let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
+
+                    let mut new_current_clauses = new_current_clauses.to_vec();
+                    new_current_clauses.reverse();
+                    let last_term = last.1.clone();
+
+                    let mut current: Option<(usize, Term<Name>)> = None;
+                    for index in 0..total_constr_length - 1 {
+                        if current.is_none() {
+                            current = new_current_clauses.pop();
+                        }
+                        if let Some(val) = current.clone() {
+                            if val.0 == index {
+                                let branch_term = val.1;
+
+                                term = Term::Apply {
+                                    function: term.into(),
+                                    argument: Term::Delay(branch_term.into()).into(),
+                                };
+                                current = None;
+                            } else {
+                                term = Term::Apply {
+                                    function: term.into(),
+                                    argument: Term::Var(Name {
+                                        text: "last_constr_then".to_string(),
+                                        unique: 0.into(),
+                                    })
+                                    .into(),
+                                }
+                            }
+                        } else {
+                            term = Term::Apply {
+                                function: term.into(),
+                                argument: Term::Var(Name {
+                                    text: "last_constr_then".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
+                            }
+                        }
+                    }
+                    if need_lam {
+                        term = Term::Apply {
+                            function: Term::Lambda {
+                                parameter_name: Name {
+                                    text: "last_constr_then".to_string(),
+                                    unique: 0.into(),
+                                },
+                                body: Term::Apply {
+                                    function: term.into(),
+                                    argument: Term::Var(Name {
+                                        text: "last_constr_then".to_string(),
+                                        unique: 0.into(),
+                                    })
+                                    .into(),
+                                }
+                                .into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(last_term.into()).into(),
+                        }
+                    } else {
+                        term = Term::Apply {
+                            function: term.into(),
+                            argument: Term::Delay(last_term.into()).into(),
+                        };
+                    }
+
+                    term
+                } else {
+                    let mut type_list = vec![];
+                    let mut is_final_type = false;
+                    // TODO use lifetimes instead of clone
+                    // Skip first type since we know we have a list
+                    let tipo = match subject {
+                        TypedExpr::Var { constructor, .. } => &constructor.tipo,
+                        _ => todo!(),
+                    };
+                    let mut current_tipo = match (&**tipo).clone() {
+                        Type::App { args, .. } => (*args[0]).clone(),
+                        Type::Fn { .. } => todo!(),
+                        Type::Var { .. } => todo!(),
+                    };
+
+                    while !is_final_type {
+                        match current_tipo.clone() {
+                            Type::App { name, args, .. } => {
+                                if args.is_empty() {
+                                    type_list.push(name);
+                                    is_final_type = true;
+                                } else {
+                                    type_list.push(name);
+                                    current_tipo = (&*args[0]).clone();
+                                }
+                            }
+                            Type::Fn { .. } => todo!(),
+                            Type::Var { tipo } => match (*tipo).borrow().clone() {
+                                tipo::TypeVar::Unbound { .. } => todo!(),
+                                tipo::TypeVar::Link { tipo } => {
+                                    current_tipo = (&*tipo).clone();
+                                }
+                                tipo::TypeVar::Generic { .. } => todo!(),
+                            },
+                        };
+                    }
+
+                    let mut new_current_clauses: Vec<(Option<usize>, bool, Term<Name>)> =
+                        current_clauses
+                            .iter()
+                            .map(|clause| {
+                                let pattern = &clause.pattern[0];
                                 let mut current_term = self.recurse_code_gen(
                                     &clause.then,
                                     scope_level.scope_increment_sequence(1),
                                 );
-                                if let Some(ind) = index {
-                                    for (index, field) in
-                                        dt.constructors[ind].arguments.iter().enumerate()
-                                    {
-                                        let label =
-                                            field.clone().label.unwrap_or(format!("{index}"));
-
-                                        if let Some(ScopedExpr {
-                                            expr: TypedExpr::Assignment { pattern, .. },
-                                            ..
-                                        }) = self.uplc_data_holder_lookup.get(&ConstrFieldKey {
-                                            local_var: current_var_name.to_string(),
-                                            field_name: label.clone(),
-                                        }) {
-                                            let var_name = match pattern {
-                                                Pattern::Var { name, .. } => name,
+                                let triplet = match dbg!(pattern) {
+                                    Pattern::List { elements, tail, .. } => {
+                                        let element_names: Vec<String> = elements
+                                            .clone()
+                                            .iter()
+                                            .map(|element| match element {
+                                                Pattern::Var { name, .. } => name.to_string(),
                                                 _ => todo!(),
-                                            };
+                                            })
+                                            .collect();
 
+                                        let tail_name: Option<String> = if let Some(tail) = tail {
+                                            match &**tail {
+                                                Pattern::Var { name, .. } => Some(name.to_string()),
+                                                _ => todo!(),
+                                            }
+                                        } else {
+                                            None
+                                        };
+
+                                        for (index, var_name) in element_names.iter().enumerate() {
                                             current_term = Term::Apply {
                                                 function: Term::Lambda {
                                                     parameter_name: Name {
@@ -1372,112 +1564,408 @@ impl<'a> CodeGenerator<'a> {
                                                 .into(),
                                                 argument: Term::Var(Name {
                                                     text: format!(
-                                                        "{current_var_name}_field_{label}"
+                                                        "{current_var_name}_item_{index}"
                                                     ),
                                                     unique: 0.into(),
                                                 })
                                                 .into(),
                                             };
                                         }
+
+                                        if let Some(tail_name) = tail_name {
+                                            current_term = Term::Apply {
+                                                function: Term::Lambda {
+                                                    parameter_name: Name {
+                                                        text: tail_name,
+                                                        unique: 0.into(),
+                                                    },
+                                                    body: current_term.into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Var(Name {
+                                                    text: format!("{current_var_name}_rest"),
+                                                    unique: 0.into(),
+                                                })
+                                                .into(),
+                                            };
+                                        }
+
+                                        (Some(elements.len()), tail.is_some(), current_term)
                                     }
-                                }
+                                    Pattern::Discard { .. } => (None, false, current_term),
+                                    _ => todo!(),
+                                };
+                                triplet
+                            })
+                            .collect();
 
-                                current_module = module.clone().unwrap_or_default();
-                                total_constr_length = dt.constructors.len();
-
-                                (index.unwrap_or(dt.constructors.len()), current_term)
-                            }
-                            _ => todo!(),
-                        };
-                        pair
-                    })
-                    .collect();
-
-                new_current_clauses.sort_by(|a, b| a.0.cmp(&b.0));
-
-                let mut term = Term::Apply {
-                    function: Term::Var(Name {
-                        text: format!("choose_{current_module}_{data_type}_constr"),
-                        unique: 0.into(),
-                    })
-                    .into(),
-                    argument: Term::Var(Name {
-                        text: current_var_name,
-                        unique: 0.into(),
-                    })
-                    .into(),
-                };
-                let need_lam = total_constr_length - new_current_clauses.len() > 0;
-
-                let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
-
-                let mut new_current_clauses = new_current_clauses.to_vec();
-                new_current_clauses.reverse();
-                let last_term = last.1.clone();
-
-                let mut current: Option<(usize, Term<Name>)> = None;
-                for index in 0..total_constr_length - 1 {
-                    if current.is_none() {
-                        current = new_current_clauses.pop();
-                    }
-                    if let Some(val) = current.clone() {
-                        if val.0 == index {
-                            let branch_term = val.1;
-
-                            term = Term::Apply {
-                                function: term.into(),
-                                argument: Term::Delay(branch_term.into()).into(),
-                            };
-                            current = None;
+                    new_current_clauses.sort_by(|item1, item2| {
+                        if item1.0.is_none() && item2.0.is_some() {
+                            Ordering::Greater
+                        } else if item2.0.is_none() && item1.0.is_some() {
+                            Ordering::Less
                         } else {
-                            term = Term::Apply {
-                                function: term.into(),
-                                argument: Term::Var(Name {
-                                    text: "last_constr_then".to_string(),
-                                    unique: 0.into(),
-                                })
-                                .into(),
+                            match item1.0.cmp(&item2.0) {
+                                Ordering::Less => Ordering::Less,
+                                Ordering::Equal => item1.1.cmp(&item2.1),
+                                Ordering::Greater => Ordering::Greater,
                             }
                         }
-                    } else {
-                        term = Term::Apply {
-                            function: term.into(),
+                    });
+
+                    println!("{new_current_clauses:?}");
+
+                    let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
+
+                    println!("{new_current_clauses:?}");
+
+                    let mut new_current_clauses = new_current_clauses.to_vec();
+                    new_current_clauses.reverse();
+                    let mut current_term: Term<Name> = last.2.clone();
+                    let last_term = last.2.clone();
+
+                    //if last clause had a tail then we need the lambda to expose rest
+                    if last.1 && last.0.is_some() {
+                        let last_index = last.0.unwrap() - 1;
+                        current_term = Term::Apply {
+                            function: Term::Lambda {
+                                parameter_name: Name {
+                                    text: format!("{current_var_name}_rest"),
+                                    unique: 0.into(),
+                                },
+                                body: current_term.into(),
+                            }
+                            .into(),
                             argument: Term::Var(Name {
-                                text: "last_constr_then".to_string(),
+                                text: format!("{current_var_name}_tail_{last_index}"),
                                 unique: 0.into(),
                             })
                             .into(),
-                        }
+                        };
                     }
-                }
-                if need_lam {
-                    term = Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "last_constr_then".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: Term::Apply {
-                                function: term.into(),
-                                argument: Term::Var(Name {
-                                    text: "last_constr_then".to_string(),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(last_term.into()).into(),
-                    }
-                } else {
-                    term = Term::Apply {
-                        function: term.into(),
-                        argument: Term::Delay(last_term.into()).into(),
-                    };
-                }
 
-                term
+                    for (index, (array_length, has_tail, then)) in
+                        new_current_clauses.iter().enumerate()
+                    {
+                        let prev_length: Option<usize> = if index == 0 {
+                            None
+                        } else {
+                            new_current_clauses
+                                .get(index - 1)
+                                .and_then(|(index_opt, _, _)| *index_opt)
+                        };
+
+                        match dbg!((*array_length, prev_length)) {
+                            (Some(length), Some(prev_length)) => {
+                                let check_length = if prev_length == length {
+                                    length + 2
+                                } else {
+                                    length + 1
+                                };
+                                // Go index by index to create cases for each possible len
+                                for expose_index in (prev_length + 1..check_length).rev() {
+                                    let prev_exposed = expose_index - 1;
+                                    let list_var_name =
+                                        format!("{current_var_name}_tail_{prev_exposed}");
+
+                                    // For a given list length if we encounter a tail and we are checking a clause length = current index
+                                    // then expose a var for tail and run clause then
+                                    current_term = if *has_tail && expose_index == length - 1 {
+                                        Term::Apply {
+                                            function: Term::Lambda {
+                                                parameter_name: Name {
+                                                    text: format!("{current_var_name}_rest"),
+                                                    unique: 0.into(),
+                                                },
+                                                body: then.clone().into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Var(Name {
+                                                text: format!(
+                                                    "{current_var_name}_tail_{expose_index}"
+                                                ),
+                                                unique: 0.into(),
+                                            })
+                                            .into(),
+                                        }
+                                    // we are checking a clause length = current index so check empty tail list and run clause then if tail list is empty
+                                    } else if expose_index == length - 1 {
+                                        Term::Force(
+                                            Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Apply {
+                                                        function: Term::Force(
+                                                            Term::Force(
+                                                                Term::Builtin(
+                                                                    DefaultFunction::ChooseList,
+                                                                )
+                                                                .into(),
+                                                            )
+                                                            .into(),
+                                                        )
+                                                        .into(),
+                                                        argument: Term::Var(Name {
+                                                            text: format!(
+                                                                "{current_var_name}_tail_{expose_index}"
+                                                            ),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                    argument: Term::Delay(then.clone().into())
+                                                        .into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(current_term.into()).into(),
+                                            }
+                                            .into(),
+                                        )
+                                    // We are not checking for a list of this length, so fallback to last clause then if tail list is empty
+                                    } else {
+                                        Term::Force(
+                                            Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Apply {
+                                                        function: Term::Force(
+                                                            Term::Force(
+                                                                Term::Builtin(
+                                                                    DefaultFunction::ChooseList,
+                                                                )
+                                                                .into(),
+                                                            )
+                                                            .into(),
+                                                        )
+                                                        .into(),
+                                                        argument: Term::Var(Name {
+                                                            text: format!(
+                                                                "{current_var_name}_tail_{expose_index}"
+                                                            ),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                    argument: Term::Delay(last_term.clone().into())
+                                                        .into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(current_term.into()).into(),
+                                            }
+                                            .into(),
+                                        )
+                                    };
+                                    if prev_length != length {
+                                        // Just expose head list and tail list. Check for empty list happens above
+                                        current_term = Term::Apply {
+                                            function: Term::Lambda {
+                                                parameter_name: Name {
+                                                    text: format!(
+                                                        "{current_var_name}_item_{expose_index}"
+                                                    ),
+                                                    unique: 0.into(),
+                                                },
+                                                body: Term::Apply {
+                                                    function: Term::Lambda {
+                                                        parameter_name: Name {
+                                                            text: format!(
+                                                                "{current_var_name}_tail_{expose_index}"
+                                                            ),
+                                                            unique: 0.into(),
+                                                        },
+                                                        body: current_term.into(),
+                                                    }
+                                                    .into(),
+                                                    argument: Term::Apply {
+                                                        function: Term::Force(
+                                                            Term::Builtin(
+                                                                DefaultFunction::TailList,
+                                                            )
+                                                            .into(),
+                                                        )
+                                                        .into(),
+                                                        argument: Term::Var(Name {
+                                                            text: list_var_name.to_string(),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                }
+                                                .into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Apply {
+                                                function: Term::Force(
+                                                    Term::Builtin(DefaultFunction::HeadList).into(),
+                                                )
+                                                .into(),
+                                                argument: Term::Var(Name {
+                                                    text: list_var_name.to_string(),
+                                                    unique: 0.into(),
+                                                })
+                                                .into(),
+                                            }
+                                            .into(),
+                                        };
+                                    }
+                                }
+                            }
+                            (Some(length), None) => {
+                                for expose_index in (0..length + 1).rev() {
+                                    let list_var_name = if expose_index == 0 {
+                                        current_var_name.clone()
+                                    } else {
+                                        let prev_exposed = expose_index - 1;
+                                        format!("{current_var_name}_tail_{prev_exposed}")
+                                    };
+
+                                    // For a given list length if we encounter a tail and we are checking a clause length = current index
+                                    // then expose a var for tail and run clause then
+                                    current_term = if *has_tail && expose_index == length - 1 {
+                                        Term::Apply {
+                                            function: Term::Lambda {
+                                                parameter_name: Name {
+                                                    text: format!("{current_var_name}_rest"),
+                                                    unique: 0.into(),
+                                                },
+                                                body: then.clone().into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Var(Name {
+                                                text: format!(
+                                                    "{current_var_name}_tail_{expose_index}"
+                                                ),
+                                                unique: 0.into(),
+                                            })
+                                            .into(),
+                                        }
+                                    // we are checking a clause length = current index so check empty tail list and run clause then if tail list is empty
+                                    } else if expose_index == length - 1 {
+                                        Term::Force(
+                                            Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Apply {
+                                                        function: Term::Force(
+                                                            Term::Force(
+                                                                Term::Builtin(
+                                                                    DefaultFunction::ChooseList,
+                                                                )
+                                                                .into(),
+                                                            )
+                                                            .into(),
+                                                        )
+                                                        .into(),
+                                                        argument: Term::Var(Name {
+                                                            text: format!(
+                                                                "{current_var_name}_tail_{expose_index}"
+                                                            ),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                    argument: Term::Delay(then.clone().into())
+                                                        .into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(current_term.into()).into(),
+                                            }
+                                            .into(),
+                                        )
+                                    // We are not checking for a list of this length, so fallback to last clause then if tail list is empty
+                                    } else {
+                                        Term::Force(
+                                            Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Apply {
+                                                        function: Term::Force(
+                                                            Term::Force(
+                                                                Term::Builtin(
+                                                                    DefaultFunction::ChooseList,
+                                                                )
+                                                                .into(),
+                                                            )
+                                                            .into(),
+                                                        )
+                                                        .into(),
+                                                        argument: Term::Var(Name {
+                                                            text: format!(
+                                                                "{current_var_name}_tail_{expose_index}"
+                                                            ),
+                                                            unique: 0.into(),
+                                                        })
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                    argument: Term::Delay(last_term.clone().into())
+                                                        .into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(current_term.into()).into(),
+                                            }
+                                            .into(),
+                                        )
+                                    };
+
+                                    // Just expose head list and tail list. Check for empty list happens above
+                                    current_term = Term::Apply {
+                                        function: Term::Lambda {
+                                            parameter_name: Name {
+                                                text: format!(
+                                                    "{current_var_name}_item_{expose_index}"
+                                                ),
+                                                unique: 0.into(),
+                                            },
+                                            body: Term::Apply {
+                                                function: Term::Lambda {
+                                                    parameter_name: Name {
+                                                        text: format!(
+                                                            "{current_var_name}_tail_{expose_index}"
+                                                        ),
+                                                        unique: 0.into(),
+                                                    },
+                                                    body: current_term.into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Apply {
+                                                    function: Term::Force(
+                                                        Term::Builtin(DefaultFunction::TailList)
+                                                            .into(),
+                                                    )
+                                                    .into(),
+                                                    argument: Term::Var(Name {
+                                                        text: list_var_name.to_string(),
+                                                        unique: 0.into(),
+                                                    })
+                                                    .into(),
+                                                }
+                                                .into(),
+                                            }
+                                            .into(),
+                                        }
+                                        .into(),
+                                        argument: Term::Apply {
+                                            function: Term::Force(
+                                                Term::Builtin(DefaultFunction::HeadList).into(),
+                                            )
+                                            .into(),
+                                            argument: Term::Var(Name {
+                                                text: list_var_name.to_string(),
+                                                unique: 0.into(),
+                                            })
+                                            .into(),
+                                        }
+                                        .into(),
+                                    };
+                                }
+                            }
+                            (None, None) => todo!(),
+                            (None, Some(_)) => todo!(),
+                        }
+                    }
+                    current_term
+                }
             }
             // if statements increase scope due to branching.
             TypedExpr::If {
@@ -2145,4 +2633,57 @@ impl<'a> CodeGenerator<'a> {
             .into(),
         }
     }
+
+    // fn add_field_length_check(&self, term: Term<Name>) -> Term<Name> {
+    // Term::Apply {
+    //     function: Term::Lambda {
+    //         parameter_name: Name {
+    //             text: "field_length_check".to_string(),
+    //             unique: 0.into(),
+    //         },
+    //         body: term.into(),
+    //     }
+    //     .into(),
+    //     argument: Term::Lambda {
+    //         parameter_name: Name {
+    //             text: "expected_field_length".to_string(),
+    //             unique: 0.into(),
+    //         },
+    //         body: Term::Lambda {
+    //             parameter_name: Name {
+    //                 text: "type_to_check".to_string(),
+    //                 unique: 0.into(),
+    //             },
+    //             body: Term::Apply {
+    //                 function: Term::Apply {
+    //                     function: Term::Apply {
+    //                         function: Term::Force(
+    //                             Term::Builtin(DefaultFunction::IfThenElse).into(),
+    //                         )
+    //                         .into(),
+    //                         argument: Term::Apply {
+    //                             function: Term::Apply {
+    //                                 function: Term::Apply {
+    //                                     function: Term::Builtin(DefaultFunction::EqualsInteger),
+    //                                     argument: Term::Apply { function: , argument: () },
+    //                                 },
+    //                                 argument: (),
+    //                             },
+    //                             argument: (),
+    //                         },
+    //                     }
+    //                     .into(),
+    //                     argument: (),
+    //                 }
+    //                 .into(),
+    //                 argument: (),
+    //             }
+    //             .into(),
+    //         }
+    //         .into(),
+    //     }
+    //     .into(),
+    // }
+    // todo!()
+    // }
 }
