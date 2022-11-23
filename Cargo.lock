@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "aiken"
-version = "0.0.25"
+version = "0.0.26"
 dependencies = [
  "aiken-lang",
  "aiken-lsp",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lang"
-version = "0.0.25"
+version = "0.0.26"
 dependencies = [
  "chumsky",
  "indexmap",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lsp"
-version = "0.0.25"
+version = "0.0.26"
 dependencies = [
  "aiken-lang",
  "aiken-project",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-project"
-version = "0.0.25"
+version = "0.0.26"
 dependencies = [
  "aiken-lang",
  "hex",
