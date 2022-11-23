@@ -38,8 +38,10 @@ pub fn spend(
   let z = [1, ..y]
   when z is {
     [] -> False
+    [a] -> a == 1
+    [a,b] -> b == 2
     [a,b,c] -> a > 1
     [a,b, c,..d] -> b > 1
-    _other -> False
+    _other -> True
   }
 }
