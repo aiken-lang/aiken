@@ -10,7 +10,7 @@ we'll list some of the main alternatives along with their differences and simila
 
 **Cardano uses Haskell for smart contracts**
 
-This is absolutely **FALSE**.
+This is **not** entirely true.
 
 The main Cardano node implementation does indeed happen to be written in Haskell.
 The virtual machine for executing smart contracts that comes baked into the node
@@ -22,7 +22,7 @@ of a smart contract and it is this low level representation that actually gets e
 
 **So what am I writing when I write Plutus?**
 
-Plutus as most people know it looks like Haskell. You even use Haskell tooling like cabal for it. Even so, you are technically not writing Haskell. Plutus or more specifically [PlutusTx](https://github.com/input-output-hk/plutus/tree/master/plutus-tx-plugin), is a plugin for GHC. This means that code that you write is consumed by this plugin and then transformed into Untyped Plutus Core. Essentially, the Haskell parser and typechecker are hijacked which results in not needing to write new custom ones. What you end up with is a kind of DSL that looks and feels like Haskell but the target runtime is not GHC.
+Plutus as most people know it looks like Haskell. You even use Haskell tooling like cabal for it. Even so, you are technically not writing Haskell. Plutus or more specifically [PlutusTx](https://github.com/input-output-hk/plutus/tree/master/plutus-tx-plugin), is a plugin for GHC. This means that the code that you write is consumed by this plugin and then transformed into Untyped Plutus Core. Essentially, it takes the intermediate representation of Haskell, GHC Core, and turns that into Untyped Plutus Core. This results in not needing to write a new parser and type checker. What you end up with is a kind of DSL that looks and feels like Haskell but the target runtime is not GHC.
 
 ## The Alternatives
 
