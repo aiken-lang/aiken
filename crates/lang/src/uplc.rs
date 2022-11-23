@@ -186,7 +186,10 @@ impl<'a> CodeGenerator<'a> {
                 body: Term::Apply {
                     function: Term::Builtin(DefaultFunction::UnListData).into(),
                     argument: Term::Apply {
-                        function: Term::Builtin(DefaultFunction::SndPair).into(),
+                        function: Term::Force(
+                            Term::Force(Term::Builtin(DefaultFunction::SndPair).into()).into(),
+                        )
+                        .into(),
                         argument: Term::Apply {
                             function: Term::Builtin(DefaultFunction::UnConstrData).into(),
                             argument: Term::Var(Name {
@@ -324,7 +327,7 @@ impl<'a> CodeGenerator<'a> {
                     self.recurse_scope_level(element, scope_level.clone());
                 }
                 if let Some(tail_element) = tail {
-                    self.recurse_scope_level(&*tail_element, scope_level)
+                    self.recurse_scope_level(tail_element, scope_level)
                 }
             }
             TypedExpr::Call { fun, args, .. } => {
@@ -816,7 +819,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut is_final_type = false;
                 // TODO use lifetimes instead of clone
                 // Skip first type since we know we have a list
-                let mut current_tipo = match (&**tipo).clone() {
+                let mut current_tipo = match (**tipo).clone() {
                     Type::App { args, .. } => (*args[0]).clone(),
                     Type::Fn { .. } => todo!(),
                     Type::Var { .. } => todo!(),
@@ -829,14 +832,14 @@ impl<'a> CodeGenerator<'a> {
                                 is_final_type = true;
                             } else {
                                 type_list.push(name);
-                                current_tipo = (&*args[0]).clone();
+                                current_tipo = (*args[0]).clone();
                             }
                         }
                         Type::Fn { .. } => todo!(),
                         Type::Var { tipo } => match (*tipo).borrow().clone() {
                             tipo::TypeVar::Unbound { .. } => todo!(),
                             tipo::TypeVar::Link { tipo } => {
-                                current_tipo = (&*tipo).clone();
+                                current_tipo = (*tipo).clone();
                             }
                             tipo::TypeVar::Generic { .. } => todo!(),
                         },
@@ -845,7 +848,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut list_term = if let Some(tail_list) = tail {
                     // Get list of tail items
-                    self.recurse_code_gen(&*tail_list, scope_level.clone())
+                    self.recurse_code_gen(tail_list, scope_level.clone())
                 } else {
                     // Or get empty list of correct type
                     let mut current_type = vec![];
@@ -1495,7 +1498,7 @@ impl<'a> CodeGenerator<'a> {
                         TypedExpr::Var { constructor, .. } => &constructor.tipo,
                         _ => todo!(),
                     };
-                    let mut current_tipo = match (&**tipo).clone() {
+                    let mut current_tipo = match (**tipo).clone() {
                         Type::App { args, .. } => (*args[0]).clone(),
                         Type::Fn { .. } => todo!(),
                         Type::Var { .. } => todo!(),
@@ -1509,14 +1512,14 @@ impl<'a> CodeGenerator<'a> {
                                     is_final_type = true;
                                 } else {
                                     type_list.push(name);
-                                    current_tipo = (&*args[0]).clone();
+                                    current_tipo = (*args[0]).clone();
                                 }
                             }
                             Type::Fn { .. } => todo!(),
                             Type::Var { tipo } => match (*tipo).borrow().clone() {
                                 tipo::TypeVar::Unbound { .. } => todo!(),
                                 tipo::TypeVar::Link { tipo } => {
-                                    current_tipo = (&*tipo).clone();
+                                    current_tipo = (*tipo).clone();
                                 }
                                 tipo::TypeVar::Generic { .. } => todo!(),
                             },
@@ -2233,7 +2236,10 @@ impl<'a> CodeGenerator<'a> {
                         }
                         .into(),
                         argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::FstPair).into(),
+                            function: Term::Force(
+                                Term::Force(Term::Builtin(DefaultFunction::FstPair).into()).into(),
+                            )
+                            .into(),
                             argument: Term::Apply {
                                 function: Term::Builtin(DefaultFunction::UnConstrData).into(),
                                 argument: Term::Var(Name {
