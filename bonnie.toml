@@ -1,0 +1,5 @@
+version="0.3.2"
+
+[scripts]
+book = "mdbook serve book -d ../_site"
+publish = "cargo workspaces publish"
