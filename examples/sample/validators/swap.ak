@@ -36,5 +36,10 @@ pub fn spend(
   let x = datum.rdmr
   let y = [datum.fin, 2, 3]
   let z = [1, ..y]
-  True
+  when z is {
+    [] -> False
+    [a,b,c] -> a > 1
+    [a,b, c,..d] -> b > 1
+    _other -> False
+  }
 }
