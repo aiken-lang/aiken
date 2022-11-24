@@ -39,9 +39,9 @@ pub fn spend(
   when z is {
     [] -> False
     [a] -> a == 1
-    [a,b] -> b == 2
-    [a,b,c] -> a > 1
-    [a,b, c,..d] -> b > 1
+    [a, b] -> b == 2
+    [a, b, c] -> a > 1
+    [a, b, c, ..d] -> b > 1
     _other -> True
   }
 }
