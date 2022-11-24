@@ -787,7 +787,10 @@ impl<'a> CodeGenerator<'a> {
                         .push((String::new(), term.clone()));
                 }
 
-                self.uplc_function_holder.pop().unwrap().1
+                self.maybe_insert_def(
+                    self.uplc_function_holder.clone().pop().unwrap().1,
+                    scope_level,
+                )
             }
             TypedExpr::Var {
                 constructor, name, ..
