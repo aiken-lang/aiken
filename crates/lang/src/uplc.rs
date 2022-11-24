@@ -187,20 +187,16 @@ impl<'a> CodeGenerator<'a> {
                     unique: 0.into(),
                 },
                 body: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::UnListData).into(),
+                    function: Term::Force(
+                        Term::Force(Term::Builtin(DefaultFunction::SndPair).into()).into(),
+                    )
+                    .into(),
                     argument: Term::Apply {
-                        function: Term::Force(
-                            Term::Force(Term::Builtin(DefaultFunction::SndPair).into()).into(),
-                        )
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                            argument: Term::Var(Name {
-                                text: "constr_var".to_string(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
+                        function: Term::Builtin(DefaultFunction::UnConstrData).into(),
+                        argument: Term::Var(Name {
+                            text: "constr_var".to_string(),
+                            unique: 0.into(),
+                        })
                         .into(),
                     }
                     .into(),
@@ -245,6 +241,8 @@ impl<'a> CodeGenerator<'a> {
         };
 
         let mut interner = Interner::new();
+
+        println!("{}", program.to_pretty());
 
         interner.program(&mut program);
 
