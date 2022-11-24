@@ -103,6 +103,7 @@ pub fn import_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Par
         .ignore_then(
             unqualified_import
                 .separated_by(just(Token::Comma))
+                .allow_trailing()
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .or_not();
@@ -411,6 +412,7 @@ pub fn expr_parser(
             .ignore_then(
                 anon_fn_param_parser()
                     .separated_by(just(Token::Comma))
+                    .allow_trailing()
                     .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             )
             .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
@@ -641,6 +643,7 @@ pub fn expr_parser(
                 }),
         ))
         .separated_by(just(Token::Comma))
+        .allow_trailing()
         .delimited_by(just(Token::LeftParen), just(Token::RightParen))
         .map_with_span(Chain::Call);
 
@@ -842,6 +845,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                 .ignore_then(
                     r.clone()
                         .separated_by(just(Token::Comma))
+                        .allow_trailing()
                         .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
                 )
                 .then_ignore(just(Token::RArrow))
@@ -855,6 +859,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                 .then(
                     r.clone()
                         .separated_by(just(Token::Comma))
+                        .allow_trailing()
                         .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                         .or_not(),
                 )
@@ -870,6 +875,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                         .ignore_then(select! {Token::UpName {name} => name})
                         .then(
                             r.separated_by(just(Token::Comma))
+                                .allow_trailing()
                                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                                 .or_not(),
                         )
@@ -917,6 +923,7 @@ pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>)
         select! {Token::UpName { name } => name}.then(
             select! {Token::Name { name } => name}
                 .separated_by(just(Token::Comma))
+                .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                 .or_not(),
         ),
