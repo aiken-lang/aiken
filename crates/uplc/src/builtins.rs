@@ -325,3 +325,66 @@ impl Display for DefaultFunction {
         }
     }
 }
+
+impl DefaultFunction {
+    pub fn aiken_name(&self) -> String {
+        use DefaultFunction::*;
+
+        match self {
+            AddInteger => "add_integer".to_string(),
+            SubtractInteger => "subtract_integer".to_string(),
+            MultiplyInteger => "multiply_integer".to_string(),
+            DivideInteger => "divide_integer".to_string(),
+            QuotientInteger => "quotient_integer".to_string(),
+            RemainderInteger => "remainder_integer".to_string(),
+            ModInteger => "mod_integer".to_string(),
+            EqualsInteger => "equals_integer".to_string(),
+            LessThanInteger => "less_than_integer".to_string(),
+            LessThanEqualsInteger => "less_than_equals_integer".to_string(),
+            AppendByteString => "append_bytearray".to_string(),
+            ConsByteString => "cons_bytearray".to_string(),
+            SliceByteString => "slice_bytearray".to_string(),
+            LengthOfByteString => "length_of_bytearray".to_string(),
+            IndexByteString => "index_bytearray".to_string(),
+            EqualsByteString => "equals_bytearray".to_string(),
+            LessThanByteString => "less_than_bytearray".to_string(),
+            LessThanEqualsByteString => "less_than_equals_bytearray".to_string(),
+            Sha2_256 => "sha2_256".to_string(),
+            Sha3_256 => "sha3_256".to_string(),
+            Blake2b_256 => "blake2b_256".to_string(),
+            VerifyEd25519Signature => "verify_signature".to_string(),
+            VerifyEcdsaSecp256k1Signature => "verify_ecdsa_secp256k1_signature".to_string(),
+            VerifySchnorrSecp256k1Signature => "verify_schnorr_secp256k1_signature".to_string(),
+            AppendString => "append_string".to_string(),
+            EqualsString => "equals_string".to_string(),
+            EncodeUtf8 => "encode_utf8".to_string(),
+            DecodeUtf8 => "decode_utf8".to_string(),
+            IfThenElse => "if_then_else".to_string(),
+            ChooseUnit => "choose_unit".to_string(),
+            Trace => "trace".to_string(),
+            FstPair => "fst_pair".to_string(),
+            SndPair => "snd_pair".to_string(),
+            ChooseList => "choose_list".to_string(),
+            MkCons => "mk_cons".to_string(),
+            HeadList => "head_list".to_string(),
+            TailList => "tail_list".to_string(),
+            NullList => "null_list".to_string(),
+            ChooseData => "choose_data".to_string(),
+            ConstrData => "constr_data".to_string(),
+            MapData => "map_data".to_string(),
+            ListData => "list_data".to_string(),
+            IData => "i_data".to_string(),
+            BData => "b_data".to_string(),
+            UnConstrData => "un_constr_data".to_string(),
+            UnMapData => "un_map_data".to_string(),
+            UnListData => "un_list_data".to_string(),
+            UnIData => "un_i_data".to_string(),
+            UnBData => "un_b_data".to_string(),
+            EqualsData => "equals_data".to_string(),
+            SerialiseData => "serialise_data".to_string(),
+            MkPairData => "mk_pair_data".to_string(),
+            MkNilData => "mk_nil_data".to_string(),
+            MkNilPairData => "mk_nil_pair_data".to_string(),
+        }
+    }
+}

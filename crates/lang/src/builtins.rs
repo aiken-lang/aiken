@@ -240,10 +240,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
 
     for builtin in DefaultFunction::iter() {
         if let Some(value) = from_default_function(builtin, id_gen) {
-            plutus.values.insert(
-                builtin.to_string().replace("ByteString", "ByteArray"),
-                value,
-            );
+            plutus.values.insert(builtin.aiken_name(), value);
         }
     }
 
@@ -403,7 +400,7 @@ pub fn from_default_function(
         ValueConstructor::public(
             tipo,
             ValueConstructorVariant::ModuleFn {
-                name: builtin.to_string().replace("ByteString", "ByteArray"),
+                name: builtin.aiken_name(),
                 field_map: None,
                 module: "".to_string(),
                 arity,
