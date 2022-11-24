@@ -13,7 +13,7 @@ pub type ScriptPurpose {
   Certify(Certificate)
 }
 
-pub type Redeemer = 
+pub type Redeemer =
   Data
 
 pub type BoundValue(value) {
@@ -47,8 +47,8 @@ pub type Transaction {
   id: TransactionId,
 }
 
-pub type TransactionId = {
-  hash: Hash(Transaction)
+pub type TransactionId {
+  hash: Hash(Transaction),
 }
 
 pub type Input {
@@ -64,12 +64,12 @@ pub type OutputReference {
 pub type PolicyId =
   ByteArray
 
-pub type StakeCredential = {
+pub type StakeCredential {
   StakeHash(Credential)
   StakePointer(Int, Int, Int)
 }
 
-pub type Credential = {
+pub type Credential {
   PublicKeyCredential(PublicKeyHash)
   ScriptCredential(ScriptHash)
 }
@@ -86,19 +86,19 @@ pub type PublicKeyHash =
 pub type PoolId =
   Hash(VerificationKey)
 
-pub type Output = {
+pub type Output {
   address: Address,
   value: Value,
   datum: DatumOption,
   reference_script: Option(ScriptHash),
 }
 
-pub type Address = {
+pub type Address {
   payment_credential: Credential,
   stake_credential: Option(StakeCredential),
 }
 
-pub type DatumOption = {
+pub type DatumOption {
   NoDatum
   DatumHash(Hash(Data))
   Datum(Data)

@@ -63,7 +63,7 @@ pub fn range(from: Int, to: Int) -> List(Int) {
 pub fn head(xs: List(a)) -> Option(a) {
   when xs is {
     [] -> None
-    _ -> Some(builtin.headList(xs))
+    _ -> Some(builtin.head_list(xs))
   }
 }
 
