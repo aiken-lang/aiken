@@ -17,6 +17,7 @@ use aiken_lang::{
     uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
     IdGenerator,
 };
+use miette::NamedSource;
 use pallas::{
     codec::minicbor,
     ledger::{addresses::Address, primitives::babbage},
@@ -156,6 +157,7 @@ impl Project {
                         errors.push(Error::Parse {
                             path: path.clone(),
                             src: code.clone(),
+                            named: NamedSource::new(path.display().to_string(), code.clone()),
                             error: Box::new(error),
                         })
                     }
@@ -201,6 +203,7 @@ impl Project {
                     .map_err(|error| Error::Type {
                         path: path.clone(),
                         src: code.clone(),
+                        named: NamedSource::new(path.display().to_string(), code.clone()),
                         error,
                     })?;
 
@@ -251,6 +254,10 @@ impl Project {
                                 location: func_def.location,
                                 src: module.code.clone(),
                                 path: module.input_path.clone(),
+                                named: NamedSource::new(
+                                    module.input_path.display().to_string(),
+                                    module.code.clone(),
+                                ),
                             })
                         }
 
@@ -263,6 +270,10 @@ impl Project {
                                 location: func_def.location,
                                 src: module.code.clone(),
                                 path: module.input_path.clone(),
+                                named: NamedSource::new(
+                                    module.input_path.display().to_string(),
+                                    module.code.clone(),
+                                ),
                                 name: func_def.name.clone(),
                                 at_least: 2,
                             })
@@ -273,6 +284,10 @@ impl Project {
                                 location: func_def.location,
                                 src: module.code.clone(),
                                 path: module.input_path.clone(),
+                                named: NamedSource::new(
+                                    module.input_path.display().to_string(),
+                                    module.code.clone(),
+                                ),
                                 name: func_def.name.clone(),
                                 at_least: 3,
                             })
