@@ -4,22 +4,26 @@ Let's start with a little reminder about the syntax. The complete syntax for Unt
 
 ## Primitive Types
 
-Plutus Core has 5 primitive types: `unit`, `bool`, `integer`, `string` and
-`bytestring`. One can construct constants using the `con` keyword, followed by
-the name of the primitive type and its value.
+Plutus Core has 7 primitive types (a.k.a. constants): `unit`, `bool`, `integer`, `bytestring`, `string`, `pair` and `list`.
+One can construct constants using the `con` keyword, followed by the name of the primitive type and its value.
 
 - Unit is denoted `()`;
 - Bool are `True` or `False`;
 - Bytestrings are denoted with a leading `#` followed by an hexadecimal sequence;
-- Strings are UTF-8 text strings, between double quotes `"`.
+- Strings are UTF-8 text strings, between double quotes `"` `"`;
+- Pair and lists are encapsulated between brackets `[` and `]`.
 
-| Primitive Type | Example                      |
-| ---            | ---                          |
-| `unit`         | `con unit ()`                |
-| `bool`         | `con bool True`              |
-| `integer`      | `con integer 42`             |
-| `bytestring`   | `con bytestring #41696b656e` |
-| `string`       | `con string "Aiken"`         |
+Note that each constant is named after its type. For pairs and lists -- which are compound types --, the type of their elements is specified between chevrons `<` and `>`.
+
+| Primitive Type | Example                              |
+| ---            | ---                                  |
+| `unit`         | `con unit ()`                        |
+| `bool`         | `con bool True`                      |
+| `integer`      | `con integer 42`                     |
+| `bytestring`   | `con bytestring #41696b656e`         |
+| `string`       | `con string "Aiken"`                 |
+| `pair`         | `con pair<bool, integer> [True, 42]` |
+| `list`         | `con list<bytestring> [#00, #aa]`    |
 
 ## Functions
 
