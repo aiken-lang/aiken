@@ -25,6 +25,7 @@ use pallas::{
 use pallas_traverse::ComputeHash;
 use script::Script;
 use serde_json::json;
+use uplc::ast::{DeBruijn, Program};
 
 use crate::{
     config::Config,
@@ -76,15 +77,15 @@ impl Project {
         }
     }
 
-    pub fn build(&mut self) -> Result<(), Error> {
-        self.compile(true)
+    pub fn build(&mut self, uplc: bool) -> Result<(), Error> {
+        self.compile(true, uplc)
     }
 
     pub fn check(&mut self) -> Result<(), Error> {
-        self.compile(false)
+        self.compile(false, false)
     }
 
-    pub fn compile(&mut self, uplc_gen: bool) -> Result<(), Error> {
+    pub fn compile(&mut self, uplc_gen: bool, uplc_dump: bool) -> Result<(), Error> {
         self.read_source_files()?;
 
         let parsed_modules = self.parse_sources()?;
@@ -98,7 +99,7 @@ impl Project {
         if uplc_gen {
             let programs = self.code_gen(validators, &checked_modules)?;
 
-            self.write_build_outputs(programs)?;
+            self.write_build_outputs(programs, uplc_dump)?;
         }
 
         Ok(())
@@ -383,7 +384,7 @@ impl Project {
         Ok(programs)
     }
 
-    fn write_build_outputs(&self, programs: Vec<Script>) -> Result<(), Error> {
+    fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
         let assets = self.root.join("assets");
 
         for script in programs {
@@ -391,7 +392,16 @@ impl Project {
 
             fs::create_dir_all(&script_output_dir)?;
 
-            let cbor = script.program.to_cbor().unwrap();
+            // dump textual uplc
+            if uplc_dump {
+                let uplc_path = script_output_dir.join("raw.uplc");
+
+                fs::write(uplc_path, script.program.to_pretty())?;
+            }
+
+            let program: Program<DeBruijn> = script.program.into();
+
+            let cbor = program.to_cbor().unwrap();
 
             // Create file containing just the script cbor hex
             let script_path = script_output_dir.join("script.txt");
