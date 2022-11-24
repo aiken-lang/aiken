@@ -45,7 +45,7 @@ builtins may be added in the future to address specific use cases that emerge.
 
 Builtins are called with the keyword `builtin` followed by their names. They may
 take one, two, three or really any number of arguments. The complete list of builtins
-is given [in annexe](./uplc/builtins.md).
+is given [in annexe](./builtins.md).
 
 ## Delay & Force
 
