@@ -28,20 +28,20 @@ pub fn final_check(z: Int) {
   z < 4
 }
 
+pub fn incrementor(counter: Int, target: Int) -> Int {
+  if counter == target {
+    target
+  } else {
+    incrementor(counter + 1, target)
+  }
+}
+
 pub fn spend(
   datum: sample.Datum,
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
-  let x = datum.rdmr
-  let y = [datum.fin, 2, 3]
-  let z = [1, ..y]
-  when z is {
-    [] -> False
-    [a] -> a == 1
-    [a, b] -> b == 2
-    [a, b, c] -> a > 1
-    [a, b, c, ..d] -> b > 1
-    _other -> True
-  }
+  let x = Sell
+  let z = incrementor(0, 4) == 4
+  z
 }
