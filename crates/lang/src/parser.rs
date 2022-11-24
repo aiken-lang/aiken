@@ -1061,19 +1061,40 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
             just(Token::LeftSquare)
                 .ignore_then(r.clone().separated_by(just(Token::Comma)))
                 .then(choice((
-                    just(Token::Comma).ignore_then(
-                        just(Token::DotDot)
-                            .ignore_then(r.clone())
-                            .map(Box::new)
-                            .or_not(),
-                    ),
+                    just(Token::Comma)
+                        .ignore_then(just(Token::DotDot).ignore_then(r.clone().or_not()).or_not()),
                     just(Token::Comma).ignored().or_not().map(|_| None),
                 )))
                 .then_ignore(just(Token::RightSquare))
-                .map_with_span(|(elements, tail), span| ast::UntypedPattern::List {
-                    location: span,
-                    elements,
-                    tail,
+                .validate(|(elements, tail), span: Span, _emit| {
+                    let tail = match tail {
+                        // There is a tail and it has a Pattern::Var or Pattern::Discard
+                        Some(Some(
+                            pat @ (ast::UntypedPattern::Var { .. }
+                            | ast::UntypedPattern::Discard { .. }),
+                        )) => Some(pat),
+                        Some(Some(pat)) => {
+                            // use emit
+                            // return parse_error(ParseErrorType::InvalidTailPattern, pat.location())
+                            Some(pat)
+                        }
+                        // There is a tail but it has no content, implicit discard
+                        Some(None) => Some(ast::UntypedPattern::Discard {
+                            location: Span {
+                                start: span.end - 1,
+                                end: span.end,
+                            },
+                            name: "_".to_string(),
+                        }),
+                        // No tail specified
+                        None => None,
+                    };
+
+                    ast::UntypedPattern::List {
+                        location: span,
+                        elements,
+                        tail: tail.map(Box::new),
+                    }
                 }),
         ))
         .then(
