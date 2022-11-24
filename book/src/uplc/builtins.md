@@ -14,8 +14,6 @@
 | `equalsInteger`                       | \-         | (integer, integer)                                  | bool                  |
 | `lessThanInteger`                     | \-         | (integer, integer)                                  | bool                  |
 | `lessThanEqualsInteger`               | \-         | (integer, integer)                                  | bool                  |
-| `greaterThanInteger`                  | \-         | (integer, integer)                                  | bool                  |
-| `greaterThanEqualsInteger`            | \-         | (integer, integer)                                  | bool                  |
 | ---                                   | ---        | ---                                                 | ---                   |
 | `appendString`                        | \-         | (string, string)                                    | string                |
 | `emptyString`                         | \-         | (string)                                            | bool                  |
@@ -24,15 +22,12 @@
 | ---                                   | ---        | ---                                                 | ---                   |
 | `appendByteString`                    | \-         | (bytestring, bytestring)                            | bytestring            |
 | `consByteString`                      | \-         | (integer, bytestring)                               | bytestring            |
-| `indexByteString`                     | \-         | (integer, bytestring)                               | integer               |
+| `indexByteString`                     | \-         | (bytestring, integer)                               | integer               |
 | `sliceByteString`                     | \-         | (integer, integer, bytestring)                      | bytestring            |
 | `lengthOfByteString`                  | \-         | (bytestring)                                        | integer               |
-| `emptyByteString`                     | \-         | (bytestring)                                        | bool                  |
 | `equalsByteString`                    | \-         | (bytestring, bytestring)                            | bool                  |
 | `lessThanByteString`                  | \-         | (bytestring, bytestring)                            | bool                  |
 | `lessThanEqualsByteString`            | \-         | (bytestring, bytestring)                            | bool                  |
-| `greaterThanByteString`               | \-         | (bytestring, bytestring)                            | bool                  |
-| `greaterThanEqualsByteString`         | \-         | (bytestring, bytestring)                            | bool                  |
 | `decodeUtf8`                          | \-         | (bytestring)                                        | string                |
 | ---                                   | ---        | ---                                                 | ---                   |
 | `chooseData`[^2]                      | \\(α\\)    | (data, \\(α\\), \\(α\\), \\(α\\), \\(α\\), \\(α\\)) | \\(α\\)               |

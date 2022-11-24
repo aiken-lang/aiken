@@ -193,14 +193,9 @@ impl Constant {
             Constant::Bool(b) => RcDoc::text("bool")
                 .append(RcDoc::line())
                 .append(RcDoc::text(if *b { "True" } else { "False" })),
-            Constant::ProtoList(r#type, items) => RcDoc::text("(")
-                .append(
-                    RcDoc::text("list")
-                        .append(RcDoc::line())
-                        .append(r#type.to_doc()),
-                )
+            Constant::ProtoList(r#type, items) => RcDoc::text("list")
                 .append(RcDoc::line_())
-                .append(RcDoc::text(")"))
+                .append(r#type.to_doc())
                 .append(RcDoc::line())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
@@ -208,22 +203,19 @@ impl Constant {
                     RcDoc::text(","),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(type1, type2, left, right) => RcDoc::text("(")
-                .append(
-                    RcDoc::text("pair")
-                        .append(RcDoc::line())
-                        .append(type1.to_doc())
-                        .append(RcDoc::line())
-                        .append(type2.to_doc()),
-                )
+            Constant::ProtoPair(type_left, type_right, left, right) => RcDoc::text("pair")
                 .append(RcDoc::line_())
-                .append(RcDoc::text(")"))
+                .append(RcDoc::text("<"))
+                .append(type_left.to_doc())
+                .append(RcDoc::text(", "))
+                .append(type_right.to_doc())
+                .append(RcDoc::text(">"))
                 .append(RcDoc::line())
-                .append(RcDoc::text("("))
+                .append(RcDoc::text("["))
                 .append(left.to_doc_list())
                 .append(RcDoc::text(","))
                 .append(right.to_doc_list())
-                .append(RcDoc::text(")")),
+                .append(RcDoc::text("]")),
             d @ Constant::Data(_) => RcDoc::text("data ").append(d.to_doc_list()),
         }
     }
@@ -264,24 +256,16 @@ impl Type {
             Type::String => RcDoc::text("string"),
             Type::ByteString => RcDoc::text("bytestring"),
             Type::Unit => RcDoc::text("unit"),
-            Type::List(r#type) => RcDoc::text("(")
-                .append(
-                    RcDoc::text("list")
-                        .append(RcDoc::line())
-                        .append(r#type.to_doc()),
-                )
-                .append(RcDoc::line_())
-                .append(RcDoc::text(")")),
-            Type::Pair(type1, type2) => RcDoc::text("(")
-                .append(
-                    RcDoc::text("list")
-                        .append(RcDoc::line())
-                        .append(type1.to_doc())
-                        .append(RcDoc::line())
-                        .append(type2.to_doc()),
-                )
-                .append(RcDoc::line_())
-                .append(RcDoc::text(")")),
+            Type::List(r#type) => RcDoc::text("list")
+                .append(RcDoc::text("<"))
+                .append(r#type.to_doc())
+                .append(RcDoc::text(">")),
+            Type::Pair(l, r) => RcDoc::text("pair")
+                .append(RcDoc::text("<"))
+                .append(l.to_doc())
+                .append(RcDoc::text(", "))
+                .append(r.to_doc())
+                .append(RcDoc::text(">")),
             Type::Data => RcDoc::text("data"),
         }
     }
