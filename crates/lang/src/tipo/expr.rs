@@ -771,20 +771,36 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         location: Span,
     ) -> Result<TypedExpr, Error> {
         let value = self.in_new_scope(|value_typer| value_typer.infer(value))?;
-        let value_typ = value.tipo();
-
-        // Ensure the pattern matches the type of the value
-        let pattern = PatternTyper::new(self.environment, &self.hydrator)
-            .unify(pattern, value_typ.clone())?;
+        let mut value_typ = value.tipo();
 
         // Check that any type annotation is accurate.
-        if let Some(ann) = annotation {
+        let pattern = if let Some(ann) = annotation {
             let ann_typ = self
                 .type_from_annotation(ann)
                 .map(|t| self.instantiate(t, &mut HashMap::new()))?;
 
-            self.unify(ann_typ, value_typ.clone(), value.type_defining_location())?;
-        }
+            self.unify(
+                ann_typ.clone(),
+                value_typ.clone(),
+                value.type_defining_location(),
+            )?;
+
+            value_typ = ann_typ.clone();
+
+            // Ensure the pattern matches the type of the value
+            PatternTyper::new(self.environment, &self.hydrator).unify(
+                pattern,
+                value_typ.clone(),
+                Some(ann_typ),
+            )?
+        } else {
+            // Ensure the pattern matches the type of the value
+            PatternTyper::new(self.environment, &self.hydrator).unify(
+                pattern,
+                value_typ.clone(),
+                None,
+            )?
+        };
 
         // We currently only do limited exhaustiveness checking of custom types
         // at the top level of patterns.
@@ -1688,8 +1704,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         // Ensure the pattern matches the type of the value
-        let pattern = PatternTyper::new(self.environment, &self.hydrator)
-            .unify(pattern, value_type.clone())?;
+        let pattern = PatternTyper::new(self.environment, &self.hydrator).unify(
+            pattern,
+            value_type.clone(),
+            None,
+        )?;
 
         // Check the type of the following code
         let then = self.infer(then)?;
