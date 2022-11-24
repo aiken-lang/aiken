@@ -449,6 +449,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
     match word {
         "as" => Some(Token::As),
         "assert" => Some(Token::Assert),
+        "check" => Some(Token::Check),
         "when" => Some(Token::When),
         "const" => Some(Token::Const),
         "fn" => Some(Token::Fn),

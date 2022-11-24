@@ -618,6 +618,7 @@ impl<A, B> Pattern<A, B> {
 pub enum AssignmentKind {
     Let,
     Assert,
+    Check,
 }
 
 pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor, Type>>;
