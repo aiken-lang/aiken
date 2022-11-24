@@ -5,7 +5,9 @@ use std::{
 };
 
 use aiken_lang::{ast::Span, parser::error::ParseError, tipo};
-use miette::{Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, RgbColors, SourceCode};
+use miette::{
+    Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
+};
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -39,6 +41,8 @@ pub enum Error {
 
         src: String,
 
+        named: NamedSource,
+
         #[source]
         error: Box<ParseError>,
     },
@@ -47,6 +51,7 @@ pub enum Error {
     Type {
         path: PathBuf,
         src: String,
+        named: NamedSource,
         #[source]
         error: tipo::error::Error,
     },
@@ -55,6 +60,7 @@ pub enum Error {
     ValidatorMustReturnBool {
         path: PathBuf,
         src: String,
+        named: NamedSource,
         location: Span,
     },
 
@@ -65,6 +71,7 @@ pub enum Error {
         location: Span,
         path: PathBuf,
         src: String,
+        named: NamedSource,
     },
 }
 
@@ -94,6 +101,7 @@ impl Error {
             errors.push(Error::Parse {
                 path: path.into(),
                 src: src.to_string(),
+                named: NamedSource::new(path.display().to_string(), src.to_string()),
                 error: error.into(),
             });
         }
@@ -245,22 +253,23 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::List(_) => None,
-            Error::Parse { src, .. } => Some(src),
-            Error::Type { src, .. } => Some(src),
+            Error::Parse { named, .. } => Some(named),
+            Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { src, .. } => Some(src),
-            Error::WrongValidatorArity { src, .. } => Some(src),
+            Error::ValidatorMustReturnBool { named, .. } => Some(named),
+            Error::WrongValidatorArity { named, .. } => Some(named),
         }
     }
 }
 
-#[derive(PartialEq, thiserror::Error)]
+#[derive(thiserror::Error)]
 pub enum Warning {
     #[error("type checking")]
     Type {
         path: PathBuf,
         src: String,
+        named: NamedSource,
         #[source]
         warning: tipo::error::Warning,
     },
@@ -273,7 +282,7 @@ impl Diagnostic for Warning {
 
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
-            Warning::Type { src, .. } => Some(src),
+            Warning::Type { named, .. } => Some(named),
         }
     }
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
@@ -291,7 +300,12 @@ impl Diagnostic for Warning {
 
 impl Warning {
     pub fn from_type_warning(warning: tipo::error::Warning, path: PathBuf, src: String) -> Warning {
-        Warning::Type { path, warning, src }
+        Warning::Type {
+            path: path.clone(),
+            warning,
+            src: src.clone(),
+            named: NamedSource::new(path.display().to_string(), src),
+        }
     }
 
     pub fn report(&self) {
