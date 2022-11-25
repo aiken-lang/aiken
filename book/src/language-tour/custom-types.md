@@ -5,7 +5,7 @@
 
 Instantiation
 
-```
+```gleam
 type Color {
     Red
     Blue
@@ -18,7 +18,7 @@ Enum types can be thought of as the unit of product types.
 
 Usage
 
-```
+```gleam
 fn myFavouriteColor() -> Color {
     Red
 }
@@ -26,14 +26,14 @@ fn myFavouriteColor() -> Color {
 
 ### Product Types
 
-```
+```gleam
 type MyValue {
     Name(String)
     Age(Int)
 }
 ```
 
-```
+```gleam
 fn eitherNameOrAge(b: Bool) -> MyValue {
     if b {
         Name("James")

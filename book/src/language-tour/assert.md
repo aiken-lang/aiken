@@ -1,7 +1,7 @@
 # Assert
 
-```
-assert rawdata is SomeType
+```gleam
+assert rawdata = SomeType
 ```
 
 Causes the script to fail if the rawdata doesn't match the structure of datumtype

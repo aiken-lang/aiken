@@ -1,6 +1,6 @@
 # Comments
 
-```
+```gleam
 // Line comments begin with a double-slash
 
 /// Doc comments begin with a triple-slash
