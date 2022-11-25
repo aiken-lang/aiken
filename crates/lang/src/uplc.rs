@@ -83,7 +83,7 @@ impl Default for ScopeLevels {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Debug, PartialEq, Hash)]
 pub struct ConstrFieldKey {
     pub local_var: String,
     pub field_name: String,
@@ -103,7 +103,7 @@ pub struct FunctionAccessKey {
     pub function_name: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConstrConversionInfo {
     local_var: String,
     field: Option<String>,
@@ -112,7 +112,7 @@ pub struct ConstrConversionInfo {
     returning_type: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ScopedExpr {
     scope: ScopeLevels,
     expr: TypedExpr,
@@ -168,6 +168,13 @@ impl<'a> CodeGenerator<'a> {
                     Ordering::Equal
                 }
             });
+
+        println!("DATA HOLDER LOOKUP{:#?}", self.uplc_data_holder_lookup);
+
+        println!(
+            "DATA USAGE HOLDER {:#?}",
+            self.uplc_data_usage_holder_lookup
+        );
 
         let mut term = self.recurse_code_gen(&body, ScopeLevels::new());
 
@@ -250,7 +257,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match body {
+        match dbg!(body) {
             TypedExpr::Int { .. } => {}
             TypedExpr::String { .. } => {}
             TypedExpr::ByteArray { .. } => {}
@@ -330,7 +337,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             TypedExpr::Call { fun, args, .. } => {
-                self.recurse_scope_level(fun, scope_level.scope_increment(1));
+                self.recurse_scope_level(fun, scope_level.clone());
 
                 for (index, arg) in args.iter().enumerate() {
                     self.recurse_scope_level(
@@ -343,13 +350,11 @@ impl<'a> CodeGenerator<'a> {
                 self.recurse_scope_level(left, scope_level.clone());
                 self.recurse_scope_level(right, scope_level);
             }
-            TypedExpr::Assignment { value, pattern, .. } => self.recurse_scope_level_pattern(
-                pattern,
-                value,
-                scope_level.scope_increment(1),
-                &[],
-            ),
-            TypedExpr::Trace { .. } => todo!(),
+            TypedExpr::Assignment { value, pattern, .. } => {
+                self.recurse_scope_level_pattern(pattern, value, scope_level, &[])
+            }
+            TypedExpr::Trace {..} => todo!(),
+            TypedExpr::Try { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
@@ -600,7 +605,7 @@ impl<'a> CodeGenerator<'a> {
                             }
                         };
 
-                        let module = module.clone().unwrap();
+                        let module = module.clone().unwrap_or_default();
                         // TODO: support multiple subjects
                         let (var_name, tipo) = match &vars[0] {
                             TypedExpr::Var {
@@ -780,8 +785,8 @@ impl<'a> CodeGenerator<'a> {
                     let mut term = self
                         .recurse_code_gen(exp, scope_level.scope_increment_sequence(i as i32 + 1));
 
-                    term = self
-                        .maybe_insert_def(term, scope_level.scope_increment_sequence(i as i32 + 1));
+                    term =
+                        self.maybe_insert_def(term, scope_level.scope_increment_sequence(i as i32));
 
                     self.uplc_function_holder
                         .push((String::new(), term.clone()));
@@ -1590,7 +1595,8 @@ impl<'a> CodeGenerator<'a> {
                     }
                     Pattern::List { .. } => None,
                     Pattern::Discard { .. } => None,
-                    _ => todo!(),
+                    Pattern::Int { .. } => None,
+                    rest => todo!("{rest:?}"),
                 };
 
                 if let Some(key) = key {
@@ -1655,7 +1661,14 @@ impl<'a> CodeGenerator<'a> {
 
                                     (index.unwrap_or(dt.constructors.len()), current_term)
                                 }
-                                _ => todo!(),
+                                Pattern::Discard { .. } => (
+                                    dt.constructors.len(),
+                                    self.recurse_code_gen(
+                                        &clause.then,
+                                        scope_level.scope_increment_sequence(1),
+                                    ),
+                                ),
+                                rest => todo!("{rest:?}"),
                             };
                             pair
                         })
@@ -1753,7 +1766,7 @@ impl<'a> CodeGenerator<'a> {
                     // Skip first type since we know we have a list
                     let tipo = match subject {
                         TypedExpr::Var { constructor, .. } => &constructor.tipo,
-                        _ => todo!(),
+                        rest => todo!("{rest:?}"),
                     };
                     let mut current_tipo = match (**tipo).clone() {
                         Type::App { args, .. } => (*args[0]).clone(),
@@ -2671,6 +2684,9 @@ impl<'a> CodeGenerator<'a> {
                 Ordering::Equal
             }
         });
+
+        println!("SCOPE LEVEL IS {scope_level:#?}");
+        println!("DATA HOLDER COMBINED {:#?}", data_holder);
 
         for ConstrConversionInfo {
             local_var,
