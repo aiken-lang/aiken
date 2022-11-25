@@ -2,7 +2,7 @@
 
 If statements
 
-```
+```gleam
 if condition {
 
 } else {
@@ -12,7 +12,7 @@ if condition {
 
 Case Patterns
 
-```
+```gleam
 when color is {
     Green -> "Success."
     Blue -> "Warning."
@@ -22,7 +22,7 @@ when color is {
 
 Let bindings with blocks
 
-```
+```gleam
 let num = -5
 let absNum = if num>=0 {num} else {-num}
 
