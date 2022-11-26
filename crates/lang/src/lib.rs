@@ -7,10 +7,12 @@ pub mod ast;
 pub mod builtins;
 pub mod expr;
 pub mod format;
+pub mod ir;
 pub mod parser;
 pub mod pretty;
 pub mod tipo;
 pub mod uplc;
+pub mod uplc_two;
 
 #[derive(Debug, Default, Clone)]
 pub struct IdGenerator {
