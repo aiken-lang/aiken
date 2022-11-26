@@ -1,6 +1,6 @@
 # Check
 
-Check is faster than assert but has weaker guarantees.
+Check is slower than assert but has stronger guarantees.
 You can unpack (1-match) data in a check.
 
 ```gleam
