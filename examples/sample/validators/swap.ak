@@ -11,8 +11,8 @@ pub type Redeemer {
 }
 
 pub type Reen {
-  Buy { signer: ByteArray, amount: Int }
-  Sell
+  Buy1 { signer: ByteArray, amount: Int }
+  Sell1
 }
 
 pub fn twice(f: fn(Int) -> Int, initial: Int) -> Int {
@@ -43,13 +43,14 @@ pub fn who(a: ByteArray) -> ByteArray {
   builtin.append_bytearray(a, #[12, 255])
 }
 
-pub fn spend(
-  datum: sample.Datum,
-  rdmr: Redeemer,
-  ctx: spend.ScriptContext,
-) -> Bool {
-  when [1, 2, 3] is {
-    [a, b, ..] -> True
-    [] -> False
+pub type Datum {
+  Buy
+  Sell
+}
+
+pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
+  when datum is {
+    Sell -> True
+    Buy -> False
   }
 }
