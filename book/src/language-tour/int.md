@@ -1,8 +1,7 @@
 # Int
 
 Ints are plutus integers which are arbitrary size.
-
-So, there is no underflow. Basic arithmetic can be done for O(1) between ints (+,-,*).
+So, there is no underflow or overflow. Basic arithmetic can be done for O(1) between ints (+,-,*).
 
 ```gleam
 // A convenient helper function to get the number 7.
