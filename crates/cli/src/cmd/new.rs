@@ -15,32 +15,32 @@ pub struct Args {
 
 pub struct Creator {
     root: PathBuf,
-    src: PathBuf,
-    scripts: PathBuf,
-    project: PathBuf,
+    lib: PathBuf,
+    validators: PathBuf,
+    project_lib: PathBuf,
     project_name: String,
 }
 
 impl Creator {
     fn new(args: Args, project_name: String) -> Self {
         let root = args.name;
-        let src = root.join("src");
-        let scripts = src.join("scripts");
+        let lib = root.join("lib");
+        let validators = root.join("validators");
         let project_name = project_name;
-        let project = src.join(&project_name);
+        let project_lib = lib.join(&project_name);
         Self {
             root,
-            src,
-            scripts,
-            project,
+            lib,
+            validators,
+            project_lib,
             project_name,
         }
     }
 
     fn run(&self) -> miette::Result<()> {
-        fs::create_dir_all(&self.src).into_diagnostic()?;
-        fs::create_dir_all(&self.scripts).into_diagnostic()?;
-        fs::create_dir_all(&self.project).into_diagnostic()?;
+        fs::create_dir_all(&self.lib).into_diagnostic()?;
+        fs::create_dir_all(&self.project_lib).into_diagnostic()?;
+        fs::create_dir_all(&self.validators).into_diagnostic()?;
 
         self.aiken_toml()?;
         self.context()?;
@@ -52,18 +52,18 @@ impl Creator {
 
     fn always_true_script(&self) -> miette::Result<()> {
         write(
-            self.scripts.join("always_true.ak"),
+            self.validators.join("always_true.ak"),
             indoc! {"
                 pub fn spend() -> Bool {
                     True
-                }            
+                }
             "},
         )
     }
 
     fn project(&self) -> miette::Result<()> {
         write(
-            self.src.join(format!("{}.ak", self.project_name)),
+            self.lib.join(format!("{}.ak", self.project_name)),
             indoc! {"
                 pub type Datum {
                     something: String,
@@ -74,7 +74,7 @@ impl Creator {
 
     fn context(&self) -> miette::Result<()> {
         write(
-            self.project.join("context.ak"),
+            self.project_lib.join("context.ak"),
             indoc! {"
                 pub type ScriptContext(purpose) {
                     tx_info: TxInfo,
@@ -143,8 +143,7 @@ pub fn exec(args: Args) -> miette::Result<()> {
 
         validate_name(&project_name).into_diagnostic()?;
 
-        let creator = Creator::new(args, project_name);
-        creator.run()?;
+        Creator::new(args, project_name).run()?;
     }
 
     Ok(())
