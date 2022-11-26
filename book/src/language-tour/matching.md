@@ -1,6 +1,6 @@
 # Matching
 
-Case Patterns
+Where-if Patterns (also known as case in lamer languages)
 
 ```gleam
 when color is {
