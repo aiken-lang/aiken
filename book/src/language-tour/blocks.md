@@ -14,8 +14,7 @@ A block can be thought of as calling an anonymous function with no arguments. Th
 Since everything is secretly a function, the last statement in any block is implicitly its return.
 
 
-Where If with blocks
-
+Blocks within a where-if clause
 ```gleam
 let name: Option(String) = someFunction()
 let suffix = ""
