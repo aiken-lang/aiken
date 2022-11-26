@@ -52,6 +52,9 @@ pub enum Error {
         help: String,
     },
 
+    #[error("Missing 'aiken.toml' manifest in {path}")]
+    MissingManifest { path: PathBuf },
+
     #[error("Cyclical module imports")]
     ImportCycle { modules: Vec<String> },
 
@@ -175,6 +178,7 @@ impl Error {
             Error::FileIo { .. } => None,
             Error::Format { .. } => None,
             Error::StandardIo(_) => None,
+            Error::MissingManifest { path } => Some(path.to_path_buf()),
             Error::TomlLoading { path, .. } => Some(path.to_path_buf()),
             Error::ImportCycle { .. } => None,
             Error::List(_) => None,
@@ -195,6 +199,7 @@ impl Error {
             Error::FileIo { .. } => None,
             Error::Format { .. } => None,
             Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => None,
             Error::TomlLoading { src, .. } => Some(src.to_string()),
             Error::ImportCycle { .. } => None,
             Error::List(_) => None,
@@ -243,6 +248,7 @@ impl Diagnostic for Error {
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::Type { .. } => Some(Box::new("aiken::check")),
             Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => Some(Box::new("aiken::loading::toml")),
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
@@ -270,6 +276,7 @@ impl Diagnostic for Error {
             Error::Parse { error, .. } => error.kind.help(),
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
@@ -315,6 +322,7 @@ impl Diagnostic for Error {
             Error::ImportCycle { .. } => None,
             Error::List(_) => None,
             Error::Parse { error, .. } => error.labels(),
+            Error::MissingManifest { .. } => None,
             Error::Type { error, .. } => error.labels(),
             Error::StandardIo(_) => None,
             Error::TomlLoading { location, .. } => {
@@ -349,6 +357,7 @@ impl Diagnostic for Error {
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => None,
             Error::TomlLoading { named, .. } => Some(named),
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { named, .. } => Some(named),
