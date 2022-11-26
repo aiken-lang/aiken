@@ -6,7 +6,7 @@ fn f(x) {
 
 }
 ```
-l functions in aiken are pure without side effect, so all functions also must return some value.
+Functions in aiken are pure without side effect, so all functions also must return some value.
 A function with no return value (like above) will error.
 
 Providing arg types:
