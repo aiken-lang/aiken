@@ -1,36 +1,29 @@
 # Blocks
-
-If statements
-
-```gleam
-if condition {
-
-} else {
-
-}
-```
-
-Case Patterns
-
-```gleam
-when color is {
-    Green -> "Success."
-    Blue -> "Warning."
-    Red -> "Error!"
-}
-```
-
 Let bindings with blocks
 
 ```gleam
-let num = -5
-let absNum = if num>=0 {num} else {-num}
+let x = 3
 
-let message = when color is {
-    Green -> "Success."
-    Blue -> "Warning."
-    Red -> "Error!"
+let z = {
+    let y = 2
+    x + y
 }
 ```
 
+A block can be thought of as calling an anonymous function with no arguments. They can be used anywhere a value is.
 Since everything is secretly a function, the last statement in any block is implicitly its return.
+
+
+Where If with blocks
+
+```gleam
+let name: Option(String) = someFunction()
+let suffix = ""
+when name is {
+    Some(s)->{
+        let combined = s + suffix
+        Some(combined)
+    }
+    None->None
+}
+```
