@@ -49,8 +49,9 @@ pub type Datum {
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
-  when datum is {
-    Sell -> True
-    Buy -> False
-  }
+  let x = [[[2, 9], [7]], [[4]], [[6]]]
+
+  let [[[a, g], d], b, ..] = x
+
+  True
 }

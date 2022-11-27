@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use vec1::Vec1;
+use uplc::builtins::DefaultFunction;
 
 use crate::{
     ast::{
@@ -40,10 +40,17 @@ pub enum IR {
     // },
     List {
         count: usize,
+        tipo: Arc<Type>,
+        tail: bool,
     },
 
     Tail {
         count: usize,
+    },
+
+    ListAccessor {
+        names: Vec<String>,
+        tail: bool,
     },
 
     // func(x, other(y))
@@ -54,13 +61,18 @@ pub enum IR {
         count: usize,
     },
 
+    Builtin {
+        func: DefaultFunction,
+    },
+
     BinOp {
         name: BinOp,
         count: usize,
+        tipo: Arc<Type>,
     },
 
     Assignment {
-        count: usize,
+        name: String,
         kind: AssignmentKind,
     },
 

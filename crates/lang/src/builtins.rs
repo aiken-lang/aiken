@@ -7,7 +7,7 @@ use uplc::builtins::DefaultFunction;
 use crate::{
     ast::{ModuleKind, Span},
     tipo::{
-        fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
+        self, fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant,
     },
     IdGenerator,
@@ -336,7 +336,13 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
-        DefaultFunction::IfThenElse => None,
+        DefaultFunction::IfThenElse => {
+            let ret = generic_var(id_gen.next());
+
+            let tipo = function(vec![bool(), ret.clone(), ret.clone()], ret);
+
+            Some((tipo, 3))
+        }
         DefaultFunction::ChooseUnit => None,
         DefaultFunction::Trace => {
             let ret = generic_var(id_gen.next());
