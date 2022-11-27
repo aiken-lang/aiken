@@ -44,14 +44,13 @@ pub fn who(a: ByteArray) -> ByteArray {
 }
 
 pub type Datum {
-  Buy
-  Sell
+  thing: Int,
+  stuff: Int,
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
-  let x = [[[2, 9], [7]], [[4]], [[6]]]
-
-  let [[[a, g], d], b, ..] = x
-
-  True
+  when datum.thing is {
+    0 -> True
+    _ -> False
+  }
 }

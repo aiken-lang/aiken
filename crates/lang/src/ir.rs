@@ -3,11 +3,8 @@ use std::sync::Arc;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{
-        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, IfBranch, Pattern, Span,
-        TypedRecordUpdateArg,
-    },
-    tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
+    ast::{AssignmentKind, BinOp, TypedRecordUpdateArg},
+    tipo::{Type, ValueConstructor},
 };
 
 // []
@@ -79,7 +76,6 @@ pub enum IR {
     DefineFunc {
         func_name: String,
         module_name: String,
-        count: usize,
     },
 
     DefineConst {
@@ -131,9 +127,8 @@ pub enum IR {
     },
 
     RecordAccess {
-        label: String,
         index: u64,
-        count: usize,
+        tipo: Arc<Type>,
     },
 
     FieldsExpose {

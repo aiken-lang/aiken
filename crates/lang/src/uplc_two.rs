@@ -1,8 +1,10 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use indexmap::IndexMap;
 use uplc::{
-    ast::{Constant, Name, Program, Term, Type as UplcType},
+    ast::{
+        builder::{self, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD},
+        Constant, Name, Program, Term,
+    },
     builtins::DefaultFunction,
     parser::interner::Interner,
     BigInt, PlutusData,
@@ -18,12 +20,7 @@ use crate::{
 };
 
 pub struct CodeGenerator<'a> {
-    // uplc_function_holder: Vec<(String, Term<Name>)>,
-    // uplc_function_holder_lookup: IndexMap<FunctionAccessKey, ScopeLevels>,
-    // uplc_data_holder_lookup: IndexMap<ConstrFieldKey, ScopedExpr>,
-    // uplc_data_constr_lookup: IndexMap<DataTypeKey, ScopeLevels>,
-    // uplc_data_usage_holder_lookup: IndexMap<ConstrUsageKey, ScopeLevels>,
-    function_recurse_lookup: IndexMap<FunctionAccessKey, usize>,
+    defined_functions: HashMap<FunctionAccessKey, ()>,
     functions: &'a HashMap<FunctionAccessKey, &'a Function<Arc<tipo::Type>, TypedExpr>>,
     // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
     data_types: &'a HashMap<DataTypeKey, &'a DataType<Arc<tipo::Type>>>,
@@ -31,6 +28,7 @@ pub struct CodeGenerator<'a> {
     // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
     module_types: &'a HashMap<String, TypeInfo>,
     id_gen: IdGenerator,
+    needs_field_access: bool,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -43,12 +41,7 @@ impl<'a> CodeGenerator<'a> {
         module_types: &'a HashMap<String, TypeInfo>,
     ) -> Self {
         CodeGenerator {
-            // uplc_function_holder: Vec::new(),
-            // uplc_function_holder_lookup: IndexMap::new(),
-            // uplc_data_holder_lookup: IndexMap::new(),
-            // uplc_data_constr_lookup: IndexMap::new(),
-            // uplc_data_usage_holder_lookup: IndexMap::new(),
-            function_recurse_lookup: IndexMap::new(),
+            defined_functions: HashMap::new(),
             functions,
             // type_aliases,
             data_types,
@@ -56,6 +49,7 @@ impl<'a> CodeGenerator<'a> {
             // constants,
             module_types,
             id_gen: IdGenerator::new(),
+            needs_field_access: false,
         }
     }
 
@@ -68,59 +62,14 @@ impl<'a> CodeGenerator<'a> {
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
-        // Apply constr exposer to top level.
-        term = Term::Apply {
-            function: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_fields_exposer".to_string(),
-                    unique: 0.into(),
-                },
-                body: term.into(),
-            }
-            .into(),
-            argument: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_var".to_string(),
-                    unique: 0.into(),
-                },
-                body: Term::Apply {
-                    function: Term::Force(
-                        Term::Force(Term::Builtin(DefaultFunction::SndPair).into()).into(),
-                    )
-                    .into(),
-                    argument: Term::Apply {
-                        function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                        argument: Term::Var(Name {
-                            text: "constr_var".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-            }
-            .into(),
-        };
+        if self.needs_field_access {
+            term = builder::constr_get_field(term);
 
-        term = self.add_arg_getter(term);
+            term = builder::constr_fields_exposer(term);
+        }
 
-        term = Term::Force(
-            Term::Apply {
-                function: Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Force(Term::Builtin(DefaultFunction::IfThenElse).into())
-                            .into(),
-                        argument: term.into(),
-                    }
-                    .into(),
-                    argument: Term::Delay(Term::Constant(Constant::Unit).into()).into(),
-                }
-                .into(),
-                argument: Term::Delay(Term::Error.into()).into(),
-            }
-            .into(),
-        );
+        // Wrap the validator body if ifThenElse term unit error
+        term = builder::final_wrapper(term);
 
         for arg in arguments.iter().rev() {
             term = Term::Lambda {
@@ -174,8 +123,6 @@ impl<'a> CodeGenerator<'a> {
                     constructor: constructor.clone(),
                     name: name.clone(),
                 });
-
-                // Add constructor information here?
             }
             TypedExpr::Fn { .. } => todo!(),
             TypedExpr::List {
@@ -193,9 +140,11 @@ impl<'a> CodeGenerator<'a> {
                     tipo: tipo.clone(),
                     tail: tail.is_some(),
                 });
+
                 for element in elements {
                     self.build_ir(element, ir_stack)
                 }
+
                 if let Some(tail) = tail {
                     ir_stack.push(IR::Tail { count: 1 });
                     self.build_ir(tail, ir_stack);
@@ -212,16 +161,12 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             TypedExpr::BinOp {
-                name,
-                left,
-                right,
-                tipo,
-                ..
+                name, left, right, ..
             } => {
                 ir_stack.push(IR::BinOp {
                     name: *name,
                     count: 2,
-                    tipo: tipo.clone(),
+                    tipo: left.tipo(),
                 });
                 self.build_ir(left, ir_stack);
                 self.build_ir(right, ir_stack);
@@ -246,10 +191,7 @@ impl<'a> CodeGenerator<'a> {
             }
             TypedExpr::Try { .. } => todo!(),
             TypedExpr::When {
-                subjects,
-                clauses,
-                tipo,
-                ..
+                subjects, clauses, ..
             } => {
                 // assuming one subject at the moment
                 ir_stack.push(IR::When {
@@ -274,19 +216,28 @@ impl<'a> CodeGenerator<'a> {
                 };
             }
             TypedExpr::If { .. } => todo!(),
-            TypedExpr::RecordAccess { .. } => todo!(),
-            TypedExpr::ModuleSelect {
+            TypedExpr::RecordAccess {
+                record,
+                index,
                 tipo,
+                ..
+            } => {
+                self.needs_field_access = true;
+
+                ir_stack.push(IR::RecordAccess {
+                    index: *index,
+                    tipo: tipo.clone(),
+                });
+
+                self.build_ir(record, ir_stack);
+            }
+            TypedExpr::ModuleSelect {
                 constructor,
                 module_name,
                 ..
             } => match constructor {
                 tipo::ModuleValueConstructor::Record { .. } => todo!(),
-                tipo::ModuleValueConstructor::Fn {
-                    location,
-                    module,
-                    name,
-                } => {
+                tipo::ModuleValueConstructor::Fn { name, .. } => {
                     let func = self.functions.get(&FunctionAccessKey {
                         module_name: module_name.clone(),
                         function_name: name.clone(),
@@ -315,7 +266,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn define_ir(&self, value_vec: &Vec<IR>, _define_vec: &mut Vec<IR>) {
+    fn define_ir(&self, value_vec: &Vec<IR>, _define_vec: &mut [IR]) {
         // get value item
         for value in value_vec {
             match dbg!(value) {
@@ -390,7 +341,6 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Discard { .. } => todo!(),
             Pattern::List { elements, tail, .. } => {
                 let mut elements_vec = vec![];
-                let mut var_vec = vec![];
 
                 let mut names = vec![];
                 for element in elements {
@@ -399,8 +349,7 @@ impl<'a> CodeGenerator<'a> {
                             names.push(name.clone());
                         }
                         a @ Pattern::List { .. } => {
-                            self.pattern_ir(a, &mut elements_vec, &mut vec![]);
-
+                            let mut var_vec = vec![];
                             let item_name = format!("list_item_id_{}", self.id_gen.next());
                             names.push(item_name.clone());
                             var_vec.push(IR::Var {
@@ -418,7 +367,7 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 name: item_name,
                             });
-                            var_vec.append(&mut elements_vec);
+                            self.pattern_ir(a, &mut elements_vec, &mut var_vec);
                         }
                         _ => todo!(),
                     }
@@ -438,8 +387,7 @@ impl<'a> CodeGenerator<'a> {
                 });
 
                 pattern_vec.append(values);
-
-                pattern_vec.append(&mut var_vec);
+                pattern_vec.append(&mut elements_vec);
             }
             Pattern::Constructor { .. } => todo!(),
         }
@@ -488,7 +436,13 @@ impl<'a> CodeGenerator<'a> {
                             module_name: module.to_string(),
                             defined_type: name.to_string(),
                         },
-                        Type::Fn { .. } => todo!(),
+                        Type::Fn { ret, .. } => match ret.deref() {
+                            Type::App { module, name, .. } => DataTypeKey {
+                                module_name: module.to_string(),
+                                defined_type: name.to_string(),
+                            },
+                            _ => unreachable!(),
+                        },
                         Type::Var { .. } => todo!(),
                     };
 
@@ -538,20 +492,14 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                println!("TIPO IS {tipo:#?}");
-
                 let list_type = match tipo.deref() {
                     Type::App { args, .. } => &args[0],
                     _ => unreachable!(),
                 };
 
-                println!("ARGS IS {:#?}", args);
-                println!("GET UPLC TYPE IS {:#?}", list_type.get_uplc_type());
-
                 if constants.len() == args.len() && !tail {
                     let list =
                         Term::Constant(Constant::ProtoList(list_type.get_uplc_type(), constants));
-                    println!("LIST TERM IS {:#?}", list);
 
                     arg_stack.push(list);
                 } else {
@@ -579,7 +527,7 @@ impl<'a> CodeGenerator<'a> {
             }
 
             IR::Tail { .. } => todo!(),
-            IR::ListAccessor { mut names, tail } => {
+            IR::ListAccessor { names, tail } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
@@ -588,31 +536,6 @@ impl<'a> CodeGenerator<'a> {
                 for _ in 0..names.len() {
                     id_list.push(self.id_gen.next());
                 }
-
-                // if tail {
-                //     let last = names.pop().unwrap();
-                //     let id = id_list[names.len() - 1];
-                //     term = Term::Apply {
-                //         function: Term::Lambda {
-                //             parameter_name: Name {
-                //                 text: last,
-                //                 unique: 0.into(),
-                //             },
-                //             body: term.into(),
-                //         }
-                //         .into(),
-                //         argument: Term::Apply {
-                //             function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
-                //                 .into(),
-                //             argument: Term::Var(Name {
-                //                 text: format!("tail_item_{}_{}", names.len() - 1, id),
-                //                 unique: 0.into(),
-                //             })
-                //             .into(),
-                //         }
-                //         .into(),
-                //     };
-                // }
 
                 let current_index = 0;
                 let (first_name, names) = names.split_first().unwrap();
@@ -624,9 +547,14 @@ impl<'a> CodeGenerator<'a> {
                             unique: 0.into(),
                         },
                         body: Term::Apply {
-                            function: self
-                                .list_access_to_uplc(names, &id_list, tail, current_index, term)
-                                .into(),
+                            function: list_access_to_uplc(
+                                names,
+                                &id_list,
+                                tail,
+                                current_index,
+                                term,
+                            )
+                            .into(),
                             argument: Term::Apply {
                                 function: Term::Force(
                                     Term::Builtin(DefaultFunction::TailList).into(),
@@ -646,17 +574,6 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                 };
-
-                for (index, name) in names.iter().enumerate().rev() {
-                    // let var_argument = if index == 0 {
-                    //     value.clone()
-                    // } else {
-                    //     Term::Var(Name {
-                    //         text: format!("tail_item_{}", index - 1),
-                    //         unique: 0.into(),
-                    //     })
-                    // };
-                }
 
                 arg_stack.push(term);
             }
@@ -836,7 +753,11 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            IR::DefineFunc { .. } => todo!(),
+            IR::DefineFunc { func_name, .. } => {
+                let body = arg_stack.pop().unwrap();
+
+                todo!()
+            }
             IR::DefineConst { .. } => todo!(),
             IR::DefineConstrFields { .. } => todo!(),
             IR::DefineConstrFieldAccess { .. } => todo!(),
@@ -846,363 +767,192 @@ impl<'a> CodeGenerator<'a> {
             IR::If { .. } => todo!(),
             IR::Constr { .. } => todo!(),
             IR::Fields { .. } => todo!(),
-            IR::RecordAccess { .. } => todo!(),
+            IR::RecordAccess { index, tipo } => {
+                let constr = arg_stack.pop().unwrap();
+
+                let mut term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Var(Name {
+                            text: CONSTR_GET_FIELD.to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Var(Name {
+                                text: CONSTR_FIELDS_EXPOSER.to_string(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                            argument: constr.into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    argument: Term::Constant(Constant::Integer(index.into())).into(),
+                };
+
+                if tipo.is_int() {
+                    term = Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnIData).into(),
+                        argument: term.into(),
+                    };
+                } else if tipo.is_bytearray() {
+                    term = Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnBData).into(),
+                        argument: term.into(),
+                    };
+                } else if tipo.is_list() {
+                    term = Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnListData).into(),
+                        argument: term.into(),
+                    };
+                }
+
+                arg_stack.push(term);
+            }
             IR::FieldsExpose { .. } => todo!(),
             IR::Todo { .. } => todo!(),
             IR::RecordUpdate { .. } => todo!(),
             IR::Negate { .. } => todo!(),
         }
     }
+}
 
-    fn add_arg_getter(&self, term: Term<Name>) -> Term<Name> {
-        // Apply constr arg getter to top level.
-        Term::Apply {
-            function: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_field_get_arg".to_string(),
-                    unique: 0.into(),
-                },
-                body: term.into(),
-            }
-            .into(),
-            argument: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_list".to_string(),
-                    unique: 0.into(),
-                },
-                body: Term::Lambda {
+fn list_access_to_uplc(
+    names: &[String],
+    id_list: &[u64],
+    tail: bool,
+    current_index: usize,
+    term: Term<Name>,
+) -> Term<Name> {
+    let (first, names) = names.split_first().unwrap();
+
+    if names.len() == 1 && tail {
+        Term::Lambda {
+            parameter_name: Name {
+                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                unique: 0.into(),
+            },
+            body: Term::Apply {
+                function: Term::Lambda {
                     parameter_name: Name {
-                        text: "arg_number".to_string(),
+                        text: first.clone(),
                         unique: 0.into(),
                     },
                     body: Term::Apply {
                         function: Term::Lambda {
                             parameter_name: Name {
-                                text: "recurse".to_string(),
+                                text: names[0].clone(),
                                 unique: 0.into(),
                             },
-                            body: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Var(Name {
-                                            text: "recurse".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                        argument: Term::Var(Name {
-                                            text: "recurse".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-
-                                    // Start recursive with index 0 of list
-                                    argument: Term::Constant(Constant::Integer(0.into())).into(),
-                                }
-                                .into(),
-                                argument: Term::Var(Name {
-                                    text: "constr_list".to_string(),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
-                            .into(),
+                            body: term.into(),
                         }
                         .into(),
-
-                        argument: Term::Lambda {
-                            parameter_name: Name {
-                                text: "self_recursor".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: Term::Lambda {
-                                parameter_name: Name {
-                                    text: "current_arg_number".to_string(),
-                                    unique: 0.into(),
-                                },
-                                body: Term::Lambda {
-                                    parameter_name: Name {
-                                        text: "list_of_constr_args".to_string(),
-                                        unique: 0.into(),
-                                    },
-                                    body: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Force(
-                                                        Term::Builtin(DefaultFunction::IfThenElse)
-                                                            .into(),
-                                                    )
-                                                    .into(),
-                                                    argument: Term::Apply {
-                                                        function: Term::Apply {
-                                                            function: Term::Builtin(
-                                                                DefaultFunction::EqualsInteger,
-                                                            )
-                                                            .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "arg_number".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: "current_arg_number".to_string(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Force(
-                                                    Term::Builtin(DefaultFunction::HeadList).into(),
-                                                )
-                                                .into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Lambda {
-                                                parameter_name: Name {
-                                                    text: "current_list_of_constr_args".to_string(),
-                                                    unique: 0.into(),
-                                                },
-                                                body: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Apply {
-                                                            function: Term::Var(Name {
-                                                                text: "self_recursor".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "self_recursor".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                        }
-                                                        .into(),
-
-                                                        argument: Term::Apply {
-                                                            function: Term::Apply {
-                                                                function: Term::Builtin(
-                                                                    DefaultFunction::AddInteger,
-                                                                )
-                                                                .into(),
-                                                                argument: Term::Var(Name {
-                                                                    text: "current_arg_number"
-                                                                        .to_string(),
-                                                                    unique: 0.into(),
-                                                                })
-                                                                .into(),
-                                                            }
-                                                            .into(),
-                                                            argument: Term::Constant(
-                                                                Constant::Integer(1.into()),
-                                                            )
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                    }
-                                                    .into(),
-
-                                                    argument: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Builtin(
-                                                                DefaultFunction::TailList,
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-
-                                                        argument: Term::Var(Name {
-                                                            text: "current_list_of_constr_args"
-                                                                .to_string(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                }
-                                                .into(),
-                                            }
-                                            .into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Var(Name {
-                                            text: "list_of_constr_args".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
+                        argument: Term::Apply {
+                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
                                 .into(),
-                            }
+                            argument: Term::Var(Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
+                                ),
+                                unique: 0.into(),
+                            })
                             .into(),
                         }
                         .into(),
                     }
+                    .into(),
+                }
+                .into(),
+                argument: Term::Apply {
+                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
+                    argument: Term::Var(Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    })
                     .into(),
                 }
                 .into(),
             }
             .into(),
         }
-    }
-
-    fn list_access_to_uplc(
-        &self,
-        names: &[String],
-        id_list: &[u64],
-        tail: bool,
-        current_index: usize,
-        term: Term<Name>,
-    ) -> Term<Name> {
-        let (first, names) = names.split_first().unwrap();
-
-        if names.len() == 1 && tail {
-            let term = Term::Lambda {
-                parameter_name: Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
-                },
-                body: Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: first.clone(),
-                            unique: 0.into(),
-                        },
-                        body: Term::Apply {
-                            function: Term::Lambda {
-                                parameter_name: Name {
-                                    text: names[0].clone(),
-                                    unique: 0.into(),
-                                },
-                                body: term.into(),
-                            }
-                            .into(),
-                            argument: Term::Apply {
-                                function: Term::Force(
-                                    Term::Builtin(DefaultFunction::TailList).into(),
-                                )
+    } else if names.is_empty() {
+        Term::Lambda {
+            parameter_name: Name {
+                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                unique: 0.into(),
+            },
+            body: Term::Apply {
+                function: Term::Lambda {
+                    parameter_name: Name {
+                        text: first.clone(),
+                        unique: 0.into(),
+                    },
+                    body: term.into(),
+                }
+                .into(),
+                argument: Term::Apply {
+                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
+                    argument: Term::Var(Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    })
+                    .into(),
+                }
+                .into(),
+            }
+            .into(),
+        }
+    } else {
+        Term::Lambda {
+            parameter_name: Name {
+                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                unique: 0.into(),
+            },
+            body: Term::Apply {
+                function: Term::Lambda {
+                    parameter_name: Name {
+                        text: first.clone(),
+                        unique: 0.into(),
+                    },
+                    body: Term::Apply {
+                        function: list_access_to_uplc(
+                            names,
+                            id_list,
+                            tail,
+                            current_index + 1,
+                            term,
+                        )
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
                                 .into(),
-                                argument: Term::Var(Name {
-                                    text: format!(
-                                        "tail_index_{}_{}",
-                                        current_index, id_list[current_index]
-                                    ),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
+                            argument: Term::Var(Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
+                                ),
+                                unique: 0.into(),
+                            })
                             .into(),
                         }
                         .into(),
                     }
                     .into(),
-                    argument: Term::Apply {
-                        function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into())
-                            .into(),
-                        argument: Term::Var(Name {
-                            text: format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
+                }
+                .into(),
+                argument: Term::Apply {
+                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
+                    argument: Term::Var(Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    })
                     .into(),
                 }
                 .into(),
-            };
-            term
-        } else if names.len() == 0 {
-            let term = Term::Lambda {
-                parameter_name: Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
-                },
-                body: Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: first.clone(),
-                            unique: 0.into(),
-                        },
-                        body: term.into(),
-                    }
-                    .into(),
-                    argument: Term::Apply {
-                        function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into())
-                            .into(),
-                        argument: Term::Var(Name {
-                            text: format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-            };
-            term
-        } else {
-            let term = Term::Lambda {
-                parameter_name: Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
-                },
-                body: Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: first.clone(),
-                            unique: 0.into(),
-                        },
-                        body: Term::Apply {
-                            function: self
-                                .list_access_to_uplc(names, id_list, tail, current_index + 1, term)
-                                .into(),
-                            argument: Term::Apply {
-                                function: Term::Force(
-                                    Term::Builtin(DefaultFunction::TailList).into(),
-                                )
-                                .into(),
-                                argument: Term::Var(Name {
-                                    text: format!(
-                                        "tail_index_{}_{}",
-                                        current_index, id_list[current_index]
-                                    ),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                    argument: Term::Apply {
-                        function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into())
-                            .into(),
-                        argument: Term::Var(Name {
-                            text: format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-            };
-            term
+            }
+            .into(),
         }
     }
 }

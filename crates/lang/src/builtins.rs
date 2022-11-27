@@ -7,7 +7,7 @@ use uplc::builtins::DefaultFunction;
 use crate::{
     ast::{ModuleKind, Span},
     tipo::{
-        self, fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
+        fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant,
     },
     IdGenerator,
