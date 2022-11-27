@@ -1,8 +1,10 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, rc::Rc, str::FromStr};
 
 use strum_macros::EnumIter;
 
 use flat_rs::de;
+
+use crate::ast::Term;
 
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
@@ -387,5 +389,17 @@ impl DefaultFunction {
             MkNilPairData => "mk_nil_pair_data",
         }
         .to_string()
+    }
+}
+
+impl<T> From<DefaultFunction> for Term<T> {
+    fn from(builtin: DefaultFunction) -> Self {
+        Term::Builtin(builtin)
+    }
+}
+
+impl<T> From<DefaultFunction> for Rc<Term<T>> {
+    fn from(builtin: DefaultFunction) -> Self {
+        Term::Builtin(builtin).into()
     }
 }
