@@ -14,7 +14,8 @@ use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedFunction},
     builtins,
     tipo::TypeInfo,
-    uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
+    uplc::{DataTypeKey, FunctionAccessKey},
+    uplc_two::CodeGenerator,
     IdGenerator,
 };
 use miette::NamedSource;
@@ -372,6 +373,7 @@ impl Project {
                 &data_types,
                 // &imports,
                 // &constants,
+                &self.module_types,
             );
 
             let program = generator.generate(body, arguments);

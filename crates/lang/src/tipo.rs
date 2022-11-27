@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
 
-use uplc::builtins::DefaultFunction;
+use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
 use crate::{
     ast::{Constant, DefinitionLocation, ModuleKind, Span, TypedConstant},
@@ -124,6 +124,43 @@ impl Type {
             Self::App { module, name, .. } if "String" == name && module.is_empty() => true,
             Self::Var { tipo } => tipo.borrow().is_string(),
             _ => false,
+        }
+    }
+
+    pub fn is_list(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "List" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_list(),
+            _ => false,
+        }
+    }
+
+    pub fn get_uplc_type(&self) -> UplcType {
+        if self.is_int() {
+            UplcType::Integer
+        } else if self.is_bytearray() {
+            UplcType::ByteString
+        } else if self.is_string() {
+            UplcType::String
+        } else if self.is_bool() {
+            UplcType::Bool
+        } else if self.is_list() {
+            let args_type = match self {
+                Self::App {
+                    module, name, args, ..
+                } if "List" == name && module.is_empty() => args[0].clone(),
+                Self::Var { tipo } => {
+                    if let TypeVar::Link { tipo } = tipo.borrow().clone() {
+                        tipo
+                    } else {
+                        todo!()
+                    }
+                }
+                _ => todo!(),
+            };
+            UplcType::List(Box::new(args_type.get_uplc_type()))
+        } else {
+            UplcType::Data
         }
     }
 
@@ -287,6 +324,13 @@ impl TypeVar {
     pub fn is_string(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_string(),
+            _ => false,
+        }
+    }
+
+    pub fn is_list(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_list(),
             _ => false,
         }
     }
