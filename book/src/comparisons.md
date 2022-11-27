@@ -35,6 +35,7 @@ main ones:
 - [Helios](https://github.com/Hyperion-BT/Helios)
 - [Plutarch](https://github.com/Plutonomicon/plutarch-plutus)
 - [plu-ts](https://github.com/HarmonicLabs/plu-ts)
+- [Scalus](https://github.com/nau/scalus)
 
 The creators of each of these projects all know each other and are in open communication with
 each other.
@@ -52,9 +53,10 @@ is smart enough to know what the type of something is without you annotating it.
 ### Helios
 
 Helios is also a brand new language. One notable implementation difference
-is that it's compiler is written in a [single javascript file](https://github.com/Hyperion-BT/Helios/blob/main/helios.js). According to the creator, the intention of that was to make the compiler implementation easier to audit.
+is that it's compiler is written in a [single javascript file without dependencies](https://github.com/Hyperion-BT/Helios/blob/main/helios.js).
+According to the creator, the intention of that was to make the compiler implementation easier to audit.
 
-As a language, Helios is also purely functional but **does not** have type inference. According to the creator, this is to make contracts easier to audit. It also supports custom types similar to records and enums.
+As a language, Helios is also purely functional but has limited have type inference. It also supports custom types similar to records and enums.
 
 Another interesting thing is that because the compiler is a single javascript file it's pretty easy to use Helios from within a javascript project.
 
@@ -67,7 +69,23 @@ higher-kinded types, etc.
 
 ### plu-ts
 
-plu-ts is **not** a new language. You can consider it an embedded DSL for creating smart contracts with Typescript. Because of this it's a bit closer to Plutarch conceptually than Aiken or Helios.
+plu-ts is **not** a new language. You can consider it an embedded DSL for creating smart contracts with Typescript.
+Because of this it's a bit closer to Plutarch conceptually than Aiken or Helios.
+
+It implements it's own type system and at compile time (js runtime) checks the types to be correct.
+
+### Scalus
+
+A Scala implementation of Plutus.
+
+Scalus is a set of libraries to work with Cardano Untyped Plutus Core that works on both JVM and JavaScript. This includes:
+
+- Untyped Plutus Core (UPLC) data types and functions
+- Flat, CBOR, JSON serialization
+- CEK UPLC evaluation machine including execution cost calculation
+- UPLC parser and pretty printer
+- Type safe UPLC expression builder, think of Plutarch
+- Macros to generate UPLC code from Scala code, think of PlutusTx but simpler
 
 ## Which should you use?
 
