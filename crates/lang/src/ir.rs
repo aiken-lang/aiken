@@ -104,15 +104,18 @@ pub enum IR {
     // },
     When {
         count: usize,
+        subject_name: String,
     },
 
     Clause {
         count: usize,
+        tipo: Arc<Type>,
+        subject_name: String,
     },
 
-    Finally {
-        count: usize,
-    },
+    Discard,
+
+    Finally,
 
     If {
         count: usize,

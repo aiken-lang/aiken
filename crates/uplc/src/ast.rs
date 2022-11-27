@@ -110,6 +110,16 @@ pub enum Term<T> {
     Builtin(DefaultFunction),
 }
 
+impl<T> Term<T> {
+    pub fn is_unit(&self) -> bool {
+        matches!(self, Term::Constant(Constant::Unit))
+    }
+
+    pub fn force_wrap(self) -> Self {
+        Term::Force(self.into())
+    }
+}
+
 impl<'a, T> Display for Term<T>
 where
     T: Binder<'a>,

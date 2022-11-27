@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::{collections::HashMap, fmt::format, ops::Deref, sync::Arc};
 
 use uplc::{
     ast::{
@@ -193,23 +193,38 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
+                let subject_name = format!("__subject_name_{}", self.id_gen.next());
+
                 // assuming one subject at the moment
                 ir_stack.push(IR::When {
                     count: clauses.len() + 1,
+                    subject_name: subject_name.clone(),
                 });
+
                 let subject = subjects[0].clone();
 
                 self.build_ir(&subject, ir_stack);
 
                 if let Some((last_clause, clauses)) = clauses.split_last() {
                     let mut clauses_vec = vec![];
+                    let mut pattern_vec = vec![];
+
                     for clause in clauses {
-                        ir_stack.push(IR::Clause { count: 2 });
                         self.build_ir(&clause.then, &mut clauses_vec);
-                        self.pattern_ir(&clause.pattern[0], ir_stack, &mut clauses_vec);
+
+                        self.when_ir(
+                            &clause.pattern[0],
+                            &mut pattern_vec,
+                            &mut clauses_vec,
+                            &subject.tipo(),
+                            subject_name.clone(),
+                        )
                     }
+
+                    ir_stack.append(&mut pattern_vec);
+
                     let last_pattern = &last_clause.pattern[0];
-                    ir_stack.push(IR::Finally { count: 2 });
+                    ir_stack.push(IR::Finally);
 
                     self.build_ir(&last_clause.then, &mut clauses_vec);
                     self.pattern_ir(last_pattern, ir_stack, &mut clauses_vec);
@@ -326,6 +341,38 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
+    fn when_ir(
+        &self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
+        pattern_vec: &mut Vec<IR>,
+        values: &mut Vec<IR>,
+        tipo: &Type,
+        subject_name: String,
+    ) {
+        match pattern {
+            Pattern::Int { value, .. } => {
+                pattern_vec.push(IR::Clause {
+                    count: 2,
+                    tipo: tipo.clone().into(),
+                    subject_name,
+                });
+
+                pattern_vec.push(IR::Int {
+                    value: value.clone(),
+                });
+
+                pattern_vec.append(values);
+            }
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { .. } => todo!(),
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => unreachable!(),
+            Pattern::List { .. } => todo!(),
+            Pattern::Constructor { .. } => todo!(),
+        }
+    }
+
     fn pattern_ir(
         &self,
         pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
@@ -338,7 +385,11 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Var { .. } => todo!(),
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => todo!(),
+            Pattern::Discard { .. } => {
+                pattern_vec.push(IR::Discard);
+
+                pattern_vec.append(values);
+            }
             Pattern::List { elements, tail, .. } => {
                 let mut elements_vec = vec![];
 
@@ -478,6 +529,9 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             },
+            IR::Discard => {
+                arg_stack.push(Term::Constant(Constant::Unit));
+            }
             IR::List { count, tipo, tail } => {
                 let mut args = vec![];
 
@@ -754,7 +808,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             IR::DefineFunc { func_name, .. } => {
-                let body = arg_stack.pop().unwrap();
+                let _body = arg_stack.pop().unwrap();
 
                 todo!()
             }
@@ -762,8 +816,70 @@ impl<'a> CodeGenerator<'a> {
             IR::DefineConstrFields { .. } => todo!(),
             IR::DefineConstrFieldAccess { .. } => todo!(),
             IR::When { .. } => todo!(),
-            IR::Clause { .. } => todo!(),
-            IR::Finally { .. } => todo!(),
+            IR::Clause {
+                count,
+                tipo,
+                subject_name,
+            } => {
+                // clause to compare
+                let clause = arg_stack.pop().unwrap();
+
+                // the body to be run if the clause matches
+                let body = arg_stack.pop().unwrap();
+
+                // the final branch in the when expression
+                let mut term = arg_stack.pop().unwrap();
+
+                let checker = if tipo.is_int() {
+                    DefaultFunction::EqualsInteger.into()
+                } else if tipo.is_bytearray() {
+                    DefaultFunction::EqualsByteString.into()
+                } else if tipo.is_bool() {
+                    todo!()
+                } else if tipo.is_string() {
+                    DefaultFunction::EqualsString.into()
+                } else if tipo.is_list() {
+                    todo!()
+                } else {
+                    DefaultFunction::EqualsData.into()
+                };
+
+                term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Force(DefaultFunction::IfThenElse.into()).into(),
+                            argument: Term::Apply {
+                                function: Term::Apply {
+                                    function: checker,
+                                    argument: Term::Var(Name {
+                                        text: subject_name,
+                                        unique: 0.into(),
+                                    })
+                                    .into(),
+                                }
+                                .into(),
+                                argument: clause.into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        argument: body.into(),
+                    }
+                    .into(),
+                    argument: term.into(),
+                }
+                .force_wrap();
+
+                arg_stack.push(term);
+            }
+            IR::Finally => {
+                let clause = arg_stack.pop().unwrap();
+
+                if !clause.is_unit() {
+                    let _body = arg_stack.pop().unwrap();
+                    todo!();
+                }
+            }
             IR::If { .. } => todo!(),
             IR::Constr { .. } => todo!(),
             IR::Fields { .. } => todo!(),
