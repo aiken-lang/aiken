@@ -1,9 +1,9 @@
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc, vec};
 
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{self, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD},
+        builder::{self, constr_index_exposer, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD},
         Constant, Name, Program, Term,
     },
     builtins::DefaultFunction,
@@ -515,26 +515,35 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                if *is_record {
-                    let data_type_key = match tipo.as_ref() {
-                        Type::Fn { ret, .. } => match &**ret {
-                            Type::App { module, name, .. } => DataTypeKey {
-                                module_name: module.clone(),
-                                defined_type: name.clone(),
-                            },
-                            _ => unreachable!(),
+                let data_type_key = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => match &**ret {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
                         },
                         _ => unreachable!(),
-                    };
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
 
-                    let data_type = self.data_types.get(&data_type_key).unwrap();
-                    let (index, constructor_type) = data_type
-                        .constructors
-                        .iter()
-                        .enumerate()
-                        .find(|(_, dt)| &dt.name == constr_name)
-                        .unwrap();
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let (index, constructor_type) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
 
+                // push constructor Index
+                pattern_vec.push(IR::Int {
+                    value: index.to_string(),
+                });
+
+                if *is_record {
                     let field_map = match constructor {
                         tipo::PatternConstructor::Record { field_map, .. } => {
                             field_map.clone().unwrap()
@@ -569,43 +578,64 @@ impl<'a> CodeGenerator<'a> {
                         .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
                         .collect::<Vec<(String, String, usize, bool)>>();
 
-                    // push constructor Index
-                    pattern_vec.push(IR::Int {
-                        value: index.to_string(),
-                    });
                     if !arguments_index.is_empty() {
                         pattern_vec.push(IR::FieldsExpose {
                             count: arguments_index.len() + 2,
                             indices: arguments_index
                                 .iter()
-                                .map(|(_, _, index, _)| *index)
+                                .map(|(label, var_name, index, _)| {
+                                    let field_type = type_map.get(label).unwrap();
+                                    (*index, var_name.clone(), field_type.clone())
+                                })
                                 .collect_vec(),
                         });
-
-                        for arg in arguments_index {
-                            let field_label = arg.0;
-                            let field_type = type_map.get(&field_label).unwrap();
-                            let field_var = arg.1;
-                            pattern_vec.push(IR::Var {
-                                constructor: ValueConstructor::public(
-                                    field_type.clone(),
-                                    ValueConstructorVariant::LocalVariable {
-                                        location: Span::empty(),
-                                    },
-                                ),
-                                name: field_var,
-                            })
-                        }
                     }
-                    pattern_vec.append(values);
                 } else {
-                    println!("todo");
+                    let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
+
+                    for (index, arg) in constructor_type.arguments.iter().enumerate() {
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(index, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, item)| {
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                Pattern::Constructor { .. } => todo!(),
+                                _ => todo!(),
+                            };
+
+                            (var_name, index, discard)
+                        })
+                        .filter(|(_, _, discard)| !discard)
+                        .collect::<Vec<(String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(name, index, _)| {
+                                    let field_type = type_map.get(index).unwrap();
+
+                                    (*index, name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                        });
+                    }
                 }
+                pattern_vec.append(values);
             }
         }
     }
 
-    fn uplc_code_gen(&self, ir_stack: &mut Vec<IR>) -> Term<Name> {
+    fn uplc_code_gen(&mut self, ir_stack: &mut Vec<IR>) -> Term<Name> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
         while let Some(ir_element) = ir_stack.pop() {
@@ -615,7 +645,7 @@ impl<'a> CodeGenerator<'a> {
         arg_stack[0].clone()
     }
 
-    fn gen_uplc(&self, ir: IR, arg_stack: &mut Vec<Term<Name>>) {
+    fn gen_uplc(&mut self, ir: IR, arg_stack: &mut Vec<Term<Name>>) {
         match ir {
             IR::Int { value } => {
                 let integer = value.parse().unwrap();
@@ -924,7 +954,14 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                     BinOp::NotEq => todo!(),
-                    BinOp::LtInt => todo!(),
+                    BinOp::LtInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
                     BinOp::LtEqInt => todo!(),
                     BinOp::GtEqInt => todo!(),
                     BinOp::GtInt => Term::Apply {
@@ -976,7 +1013,24 @@ impl<'a> CodeGenerator<'a> {
             IR::DefineConst { .. } => todo!(),
             IR::DefineConstrFields { .. } => todo!(),
             IR::DefineConstrFieldAccess { .. } => todo!(),
-            IR::Lam { .. } => todo!(),
+            IR::Lam { name } => {
+                let arg = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+
+                term = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: name,
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    }
+                    .into(),
+                    argument: arg.into(),
+                };
+                arg_stack.push(term);
+            }
             IR::When {
                 subject_name, tipo, ..
             } => {
@@ -984,7 +1038,8 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = arg_stack.pop().unwrap();
 
-                term = if tipo.is_int() {
+                term = if tipo.is_int() || tipo.is_bytearray() || tipo.is_string() || tipo.is_list()
+                {
                     Term::Apply {
                         function: Term::Lambda {
                             parameter_name: Name {
@@ -997,7 +1052,17 @@ impl<'a> CodeGenerator<'a> {
                         argument: subject.into(),
                     }
                 } else {
-                    todo!()
+                    Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: subject_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: constr_index_exposer(subject).into(),
+                    }
                 };
 
                 arg_stack.push(term);
@@ -1077,12 +1142,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             IR::Finally => {
-                let clause = arg_stack.pop().unwrap();
-
-                if !clause.is_unit() {
-                    let _body = arg_stack.pop().unwrap();
-                    todo!();
-                }
+                let _clause = arg_stack.pop().unwrap();
             }
             IR::If { .. } => todo!(),
             IR::Constr { .. } => todo!(),
@@ -1130,7 +1190,247 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            IR::FieldsExpose { .. } => todo!(),
+            IR::FieldsExpose {
+                count: _count,
+                indices,
+            } => {
+                self.needs_field_access = true;
+
+                let constr_var = arg_stack.pop().unwrap();
+                let mut body = arg_stack.pop().unwrap();
+
+                let mut indices = indices.into_iter().rev();
+                let highest = indices.next().unwrap();
+                let mut id_list = vec![];
+
+                for _ in 0..highest.0 {
+                    id_list.push(self.id_gen.next());
+                }
+
+                let constr_name_lam = format!("__constr_fields_{}", self.id_gen.next());
+                let highest_loop_index = highest.0 as i32 - 1;
+                let last_prev_tail = Term::Var(Name {
+                    text: if highest_loop_index == -1 {
+                        constr_name_lam.clone()
+                    } else {
+                        format!(
+                            "__tail_{}_{}",
+                            highest_loop_index, id_list[highest_loop_index as usize]
+                        )
+                    },
+                    unique: 0.into(),
+                });
+
+                let unwrapper = if highest.2.is_int() {
+                    Term::Apply {
+                        function: DefaultFunction::UnIData.into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: last_prev_tail.into(),
+                        }
+                        .into(),
+                    }
+                } else if highest.2.is_bytearray() {
+                    Term::Apply {
+                        function: DefaultFunction::UnBData.into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: last_prev_tail.into(),
+                        }
+                        .into(),
+                    }
+                } else if highest.2.is_list() {
+                    Term::Apply {
+                        function: DefaultFunction::UnListData.into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: last_prev_tail.into(),
+                        }
+                        .into(),
+                    }
+                } else {
+                    Term::Apply {
+                        function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                        argument: last_prev_tail.into(),
+                    }
+                };
+
+                body = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: highest.1,
+                            unique: 0.into(),
+                        },
+                        body: body.into(),
+                    }
+                    .into(),
+                    argument: unwrapper.into(),
+                };
+
+                let mut current_field = None;
+                for index in (0..highest.0).rev() {
+                    let current_tail_index = index;
+                    let previous_tail_index = if index == 0 { 0 } else { index - 1 };
+                    let current_tail_id = id_list[index];
+                    let previous_tail_id = if index == 0 { 0 } else { id_list[index - 1] };
+                    if current_field.is_none() {
+                        current_field = indices.next();
+                    }
+
+                    let prev_tail = if index == 0 {
+                        Term::Var(Name {
+                            text: constr_name_lam.clone(),
+                            unique: 0.into(),
+                        })
+                    } else {
+                        Term::Var(Name {
+                            text: format!("__tail_{previous_tail_index}_{previous_tail_id}"),
+                            unique: 0.into(),
+                        })
+                    };
+
+                    if let Some(ref field) = current_field {
+                        if field.0 == index {
+                            let unwrapper = if field.2.is_int() {
+                                Term::Apply {
+                                    function: DefaultFunction::UnIData.into(),
+                                    argument: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::HeadList)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: prev_tail.clone().into(),
+                                    }
+                                    .into(),
+                                }
+                            } else if field.2.is_bytearray() {
+                                Term::Apply {
+                                    function: DefaultFunction::UnBData.into(),
+                                    argument: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::HeadList)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: prev_tail.clone().into(),
+                                    }
+                                    .into(),
+                                }
+                            } else if field.2.is_list() {
+                                Term::Apply {
+                                    function: DefaultFunction::UnListData.into(),
+                                    argument: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::HeadList)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: prev_tail.clone().into(),
+                                    }
+                                    .into(),
+                                }
+                            } else {
+                                Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::HeadList)
+                                        .force_wrap()
+                                        .into(),
+                                    argument: prev_tail.clone().into(),
+                                }
+                            };
+
+                            body = Term::Apply {
+                                function: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: field.1.clone(),
+                                        unique: 0.into(),
+                                    },
+                                    body: Term::Apply {
+                                        function: Term::Lambda {
+                                            parameter_name: Name {
+                                                text: format!(
+                                                    "__tail_{current_tail_index}_{current_tail_id}"
+                                                ),
+                                                unique: 0.into(),
+                                            },
+                                            body: body.into(),
+                                        }
+                                        .into(),
+                                        argument: Term::Apply {
+                                            function: Term::Builtin(DefaultFunction::TailList)
+                                                .force_wrap()
+                                                .into(),
+                                            argument: prev_tail.into(),
+                                        }
+                                        .into(),
+                                    }
+                                    .into(),
+                                }
+                                .into(),
+                                argument: unwrapper.into(),
+                            };
+
+                            current_field = None;
+                        } else {
+                            body = Term::Apply {
+                                function: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: format!(
+                                            "__tail_{current_tail_index}_{current_tail_id}"
+                                        ),
+                                        unique: 0.into(),
+                                    },
+                                    body: body.into(),
+                                }
+                                .into(),
+                                argument: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::TailList)
+                                        .force_wrap()
+                                        .force_wrap()
+                                        .into(),
+                                    argument: prev_tail.into(),
+                                }
+                                .into(),
+                            }
+                        }
+                    } else {
+                        body = Term::Apply {
+                            function: Term::Lambda {
+                                parameter_name: Name {
+                                    text: format!("__tail_{current_tail_index}_{current_tail_id}"),
+                                    unique: 0.into(),
+                                },
+                                body: body.into(),
+                            }
+                            .into(),
+                            argument: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::TailList)
+                                    .force_wrap()
+                                    .force_wrap()
+                                    .into(),
+                                argument: prev_tail.into(),
+                            }
+                            .into(),
+                        }
+                    }
+                }
+
+                body = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: constr_name_lam,
+                            unique: 0.into(),
+                        },
+                        body: body.into(),
+                    }
+                    .into(),
+                    argument: Term::Apply {
+                        function: Term::Var(Name {
+                            text: CONSTR_FIELDS_EXPOSER.to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: constr_var.into(),
+                    }
+                    .into(),
+                };
+
+                arg_stack.push(body);
+            }
             IR::Todo { .. } => todo!(),
             IR::RecordUpdate { .. } => todo!(),
             IR::Negate { .. } => todo!(),

@@ -44,14 +44,14 @@ pub fn who(a: ByteArray) -> ByteArray {
 }
 
 pub type Datum {
-  Offer { price: Int, asset_class: ByteArray }
+  Offer { price: Int, asset_class: ByteArray, thing: Int }
   Sell
   Hold(Int)
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
   when datum is {
-    Offer { price, .. } -> price > 0
+    Offer { price, thing: t, .. } -> price > 0
     Hold(less) -> less < 0
     Sell -> False
   }

@@ -141,7 +141,7 @@ pub enum IR {
 
     FieldsExpose {
         count: usize,
-        indices: Vec<usize>,
+        indices: Vec<(usize, String, Arc<Type>)>,
     },
 
     // ModuleSelect {
