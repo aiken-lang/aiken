@@ -3,6 +3,7 @@ use crate::builtins::DefaultFunction;
 use super::{Constant, Name, Term};
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
+pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
 
 pub fn final_wrapper<T>(term: Term<T>) -> Term<T> {
@@ -54,6 +55,18 @@ pub fn constr_fields_exposer(term: Term<Name>) -> Term<Name> {
                 .into(),
             }
             .into(),
+        }
+        .into(),
+    }
+}
+
+pub fn constr_index_exposer(term: Term<Name>) -> Term<Name> {
+    Term::Apply {
+        function: Term::Force(Term::Force(Term::Builtin(DefaultFunction::FstPair).into()).into())
+            .into(),
+        argument: Term::Apply {
+            function: Term::Builtin(DefaultFunction::UnConstrData).into(),
+            argument: term.into(),
         }
         .into(),
     }
