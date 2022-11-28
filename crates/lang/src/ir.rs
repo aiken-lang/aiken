@@ -96,6 +96,10 @@ pub enum IR {
         count: usize,
     },
 
+    Lam {
+        name: String,
+    },
+
     // Try {
     //     tipo: Arc<Type>,
     //     value: Box<Self>,
@@ -104,6 +108,7 @@ pub enum IR {
     // },
     When {
         count: usize,
+        tipo: Arc<Type>,
         subject_name: String,
     },
 
@@ -136,6 +141,7 @@ pub enum IR {
 
     FieldsExpose {
         count: usize,
+        indices: Vec<usize>,
     },
 
     // ModuleSelect {
