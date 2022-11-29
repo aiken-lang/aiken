@@ -91,12 +91,10 @@ pub enum TypedExpr {
         kind: AssignmentKind,
     },
 
-    Try {
+    Trace {
         location: Span,
         tipo: Arc<Type>,
-        value: Box<Self>,
         then: Box<Self>,
-        pattern: Pattern<PatternConstructor, Arc<Type>>,
     },
 
     When {
@@ -130,11 +128,11 @@ pub enum TypedExpr {
         constructor: ModuleValueConstructor,
     },
 
-    // Tuple {
-    //     location: Span,
-    //     tipo: Arc<Type>,
-    //     elems: Vec<Self>,
-    // },
+    Tuple {
+        location: Span,
+        tipo: Arc<Type>,
+        elems: Vec<Self>,
+    },
 
     // TupleIndex {
     //     location: Span,
@@ -166,7 +164,7 @@ impl TypedExpr {
         match self {
             Self::Negate { .. } => bool(),
             Self::Var { constructor, .. } => constructor.tipo.clone(),
-            Self::Try { then, .. } => then.tipo(),
+            Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
             | Self::Int { tipo, .. }
             | Self::Todo { tipo, .. }
@@ -175,7 +173,7 @@ impl TypedExpr {
             | Self::Call { tipo, .. }
             | Self::If { tipo, .. }
             | Self::BinOp { tipo, .. }
-            // | Self::Tuple { tipo, .. }
+            | Self::Tuple { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
             // | Self::TupleIndex { tipo, .. }
@@ -194,7 +192,7 @@ impl TypedExpr {
             self,
             Self::Int { .. }
                 | Self::List { .. }
-                // | Self::Tuple { .. }
+                | Self::Tuple { .. }
                 | Self::String { .. }
                 | Self::ByteArray { .. }
         )
@@ -209,13 +207,13 @@ impl TypedExpr {
         match self {
             TypedExpr::Fn { .. }
             | TypedExpr::Int { .. }
-            | TypedExpr::Try { .. }
+            | TypedExpr::Trace { .. }
             | TypedExpr::List { .. }
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
             | TypedExpr::Todo { .. }
             | TypedExpr::BinOp { .. }
-            // | TypedExpr::Tuple { .. }
+            | TypedExpr::Tuple { .. }
             | TypedExpr::Negate { .. }
             | TypedExpr::String { .. }
             | TypedExpr::Sequence { .. }
@@ -249,14 +247,14 @@ impl TypedExpr {
         match self {
             Self::Fn { location, .. }
             | Self::Int { location, .. }
-            | Self::Try { location, .. }
+            | Self::Trace { location, .. }
             | Self::Var { location, .. }
             | Self::Todo { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
-            // | Self::Tuple { location, .. }
+            | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Negate { location, .. }
             | Self::Pipeline { location, .. }
@@ -286,7 +284,7 @@ impl TypedExpr {
     pub fn location(&self) -> Span {
         match self {
             Self::Fn { location, .. }
-            | Self::Try { location, .. }
+            | Self::Trace { location, .. }
             | Self::Int { location, .. }
             | Self::Var { location, .. }
             | Self::Todo { location, .. }
@@ -295,7 +293,7 @@ impl TypedExpr {
             | Self::If { location, .. }
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
-            // | Self::Tuple { location, .. }
+            | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Negate { location, .. }
             | Self::Sequence { location, .. }
@@ -376,12 +374,10 @@ pub enum UntypedExpr {
         annotation: Option<Annotation>,
     },
 
-    Try {
+    Trace {
         location: Span,
-        value: Box<Self>,
-        pattern: Pattern<(), ()>,
         then: Box<Self>,
-        annotation: Option<Annotation>,
+        text: Option<String>,
     },
 
     When {
@@ -402,10 +398,10 @@ pub enum UntypedExpr {
         container: Box<Self>,
     },
 
-    // Tuple {
-    //     location: Span,
-    //     elems: Vec<Self>,
-    // },
+    Tuple {
+        location: Span,
+        elems: Vec<Self>,
+    },
     // TupleIndex {
     //     location: Span,
     //     index: u64,
@@ -481,7 +477,7 @@ impl UntypedExpr {
 
     pub fn location(&self) -> Span {
         match self {
-            Self::Try { then, .. } => then.location(),
+            Self::Trace { then, .. } => then.location(),
             Self::PipeLine { expressions, .. } => expressions.last().location(),
             Self::Fn { location, .. }
             | Self::Var { location, .. }
@@ -492,7 +488,7 @@ impl UntypedExpr {
             | Self::List { location, .. }
             | Self::ByteArray { location, .. }
             | Self::BinOp { location, .. }
-            // | Self::Tuple { location, .. }
+            | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Assignment { location, .. }
             // | Self::TupleIndex { location, .. }
@@ -519,7 +515,7 @@ impl UntypedExpr {
                 .map(|e| e.start_byte_index())
                 .unwrap_or(location.start),
             Self::PipeLine { expressions, .. } => expressions.first().start_byte_index(),
-            Self::Try { location, .. } | Self::Assignment { location, .. } => location.start,
+            Self::Trace { location, .. } | Self::Assignment { location, .. } => location.start,
             _ => self.location().start,
         }
     }

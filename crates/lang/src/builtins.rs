@@ -438,6 +438,10 @@ pub fn byte_array() -> Arc<Type> {
     })
 }
 
+pub fn tuple(elems: Vec<Arc<Type>>) -> Arc<Type> {
+    Arc::new(Type::Tuple { elems })
+}
+
 pub fn bool() -> Arc<Type> {
     Arc::new(Type::App {
         args: vec![],

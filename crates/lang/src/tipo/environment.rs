@@ -12,7 +12,7 @@ use crate::{
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
         UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
     },
-    builtins::{self, function, generic_var, unbound_var},
+    builtins::{self, function, generic_var, tuple, unbound_var},
     tipo::fields::FieldMap,
     IdGenerator,
 };
@@ -564,12 +564,13 @@ impl<'a> Environment<'a> {
                     .collect(),
                 self.instantiate(ret.clone(), ids, hydrator),
             ),
-            // Type::Tuple { elems } => tuple(
-            //     elems
-            //         .iter()
-            //         .map(|t| self.instantiate(t.clone(), ids, hydrator))
-            //         .collect(),
-            // ),
+
+            Type::Tuple { elems } => tuple(
+                elems
+                    .iter()
+                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
+                    .collect(),
+            ),
         }
     }
 
@@ -1400,6 +1401,7 @@ fn unify_unbound_type(tipo: Arc<Type>, own_id: u64, location: Span) -> Result<()
             for arg in args {
                 unify_unbound_type(arg.clone(), own_id, location)?
             }
+
             Ok(())
         }
 
@@ -1407,7 +1409,16 @@ fn unify_unbound_type(tipo: Arc<Type>, own_id: u64, location: Span) -> Result<()
             for arg in args {
                 unify_unbound_type(arg.clone(), own_id, location)?;
             }
+
             unify_unbound_type(ret.clone(), own_id, location)
+        }
+
+        Type::Tuple { elems, .. } => {
+            for elem in elems {
+                unify_unbound_type(elem.clone(), own_id, location)?
+            }
+
+            Ok(())
         }
 
         Type::Var { .. } => unreachable!(),
@@ -1591,11 +1602,12 @@ pub(crate) fn generalise(t: Arc<Type>, ctx_level: usize) -> Arc<Type> {
                 .collect(),
             generalise(ret.clone(), ctx_level),
         ),
-        // Type::Tuple { elems } => tuple(
-        //     elems
-        //         .iter()
-        //         .map(|t| generalise(t.clone(), ctx_level))
-        //         .collect(),
-        // ),
+
+        Type::Tuple { elems } => tuple(
+            elems
+                .iter()
+                .map(|t| generalise(t.clone(), ctx_level))
+                .collect(),
+        ),
     }
 }

@@ -36,12 +36,17 @@ pub fn incrementor(counter: Int, target: Int) -> Int {
   }
 }
 
+pub fn who(a: #(Int, Int)) -> #(Int, Int) {
+  #(1, 2)
+}
+
 pub fn spend(
   datum: sample.Datum,
   rdmr: Redeemer,
   ctx: spend.ScriptContext,
 ) -> Bool {
-  let x = Sell
-  let z = incrementor(0, 4) == 4
-  z
+  when [1, 2, 3] is {
+    [a, b, ..] -> True
+    [] -> False
+  }
 }

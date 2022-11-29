@@ -459,7 +459,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "opaque" => Some(Token::Opaque),
         "pub" => Some(Token::Pub),
         "todo" => Some(Token::Todo),
-        "try" => Some(Token::Try),
+        "try" => Some(Token::Trace),
         "type" => Some(Token::Type),
         _ => None,
     }

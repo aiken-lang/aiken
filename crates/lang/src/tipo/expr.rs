@@ -10,7 +10,7 @@ use crate::{
         UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
         UntypedPattern, UntypedRecordUpdateArg,
     },
-    builtins::{bool, byte_array, function, int, list, result, string},
+    builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{TypedExpr, UntypedExpr},
     tipo::fields::FieldMap,
 };
@@ -245,9 +245,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
             } => self.infer_seq(location, expressions),
 
-            // UntypedExpr::Tuple {
-            //     location, elems, ..
-            // } => self.infer_tuple(elems, location),
+            UntypedExpr::Tuple {
+                location, elems, ..
+            } => self.infer_tuple(elems, location),
+
             UntypedExpr::String {
                 location, value, ..
             } => Ok(self.infer_string(value, location)),
@@ -278,14 +279,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } => self.infer_assignment(pattern, *value, kind, &annotation, location),
 
-            UntypedExpr::Try {
-                location,
-                pattern,
-                value,
-                then,
-                annotation,
-                ..
-            } => self.infer_try(pattern, *value, *then, &annotation, location),
+            UntypedExpr::Trace { location, then, .. } => self.infer_trace(*then, location),
 
             UntypedExpr::When {
                 location,
@@ -1665,6 +1659,24 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
+    fn infer_tuple(&mut self, elems: Vec<UntypedExpr>, location: Span) -> Result<TypedExpr, Error> {
+        let mut typed_elems = vec![];
+
+        for elem in elems {
+            let typed_elem = self.infer(elem)?;
+
+            typed_elems.push(typed_elem);
+        }
+
+        let tipo = tuple(typed_elems.iter().map(|e| e.tipo()).collect());
+
+        Ok(TypedExpr::Tuple {
+            location,
+            elems: typed_elems,
+            tipo,
+        })
+    }
+
     fn infer_todo(&mut self, location: Span, kind: TodoKind, label: Option<String>) -> TypedExpr {
         let tipo = self.new_unbound_var();
 
@@ -1681,66 +1693,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
-    fn infer_try(
-        &mut self,
-        pattern: UntypedPattern,
-        value: UntypedExpr,
-        then: UntypedExpr,
-        annotation: &Option<Annotation>,
-        location: Span,
-    ) -> Result<TypedExpr, Error> {
-        let value = self.in_new_scope(|value_typer| value_typer.infer(value))?;
-
-        let value_type = self.new_unbound_var();
-        let try_error_type = self.new_unbound_var();
-
-        // Ensure that the value is a result
-        {
-            let v = value_type.clone();
-
-            let e = try_error_type.clone();
-
-            self.unify(result(v, e), value.tipo(), value.type_defining_location())?;
-        };
-
-        // Ensure the pattern matches the type of the value
-        let pattern = PatternTyper::new(self.environment, &self.hydrator).unify(
-            pattern,
-            value_type.clone(),
-            None,
-        )?;
-
+    fn infer_trace(&mut self, then: UntypedExpr, location: Span) -> Result<TypedExpr, Error> {
         // Check the type of the following code
         let then = self.infer(then)?;
 
         let tipo = then.tipo();
 
-        // Ensure that a Result with the right error type is returned for `try`
-        {
-            let t = self.new_unbound_var();
-
-            self.unify(
-                result(t, try_error_type),
-                tipo.clone(),
-                then.type_defining_location(),
-            )
-            .map_err(|e| e.inconsistent_try(tipo.is_result()))?;
-        }
-
-        // Check that any type annotation is accurate.
-        if let Some(ann) = annotation {
-            let ann_typ = self
-                .type_from_annotation(ann)
-                .map(|t| self.instantiate(t, &mut HashMap::new()))?;
-
-            self.unify(ann_typ, value_type, value.type_defining_location())?;
-        }
-
-        Ok(TypedExpr::Try {
+        Ok(TypedExpr::Trace {
             location,
             tipo,
-            pattern,
-            value: Box::new(value),
             then: Box::new(then),
         })
     }
