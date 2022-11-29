@@ -51,8 +51,8 @@ pub type Datum {
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
   when datum is {
-    Offer { price, thing: t, .. } -> price > 0
+    Offer { price, thing: t, .. } -> add_one(price) > 0
     Hold(less) -> less < 0
-    Sell -> False
+    Sell -> add_one(1) > 1
   }
 }
