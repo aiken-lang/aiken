@@ -97,7 +97,7 @@ pub struct DataTypeKey {
 
 pub type ConstrUsageKey = String;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct FunctionAccessKey {
     pub module_name: String,
     pub function_name: String,
@@ -353,8 +353,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Assignment { value, pattern, .. } => {
                 self.recurse_scope_level_pattern(pattern, value, scope_level, &[])
             }
-            TypedExpr::Trace {..} => todo!(),
-            TypedExpr::Try { .. } => todo!(),
+            TypedExpr::Trace { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
