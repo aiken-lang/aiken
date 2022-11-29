@@ -317,7 +317,7 @@ impl<'a> CodeGenerator<'a> {
                     ValueConstructorVariant::Record { .. } => {
                         match &*constructor.tipo {
                             Type::App { .. } => {}
-                            Type::Fn { .. } | Type::Var { .. } => {}
+                            Type::Fn { .. } | Type::Var { .. } | Type::Tuple { .. } => {}
                         };
                     }
                 };
@@ -351,7 +351,7 @@ impl<'a> CodeGenerator<'a> {
                 scope_level.scope_increment(1),
                 &[],
             ),
-            TypedExpr::Try { .. } => todo!(),
+            TypedExpr::Trace { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
@@ -531,6 +531,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Todo { .. } => todo!(),
             TypedExpr::RecordUpdate { .. } => todo!(),
             TypedExpr::Negate { .. } => todo!(),
+            TypedExpr::Tuple { .. } => todo!(),
         }
     }
 
@@ -763,6 +764,7 @@ impl<'a> CodeGenerator<'a> {
                     _ => todo!(),
                 };
             }
+            Pattern::Tuple { .. } => todo!(),
         }
     }
 
@@ -818,6 +820,7 @@ impl<'a> CodeGenerator<'a> {
                                 },
                                 Type::Fn { .. } => todo!(),
                                 Type::Var { .. } => todo!(),
+                                Type::Tuple { .. } => todo!(),
                             };
 
                             if let Some(data_type) = self.data_types.get(&data_type_key) {
@@ -871,6 +874,7 @@ impl<'a> CodeGenerator<'a> {
                     Type::App { args, .. } => (*args[0]).clone(),
                     Type::Fn { .. } => todo!(),
                     Type::Var { .. } => todo!(),
+                    Type::Tuple { .. } => todo!(),
                 };
                 while !is_final_type {
                     match current_tipo.clone() {
@@ -891,6 +895,7 @@ impl<'a> CodeGenerator<'a> {
                             }
                             tipo::TypeVar::Generic { .. } => todo!(),
                         },
+                        Type::Tuple { .. } => todo!(),
                     };
                 }
 
@@ -1282,6 +1287,7 @@ impl<'a> CodeGenerator<'a> {
                         },
                         Type::Fn { .. } => todo!(),
                         Type::Var { .. } => todo!(),
+                        Type::Tuple { .. } => todo!(),
                     },
                     BinOp::And => Term::Force(
                         Term::Apply {
@@ -1411,6 +1417,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                         Type::Fn { .. } => todo!(),
                         Type::Var { .. } => todo!(),
+                        Type::Tuple { .. } => todo!(),
                     },
                     BinOp::LtInt => Term::Apply {
                         function: Term::Apply {
@@ -1508,8 +1515,9 @@ impl<'a> CodeGenerator<'a> {
                 Pattern::Discard { .. } => todo!(),
                 Pattern::List { .. } => todo!(),
                 Pattern::Constructor { .. } => todo!(),
+                Pattern::Tuple { .. } => todo!(),
             },
-            TypedExpr::Try { .. } => todo!(),
+            TypedExpr::Trace { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
@@ -1753,6 +1761,7 @@ impl<'a> CodeGenerator<'a> {
                         Type::App { args, .. } => (*args[0]).clone(),
                         Type::Fn { .. } => todo!(),
                         Type::Var { .. } => todo!(),
+                        Type::Tuple { .. } => todo!(),
                     };
 
                     while !is_final_type {
@@ -1774,6 +1783,7 @@ impl<'a> CodeGenerator<'a> {
                                 }
                                 tipo::TypeVar::Generic { .. } => todo!(),
                             },
+                            Type::Tuple { .. } => todo!(),
                         };
                     }
 
@@ -2356,6 +2366,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Todo { .. } => todo!(),
             TypedExpr::RecordUpdate { .. } => todo!(),
             TypedExpr::Negate { .. } => todo!(),
+            TypedExpr::Tuple { .. } => todo!(),
         }
     }
 
@@ -2617,6 +2628,7 @@ impl<'a> CodeGenerator<'a> {
                                     Type::App { name, .. } => name,
                                     Type::Fn { .. } => todo!(),
                                     Type::Var { .. } => todo!(),
+                                    Type::Tuple { .. } => todo!(),
                                 };
                                 (index, name.clone())
                             }
@@ -2628,6 +2640,7 @@ impl<'a> CodeGenerator<'a> {
                                         Type::App { name, .. } => name,
                                         Type::Fn { .. } => todo!(),
                                         Type::Var { .. } => todo!(),
+                                        Type::Tuple { .. } => todo!(),
                                     };
                                     (index, name.clone())
                                 }

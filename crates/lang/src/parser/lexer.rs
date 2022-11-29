@@ -31,6 +31,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just('|').to(Token::Vbar),
         just("&&").to(Token::AmperAmper),
         just("\n\n").to(Token::EmptyLine),
+        just('#').to(Token::Hash),
     ));
 
     let grouping = choice((
@@ -74,7 +75,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "pub" => Token::Pub,
         "use" => Token::Use,
         "todo" => Token::Todo,
-        "try" => Token::Try,
+        "trace" => Token::Trace,
         "type" => Token::Type,
         "when" => Token::When,
         _ => {

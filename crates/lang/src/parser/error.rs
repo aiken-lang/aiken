@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt};
+use std::collections::HashSet;
 
 use miette::Diagnostic;
 
@@ -72,7 +72,7 @@ pub enum ErrorKind {
     #[error("unexpected end")]
     UnexpectedEnd,
     #[error("unexpected {0}")]
-    #[diagnostic(help("try removing it"))]
+    #[diagnostic(help("{}", .0.help().unwrap_or_else(|| Box::new(""))))]
     Unexpected(Pattern),
     #[error("unclosed {start}")]
     Unclosed {
@@ -87,12 +87,22 @@ pub enum ErrorKind {
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
 pub enum Pattern {
+    #[error("{0:?}")]
     Char(char),
+    #[error("{0}")]
+    #[diagnostic(help("try removing it"))]
     Token(Token),
+    #[error("literal")]
     Literal,
+    #[error("type name")]
     TypeIdent,
+    #[error("indentifier")]
     TermIdent,
+    #[error("end of input")]
     End,
+    #[error("pattern")]
+    #[diagnostic(help("list spread in match can only have a discard or var"))]
+    Match,
 }
 
 impl From<char> for Pattern {
@@ -103,18 +113,5 @@ impl From<char> for Pattern {
 impl From<Token> for Pattern {
     fn from(tok: Token) -> Self {
         Self::Token(tok)
-    }
-}
-
-impl fmt::Display for Pattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Pattern::Token(token) => write!(f, "{}", token),
-            Pattern::Char(c) => write!(f, "{:?}", c),
-            Pattern::Literal => write!(f, "literal"),
-            Pattern::TypeIdent => write!(f, "type name"),
-            Pattern::TermIdent => write!(f, "identifier"),
-            Pattern::End => write!(f, "end of input"),
-        }
     }
 }

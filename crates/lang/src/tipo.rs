@@ -45,12 +45,16 @@ pub enum Type {
 
     /// A type variable. See the contained `TypeVar` enum for more information.
     ///
-    Var { tipo: Arc<RefCell<TypeVar>> },
+    Var {
+        tipo: Arc<RefCell<TypeVar>>,
+    },
     // /// A tuple is an ordered collection of 0 or more values, each of which
     // /// can have a different type, so the `tuple` type is the sum of all the
     // /// contained types.
     // ///
-    // Tuple { elems: Vec<Arc<Type>> },
+    Tuple {
+        elems: Vec<Arc<Type>>,
+    },
 }
 
 impl Type {
@@ -185,7 +189,7 @@ impl Type {
 
             Self::App { args, .. } => args.iter().find_map(|t| t.find_private_type()),
 
-            // Self::Tuple { elems, .. } => elems.iter().find_map(|t| t.find_private_type()),
+            Self::Tuple { elems, .. } => elems.iter().find_map(|t| t.find_private_type()),
             Self::Fn { ret, args, .. } => ret
                 .find_private_type()
                 .or_else(|| args.iter().find_map(|t| t.find_private_type())),

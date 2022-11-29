@@ -327,20 +327,17 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
 pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     recursive(|r| {
         choice((
-            just(Token::Try)
-                .ignore_then(pattern_parser())
-                .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-                .then_ignore(just(Token::Equal))
-                .then(expr_parser(r.clone()))
+            just(Token::Trace)
+                .ignore_then(
+                    select! {Token::String {value} => value}
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                        .or_not(),
+                )
                 .then(r.clone())
-                .map_with_span(|(((pattern, annotation), value), then_), span| {
-                    expr::UntypedExpr::Try {
-                        location: span,
-                        value: Box::new(value),
-                        pattern,
-                        then: Box::new(then_),
-                        annotation,
-                    }
+                .map_with_span(|(text, then_), span| expr::UntypedExpr::Trace {
+                    location: span,
+                    then: Box::new(then_),
+                    text,
                 }),
             expr_parser(r.clone())
                 .then(r.repeated())
@@ -387,6 +384,18 @@ pub fn expr_parser(
                 kind: TodoKind::Keyword,
                 location: span,
                 label,
+            });
+
+        let tuple = just(Token::Hash)
+            .ignore_then(
+                r.clone()
+                    .separated_by(just(Token::Comma))
+                    .allow_trailing()
+                    .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+            )
+            .map_with_span(|elems, span| expr::UntypedExpr::Tuple {
+                location: span,
+                elems,
             });
 
         let list_parser = just(Token::LeftSquare)
@@ -562,6 +571,7 @@ pub fn expr_parser(
             int_parser,
             var_parser,
             todo_parser,
+            tuple,
             list_parser,
             anon_fn_parser,
             block_parser,
@@ -835,12 +845,24 @@ pub fn expr_parser(
 pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
     recursive(|r| {
         choice((
+            // Type hole
             select! {Token::DiscardName { name } => name}.map_with_span(|name, span| {
                 ast::Annotation::Hole {
                     location: span,
                     name,
                 }
             }),
+            just(Token::Hash)
+                .ignore_then(
+                    r.clone()
+                        .separated_by(just(Token::Comma))
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+                )
+                .map_with_span(|elems, span| ast::Annotation::Tuple {
+                    location: span,
+                    elems,
+                }),
+            // Function
             just(Token::Fn)
                 .ignore_then(
                     r.clone()
@@ -855,6 +877,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                     arguments,
                     ret: Box::new(ret),
                 }),
+            // Constructor function
             select! {Token::UpName { name } => name}
                 .then(
                     r.clone()
@@ -869,6 +892,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                     name,
                     arguments: arguments.unwrap_or_default(),
                 }),
+            // Constructor Module or type Variable
             select! {Token::Name { name } => name}
                 .then(
                     just(Token::Dot)
@@ -890,6 +914,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                             arguments: arguments.unwrap_or_default(),
                         }
                     } else {
+                        // TODO: parse_error(ParseErrorType::NotConstType, SrcSpan { start, end })
                         ast::Annotation::Var {
                             location: span,
                             name: mod_name,
@@ -1058,6 +1083,16 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     value,
                 }
             }),
+            just(Token::Hash)
+                .ignore_then(
+                    r.clone()
+                        .separated_by(just(Token::Comma))
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+                )
+                .map_with_span(|elems, span| ast::UntypedPattern::Tuple {
+                    location: span,
+                    elems,
+                }),
             just(Token::LeftSquare)
                 .ignore_then(r.clone().separated_by(just(Token::Comma)))
                 .then(choice((
@@ -1066,7 +1101,7 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     just(Token::Comma).ignored().or_not().map(|_| None),
                 )))
                 .then_ignore(just(Token::RightSquare))
-                .validate(|(elements, tail), span: Span, _emit| {
+                .validate(|(elements, tail), span: Span, emit| {
                     let tail = match tail {
                         // There is a tail and it has a Pattern::Var or Pattern::Discard
                         Some(Some(
@@ -1074,8 +1109,12 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                             | ast::UntypedPattern::Discard { .. }),
                         )) => Some(pat),
                         Some(Some(pat)) => {
-                            // use emit
-                            // return parse_error(ParseErrorType::InvalidTailPattern, pat.location())
+                            emit(ParseError::expected_input_found(
+                                pat.location(),
+                                None,
+                                Some(error::Pattern::Match),
+                            ));
+
                             Some(pat)
                         }
                         // There is a tail but it has no content, implicit discard

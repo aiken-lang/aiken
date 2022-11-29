@@ -385,12 +385,18 @@ pub enum Annotation {
         location: Span,
         name: String,
     },
+
+    Tuple {
+        location: Span,
+        elems: Vec<Self>,
+    },
 }
 
 impl Annotation {
     pub fn location(&self) -> Span {
         match self {
             Annotation::Fn { location, .. }
+            | Annotation::Tuple { location, .. }
             | Annotation::Var { location, .. }
             | Annotation::Hole { location, .. }
             | Annotation::Constructor { location, .. } => *location,
@@ -417,6 +423,19 @@ impl Annotation {
                         && arguments
                             .iter()
                             .zip(o_arguments)
+                            .all(|a| a.0.is_logically_equal(a.1))
+                }
+                _ => false,
+            },
+            Annotation::Tuple { elems, location: _ } => match other {
+                Annotation::Tuple {
+                    elems: o_elems,
+                    location: _,
+                } => {
+                    elems.len() == o_elems.len()
+                        && elems
+                            .iter()
+                            .zip(o_elems)
                             .all(|a| a.0.is_logically_equal(a.1))
                 }
                 _ => false,
@@ -584,10 +603,11 @@ pub enum Pattern<Constructor, Type> {
         with_spread: bool,
         tipo: Type,
     },
-    // Tuple {
-    //     location: Span,
-    //     elems: Vec<Self>,
-    // },
+
+    Tuple {
+        location: Span,
+        elems: Vec<Self>,
+    },
 }
 
 impl<A, B> Pattern<A, B> {
@@ -600,7 +620,7 @@ impl<A, B> Pattern<A, B> {
             | Pattern::List { location, .. }
             | Pattern::Discard { location, .. }
             | Pattern::String { location, .. }
-            // | Pattern::Tuple { location, .. }
+            | Pattern::Tuple { location, .. }
             // | Pattern::Concatenate { location, .. }
             | Pattern::Constructor { location, .. } => *location,
         }

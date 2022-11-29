@@ -74,6 +74,8 @@ impl Printer {
                 .append(break_("", " ").append(self.print(ret)).nest(INDENT).group()),
 
             Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
+
+            Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("#(", ")"),
         }
     }
 

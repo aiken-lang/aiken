@@ -276,7 +276,7 @@ impl<'comments> Formatter<'comments> {
                 let head = pub_(*public).append("const ").append(name.as_str());
                 let head = match annotation {
                     None => head,
-                    Some(t) => head.append(": ").append(self.type_ast(t)),
+                    Some(t) => head.append(": ").append(self.annotation(t)),
                 };
                 head.append(" = ").append(self.const_expr(value))
             }
@@ -410,7 +410,7 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn type_ast<'a>(&mut self, t: &'a Annotation) -> Document<'a> {
+    fn annotation<'a>(&mut self, t: &'a Annotation) -> Document<'a> {
         match t {
             Annotation::Hole { name, .. } => name.to_doc(),
 
@@ -430,15 +430,16 @@ impl<'comments> Formatter<'comments> {
                 .append(self.type_arguments(args))
                 .group()
                 .append(" ->")
-                .append(break_("", " ").append(self.type_ast(retrn)).nest(INDENT)),
+                .append(break_("", " ").append(self.annotation(retrn)).nest(INDENT)),
 
             Annotation::Var { name, .. } => name.to_doc(),
+            Annotation::Tuple { elems, .. } => "#".to_doc().append(self.type_arguments(elems)),
         }
         .group()
     }
 
     fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
-        wrap_args(args.iter().map(|t| (self.type_ast(t), false)))
+        wrap_args(args.iter().map(|t| (self.annotation(t), false)))
     }
 
     pub fn type_alias<'a>(
@@ -457,7 +458,7 @@ impl<'comments> Formatter<'comments> {
         };
 
         head.append(" =")
-            .append(line().append(self.type_ast(typ)).group().nest(INDENT))
+            .append(line().append(self.annotation(typ)).group().nest(INDENT))
     }
 
     fn fn_arg<'a, A>(&mut self, arg: &'a Arg<A>) -> Document<'a> {
@@ -465,7 +466,11 @@ impl<'comments> Formatter<'comments> {
 
         let doc = match &arg.annotation {
             None => arg.arg_name.to_doc(),
-            Some(a) => arg.arg_name.to_doc().append(": ").append(self.type_ast(a)),
+            Some(a) => arg
+                .arg_name
+                .to_doc()
+                .append(": ")
+                .append(self.annotation(a)),
         }
         .group();
 
@@ -489,7 +494,7 @@ impl<'comments> Formatter<'comments> {
 
         // Add return annotation
         let head = match return_annotation {
-            Some(anno) => head.append(" -> ").append(self.type_ast(anno)),
+            Some(anno) => head.append(" -> ").append(self.annotation(anno)),
             None => head,
         }
         .group();
@@ -526,7 +531,7 @@ impl<'comments> Formatter<'comments> {
 
         let header = match return_annotation {
             None => header,
-            Some(t) => header.append(" -> ").append(self.type_ast(t)),
+            Some(t) => header.append(" -> ").append(self.annotation(t)),
         };
 
         header
@@ -576,7 +581,7 @@ impl<'comments> Formatter<'comments> {
 
         let annotation = annotation
             .as_ref()
-            .map(|a| ": ".to_doc().append(self.type_ast(a)));
+            .map(|a| ": ".to_doc().append(self.annotation(a)));
 
         let doc = if then.is_some() {
             keyword.to_doc().force_break()
@@ -697,13 +702,28 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.assignment(pattern, value, None, Some(*kind), annotation),
 
-            UntypedExpr::Try {
-                value,
-                pattern,
-                annotation,
+            UntypedExpr::Trace {
+                text: None, then, ..
+            } => "trace"
+                .to_doc()
+                .append(if self.pop_empty_lines(then.start_byte_index()) {
+                    lines(2)
+                } else {
+                    line()
+                })
+                .append(self.expr(then)),
+
+            UntypedExpr::Trace {
+                text: Some(l),
                 then,
                 ..
-            } => self.assignment(pattern, value, Some(then), None, annotation),
+            } => docvec!["trace(\"", l, "\")"]
+                .append(if self.pop_empty_lines(then.start_byte_index()) {
+                    lines(2)
+                } else {
+                    line()
+                })
+                .append(self.expr(then)),
 
             UntypedExpr::When {
                 subjects, clauses, ..
@@ -719,6 +739,11 @@ impl<'comments> Formatter<'comments> {
                 arguments: args,
                 ..
             } => self.record_update(constructor, spread, args),
+
+            UntypedExpr::Tuple { elems, .. } => "#"
+                .to_doc()
+                .append(wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))))
+                .group(),
         };
         commented(document, comments)
     }
@@ -742,7 +767,7 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         fn is_breakable(expr: &UntypedPattern) -> bool {
             match expr {
-                Pattern::List { .. } => true,
+                Pattern::Tuple { .. } | Pattern::List { .. } => true,
                 Pattern::Constructor {
                     arguments: args, ..
                 } => !args.is_empty(),
@@ -982,8 +1007,8 @@ impl<'comments> Formatter<'comments> {
                     let arg_comments = self.pop_comments(location.start);
 
                     let arg = match label {
-                        Some(l) => l.to_doc().append(": ").append(self.type_ast(annotation)),
-                        None => self.type_ast(annotation),
+                        Some(l) => l.to_doc().append(": ").append(self.annotation(annotation)),
+                        None => self.annotation(annotation),
                     };
 
                     commented(
@@ -1007,8 +1032,8 @@ impl<'comments> Formatter<'comments> {
                         let arg_comments = self.pop_comments(location.start);
 
                         let arg = match label {
-                            Some(l) => l.to_doc().append(": ").append(self.type_ast(annotation)),
-                            None => self.type_ast(annotation),
+                            Some(l) => l.to_doc().append(": ").append(self.annotation(annotation)),
+                            None => self.annotation(annotation),
                         };
 
                         (
@@ -1127,7 +1152,7 @@ impl<'comments> Formatter<'comments> {
         match expr {
             UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. }
-            | UntypedExpr::Try { .. } => "{"
+            | UntypedExpr::Trace { .. } => "{"
                 .to_doc()
                 .append(line().append(self.expr(expr)).nest(INDENT))
                 .append(line())
@@ -1158,7 +1183,7 @@ impl<'comments> Formatter<'comments> {
 
     fn case_clause_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Try { .. }
+            UntypedExpr::Trace { .. }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => " {"
                 .to_doc()
@@ -1244,6 +1269,11 @@ impl<'comments> Formatter<'comments> {
             }
 
             Pattern::Discard { name, .. } => name.to_doc(),
+
+            Pattern::Tuple { elems, .. } => "#"
+                .to_doc()
+                .append(wrap_args(elems.iter().map(|e| (self.pattern(e), false))))
+                .group(),
 
             Pattern::List { elements, tail, .. } => {
                 let elements_document =

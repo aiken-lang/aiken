@@ -1,6 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{ast::Annotation, builtins::function};
+use crate::{
+    ast::Annotation,
+    builtins::{function, tuple},
+};
 
 use super::{environment::Environment, error::Error, Type, TypeConstructor};
 
@@ -208,6 +211,18 @@ impl Hydrator {
             Annotation::Hole { location, .. } => Err(Error::UnexpectedTypeHole {
                 location: *location,
             }),
+
+            Annotation::Tuple { elems, .. } => {
+                let mut typed_elems = vec![];
+
+                for elem in elems {
+                    let typed_elem = self.type_from_annotation(elem, environment)?;
+
+                    typed_elems.push(typed_elem)
+                }
+
+                Ok(tuple(typed_elems))
+            }
         }
     }
 }
