@@ -21,13 +21,21 @@ use crate::{
     IdGenerator,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FuncComponents {
     ir: Vec<IR>,
     dependencies: Vec<FunctionAccessKey>,
     args: Vec<String>,
     recursive: bool,
 }
+
+// #[derive(Clone, Debug)]
+// pub struct FuncIndex {
+//     index: usize,
+//     scope: Vec<u8>,
+//     occurrences: Vec<String>,
+
+// }
 
 pub struct CodeGenerator<'a> {
     defined_functions: HashMap<FunctionAccessKey, ()>,
@@ -111,7 +119,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn build_ir(&mut self, body: &TypedExpr, ir_stack: &mut Vec<IR>, scope: Vec<u64>) {
-        match dbg!(body) {
+        match body {
             TypedExpr::Int { value, .. } => ir_stack.push(IR::Int {
                 scope,
                 value: value.to_string(),
@@ -288,7 +296,7 @@ impl<'a> CodeGenerator<'a> {
                         scope: final_scope.clone(),
                     });
 
-                    self.build_ir(&last_clause.then, &mut clauses_vec, final_scope);
+                    self.build_ir(&last_clause.then, &mut clauses_vec, final_scope.clone());
                     self.when_ir(
                         last_pattern,
                         &mut pattern_vec,
@@ -296,7 +304,7 @@ impl<'a> CodeGenerator<'a> {
                         &subject.tipo(),
                         constr_var.clone(),
                         &mut needs_constr_var,
-                        scope.clone(),
+                        final_scope,
                     );
 
                     if needs_constr_var {
@@ -501,7 +509,7 @@ impl<'a> CodeGenerator<'a> {
         values: &mut Vec<IR>,
         scope: Vec<u64>,
     ) {
-        match dbg!(pattern) {
+        match pattern {
             Pattern::Int { .. } => todo!(),
             Pattern::String { .. } => todo!(),
             Pattern::Var { .. } => todo!(),
@@ -517,7 +525,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut names = vec![];
                 for element in elements {
-                    match dbg!(element) {
+                    match element {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
@@ -732,7 +740,10 @@ impl<'a> CodeGenerator<'a> {
                     unique: 0.into(),
                 })),
                 ValueConstructorVariant::ModuleConstant { .. } => todo!(),
-                ValueConstructorVariant::ModuleFn { .. } => todo!(),
+                ValueConstructorVariant::ModuleFn { .. } => arg_stack.push(Term::Var(Name {
+                    text: name,
+                    unique: 0.into(),
+                })),
                 ValueConstructorVariant::Record {
                     name: constr_name, ..
                 } => {
@@ -1072,8 +1083,9 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             IR::DefineFunc { .. } => {
-                let _body = arg_stack.pop().unwrap();
+                let _func_body = arg_stack.pop().unwrap();
 
+                let _term = arg_stack.pop().unwrap();
                 todo!()
             }
             IR::DefineConst { .. } => todo!(),
@@ -1505,12 +1517,241 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub(crate) fn define_ir(&mut self, ir_stack: &mut Vec<IR>) {
-        let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
-        let mut defined_func_and_calls: IndexMap<FunctionAccessKey, FuncComponents> =
-            IndexMap::new();
-        let mut func_index_map: IndexMap<FunctionAccessKey, (usize, Vec<u64>)> = IndexMap::new();
+        let mut func_components = IndexMap::new();
+        let mut func_index_map = IndexMap::new();
 
-        for (index, ir) in ir_stack.iter().enumerate().rev() {
+        self.define_recurse_ir(ir_stack, &mut func_components, &mut func_index_map);
+
+        let mut final_func_dep_ir = IndexMap::new();
+
+        println!("FINAL FUNC MAP IS {:#?}", func_index_map);
+
+        for func in func_index_map.clone() {
+            if self.defined_functions.contains_key(&func.0) {
+                continue;
+            }
+
+            let mut funt_comp = func_components.get(&func.0).unwrap().clone();
+            let func_scope = func_index_map.get(&func.0).unwrap();
+
+            let mut dep_ir = vec![];
+
+            while let Some(dependency) = funt_comp.dependencies.pop() {
+                if self.defined_functions.contains_key(&dependency) {
+                    continue;
+                }
+
+                let depend_comp = func_components.get(&dependency).unwrap();
+
+                let dep_scope = func_index_map.get(&dependency).unwrap();
+
+                if get_common_ancestor(dep_scope, func_scope) == func_scope.clone() {
+                    funt_comp
+                        .dependencies
+                        .extend(depend_comp.dependencies.clone());
+
+                    let mut temp_ir = vec![IR::DefineFunc {
+                        scope: func_scope.clone(),
+                        func_name: dependency.function_name.clone(),
+                        module_name: dependency.module_name.clone(),
+                        params: depend_comp.args.clone(),
+                        recursive: depend_comp.recursive,
+                    }];
+
+                    temp_ir.extend(depend_comp.ir.clone());
+
+                    temp_ir.append(&mut dep_ir);
+
+                    dep_ir = temp_ir;
+                    self.defined_functions.insert(dependency, ());
+                }
+            }
+
+            final_func_dep_ir.insert(func.0, dep_ir);
+        }
+
+        for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
+            match ir {
+                IR::Var { constructor, .. } => {
+                    if let ValueConstructorVariant::ModuleFn { .. } = &constructor.variant {}
+                }
+                a => {
+                    let temp_func_index_map = func_index_map.clone();
+                    let to_insert = temp_func_index_map
+                        .iter()
+                        .filter(|func| {
+                            func.1.clone() == a.scope()
+                                && !self.defined_functions.contains_key(func.0)
+                        })
+                        .collect_vec();
+
+                    for item in to_insert.into_iter() {
+                        func_index_map.remove(item.0);
+                        self.defined_functions.insert(item.0.clone(), ());
+
+                        println!("INSERTING HERE {item:#?}  AT {a:#?}");
+
+                        let mut full_func_ir = final_func_dep_ir.get(item.0).unwrap().clone();
+
+                        let funt_comp = func_components.get(item.0).unwrap();
+
+                        full_func_ir.push(IR::DefineFunc {
+                            scope: item.1.clone(),
+                            func_name: item.0.function_name.clone(),
+                            module_name: item.0.module_name.clone(),
+                            params: funt_comp.args.clone(),
+                            recursive: funt_comp.recursive,
+                        });
+
+                        full_func_ir.extend(funt_comp.ir.clone());
+
+                        for ir in full_func_ir.into_iter().rev() {
+                            ir_stack.insert(index, ir);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn define_recurse_ir(
+        &mut self,
+        ir_stack: &[IR],
+        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
+        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+    ) {
+        self.process_define_ir(ir_stack, func_components, func_index_map);
+
+        for func_index in func_index_map.clone().iter() {
+            let func = func_index.0;
+
+            let function_components = func_components.get(func).unwrap();
+            let function_ir = function_components.ir.clone();
+
+            let mut inner_func_components = IndexMap::new();
+
+            let mut inner_func_index_map = IndexMap::new();
+
+            self.define_recurse_ir(
+                &function_ir,
+                &mut inner_func_components,
+                &mut inner_func_index_map,
+            );
+
+            //now unify
+            for item in inner_func_components {
+                if !func_components.contains_key(&item.0) {
+                    func_components.insert(item.0, item.1);
+                }
+            }
+
+            for item in inner_func_index_map {
+                if let Some(entry) = func_index_map.get_mut(&item.0) {
+                    *entry = get_common_ancestor(entry, &item.1);
+                } else {
+                    func_index_map.insert(item.0, item.1);
+                }
+            }
+
+            // let mut sorted_functions = vec![];
+            // let func = func_index.0;
+            // let scope = func_index.1;
+
+            // let function_components = func_components.get(func).unwrap();
+            // let dependencies = function_components.dependencies.clone();
+            // let function_ir = function_components.ir.clone();
+
+            // let mut nested_func_components = func_components.clone();
+            // let mut nested_func_index_map = func_index_map.clone();
+
+            // self.process_define_ir(
+            //     &function_ir,
+            //     &mut nested_func_components,
+            //     &mut nested_func_index_map,
+            // );
+
+            // for dependency in dependencies {
+            //     println!("GOT HERE333");
+            //     let dependency_scope = nested_func_index_map.get(&dependency).unwrap();
+            //     if get_common_ancestor(scope, dependency_scope) == scope.clone()
+            //         && !self.defined_functions.contains_key(func)
+            //     {
+            //         let components = nested_func_components.get(&dependency).unwrap();
+
+            //         println!("COMPONENTS IS {:#?}", components);
+            //         let mut dependency_ir = components.ir.clone();
+
+            //         self.define_ir(
+            //             &mut dependency_ir,
+            //             &mut nested_func_components,
+            //             &mut nested_func_index_map,
+            //         );
+
+            //         sorted_functions.append(&mut dependency_ir);
+            //         self.defined_functions.insert(dependency, ());
+            //     }
+            // }
+
+            // sorted_functions.push(IR::DefineFunc {
+            //     scope: scope.clone(),
+            //     func_name: func.function_name.clone(),
+            //     module_name: func.module_name.clone(),
+            //     params: function_components.args.clone(),
+            //     recursive: function_components.recursive,
+            // });
+
+            // sorted_functions.extend(function_ir.clone());
+
+            // dependencies_included_ir.insert(func.clone(), sorted_functions);
+
+            // for item in nested_func_components {
+            //     if !final_func_components.contains_key(&item.0) {
+            //         final_func_components.insert(item.0, item.1);
+            //     }
+            // }
+
+            // for item in nested_func_index_map {
+            //     if let Some(scope) = final_func_index_map.get_mut(&item.0) {
+            //         *scope = get_common_ancestor(scope, &item.1);
+            //     } else {
+            //         final_func_index_map.insert(item.0, item.1);
+            //     }
+            // }
+        }
+
+        // for (index, ir) in ir_stack.clone().iter().enumerate().rev() {
+        //     match ir {
+        //         IR::Var { constructor, .. } => {
+        //             if let ValueConstructorVariant::ModuleFn { .. } = &constructor.variant {}
+        //         }
+        //         a => {
+        //             let scope = a.scope();
+
+        //             for func in final_func_index_map.iter() {
+        //                 if get_common_ancestor(&scope, func.1) == scope
+        //                     && !self.defined_functions.contains_key(func.0)
+        //                 {
+        //                     let func_component = final_func_components.get(func.0).unwrap();
+
+        //                     for item in func_component.ir.iter().rev() {
+        //                         ir_stack.insert(index, item.clone())
+        //                     }
+        //                     self.defined_functions.insert(func.0.clone(), ());
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+    }
+
+    fn process_define_ir(
+        &mut self,
+        ir_stack: &[IR],
+        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
+        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+    ) {
+        let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
+        for ir in ir_stack.iter().rev() {
             match ir {
                 IR::Var {
                     scope, constructor, ..
@@ -1532,7 +1773,7 @@ impl<'a> CodeGenerator<'a> {
                                 let new_scope = get_common_ancestor(scope, scope_prev);
 
                                 to_be_defined_map.insert(function_key, new_scope);
-                            } else if defined_func_and_calls.get(&function_key).is_some() {
+                            } else if func_components.get(&function_key).is_some() {
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
                             } else {
                                 let function = self.functions.get(&function_key).unwrap();
@@ -1577,28 +1818,23 @@ impl<'a> CodeGenerator<'a> {
                                         _ => {}
                                     }
                                 }
-                                if let Ok(index) = func_calls.binary_search(&function_key) {
-                                    func_calls.remove(index);
-                                    defined_func_and_calls.insert(
-                                        function_key,
-                                        FuncComponents {
-                                            ir: func_ir,
-                                            dependencies: func_calls,
-                                            recursive: true,
-                                            args,
-                                        },
-                                    );
-                                } else {
-                                    defined_func_and_calls.insert(
-                                        function_key,
-                                        FuncComponents {
-                                            ir: func_ir,
-                                            dependencies: func_calls,
-                                            recursive: false,
-                                            args,
-                                        },
-                                    );
-                                }
+                                let recursive =
+                                    if let Ok(index) = func_calls.binary_search(&function_key) {
+                                        func_calls.remove(index);
+                                        true
+                                    } else {
+                                        false
+                                    };
+
+                                func_components.insert(
+                                    function_key,
+                                    FuncComponents {
+                                        ir: func_ir,
+                                        dependencies: func_calls,
+                                        recursive,
+                                        args,
+                                    },
+                                );
                             }
                         }
                     }
@@ -1607,32 +1843,19 @@ impl<'a> CodeGenerator<'a> {
                     let scope = a.scope();
 
                     for func in to_be_defined_map.clone().iter() {
-                        println!(
-                            "MADE IT HERE 222 and func_scope is {:#?} and scope is {:#?}",
-                            func.1.clone(),
-                            scope.clone()
-                        );
-
-                        if dbg!(get_common_ancestor(&scope, func.1) == scope.to_vec()) {
-                            if let Some((_, index_scope)) = func_index_map.get(func.0) {
+                        if get_common_ancestor(&scope, func.1) == scope.to_vec() {
+                            if let Some(index_scope) = func_index_map.get(func.0) {
                                 if get_common_ancestor(index_scope, func.1) == scope.to_vec() {
-                                    println!("DID insert again");
-                                    func_index_map.insert(func.0.clone(), (index, scope.clone()));
+                                    func_index_map.insert(func.0.clone(), scope.clone());
                                     to_be_defined_map.shift_remove(func.0);
                                 } else {
-                                    println!(
-                                        "DID update, index_scope is {:#?} and func is {:#?}",
-                                        index_scope, func.1
-                                    );
                                     to_be_defined_map.insert(
                                         func.0.clone(),
                                         get_common_ancestor(index_scope, func.1),
                                     );
-                                    println!("to_be_defined: {:#?}", to_be_defined_map);
                                 }
                             } else {
-                                println!("DID insert");
-                                func_index_map.insert(func.0.clone(), (index, scope.clone()));
+                                func_index_map.insert(func.0.clone(), scope.clone());
                                 to_be_defined_map.shift_remove(func.0);
                             }
                         }
@@ -1641,41 +1864,10 @@ impl<'a> CodeGenerator<'a> {
             }
         }
 
-        for func_index in func_index_map.iter() {
-            println!("INDEX FUNC IS {func_index:#?}");
-            let func = func_index.0;
-            let (index, scope) = func_index.1;
-
-            let function_components = defined_func_and_calls.get(func).unwrap();
-            let dependencies = function_components.dependencies.clone();
-
-            let mut sorted_functions = vec![];
-
-            for dependency in dependencies {
-                let (_, dependency_scope) = func_index_map.get(&dependency).unwrap();
-                if get_common_ancestor(scope, dependency_scope) == scope.clone() {
-                    let components = defined_func_and_calls.get(&dependency).unwrap();
-                    let mut dependency_ir = components.ir.clone();
-                    self.define_ir(&mut dependency_ir);
-                    sorted_functions.append(&mut dependency_ir);
-                }
-            }
-            if !self.defined_functions.contains_key(func) {
-                for item in sorted_functions.into_iter().rev() {
-                    ir_stack.insert(*index, item);
-                }
-                ir_stack.insert(
-                    *index,
-                    IR::DefineFunc {
-                        scope: scope.clone(),
-                        func_name: func.function_name.clone(),
-                        module_name: func.module_name.clone(),
-                        params: function_components.args.clone(),
-                        recursive: function_components.recursive,
-                    },
-                );
-                self.defined_functions.insert(func.clone(), ());
-            }
+        //Still to be defined
+        for func in to_be_defined_map.clone().iter() {
+            let index_scope = func_index_map.get(func.0).unwrap();
+            func_index_map.insert(func.0.clone(), get_common_ancestor(func.1, index_scope));
         }
     }
 }
