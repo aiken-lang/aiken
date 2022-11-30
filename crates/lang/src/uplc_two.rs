@@ -352,7 +352,9 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.append(&mut pattern_vec);
                 };
             }
-            TypedExpr::If { .. } => todo!(),
+            TypedExpr::If { .. } => {
+                todo!()
+            }
             TypedExpr::RecordAccess {
                 record,
                 index,
@@ -460,10 +462,25 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(values);
             }
             Pattern::String { .. } => todo!(),
-            Pattern::Var { .. } => todo!(),
+            Pattern::Var { name, .. } => {
+                pattern_vec.push(IR::Var {
+                    scope,
+                    name: name.clone(),
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                });
+                pattern_vec.append(values);
+            }
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => unreachable!(),
+            Pattern::Discard { .. } => {
+                pattern_vec.push(IR::Discard { scope });
+                pattern_vec.append(values);
+            }
             Pattern::List { .. } => todo!(),
             Pattern::Constructor { arguments, .. } => {
                 let mut needs_access_to_constr_var = false;
@@ -1082,11 +1099,108 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            IR::DefineFunc { .. } => {
-                let _func_body = arg_stack.pop().unwrap();
+            IR::DefineFunc {
+                func_name,
+                params,
+                recursive,
+                ..
+            } => {
+                let mut func_body = arg_stack.pop().unwrap();
 
-                let _term = arg_stack.pop().unwrap();
-                todo!()
+                let mut term = arg_stack.pop().unwrap();
+
+                for param in params.iter().rev() {
+                    func_body = Term::Lambda {
+                        parameter_name: Name {
+                            text: param.clone(),
+                            unique: 0.into(),
+                        },
+                        body: func_body.into(),
+                    };
+                }
+
+                if !recursive {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: func_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: func_body.into(),
+                    };
+                    arg_stack.push(term);
+                } else {
+                    func_body = Term::Lambda {
+                        parameter_name: Name {
+                            text: func_name.clone(),
+                            unique: 0.into(),
+                        },
+                        body: func_body.into(),
+                    };
+
+                    let mut boostrap_recurse = Term::Apply {
+                        function: Term::Var(Name {
+                            text: "__recurse".to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: Term::Var(Name {
+                            text: "__recurse".to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    };
+
+                    for param in params.iter() {
+                        boostrap_recurse = Term::Apply {
+                            function: boostrap_recurse.into(),
+                            argument: Term::Var(Name {
+                                text: param.clone(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        };
+                    }
+
+                    func_body = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "__recurse".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: boostrap_recurse.into(),
+                        }
+                        .into(),
+                        argument: func_body.into(),
+                    };
+
+                    for param in params.iter().rev() {
+                        func_body = Term::Lambda {
+                            parameter_name: Name {
+                                text: param.clone(),
+                                unique: 0.into(),
+                            },
+                            body: func_body.into(),
+                        };
+                    }
+
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: func_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: func_body.into(),
+                    };
+
+                    arg_stack.push(term);
+                }
             }
             IR::DefineConst { .. } => todo!(),
             IR::DefineConstrFields { .. } => todo!(),
@@ -1520,11 +1634,18 @@ impl<'a> CodeGenerator<'a> {
         let mut func_components = IndexMap::new();
         let mut func_index_map = IndexMap::new();
 
-        self.define_recurse_ir(ir_stack, &mut func_components, &mut func_index_map);
+        let recursion_func_map = IndexMap::new();
+
+        self.define_recurse_ir(
+            ir_stack,
+            &mut func_components,
+            &mut func_index_map,
+            recursion_func_map,
+        );
 
         let mut final_func_dep_ir = IndexMap::new();
 
-        println!("FINAL FUNC MAP IS {:#?}", func_index_map);
+        println!("GOT HERE");
 
         for func in func_index_map.clone() {
             if self.defined_functions.contains_key(&func.0) {
@@ -1589,8 +1710,6 @@ impl<'a> CodeGenerator<'a> {
                         func_index_map.remove(item.0);
                         self.defined_functions.insert(item.0.clone(), ());
 
-                        println!("INSERTING HERE {item:#?}  AT {a:#?}");
-
                         let mut full_func_ir = final_func_dep_ir.get(item.0).unwrap().clone();
 
                         let funt_comp = func_components.get(item.0).unwrap();
@@ -1619,14 +1738,49 @@ impl<'a> CodeGenerator<'a> {
         ir_stack: &[IR],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+        recursion_func_map: IndexMap<FunctionAccessKey, ()>,
     ) {
         self.process_define_ir(ir_stack, func_components, func_index_map);
+
+        let mut recursion_func_map = recursion_func_map;
 
         for func_index in func_index_map.clone().iter() {
             let func = func_index.0;
 
             let function_components = func_components.get(func).unwrap();
             let function_ir = function_components.ir.clone();
+
+            for ir in function_ir.clone() {
+                if let IR::Var {
+                    constructor:
+                        ValueConstructor {
+                            variant:
+                                ValueConstructorVariant::ModuleFn {
+                                    name: func_name,
+                                    module,
+                                    ..
+                                },
+                            ..
+                        },
+                    ..
+                } = ir
+                {
+                    if recursion_func_map.contains_key(&FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: func_name.clone(),
+                    }) {
+                        return;
+                    } else {
+                        recursion_func_map.insert(
+                            FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: func_name.clone(),
+                            },
+                            (),
+                        );
+                    }
+                }
+            }
 
             let mut inner_func_components = IndexMap::new();
 
@@ -1636,6 +1790,7 @@ impl<'a> CodeGenerator<'a> {
                 &function_ir,
                 &mut inner_func_components,
                 &mut inner_func_index_map,
+                recursion_func_map.clone(),
             );
 
             //now unify
@@ -1652,96 +1807,7 @@ impl<'a> CodeGenerator<'a> {
                     func_index_map.insert(item.0, item.1);
                 }
             }
-
-            // let mut sorted_functions = vec![];
-            // let func = func_index.0;
-            // let scope = func_index.1;
-
-            // let function_components = func_components.get(func).unwrap();
-            // let dependencies = function_components.dependencies.clone();
-            // let function_ir = function_components.ir.clone();
-
-            // let mut nested_func_components = func_components.clone();
-            // let mut nested_func_index_map = func_index_map.clone();
-
-            // self.process_define_ir(
-            //     &function_ir,
-            //     &mut nested_func_components,
-            //     &mut nested_func_index_map,
-            // );
-
-            // for dependency in dependencies {
-            //     println!("GOT HERE333");
-            //     let dependency_scope = nested_func_index_map.get(&dependency).unwrap();
-            //     if get_common_ancestor(scope, dependency_scope) == scope.clone()
-            //         && !self.defined_functions.contains_key(func)
-            //     {
-            //         let components = nested_func_components.get(&dependency).unwrap();
-
-            //         println!("COMPONENTS IS {:#?}", components);
-            //         let mut dependency_ir = components.ir.clone();
-
-            //         self.define_ir(
-            //             &mut dependency_ir,
-            //             &mut nested_func_components,
-            //             &mut nested_func_index_map,
-            //         );
-
-            //         sorted_functions.append(&mut dependency_ir);
-            //         self.defined_functions.insert(dependency, ());
-            //     }
-            // }
-
-            // sorted_functions.push(IR::DefineFunc {
-            //     scope: scope.clone(),
-            //     func_name: func.function_name.clone(),
-            //     module_name: func.module_name.clone(),
-            //     params: function_components.args.clone(),
-            //     recursive: function_components.recursive,
-            // });
-
-            // sorted_functions.extend(function_ir.clone());
-
-            // dependencies_included_ir.insert(func.clone(), sorted_functions);
-
-            // for item in nested_func_components {
-            //     if !final_func_components.contains_key(&item.0) {
-            //         final_func_components.insert(item.0, item.1);
-            //     }
-            // }
-
-            // for item in nested_func_index_map {
-            //     if let Some(scope) = final_func_index_map.get_mut(&item.0) {
-            //         *scope = get_common_ancestor(scope, &item.1);
-            //     } else {
-            //         final_func_index_map.insert(item.0, item.1);
-            //     }
-            // }
         }
-
-        // for (index, ir) in ir_stack.clone().iter().enumerate().rev() {
-        //     match ir {
-        //         IR::Var { constructor, .. } => {
-        //             if let ValueConstructorVariant::ModuleFn { .. } = &constructor.variant {}
-        //         }
-        //         a => {
-        //             let scope = a.scope();
-
-        //             for func in final_func_index_map.iter() {
-        //                 if get_common_ancestor(&scope, func.1) == scope
-        //                     && !self.defined_functions.contains_key(func.0)
-        //                 {
-        //                     let func_component = final_func_components.get(func.0).unwrap();
-
-        //                     for item in func_component.ir.iter().rev() {
-        //                         ir_stack.insert(index, item.clone())
-        //                     }
-        //                     self.defined_functions.insert(func.0.clone(), ());
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
     }
 
     fn process_define_ir(

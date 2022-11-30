@@ -32,10 +32,9 @@ pub fn final_check(z: Int) {
 }
 
 pub fn incrementor(counter: Int, target: Int) -> Int {
-  if counter == target {
-    target
-  } else {
-    incrementor(counter + 1, target)
+  when counter is {
+    target -> target
+    _ -> incrementor(counter+1, target)
   }
 }
 
@@ -51,8 +50,8 @@ pub type Datum {
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
   when datum is {
-    Offer { price, thing: t, .. } -> add_two(price) > 0
-    Hold(less) -> less < 0
-    Sell -> add_one(1) > 1
+    Offer { price, thing: t, .. } -> add_one(price) > 0
+    Hold(less) -> incrementor(0, 8) == less
+    Sell -> add_two(1) > 1
   }
 }
