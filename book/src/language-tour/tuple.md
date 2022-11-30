@@ -1,9 +1,8 @@
 # Tuple
 
-Tuples are anonymous product types. They are useful for passing combinations of data between functions.
+Aiken has tuples which can be useful for grouping values.
 
-```
-let x = (1, 2)
-let y = (3, 4)
-pairAdder(x, y) -- --> (4, 6)
+```aiken
+#(10, "hello") // Type is #(Int, String)
+#(1, 4, [0]) // Type is #(Int, Int, List(Int))
 ```

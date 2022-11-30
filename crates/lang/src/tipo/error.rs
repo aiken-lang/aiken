@@ -6,20 +6,18 @@ use crate::ast::{BinOp, Span, TodoKind};
 
 use super::Type;
 
-// use aiken/pub
-
-// pub fn do_thing() { pub.other() }
-
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
-    #[error("duplicate argument {label}")]
+    #[error("Duplicate argument\n\n{label}")]
+    #[diagnostic(help("Try renaming it"))]
     DuplicateArgument {
         #[label]
         location: Span,
         label: String,
     },
 
-    #[error("duplicate const {name}")]
+    #[error("Duplicate const\n\n{name}")]
+    #[diagnostic(help("Try renaming it"))]
     DuplicateConstName {
         #[label]
         location: Span,
@@ -28,7 +26,8 @@ pub enum Error {
         name: String,
     },
 
-    #[error("duplicate import {name}")]
+    #[error("Duplicate import\n\n{name}")]
+    #[diagnostic(help("Try renaming it"))]
     DuplicateImport {
         #[label]
         location: Span,
@@ -37,14 +36,16 @@ pub enum Error {
         name: String,
     },
 
-    #[error("duplicate name {label}")]
+    #[error("Duplicate field\n\n{label}")]
+    #[diagnostic(help("Try renaming it"))]
     DuplicateField {
         #[label]
         location: Span,
         label: String,
     },
 
-    #[error("duplicate name {name}")]
+    #[error("Duplicate name\n\n{name}")]
+    #[diagnostic(help("Try renaming it"))]
     DuplicateName {
         #[label]
         location: Span,
@@ -53,7 +54,8 @@ pub enum Error {
         name: String,
     },
 
-    #[error("duplicate type name {name}")]
+    #[error("Duplicate type name\n\n{name}")]
+    #[diagnostic(help("Try renaming it"))]
     DuplicateTypeName {
         #[label]
         location: Span,
@@ -62,7 +64,7 @@ pub enum Error {
         name: String,
     },
 
-    #[error("incorrect arity expected {expected} but given {given}")]
+    #[error("Incorrect arity\n\nExpected\n\n{expected}\n\nGiven\n\n{given}")]
     IncorrectArity {
         #[label]
         location: Span,
@@ -71,7 +73,7 @@ pub enum Error {
         labels: Vec<String>,
     },
 
-    #[error("incorrect number of clause patterns expected {expected} but given {given}")]
+    #[error("Incorrect number of clause patterns\n\nExpected\n\n{expected}\n\nGiven\n\n{given}")]
     IncorrectNumClausePatterns {
         #[label]
         location: Span,
@@ -79,7 +81,7 @@ pub enum Error {
         given: usize,
     },
 
-    #[error("{name} has incorrect type arity expected {expected} but given {given}")]
+    #[error("Incorrect type arity for `{name}`\n\nExpected\n\n{expected}\n\nGiven\n\n{given}")]
     IncorrectTypeArity {
         #[label]
         location: Span,
@@ -88,50 +90,50 @@ pub enum Error {
         given: usize,
     },
 
-    #[error("non-exhaustive pattern match")]
+    #[error("Non-exhaustive pattern match")]
     NotExhaustivePatternMatch {
         #[label]
         location: Span,
         unmatched: Vec<String>,
     },
 
-    #[error("not a function")]
+    #[error("Not a function")]
     NotFn {
         #[label]
         location: Span,
         tipo: Arc<Type>,
     },
 
-    #[error("{name} contains keyword {keyword}")]
+    #[error("Module\n\n{name}\n\ncontains keyword\n\n{keyword}")]
     KeywordInModuleName { name: String, keyword: String },
 
-    #[error("clause guard {name} is not local")]
+    #[error("Clause guard {name} is not local")]
     NonLocalClauseGuardVariable {
         #[label]
         location: Span,
         name: String,
     },
 
-    #[error("positional argument after labeled")]
+    #[error("Positional argument after labeled")]
     PositionalArgumentAfterLabeled {
         #[label]
         location: Span,
     },
 
-    #[error("private type leaked")]
+    #[error("Private type leaked")]
     PrivateTypeLeak {
         #[label]
         location: Span,
         leaked: Type,
     },
 
-    #[error("record access unknown type")]
+    #[error("Record access unknown type")]
     RecordAccessUnknownType {
         #[label]
         location: Span,
     },
 
-    #[error("record update invalid constructor")]
+    #[error("Record update invalid constructor")]
     RecordUpdateInvalidConstructor {
         #[label]
         location: Span,
@@ -140,27 +142,27 @@ pub enum Error {
     #[error("{name} is a reserved module name")]
     ReservedModuleName { name: String },
 
-    #[error("unexpected labeled argument {label}")]
+    #[error("Unexpected labeled argument\n\n{label}")]
     UnexpectedLabeledArg {
         #[label]
         location: Span,
         label: String,
     },
 
-    #[error("unexpected type hole")]
+    #[error("Unexpected type hole")]
     UnexpectedTypeHole {
         #[label]
         location: Span,
     },
 
-    #[error("unknown labels")]
+    #[error("Unknown labels")]
     UnknownLabels {
         unknown: Vec<(String, Span)>,
         valid: Vec<String>,
         supplied: Vec<String>,
     },
 
-    #[error("unknown module {name}")]
+    #[error("Unknown module\n\n{name}")]
     UnknownModule {
         #[label]
         location: Span,
@@ -168,7 +170,7 @@ pub enum Error {
         imported_modules: Vec<String>,
     },
 
-    #[error("unknown module field {name} in module {module_name}")]
+    #[error("Unknown module field\n\n{name}\n\nin module\n\n{module_name}")]
     UnknownModuleField {
         location: Span,
         name: String,
@@ -177,7 +179,7 @@ pub enum Error {
         type_constructors: Vec<String>,
     },
 
-    #[error("unknown module value {name}")]
+    #[error("Unknown module value\n\n{name}")]
     UnknownModuleValue {
         #[label]
         location: Span,
@@ -186,7 +188,7 @@ pub enum Error {
         value_constructors: Vec<String>,
     },
 
-    #[error("unknown type {name} in module {module_name}")]
+    #[error("Unknown type\n\n{name}\n\nin module\n\n{module_name}")]
     UnknownModuleType {
         #[label]
         location: Span,
@@ -195,7 +197,7 @@ pub enum Error {
         type_constructors: Vec<String>,
     },
 
-    #[error("unknown record field {label}")]
+    #[error("Unknown record field\n\n{label}")]
     UnknownRecordField {
         #[label]
         location: Span,
@@ -205,7 +207,7 @@ pub enum Error {
         situation: Option<UnknownRecordFieldSituation>,
     },
 
-    #[error("unknown type {name}")]
+    #[error("Unknown type\n\n{name}")]
     UnknownType {
         #[label]
         location: Span,
@@ -213,7 +215,7 @@ pub enum Error {
         types: Vec<String>,
     },
 
-    #[error("unknown variable {name}")]
+    #[error("Unknown variable\n\n{name}")]
     UnknownVariable {
         #[label]
         location: Span,
@@ -221,14 +223,14 @@ pub enum Error {
         variables: Vec<String>,
     },
 
-    #[error("unnecessary spread operator")]
+    #[error("Unnecessary spread operator")]
     UnnecessarySpreadOperator {
         #[label]
         location: Span,
         arity: usize,
     },
 
-    #[error("cannot update a type with multiple constructors")]
+    #[error("Cannot update a type with multiple constructors")]
     UpdateMultiConstructorType {
         #[label]
         location: Span,

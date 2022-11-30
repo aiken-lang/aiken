@@ -1,16 +1,25 @@
 # Assert
 
-```gleam
-assert rawdata = SomeType
+```aiken
+type Datum {
+  n: Int
+}
+
+fn do_something(datum: Data) -> Bool {
+  assert d: Datum = datum
+
+  d.n == 0
+}
 ```
 
-Causes the script to fail if the rawdata doesn't match the structure of datumtype
-Otherwise, returns a value of SomeType
+Causes the script to fail if the raw `Data` doesn't match the structure of `Datum`.
 
 Primarily for validating input datums / redeemers.
 
-You can unpack (1-match) data in the assertion
+You can also assert patterns.
 
-```gleam
-assert Some(x) = Option(Int)
+```aiken
+let optional_int = Some(1)
+
+assert Some(x) = optional_int
 ```

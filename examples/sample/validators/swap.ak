@@ -1,6 +1,7 @@
 use sample
 use sample/mint
 use sample/spend
+use aiken/builtin
 
 pub type Redeemer {
   signer: ByteArray,
@@ -36,8 +37,8 @@ pub fn incrementor(counter: Int, target: Int) -> Int {
   }
 }
 
-pub fn who(a: #(Int, Int)) -> #(Int, Int) {
-  #(1, 2)
+pub fn who(a: ByteArray) -> ByteArray {
+  builtin.append_bytearray(a, #[12, 256])
 }
 
 pub fn spend(

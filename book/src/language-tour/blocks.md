@@ -1,28 +1,18 @@
 # Blocks
-Let bindings with blocks
 
-```gleam
-let x = 3
+Every block in Aiken is an expression. All expressions in the
+block are executed, and the result of the last expression is returned.
 
-let z = {
-    let y = 2
-    x + y
-}
+```aiken
+let value: Bool = {
+    "Hello"
+    42 + 12
+    False
+} // => False
 ```
 
-A block can be thought of as calling an anonymous function with no arguments. They can be used anywhere a value is.
-Since everything is secretly a function, the last statement in any block is implicitly its return.
+Expression blocks can be used instead of parenthesis to change the precedence of operations.
 
-
-Blocks within a where-if clause
-```gleam
-let name: Option(String) = someFunction()
-let suffix = ""
-when name is {
-    Some(s)->{
-        let combined = s + suffix
-        Some(combined)
-    }
-    None->None
-}
+```
+let celsius = { fahrenheit - 32 } * 5 / 9
 ```

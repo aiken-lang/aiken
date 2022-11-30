@@ -1,15 +1,21 @@
 # String
 
-There are Strings and ByteArrays (plutus bytestrings)
+In Aiken Strings can be written as text surrounded by double quotes.
 
-The default representation using double quotes is a string.
+```aiken
+"Hello, Aiken!"
 ```
-let mystring = "Hello World!"
+
+They can span multiple lines.
+
+```aiken
+"Hello
+Aiken!"
 ```
-Strings may be appended and compared.
 
-For char operations, ByteArrays must be used.
-ByteArrays have efficient indexing, slicing, and can be compared or concatenated.
-ByteArrays can also be useful for non-text data (hence why we call them arrays not strings.)
+Under the hood Strings are [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoded binaries
+and can contain any valid unicode.
 
-Due to their fixed byte width, you may find them not suitable for complex structures.
+```aiken
+"🌘 アルバイト Aiken 🌒"
+```

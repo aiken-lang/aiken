@@ -12,30 +12,30 @@ use miette::{
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
 pub enum Error {
-    #[error("duplicate module {module}")]
+    #[error("Duplicate module\n\n{module}")]
     DuplicateModule {
         module: String,
         first: PathBuf,
         second: PathBuf,
     },
 
-    #[error("file operation failed")]
+    #[error("File operation failed")]
     FileIo { error: io::Error, path: PathBuf },
 
-    #[error("source code incorrectly formatted")]
+    #[error("Source code incorrectly formatted")]
     Format { problem_files: Vec<Unformatted> },
 
     #[error(transparent)]
     StandardIo(#[from] io::Error),
 
-    #[error("cyclical module imports")]
+    #[error("Syclical module imports")]
     ImportCycle { modules: Vec<String> },
 
     /// Useful for returning many [`Error::Parse`] at once
-    #[error("a list of errors")]
+    #[error("A list of errors")]
     List(Vec<Self>),
 
-    #[error("parsing")]
+    #[error("Parsing")]
     Parse {
         path: PathBuf,
 
@@ -47,7 +47,7 @@ pub enum Error {
         error: Box<ParseError>,
     },
 
-    #[error("type checking")]
+    #[error("Checking")]
     Type {
         path: PathBuf,
         src: String,
@@ -56,7 +56,7 @@ pub enum Error {
         error: tipo::error::Error,
     },
 
-    #[error("validator functions must return Bool")]
+    #[error("Validator functions must return Bool")]
     ValidatorMustReturnBool {
         path: PathBuf,
         src: String,
@@ -64,7 +64,7 @@ pub enum Error {
         location: Span,
     },
 
-    #[error("{name} requires at least {at_least} arguments")]
+    #[error("Validator\n\n{name}\n\nrequires at least {at_least} arguments")]
     WrongValidatorArity {
         name: String,
         at_least: u8,
@@ -198,7 +198,7 @@ impl Diagnostic for Error {
             Error::ImportCycle { .. } => Some(Box::new("aiken::module::cyclical")),
             Error::List(_) => None,
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
-            Error::Type { .. } => Some(Box::new("aiken::typecheck")),
+            Error::Type { .. } => Some(Box::new("aiken::check")),
             Error::StandardIo(_) => None,
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),

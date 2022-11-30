@@ -12,12 +12,10 @@ pub type Option(a) {
 Then, functions which fail may safely return an optional value.
 
 ```
-pub fn getHead(a: List(a))->a {
+pub fn get_head(a: List(a)) -> Option(a) {
     when a is {
-        [a, .._]->Some(a)
-        []->None
+        [a, .._] -> Some(a)
+        [] -> None
     }
 }
 ```
-
-An unsafe variant of this function might instead assert that there is a head, and return it.
