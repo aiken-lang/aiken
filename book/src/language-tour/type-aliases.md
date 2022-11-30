@@ -1,24 +1,24 @@
 # Type aliases
 
-A type alias lets you create a name which is identical to another type, without any additional information.
-We like type names (including type alias names) to be PascalCase.
+A type alias lets you create a name which is identical to
+another type, without any additional information.
 
-```gleam
+```aiken
 type MyNumber = Integer
 ```
 
-I imagine them like variables for types. You could use this to simplify your type signatures for tuples.
+They are most useful for simplifying type signatures.
 
-```gleam
-type Person = (String, Integer)
+```aiken
+type Person = #(String, Integer)
 
-fn createPerson(name: String, age: Integer) -> Person {
-    (name, age)
+fn create_person(name: String, age: Integer) -> Person {
+    #(name, age)
 }
 ```
 
-If you want the type-alias to be accessible as a module, you should pub it.
+If you want the type alias to be accessible from a module, you can define it as public.
 
 ```
-pub type MyVector3 = (Integer, Integer, Integer)
+pub type MyVector3 = #(Integer, Integer, Integer)
 ```

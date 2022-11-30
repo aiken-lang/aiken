@@ -398,6 +398,34 @@ pub fn expr_parser(
                 elems,
             });
 
+        let bytearray = just(Token::Hash)
+            .ignore_then(
+                select! {Token::Int {value} => value}
+                    .validate(|value, span, emit| {
+                        let byte: u8 = match value.parse() {
+                            Ok(b) => b,
+                            Err(_) => {
+                                emit(ParseError::expected_input_found(
+                                    span,
+                                    None,
+                                    Some(error::Pattern::Byte),
+                                ));
+
+                                0
+                            }
+                        };
+
+                        byte
+                    })
+                    .separated_by(just(Token::Comma))
+                    .allow_trailing()
+                    .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
+            )
+            .map_with_span(|bytes, span| expr::UntypedExpr::ByteArray {
+                location: span,
+                bytes,
+            });
+
         let list_parser = just(Token::LeftSquare)
             .ignore_then(r.clone().separated_by(just(Token::Comma)))
             .then(choice((
@@ -505,7 +533,7 @@ pub fn expr_parser(
         let assert_parser = just(Token::Assert)
             .ignore_then(pattern_parser())
             .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-            .then_ignore(just(Token::Is))
+            .then_ignore(just(Token::Equal))
             .then(r.clone())
             .map_with_span(
                 |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
@@ -520,7 +548,7 @@ pub fn expr_parser(
         let check_parser = just(Token::Check)
             .ignore_then(pattern_parser())
             .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-            .then_ignore(just(Token::Is))
+            .then_ignore(just(Token::Equal))
             .then(r.clone())
             .map_with_span(
                 |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
@@ -572,6 +600,7 @@ pub fn expr_parser(
             var_parser,
             todo_parser,
             tuple,
+            bytearray,
             list_parser,
             anon_fn_parser,
             block_parser,

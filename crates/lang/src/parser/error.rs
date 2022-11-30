@@ -5,7 +5,7 @@ use miette::Diagnostic;
 use crate::{ast::Span, parser::token::Token};
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
-#[error("{}", .kind)]
+#[error("{kind}")]
 pub struct ParseError {
     pub kind: ErrorKind,
     #[label]
@@ -71,7 +71,7 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
 pub enum ErrorKind {
     #[error("unexpected end")]
     UnexpectedEnd,
-    #[error("unexpected {0}")]
+    #[error("{0}")]
     #[diagnostic(help("{}", .0.help().unwrap_or_else(|| Box::new(""))))]
     Unexpected(Pattern),
     #[error("unclosed {start}")]
@@ -87,22 +87,29 @@ pub enum ErrorKind {
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
 pub enum Pattern {
-    #[error("{0:?}")]
+    #[error("Unexpected {0:?}")]
+    #[diagnostic(help("Try removing it"))]
     Char(char),
-    #[error("{0}")]
-    #[diagnostic(help("try removing it"))]
+    #[error("Unexpected {0}")]
+    #[diagnostic(help("Try removing it"))]
     Token(Token),
-    #[error("literal")]
+    #[error("Unexpected literal")]
+    #[diagnostic(help("Try removing it"))]
     Literal,
-    #[error("type name")]
+    #[error("Unexpected type name")]
+    #[diagnostic(help("Try removing it"))]
     TypeIdent,
-    #[error("indentifier")]
+    #[error("Unexpected indentifier")]
+    #[diagnostic(help("Try removing it"))]
     TermIdent,
-    #[error("end of input")]
+    #[error("Unexpected end of input")]
     End,
-    #[error("pattern")]
-    #[diagnostic(help("list spread in match can only have a discard or var"))]
+    #[error("Bad list spread pattern")]
+    #[diagnostic(help("List spread in matches can\nuse have a discard or var"))]
     Match,
+    #[error("Bad byte literal")]
+    #[diagnostic(help("Bytes must be between 0-255"))]
+    Byte,
 }
 
 impl From<char> for Pattern {

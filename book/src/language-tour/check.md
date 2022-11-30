@@ -1,8 +1,19 @@
 # Check
 
-Check is slower than assert but has stronger guarantees.
-You can unpack (1-match) data in a check.
+`check` uses more budget than assert but has stronger guarantees.
 
-```gleam
-check Some(x) = Option(Int)
+# Assert
+
+```aiken
+type Datum {
+  n: Int
+}
+
+fn do_something(datum: Data) -> Bool {
+  check d: Datum = datum
+
+  d.n == 0
+}
 ```
+
+Causes the script to fail if the raw `Data` doesn't match the structure of `Datum`.

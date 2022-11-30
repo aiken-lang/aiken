@@ -5,7 +5,7 @@ smart contracts on the [Cardano](https://cardano.org) blockchain.
 
 ## Philosophy
 
-Our main goal is to improve the smart contract development experience for the Cardano blockchain. Aiken takes inspiration from many modern languages such as gleam, rust, and elm which are known for friendly error messages and an overall excellent developer experience. We believe Cardano deserves a dedicated language with these kinds of features, developed in the open with the community.
+Our main goal is to improve the smart contract development experience for the Cardano blockchain. Aiken takes inspiration from many modern languages such as aiken, rust, and elm which are known for friendly error messages and an overall excellent developer experience. We believe Cardano deserves a dedicated language with these kinds of features, developed in the open with the community.
 
 ## Goals
 
