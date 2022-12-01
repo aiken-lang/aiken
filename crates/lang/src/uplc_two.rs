@@ -1105,34 +1105,7 @@ impl<'a> CodeGenerator<'a> {
                                                     argument: left.into(),
                                                 }
                                                 .into(),
-                                                argument: Term::Delay(
-                                                    Term::Apply {
-                                                        function: Term::Apply {
-                                                            function: Term::Apply {
-                                                                function: Term::Force(
-                                                                    Term::Builtin(
-                                                                        DefaultFunction::IfThenElse,
-                                                                    )
-                                                                    .into(),
-                                                                )
-                                                                .into(),
-                                                                argument: right.clone().into(),
-                                                            }
-                                                            .into(),
-                                                            argument: Term::Constant(
-                                                                Constant::Bool(true),
-                                                            )
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                        argument: Term::Constant(Constant::Bool(
-                                                            false,
-                                                        ))
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                )
-                                                .into(),
+                                                argument: Term::Delay(right.clone().into()).into(),
                                             }
                                             .into(),
                                             argument: Term::Delay(
@@ -1192,7 +1165,14 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                         argument: right.into(),
                     },
-                    BinOp::LtEqInt => todo!(),
+                    BinOp::LtEqInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
                     BinOp::GtEqInt => todo!(),
                     BinOp::GtInt => Term::Apply {
                         function: Term::Apply {
@@ -1210,10 +1190,38 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                         argument: right.into(),
                     },
-                    BinOp::SubInt => todo!(),
-                    BinOp::MultInt => todo!(),
-                    BinOp::DivInt => todo!(),
-                    BinOp::ModInt => todo!(),
+                    BinOp::SubInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::SubtractInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::MultInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::MultiplyInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::DivInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::DivideInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::ModInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::ModInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
                 };
                 arg_stack.push(term);
             }
