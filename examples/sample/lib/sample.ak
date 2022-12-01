@@ -18,8 +18,8 @@ pub type Datum {
   rdmr: Redeem,
 }
 
-pub fn eqInt(a: Int, b: Int) {
-  a == b
+pub fn eqIntPlusOne(a: Int, b: Int) {
+  a + 1 == b
 }
 
 pub fn eqString(a: ByteArray, b: ByteArray) {
@@ -34,4 +34,14 @@ pub type Thing {
 pub type Other {
   Wow
   Yes
+}
+
+pub fn incrementor(counter: Int, target: Int) -> Int {
+  if counter == target {
+    counter
+  } else if counter > target {
+    counter - target
+  } else {
+    incrementor(counter + 1, target)
+  }
 }
