@@ -265,7 +265,7 @@ impl Diagnostic for Error {
 
 #[derive(thiserror::Error)]
 pub enum Warning {
-    #[error("type checking")]
+    #[error("Checking")]
     Type {
         path: PathBuf,
         src: String,

@@ -5,7 +5,7 @@ use miette::Diagnostic;
 use crate::{ast::Span, parser::token::Token};
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
-#[error("{kind}")]
+#[error("{kind}\n")]
 pub struct ParseError {
     pub kind: ErrorKind,
     #[label]
@@ -104,12 +104,17 @@ pub enum Pattern {
     TermIdent,
     #[error("Unexpected end of input")]
     End,
-    #[error("Bad list spread pattern")]
+    #[error("Malformed list spread pattern")]
     #[diagnostic(help("List spread in matches can\nuse have a discard or var"))]
     Match,
-    #[error("Bad byte literal")]
+    #[error("Malformed byte literal")]
     #[diagnostic(help("Bytes must be between 0-255"))]
     Byte,
+    #[error("Unexpected pattern")]
+    #[diagnostic(help(
+        "If no label is provided then only variables\nmatching a field name are allowed"
+    ))]
+    RecordPunning,
 }
 
 impl From<char> for Pattern {

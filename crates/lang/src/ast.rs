@@ -185,6 +185,11 @@ pub enum Constant<T, RecordTag> {
         value: String,
     },
 
+    Tuple {
+        location: Span,
+        elements: Vec<Self>,
+    },
+
     List {
         location: Span,
         elements: Vec<Self>,
@@ -221,6 +226,9 @@ impl TypedConstant {
             Constant::Int { .. } => builtins::int(),
             Constant::String { .. } => builtins::string(),
             Constant::ByteArray { .. } => builtins::byte_array(),
+            Constant::Tuple { elements, .. } => {
+                builtins::tuple(elements.iter().map(|e| e.tipo()).collect())
+            }
             Constant::List { tipo, .. }
             | Constant::Record { tipo, .. }
             | Constant::Var { tipo, .. } => tipo.clone(),
@@ -232,6 +240,7 @@ impl<A, B> Constant<A, B> {
     pub fn location(&self) -> Span {
         match self {
             Constant::Int { location, .. }
+            | Constant::Tuple { location, .. }
             | Constant::List { location, .. }
             | Constant::String { location, .. }
             | Constant::Record { location, .. }
