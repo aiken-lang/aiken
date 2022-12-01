@@ -8,6 +8,7 @@ const something = 5
 pub type Redeemer {
   signer: ByteArray,
   amount: Int,
+  other_thing: Redeemer,
 }
 
 pub type Reen {
@@ -32,9 +33,12 @@ pub fn final_check(z: Int) {
 }
 
 pub fn incrementor(counter: Int, target: Int) -> Int {
-  when counter is {
-    target -> target
-    _ -> incrementor(counter+1, target)
+  if counter == target {
+    counter
+  } else if counter > target {
+    counter - target
+  } else {
+    incrementor(counter + 1, target)
   }
 }
 
@@ -43,15 +47,29 @@ pub fn who(a: ByteArray) -> ByteArray {
 }
 
 pub type Datum {
-  Offer { price: Int, asset_class: ByteArray, thing: Int }
+  Offer {
+    price: Int,
+    asset_class: ByteArray,
+    thing: Int,
+    other_thing: Redeemer,
+  }
   Sell
   Hold(Int)
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
   when datum is {
-    Offer { price, thing: t, .. } -> add_one(price) > 0
-    Hold(less) -> incrementor(0, 8) == less
-    Sell -> add_two(1) > 1
+    Sell -> sample.eqIntPlusOne(sample.incrementor(0, 8), 9)
+    _ -> False
   }
+
+
+
+
+  // let Redeemer{ signer, amount: amount2, other_thing: Redeemer{ signer: nested_signer, ..}} = datum
+  // True
+  // when datum is {
+  //   Offer{ price: p, asset_class: ac, thing: thing, other_thing: Redeemer{ other_thing: Redeemer{ signer: nested_signer, amount: amount, ..}, .. } } -> True
+  //   _ -> False
+  // }
 }

@@ -16,7 +16,7 @@ use crate::{
     ast::{ArgName, AssignmentKind, BinOp, DataType, Function, Pattern, Span, TypedArg},
     expr::TypedExpr,
     ir::IR,
-    tipo::{self, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
+    tipo::{self, fields::FieldMap, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
     uplc::{DataTypeKey, FunctionAccessKey},
     IdGenerator,
 };
@@ -352,8 +352,38 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.append(&mut pattern_vec);
                 };
             }
-            TypedExpr::If { .. } => {
-                todo!()
+            TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => {
+                let mut if_ir = vec![];
+
+                for (index, branch) in branches.iter().enumerate() {
+                    let mut branch_scope = scope.clone();
+                    branch_scope.push(self.id_gen.next());
+
+                    if index == 0 {
+                        if_ir.push(IR::If {
+                            scope: scope.clone(),
+                            count: 3,
+                        });
+                    } else {
+                        if_ir.push(IR::If {
+                            scope: branch_scope.clone(),
+                            count: 3,
+                        });
+                    }
+                    self.build_ir(&branch.condition, &mut if_ir, branch_scope.clone());
+                    self.build_ir(&branch.body, &mut if_ir, branch_scope);
+                }
+
+                let mut branch_scope = scope.clone();
+                branch_scope.push(self.id_gen.next());
+
+                self.build_ir(&final_else, &mut if_ir, branch_scope);
+
+                ir_stack.append(&mut if_ir);
             }
             TypedExpr::RecordAccess {
                 record,
@@ -377,14 +407,28 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => match constructor {
                 tipo::ModuleValueConstructor::Record { .. } => todo!(),
-                tipo::ModuleValueConstructor::Fn { name, .. } => {
+                tipo::ModuleValueConstructor::Fn { name, module, .. } => {
                     let func = self.functions.get(&FunctionAccessKey {
                         module_name: module_name.clone(),
                         function_name: name.clone(),
                     });
 
-                    if let Some(_func) = func {
-                        todo!()
+                    if let Some(func) = func {
+                        ir_stack.push(IR::Var {
+                            scope,
+                            constructor: ValueConstructor::public(
+                                func.return_type.clone(),
+                                ValueConstructorVariant::ModuleFn {
+                                    name: name.clone(),
+                                    field_map: None,
+                                    module: module.clone(),
+                                    arity: func.arguments.len(),
+                                    location: Span::empty(),
+                                    builtin: None,
+                                },
+                            ),
+                            name: format!("{module}_{name}"),
+                        });
                     } else {
                         let type_info = self.module_types.get(module_name).unwrap();
                         let value = type_info.values.get(name).unwrap();
@@ -437,7 +481,9 @@ impl<'a> CodeGenerator<'a> {
             list @ Pattern::List { .. } => {
                 self.pattern_ir(list, pattern_vec, value_vec, scope);
             }
-            Pattern::Constructor { .. } => todo!(),
+            Pattern::Constructor { .. } => {
+                self.pattern_ir(pattern, pattern_vec, value_vec, scope);
+            }
             Pattern::Tuple { .. } => todo!(),
         }
     }
@@ -482,7 +528,11 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(values);
             }
             Pattern::List { .. } => todo!(),
-            Pattern::Constructor { arguments, .. } => {
+            Pattern::Constructor {
+                arguments,
+                name: constr_name,
+                ..
+            } => {
                 let mut needs_access_to_constr_var = false;
                 for arg in arguments {
                     match arg.value {
@@ -506,13 +556,44 @@ impl<'a> CodeGenerator<'a> {
                     scope: scope.clone(),
                 }];
 
+                let data_type_key = match tipo {
+                    Type::Fn { ret, .. } => match ret.as_ref() {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
+                        },
+                        _ => unreachable!(),
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let (index, _) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
+
+                // push constructor Index
+                pattern_vec.push(IR::Int {
+                    value: index.to_string(),
+                    scope: scope.clone(),
+                });
+
                 if needs_access_to_constr_var {
                     *needs_constr_var = true;
-                    new_vec.append(values);
+                    // new_vec.append(values);
 
                     self.pattern_ir(pattern, pattern_vec, &mut new_vec, scope);
+                    pattern_vec.append(values);
                 } else {
-                    self.pattern_ir(pattern, pattern_vec, values, scope);
+                    self.pattern_ir(pattern, pattern_vec, &mut vec![], scope);
+                    pattern_vec.append(values);
                 }
             }
             Pattern::Tuple { .. } => todo!(),
@@ -613,19 +694,13 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 let data_type = self.data_types.get(&data_type_key).unwrap();
-                let (index, constructor_type) = data_type
+                let (_, constructor_type) = data_type
                     .constructors
                     .iter()
                     .enumerate()
                     .find(|(_, dt)| &dt.name == constr_name)
                     .unwrap();
-
-                // push constructor Index
-                pattern_vec.push(IR::Int {
-                    value: index.to_string(),
-                    scope: scope.clone(),
-                });
-
+                let mut nested_pattern = vec![];
                 if *is_record {
                     let field_map = match constructor {
                         tipo::PatternConstructor::Record { field_map, .. } => {
@@ -651,7 +726,31 @@ impl<'a> CodeGenerator<'a> {
                                 Pattern::Var { name, .. } => (false, name.clone()),
                                 Pattern::Discard { .. } => (true, "".to_string()),
                                 Pattern::List { .. } => todo!(),
-                                Pattern::Constructor { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_name = format!("{constr_name}_{id}");
+                                    self.pattern_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![IR::Var {
+                                            scope: scope.clone(),
+                                            constructor: ValueConstructor::public(
+                                                tipo.clone(),
+                                                ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                            ),
+                                            name: constr_name.clone(),
+                                        }],
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_name)
+                                }
                                 _ => todo!(),
                             };
 
@@ -691,7 +790,31 @@ impl<'a> CodeGenerator<'a> {
                                 Pattern::Var { name, .. } => (false, name.clone()),
                                 Pattern::Discard { .. } => (true, "".to_string()),
                                 Pattern::List { .. } => todo!(),
-                                Pattern::Constructor { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_name = format!("{constr_name}_{id}");
+                                    self.pattern_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![IR::Var {
+                                            scope: scope.clone(),
+                                            constructor: ValueConstructor::public(
+                                                tipo.clone(),
+                                                ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                            ),
+                                            name: constr_name.clone(),
+                                        }],
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_name)
+                                }
                                 _ => todo!(),
                             };
 
@@ -715,7 +838,9 @@ impl<'a> CodeGenerator<'a> {
                         });
                     }
                 }
+
                 pattern_vec.append(values);
+                pattern_vec.append(&mut nested_pattern);
             }
             Pattern::Tuple { .. } => todo!(),
         }
@@ -757,10 +882,21 @@ impl<'a> CodeGenerator<'a> {
                     unique: 0.into(),
                 })),
                 ValueConstructorVariant::ModuleConstant { .. } => todo!(),
-                ValueConstructorVariant::ModuleFn { .. } => arg_stack.push(Term::Var(Name {
-                    text: name,
-                    unique: 0.into(),
-                })),
+                ValueConstructorVariant::ModuleFn {
+                    name: func_name,
+                    module,
+                    ..
+                } => {
+                    let name = if func_name == name {
+                        format!("{module}_{func_name}")
+                    } else {
+                        name
+                    };
+                    arg_stack.push(Term::Var(Name {
+                        text: name,
+                        unique: 0.into(),
+                    }));
+                }
                 ValueConstructorVariant::Record {
                     name: constr_name, ..
                 } => {
@@ -1103,8 +1239,14 @@ impl<'a> CodeGenerator<'a> {
                 func_name,
                 params,
                 recursive,
+                module_name,
                 ..
             } => {
+                let func_name = if module_name.is_empty() {
+                    func_name
+                } else {
+                    format!("{module_name}_{func_name}")
+                };
                 let mut func_body = arg_stack.pop().unwrap();
 
                 let mut term = arg_stack.pop().unwrap();
@@ -1336,7 +1478,31 @@ impl<'a> CodeGenerator<'a> {
             IR::Finally { .. } => {
                 let _clause = arg_stack.pop().unwrap();
             }
-            IR::If { .. } => todo!(),
+            IR::If { .. } => {
+                let condition = arg_stack.pop().unwrap();
+                let then = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                term = Term::Force(
+                    Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::IfThenElse)
+                                    .force_wrap()
+                                    .into(),
+                                argument: condition.into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(then.into()).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(term.into()).into(),
+                    }
+                    .into(),
+                );
+
+                arg_stack.push(term);
+            }
             IR::Constr { .. } => todo!(),
             IR::Fields { .. } => todo!(),
             IR::RecordAccess { index, tipo, .. } => {
@@ -1382,11 +1548,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            IR::FieldsExpose {
-                count: _count,
-                indices,
-                ..
-            } => {
+            IR::FieldsExpose { indices, .. } => {
                 self.needs_field_access = true;
 
                 let constr_var = arg_stack.pop().unwrap();
@@ -1644,8 +1806,6 @@ impl<'a> CodeGenerator<'a> {
         );
 
         let mut final_func_dep_ir = IndexMap::new();
-
-        println!("GOT HERE");
 
         for func in func_index_map.clone() {
             if self.defined_functions.contains_key(&func.0) {
