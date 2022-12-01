@@ -285,7 +285,16 @@ impl<'comments> Formatter<'comments> {
 
     fn const_expr<'a, A, B>(&mut self, value: &'a Constant<A, B>) -> Document<'a> {
         match value {
-            Constant::ByteArray { .. } => todo!(),
+            Constant::ByteArray { bytes, .. } => "#"
+                .to_doc()
+                .append(
+                    flex_break("[", "[")
+                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .append("]"),
+                )
+                .group(),
             Constant::Int { value, .. } => value.to_doc(),
 
             Constant::String { value, .. } => self.string(value),
@@ -615,7 +624,16 @@ impl<'comments> Formatter<'comments> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
-            UntypedExpr::ByteArray { .. } => todo!(),
+            UntypedExpr::ByteArray { bytes, .. } => "#"
+                .to_doc()
+                .append(
+                    flex_break("[", "[")
+                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .append("]"),
+                )
+                .group(),
             UntypedExpr::If {
                 branches,
                 final_else,
