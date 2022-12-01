@@ -1177,6 +1177,22 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((typed_pattern, typed_alternatives))
     }
 
+    fn infer_const_tuple(
+        &mut self,
+        untyped_elements: Vec<UntypedConstant>,
+        location: Span,
+    ) -> Result<TypedConstant, Error> {
+        let mut elements = Vec::with_capacity(untyped_elements.len());
+
+        for element in untyped_elements {
+            let element = self.infer_const(&None, element)?;
+
+            elements.push(element);
+        }
+
+        Ok(Constant::Tuple { elements, location })
+    }
+
     // TODO: extract the type annotation checking into a infer_module_const
     // function that uses this function internally
     pub fn infer_const(
@@ -1192,6 +1208,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Constant::String {
                 location, value, ..
             } => Ok(Constant::String { location, value }),
+
+            Constant::Tuple {
+                elements, location, ..
+            } => self.infer_const_tuple(elements, location),
 
             Constant::List {
                 elements, location, ..

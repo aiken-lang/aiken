@@ -3,6 +3,8 @@ use sample/mint
 use sample/spend
 use aiken/builtin
 
+const something = 5
+
 pub type Redeemer {
   signer: ByteArray,
   amount: Int,

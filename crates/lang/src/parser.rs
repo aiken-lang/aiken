@@ -74,6 +74,7 @@ fn module_parser() -> impl Parser<Token, Vec<UntypedDefinition>, Error = ParseEr
         data_parser(),
         type_alias_parser(),
         fn_parser(),
+        constant_parser(),
     ))
     .repeated()
     .then_ignore(end())
@@ -265,6 +266,202 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
         )
 }
 
+fn constant_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
+    pub_parser()
+        .or_not()
+        .then_ignore(just(Token::Const))
+        .then(select! {Token::Name{name} => name})
+        .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+        .then_ignore(just(Token::Equal))
+        .then(constant_value_parser())
+        .map_with_span(|(((public, name), annotation), value), span| {
+            ast::UntypedDefinition::ModuleConstant(ast::ModuleConstant {
+                doc: None,
+                location: span,
+                public: public.is_some(),
+                name,
+                annotation,
+                value: Box::new(value),
+                tipo: (),
+            })
+        })
+}
+
+fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = ParseError> {
+    recursive(|r| {
+        let constant_string_parser =
+            select! {Token::String {value} => value}.map_with_span(|value, span| {
+                ast::UntypedConstant::String {
+                    location: span,
+                    value,
+                }
+            });
+
+        let constant_int_parser =
+            select! {Token::Int {value} => value}.map_with_span(|value, span| {
+                ast::UntypedConstant::Int {
+                    location: span,
+                    value,
+                }
+            });
+
+        let constant_tuple_parser = just(Token::Hash)
+            .ignore_then(r.clone())
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+            .map_with_span(|elements, span| ast::UntypedConstant::Tuple {
+                location: span,
+                elements,
+            });
+
+        let constant_bytearray_parser = just(Token::Hash)
+            .ignore_then(
+                select! {Token::Int {value} => value}.validate(|value, span, emit| {
+                    let byte: u8 = match value.parse() {
+                        Ok(b) => b,
+                        Err(_) => {
+                            emit(ParseError::expected_input_found(
+                                span,
+                                None,
+                                Some(error::Pattern::Byte),
+                            ));
+
+                            0
+                        }
+                    };
+
+                    byte
+                }),
+            )
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare))
+            .map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
+                location: span,
+                bytes,
+            });
+
+        let constant_list_parser = r
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare))
+            .map_with_span(|elements, span| ast::UntypedConstant::List {
+                location: span,
+                elements,
+                tipo: (),
+            });
+
+        let constant_record_parser = choice((
+            choice((
+                select! {Token::Name { name } => name}
+                    .then_ignore(just(Token::Dot))
+                    .or_not()
+                    .then(select! {Token::UpName { name } => name})
+                    .then(
+                        select! {Token::Name {name} => name}
+                            .then_ignore(just(Token::Colon))
+                            .or_not()
+                            .then(r.clone())
+                            .validate(|(label_opt, value), span, emit| {
+                                let label = if label_opt.is_some() {
+                                    label_opt
+                                } else if let ast::UntypedConstant::Var { name, .. } = &value {
+                                    Some(name.clone())
+                                } else {
+                                    emit(ParseError::expected_input_found(
+                                        value.location(),
+                                        None,
+                                        Some(error::Pattern::RecordPunning),
+                                    ));
+
+                                    None
+                                };
+
+                                ast::CallArg {
+                                    location: span,
+                                    value,
+                                    label,
+                                }
+                            })
+                            .separated_by(just(Token::Comma))
+                            .allow_trailing()
+                            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+                    )
+                    .map_with_span(
+                        |((module, name), args), span| ast::UntypedConstant::Record {
+                            location: span,
+                            module,
+                            name,
+                            args,
+                            tag: (),
+                            tipo: (),
+                            field_map: None,
+                        },
+                    ),
+                select! {Token::Name { name } => name}
+                    .then_ignore(just(Token::Dot))
+                    .or_not()
+                    .then(select! {Token::UpName { name } => name})
+                    .then(
+                        r.clone()
+                            .map_with_span(|value, span| ast::CallArg {
+                                location: span,
+                                value,
+                                label: None,
+                            })
+                            .separated_by(just(Token::Comma))
+                            .allow_trailing()
+                            .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+                    )
+                    .map_with_span(
+                        |((module, name), args), span| ast::UntypedConstant::Record {
+                            location: span,
+                            module,
+                            name,
+                            args,
+                            tag: (),
+                            tipo: (),
+                            field_map: None,
+                        },
+                    ),
+            )),
+            select! {Token::Name { name } => name}
+                .then_ignore(just(Token::Dot))
+                .then(select! {Token::Name{name} => name})
+                .map_with_span(|(module, name), span: Span| ast::UntypedConstant::Var {
+                    location: span.union(span),
+                    module: Some(module),
+                    name,
+                    constructor: None,
+                    tipo: (),
+                }),
+        ));
+
+        let constant_var_parser =
+            select! {Token::Name {name} => name}.map_with_span(|name, span| {
+                ast::UntypedConstant::Var {
+                    location: span,
+                    module: None,
+                    name,
+                    constructor: None,
+                    tipo: (),
+                }
+            });
+
+        choice((
+            constant_string_parser,
+            constant_int_parser,
+            constant_tuple_parser,
+            constant_bytearray_parser,
+            constant_list_parser,
+            constant_record_parser,
+            constant_var_parser,
+        ))
+    })
+}
+
 pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
     choice((
         select! {Token::Name {name} => name}
@@ -445,6 +642,10 @@ pub fn expr_parser(
                 tail,
             });
 
+        let block_parser = seq_r
+            .clone()
+            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
+
         let anon_fn_parser = just(Token::Fn)
             .ignore_then(
                 anon_fn_param_parser()
@@ -453,11 +654,7 @@ pub fn expr_parser(
                     .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             )
             .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
-            .then(
-                seq_r
-                    .clone()
-                    .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-            )
+            .then(seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
             .map_with_span(
                 |((arguments, return_annotation), body), span| expr::UntypedExpr::Fn {
                     arguments,
@@ -467,8 +664,6 @@ pub fn expr_parser(
                     return_annotation,
                 },
             );
-
-        let block_parser = seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
         // TODO: do guards later
         // let when_clause_guard_parser = just(Token::If);
@@ -999,10 +1194,16 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     label: Some(name),
                     value: pattern,
                 }),
-            r.clone().map_with_span(|pattern, span| {
+            r.clone().validate(|pattern, span, emit| {
                 let label = if let ast::UntypedPattern::Var { name, .. } = &pattern {
                     Some(name.clone())
                 } else {
+                    emit(ParseError::expected_input_found(
+                        pattern.location(),
+                        None,
+                        Some(error::Pattern::RecordPunning),
+                    ));
+
                     None
                 };
 

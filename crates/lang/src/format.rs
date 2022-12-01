@@ -351,6 +351,13 @@ impl<'comments> Formatter<'comments> {
                 module: Some(module),
                 ..
             } => docvec![module, ".", name],
+
+            Constant::Tuple { elements, .. } => "#"
+                .to_doc()
+                .append(wrap_args(
+                    elements.iter().map(|e| (self.const_expr(e), false)),
+                ))
+                .group(),
         }
     }
 
