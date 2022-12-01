@@ -40,7 +40,7 @@ pub fn incrementor(counter: Int, target: Int) -> Int {
 }
 
 pub fn who(a: ByteArray) -> ByteArray {
-  builtin.append_bytearray(a, #[12, 256])
+  builtin.append_bytearray(a, #[12, 255])
 }
 
 pub fn spend(
