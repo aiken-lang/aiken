@@ -140,6 +140,10 @@ pub enum IR {
         subject_name: String,
     },
 
+    ClauseGuard {
+        scope: Vec<u64>,
+    },
+
     Discard {
         scope: Vec<u64>,
     },
@@ -238,6 +242,7 @@ impl IR {
             | IR::Lam { scope, .. }
             | IR::When { scope, .. }
             | IR::Clause { scope, .. }
+            | IR::ClauseGuard { scope }
             | IR::Discard { scope }
             | IR::Finally { scope }
             | IR::If { scope, .. }
