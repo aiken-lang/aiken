@@ -16,7 +16,7 @@ use crate::{
     ast::{ArgName, AssignmentKind, BinOp, DataType, Function, Pattern, Span, TypedArg},
     expr::TypedExpr,
     ir::IR,
-    tipo::{self, fields::FieldMap, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
+    tipo::{self, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
     uplc::{DataTypeKey, FunctionAccessKey},
     IdGenerator,
 };
@@ -378,10 +378,10 @@ impl<'a> CodeGenerator<'a> {
                     self.build_ir(&branch.body, &mut if_ir, branch_scope);
                 }
 
-                let mut branch_scope = scope.clone();
+                let mut branch_scope = scope;
                 branch_scope.push(self.id_gen.next());
 
-                self.build_ir(&final_else, &mut if_ir, branch_scope);
+                self.build_ir(final_else, &mut if_ir, branch_scope);
 
                 ir_stack.append(&mut if_ir);
             }
@@ -454,40 +454,6 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn assignment_ir(
-        &mut self,
-        pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
-        pattern_vec: &mut Vec<IR>,
-        value_vec: &mut Vec<IR>,
-        _tipo: &Type,
-        kind: AssignmentKind,
-        scope: Vec<u64>,
-    ) {
-        match pattern {
-            Pattern::Int { .. } => todo!(),
-            Pattern::String { .. } => todo!(),
-            Pattern::Var { name, .. } => {
-                pattern_vec.push(IR::Assignment {
-                    name: name.clone(),
-                    kind,
-                    scope,
-                });
-
-                pattern_vec.append(value_vec);
-            }
-            Pattern::VarUsage { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => todo!(),
-            list @ Pattern::List { .. } => {
-                self.pattern_ir(list, pattern_vec, value_vec, scope);
-            }
-            Pattern::Constructor { .. } => {
-                self.pattern_ir(pattern, pattern_vec, value_vec, scope);
-            }
-            Pattern::Tuple { .. } => todo!(),
-        }
-    }
-
     fn when_ir(
         &mut self,
         pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
@@ -534,27 +500,24 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 let mut needs_access_to_constr_var = false;
+
+                let mut needs_clause_guard = false;
                 for arg in arguments {
                     match arg.value {
-                        Pattern::Var { .. }
-                        | Pattern::List { .. }
-                        | Pattern::Constructor { .. } => {
+                        Pattern::Var { .. } => {
                             needs_access_to_constr_var = true;
                         }
-                        _ => {}
+                        Pattern::List { .. }
+                        | Pattern::Constructor { .. }
+                        | Pattern::Tuple { .. } => {
+                            needs_access_to_constr_var = true;
+                            needs_clause_guard = true;
+                        }
+                        Pattern::Discard { .. } => {}
+
+                        _ => todo!("{arg:#?}"),
                     }
                 }
-
-                let mut new_vec = vec![IR::Var {
-                    constructor: ValueConstructor::public(
-                        tipo.clone().into(),
-                        ValueConstructorVariant::LocalVariable {
-                            location: Span::empty(),
-                        },
-                    ),
-                    name: constr_var,
-                    scope: scope.clone(),
-                }];
 
                 let data_type_key = match tipo {
                     Type::Fn { ret, .. } => match ret.as_ref() {
@@ -572,6 +535,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 let data_type = self.data_types.get(&data_type_key).unwrap();
+
                 let (index, _) = data_type
                     .constructors
                     .iter()
@@ -579,22 +543,311 @@ impl<'a> CodeGenerator<'a> {
                     .find(|(_, dt)| &dt.name == constr_name)
                     .unwrap();
 
-                // push constructor Index
-                pattern_vec.push(IR::Int {
-                    value: index.to_string(),
+                let mut new_vec = vec![IR::Var {
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: constr_var,
                     scope: scope.clone(),
-                });
+                }];
+
+                // if only one constructor, no need to check
+                if data_type.constructors.len() > 1 {
+                    if needs_clause_guard {
+                        pattern_vec.push(IR::ClauseGuard {
+                            scope: scope.clone(),
+                        });
+                    }
+
+                    // push constructor Index
+                    pattern_vec.push(IR::Int {
+                        value: index.to_string(),
+                        scope: scope.clone(),
+                    });
+                }
 
                 if needs_access_to_constr_var {
                     *needs_constr_var = true;
-                    // new_vec.append(values);
 
-                    self.pattern_ir(pattern, pattern_vec, &mut new_vec, scope);
+                    self.when_recursive_ir(pattern, pattern_vec, &mut new_vec, tipo, scope);
                     pattern_vec.append(values);
                 } else {
-                    self.pattern_ir(pattern, pattern_vec, &mut vec![], scope);
+                    self.when_recursive_ir(pattern, pattern_vec, &mut vec![], tipo, scope);
                     pattern_vec.append(values);
                 }
+            }
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn when_recursive_ir(
+        &mut self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
+        pattern_vec: &mut Vec<IR>,
+        values: &mut Vec<IR>,
+        _tipo: &Type,
+        scope: Vec<u64>,
+    ) {
+        match pattern {
+            Pattern::Int { .. } => todo!(),
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { .. } => todo!(),
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => {
+                pattern_vec.push(IR::Discard { scope });
+
+                pattern_vec.append(values);
+            }
+            Pattern::List { elements, tail, .. } => {
+                let mut elements_vec = vec![];
+
+                let mut names = vec![];
+                for element in elements {
+                    match element {
+                        Pattern::Var { name, .. } => {
+                            names.push(name.clone());
+                        }
+                        a @ Pattern::List { .. } => {
+                            let mut var_vec = vec![];
+                            let item_name = format!("list_item_id_{}", self.id_gen.next());
+                            names.push(item_name.clone());
+                            var_vec.push(IR::Var {
+                                constructor: ValueConstructor::public(
+                                    Type::App {
+                                        public: true,
+                                        module: String::new(),
+                                        name: String::new(),
+                                        args: vec![],
+                                    }
+                                    .into(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: item_name,
+                                scope: scope.clone(),
+                            });
+                            self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
+                        }
+                        _ => todo!(),
+                    }
+                }
+
+                if let Some(tail) = tail {
+                    match &**tail {
+                        Pattern::Var { name, .. } => names.push(name.clone()),
+                        Pattern::Discard { .. } => {}
+                        _ => unreachable!(),
+                    }
+                }
+
+                pattern_vec.push(IR::ListAccessor {
+                    names,
+                    tail: tail.is_some(),
+                    scope,
+                });
+
+                pattern_vec.append(values);
+                pattern_vec.append(&mut elements_vec);
+                todo!();
+            }
+            Pattern::Constructor {
+                is_record,
+                name: constr_name,
+                arguments,
+                constructor,
+                tipo,
+                ..
+            } => {
+                let data_type_key = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => match &**ret {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
+                        },
+                        _ => unreachable!(),
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let (_, constructor_type) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
+                let mut nested_pattern = vec![];
+                if *is_record {
+                    let field_map = match constructor {
+                        tipo::PatternConstructor::Record { field_map, .. } => {
+                            field_map.clone().unwrap()
+                        }
+                    };
+
+                    let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
+
+                    for arg in &constructor_type.arguments {
+                        let label = arg.label.clone().unwrap();
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(label, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .map(|item| {
+                            let label = item.label.clone().unwrap_or_default();
+                            let field_index = field_map.fields.get(&label).unwrap_or(&0);
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_name = format!("{constr_name}_{id}");
+                                    self.when_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![],
+                                        tipo,
+                                        constr_name.clone(),
+                                        &mut false,
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_name)
+                                }
+                                _ => todo!(),
+                            };
+
+                            (label, var_name, *field_index, discard)
+                        })
+                        .filter(|(_, _, _, discard)| !discard)
+                        .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
+                        .collect::<Vec<(String, String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(label, var_name, index, _)| {
+                                    let field_type = type_map.get(label).unwrap();
+                                    (*index, var_name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                            scope,
+                        });
+                    }
+                } else {
+                    let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
+
+                    for (index, arg) in constructor_type.arguments.iter().enumerate() {
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(index, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, item)| {
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_name = format!("{constr_name}_{id}");
+                                    self.when_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![],
+                                        tipo,
+                                        constr_name.clone(),
+                                        &mut false,
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_name)
+                                }
+                                _ => todo!(),
+                            };
+
+                            (var_name, index, discard)
+                        })
+                        .filter(|(_, _, discard)| !discard)
+                        .collect::<Vec<(String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(name, index, _)| {
+                                    let field_type = type_map.get(index).unwrap();
+
+                                    (*index, name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                            scope,
+                        });
+                    }
+                }
+
+                pattern_vec.append(values);
+                pattern_vec.append(&mut nested_pattern);
+            }
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn assignment_ir(
+        &mut self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
+        pattern_vec: &mut Vec<IR>,
+        value_vec: &mut Vec<IR>,
+        _tipo: &Type,
+        kind: AssignmentKind,
+        scope: Vec<u64>,
+    ) {
+        match pattern {
+            Pattern::Int { .. } => todo!(),
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { name, .. } => {
+                pattern_vec.push(IR::Assignment {
+                    name: name.clone(),
+                    kind,
+                    scope,
+                });
+
+                pattern_vec.append(value_vec);
+            }
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => todo!(),
+            list @ Pattern::List { .. } => {
+                self.pattern_ir(list, pattern_vec, value_vec, scope);
+            }
+            Pattern::Constructor { .. } => {
+                self.pattern_ir(pattern, pattern_vec, value_vec, scope);
             }
             Pattern::Tuple { .. } => todo!(),
         }
@@ -1483,6 +1736,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
+            IR::ClauseGuard { .. } => todo!(),
             IR::Finally { .. } => {
                 let _clause = arg_stack.pop().unwrap();
             }
