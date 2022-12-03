@@ -1751,7 +1751,10 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             IR::Clause {
-                tipo, subject_name, ..
+                tipo,
+                subject_name,
+                complex_clause,
+                ..
             } => {
                 // clause to compare
                 let clause = arg_stack.pop().unwrap();
@@ -1804,32 +1807,137 @@ impl<'a> CodeGenerator<'a> {
                     }
                 };
 
-                term = Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Force(DefaultFunction::IfThenElse.into()).into(),
-                            argument: Term::Apply {
-                                function: checker.into(),
-                                argument: clause.into(),
+                if complex_clause {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::IfThenElse)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: Term::Apply {
+                                            function: checker.into(),
+                                            argument: clause.into(),
+                                        }
+                                        .into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Delay(body.into()).into(),
+                                }
+                                .into(),
+                                argument: Term::Var(Name {
+                                    text: "__other_clauses_delayed".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
                             }
                             .into(),
                         }
                         .into(),
-                        argument: Term::Delay(body.into()).into(),
+                        argument: Term::Delay(term.into()).into(),
+                    }
+                    .force_wrap()
+                } else {
+                    term = Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Force(DefaultFunction::IfThenElse.into()).into(),
+                                argument: Term::Apply {
+                                    function: checker.into(),
+                                    argument: clause.into(),
+                                }
+                                .into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(body.into()).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(term.into()).into(),
+                    }
+                    .force_wrap();
+                }
+
+                arg_stack.push(term);
+            }
+            IR::ClauseGuard {
+                subject_name, tipo, ..
+            } => {
+                let condition = arg_stack.pop().unwrap();
+
+                let then = arg_stack.pop().unwrap();
+
+                let checker = if tipo.is_int() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsInteger.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_bytearray() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsByteString.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_bool() {
+                    todo!()
+                } else if tipo.is_string() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsString.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_list() {
+                    todo!()
+                } else {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsInteger.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                };
+
+                let term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::IfThenElse)
+                                .force_wrap()
+                                .into(),
+                            argument: Term::Apply {
+                                function: checker.into(),
+                                argument: condition.into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(then.into()).into(),
                     }
                     .into(),
-                    argument: Term::Delay(term.into()).into(),
+                    argument: Term::Var(Name {
+                        text: "__other_clauses_delayed".to_string(),
+                        unique: 0.into(),
+                    })
+                    .into(),
                 }
                 .force_wrap();
 
                 arg_stack.push(term);
-            }
-            IR::ClauseGuard { .. } => {
-                let _condition = arg_stack.pop().unwrap();
-
-                let _then = arg_stack.pop().unwrap();
-
-                todo!();
             }
             IR::Finally { .. } => {
                 let _clause = arg_stack.pop().unwrap();
