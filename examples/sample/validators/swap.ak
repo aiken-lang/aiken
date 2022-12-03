@@ -47,7 +47,7 @@ pub fn who(a: ByteArray) -> ByteArray {
 }
 
 pub type Datum {
-  Offer { prices: List(Int), asset_class: ByteArray, other_thing: Redeemer }
+  Offer { prices: List(Int), asset_class: ByteArray, other_thing: Datum }
   Sell
   Hold(Int)
 }
@@ -58,11 +58,11 @@ pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
     Offer {
       prices: p,
       asset_class: ac,
-      other_thing: Redeemer {
-        other_thing: Redeemer { signer: nested_signer, amount, .. },
+      other_thing: Offer {
+        other_thing: Offer { asset_class: nested_signer, prices: amounts, .. },
         ..
       },
-    } -> True
+    } -> 1 == 1
     _ -> False
   }
 }
