@@ -138,10 +138,13 @@ pub enum IR {
         count: usize,
         tipo: Arc<Type>,
         subject_name: String,
+        complex_clause: bool,
     },
 
     ClauseGuard {
         scope: Vec<u64>,
+        subject_name: String,
+        tipo: Arc<Type>,
     },
 
     Discard {
@@ -242,7 +245,7 @@ impl IR {
             | IR::Lam { scope, .. }
             | IR::When { scope, .. }
             | IR::Clause { scope, .. }
-            | IR::ClauseGuard { scope }
+            | IR::ClauseGuard { scope, .. }
             | IR::Discard { scope }
             | IR::Finally { scope }
             | IR::If { scope, .. }
