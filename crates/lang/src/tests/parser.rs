@@ -1177,7 +1177,7 @@ fn call() {
 fn record_update() {
     let code = indoc! {r#"
         fn update_name(user: User, name: String) -> User {
-          User { ..user, name: "Aiken", }
+          User { ..user, name: "Aiken", age }
         }
     "#};
 
@@ -1215,7 +1215,7 @@ fn record_update() {
                 },
             ],
             body: expr::UntypedExpr::RecordUpdate {
-                location: Span::new((), 53..84),
+                location: Span::new((), 53..88),
                 constructor: Box::new(expr::UntypedExpr::Var {
                     location: Span::new((), 53..57),
                     name: "User".to_string(),
@@ -1227,14 +1227,24 @@ fn record_update() {
                     }),
                     location: Span::new((), 60..66),
                 },
-                arguments: vec![ast::UntypedRecordUpdateArg {
-                    label: "name".to_string(),
-                    location: Span::new((), 68..81),
-                    value: expr::UntypedExpr::String {
-                        location: Span::new((), 74..81),
-                        value: "Aiken".to_string(),
+                arguments: vec![
+                    ast::UntypedRecordUpdateArg {
+                        label: "name".to_string(),
+                        location: Span::new((), 68..81),
+                        value: expr::UntypedExpr::String {
+                            location: Span::new((), 74..81),
+                            value: "Aiken".to_string(),
+                        },
                     },
-                }],
+                    ast::UntypedRecordUpdateArg {
+                        label: "age".to_string(),
+                        location: Span::new((), 83..86),
+                        value: expr::UntypedExpr::Var {
+                            location: Span::new((), 83..86),
+                            name: "age".to_string(),
+                        },
+                    },
+                ],
             },
             doc: None,
             location: Span::new((), 0..48),
@@ -1247,7 +1257,7 @@ fn record_update() {
                 arguments: vec![],
             }),
             return_type: (),
-            end_position: 85,
+            end_position: 89,
         }),
     )
 }
