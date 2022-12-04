@@ -75,6 +75,7 @@ version = "0.0.26"
 dependencies = [
  "chumsky",
  "indexmap",
+ "indoc",
  "itertools",
  "miette",
  "pretty_assertions",
