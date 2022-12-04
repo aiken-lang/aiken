@@ -423,11 +423,11 @@ fn pipeline() {
 fn if_expression() {
     let code = indoc! {r#"
         fn ifs() {
-          if True then {
+          if True {
             1 + 1
-          } else if a < 4 then {
+          } else if a < 4 {
             5
-          } else if a || b then {
+          } else if a || b {
             6
           } else {
             3
@@ -440,7 +440,7 @@ fn if_expression() {
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![],
             body: expr::UntypedExpr::If {
-                location: Span::new((), 13..121),
+                location: Span::new((), 13..106),
                 branches: vec1::vec1![
                     ast::IfBranch {
                         condition: expr::UntypedExpr::Var {
@@ -448,60 +448,60 @@ fn if_expression() {
                             name: "True".to_string(),
                         },
                         body: expr::UntypedExpr::BinOp {
-                            location: Span::new((), 32..37),
+                            location: Span::new((), 27..32),
                             name: ast::BinOp::AddInt,
                             left: Box::new(expr::UntypedExpr::Int {
-                                location: Span::new((), 32..33),
+                                location: Span::new((), 27..28),
                                 value: "1".to_string(),
                             }),
                             right: Box::new(expr::UntypedExpr::Int {
-                                location: Span::new((), 36..37),
+                                location: Span::new((), 31..32),
                                 value: "1".to_string(),
                             }),
                         },
-                        location: Span::new((), 16..41),
+                        location: Span::new((), 16..36),
                     },
                     ast::IfBranch {
                         condition: expr::UntypedExpr::BinOp {
-                            location: Span::new((), 50..55),
+                            location: Span::new((), 45..50),
                             name: ast::BinOp::LtInt,
                             left: Box::new(expr::UntypedExpr::Var {
-                                location: Span::new((), 50..51),
+                                location: Span::new((), 45..46),
                                 name: "a".to_string(),
                             }),
                             right: Box::new(expr::UntypedExpr::Int {
-                                location: Span::new((), 54..55),
+                                location: Span::new((), 49..50),
                                 value: "4".to_string(),
                             }),
                         },
                         body: expr::UntypedExpr::Int {
-                            location: Span::new((), 67..68),
+                            location: Span::new((), 57..58),
                             value: "5".to_string(),
                         },
-                        location: Span::new((), 50..72),
+                        location: Span::new((), 45..62),
                     },
                     ast::IfBranch {
                         condition: expr::UntypedExpr::BinOp {
-                            location: Span::new((), 81..87),
+                            location: Span::new((), 71..77),
                             name: ast::BinOp::Or,
                             left: Box::new(expr::UntypedExpr::Var {
-                                location: Span::new((), 81..82),
+                                location: Span::new((), 71..72),
                                 name: "a".to_string(),
                             }),
                             right: Box::new(expr::UntypedExpr::Var {
-                                location: Span::new((), 86..87),
+                                location: Span::new((), 76..77),
                                 name: "b".to_string(),
                             }),
                         },
                         body: expr::UntypedExpr::Int {
-                            location: Span::new((), 99..100),
+                            location: Span::new((), 84..85),
                             value: "6".to_string(),
                         },
-                        location: Span::new((), 81..104),
+                        location: Span::new((), 71..89),
                     },
                 ],
                 final_else: Box::new(expr::UntypedExpr::Int {
-                    location: Span::new((), 116..117),
+                    location: Span::new((), 101..102),
                     value: "3".to_string(),
                 }),
             },
@@ -511,7 +511,7 @@ fn if_expression() {
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 122,
+            end_position: 107,
         }),
     )
 }
