@@ -627,7 +627,7 @@ pub fn expr_parser(
 
         let record_parser = choice((
             select! {Token::Name { name } => name}
-                .map_with_span(|module, span| (module, span))
+                .map_with_span(|module, span: Span| (module, span))
                 .then_ignore(just(Token::Dot))
                 .or_not()
                 .then(
@@ -635,35 +635,29 @@ pub fn expr_parser(
                         .map_with_span(|name, span| (name, span)),
                 )
                 .then(
-                    select! {Token::Name {name} => name}
-                        .then_ignore(just(Token::Colon))
-                        .or_not()
-                        .then(r.clone())
-                        .validate(|(label_opt, value), span, emit| {
-                            dbg!(&label_opt);
-                            let label = if label_opt.is_some() {
-                                label_opt
-                            } else if let expr::UntypedExpr::Var { name, .. } = &value {
-                                Some(name.clone())
-                            } else {
-                                emit(ParseError::expected_input_found(
-                                    value.location(),
-                                    None,
-                                    Some(error::Pattern::RecordPunning),
-                                ));
-
-                                None
-                            };
-
-                            ast::CallArg {
+                    choice((
+                        select! {Token::Name {name} => name}
+                            .then_ignore(just(Token::Colon))
+                            .then(r.clone())
+                            .map_with_span(|(label, value), span| ast::CallArg {
                                 location: span,
                                 value,
-                                label,
+                                label: Some(label),
+                            }),
+                        select! {Token::Name {name} => name}.map_with_span(|name, span| {
+                            ast::CallArg {
+                                location: span,
+                                value: expr::UntypedExpr::Var {
+                                    name: name.clone(),
+                                    location: span,
+                                },
+                                label: Some(name),
                             }
-                        })
-                        .separated_by(just(Token::Comma))
-                        .allow_trailing()
-                        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+                        }),
+                    ))
+                    .separated_by(just(Token::Comma))
+                    .allow_trailing()
+                    .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
                 ),
             select! {Token::Name { name } => name}
                 .map_with_span(|module, span| (module, span))
@@ -918,29 +912,23 @@ pub fn expr_parser(
             );
 
         let if_parser = just(Token::If)
-            .ignore_then(
-                r.clone()
-                    .then_ignore(just(Token::Then))
-                    .then(block_parser.clone())
-                    .map_with_span(|(condition, body), span| ast::IfBranch {
-                        condition,
-                        body,
-                        location: span,
-                    }),
-            )
+            .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
+                |(condition, body), span| ast::IfBranch {
+                    condition,
+                    body,
+                    location: span,
+                },
+            ))
             .then(
                 just(Token::Else)
                     .ignore_then(just(Token::If))
-                    .ignore_then(
-                        r.clone()
-                            .then_ignore(just(Token::Then))
-                            .then(block_parser.clone())
-                            .map_with_span(|(condition, body), span| ast::IfBranch {
-                                condition,
-                                body,
-                                location: span,
-                            }),
-                    )
+                    .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
+                        |(condition, body), span| ast::IfBranch {
+                            condition,
+                            body,
+                            location: span,
+                        },
+                    ))
                     .repeated(),
             )
             .then_ignore(just(Token::Else))
