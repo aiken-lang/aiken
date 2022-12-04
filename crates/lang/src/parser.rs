@@ -573,18 +573,30 @@ pub fn expr_parser(
                     .then(
                         just(Token::Comma)
                             .ignore_then(
-                                select! { Token::Name {name} => name }
-                                    .then_ignore(just(Token::Colon))
-                                    .then(r.clone())
-                                    .map_with_span(|(label, value), span| {
-                                        ast::UntypedRecordUpdateArg {
-                                            label,
-                                            value,
+                                choice((
+                                    select! { Token::Name {name} => name }
+                                        .then_ignore(just(Token::Colon))
+                                        .then(r.clone())
+                                        .map_with_span(|(label, value), span| {
+                                            ast::UntypedRecordUpdateArg {
+                                                label,
+                                                value,
+                                                location: span,
+                                            }
+                                        }),
+                                    select! {Token::Name {name} => name}.map_with_span(
+                                        |name, span| ast::UntypedRecordUpdateArg {
                                             location: span,
-                                        }
-                                    })
-                                    .separated_by(just(Token::Comma))
-                                    .allow_trailing(),
+                                            value: expr::UntypedExpr::Var {
+                                                name: name.clone(),
+                                                location: span,
+                                            },
+                                            label: name,
+                                        },
+                                    ),
+                                ))
+                                .separated_by(just(Token::Comma))
+                                .allow_trailing(),
                             )
                             .or_not(),
                     )
