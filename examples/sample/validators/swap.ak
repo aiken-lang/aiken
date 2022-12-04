@@ -32,7 +32,7 @@ pub fn final_check(z: Int) {
 }
 
 pub fn incrementor(counter: Int, target: Int) -> Int {
-  if counter == target {
+  if counter == target then {
     target
   } else {
     incrementor(counter + 1, target)

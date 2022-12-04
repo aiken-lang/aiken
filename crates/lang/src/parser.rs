@@ -562,6 +562,168 @@ pub fn expr_parser(
             }
         });
 
+        let record_update_parser = select! {Token::Name { name } => name}
+            .map_with_span(|module, span: Span| (module, span))
+            .then_ignore(just(Token::Dot))
+            .or_not()
+            .then(select! {Token::UpName { name } => name}.map_with_span(|name, span| (name, span)))
+            .then(
+                just(Token::DotDot)
+                    .ignore_then(r.clone())
+                    .then(
+                        just(Token::Comma)
+                            .ignore_then(
+                                select! { Token::Name {name} => name }
+                                    .then_ignore(just(Token::Colon))
+                                    .then(r.clone())
+                                    .map_with_span(|(label, value), span| {
+                                        ast::UntypedRecordUpdateArg {
+                                            label,
+                                            value,
+                                            location: span,
+                                        }
+                                    })
+                                    .separated_by(just(Token::Comma))
+                                    .allow_trailing(),
+                            )
+                            .or_not(),
+                    )
+                    .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
+                    .map_with_span(|a, span: Span| (a, span)),
+            )
+            .map(|((module, (name, n_span)), ((spread, opt_args), span))| {
+                let constructor = if let Some((module, m_span)) = module {
+                    expr::UntypedExpr::FieldAccess {
+                        location: m_span.union(n_span),
+                        label: name,
+                        container: Box::new(expr::UntypedExpr::Var {
+                            location: m_span,
+                            name: module,
+                        }),
+                    }
+                } else {
+                    expr::UntypedExpr::Var {
+                        location: n_span,
+                        name,
+                    }
+                };
+
+                let spread_span = spread.location();
+
+                let location = Span::new((), spread_span.start - 2..spread_span.end);
+
+                let spread = ast::RecordUpdateSpread {
+                    base: Box::new(spread),
+                    location,
+                };
+
+                expr::UntypedExpr::RecordUpdate {
+                    location: constructor.location().union(span),
+                    constructor: Box::new(constructor),
+                    spread,
+                    arguments: opt_args.unwrap_or_default(),
+                }
+            });
+
+        let record_parser = choice((
+            select! {Token::Name { name } => name}
+                .map_with_span(|module, span| (module, span))
+                .then_ignore(just(Token::Dot))
+                .or_not()
+                .then(
+                    select! {Token::UpName { name } => name}
+                        .map_with_span(|name, span| (name, span)),
+                )
+                .then(
+                    select! {Token::Name {name} => name}
+                        .then_ignore(just(Token::Colon))
+                        .or_not()
+                        .then(r.clone())
+                        .validate(|(label_opt, value), span, emit| {
+                            dbg!(&label_opt);
+                            let label = if label_opt.is_some() {
+                                label_opt
+                            } else if let expr::UntypedExpr::Var { name, .. } = &value {
+                                Some(name.clone())
+                            } else {
+                                emit(ParseError::expected_input_found(
+                                    value.location(),
+                                    None,
+                                    Some(error::Pattern::RecordPunning),
+                                ));
+
+                                None
+                            };
+
+                            ast::CallArg {
+                                location: span,
+                                value,
+                                label,
+                            }
+                        })
+                        .separated_by(just(Token::Comma))
+                        .allow_trailing()
+                        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+                ),
+            select! {Token::Name { name } => name}
+                .map_with_span(|module, span| (module, span))
+                .then_ignore(just(Token::Dot))
+                .or_not()
+                .then(
+                    select! {Token::UpName { name } => name}
+                        .map_with_span(|name, span| (name, span)),
+                )
+                .then(
+                    r.clone()
+                        .map_with_span(|value, span| ast::CallArg {
+                            location: span,
+                            value,
+                            label: None,
+                        })
+                        .separated_by(just(Token::Comma))
+                        .allow_trailing()
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+                ),
+        ))
+        .map_with_span(|((module, (name, n_span)), arguments), span| {
+            let fun = if let Some((module, m_span)) = module {
+                expr::UntypedExpr::FieldAccess {
+                    location: m_span.union(n_span),
+                    label: name,
+                    container: Box::new(expr::UntypedExpr::Var {
+                        location: m_span,
+                        name: module,
+                    }),
+                }
+            } else {
+                expr::UntypedExpr::Var {
+                    location: n_span,
+                    name,
+                }
+            };
+
+            expr::UntypedExpr::Call {
+                arguments,
+                fun: Box::new(fun),
+                location: span,
+            }
+        });
+
+        let field_access_constructor = select! {Token::Name { name } => name}
+            .map_with_span(|module, span| (module, span))
+            .then_ignore(just(Token::Dot))
+            .then(select! {Token::UpName { name } => name})
+            .map_with_span(
+                |((module, m_span), name), span| expr::UntypedExpr::FieldAccess {
+                    location: span,
+                    label: name,
+                    container: Box::new(expr::UntypedExpr::Var {
+                        location: m_span,
+                        name: module,
+                    }),
+                },
+            );
+
         let var_parser = select! {
             Token::Name { name } => name,
             Token::UpName { name } => name,
@@ -756,23 +918,29 @@ pub fn expr_parser(
             );
 
         let if_parser = just(Token::If)
-            .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
-                |(condition, body), span| ast::IfBranch {
-                    condition,
-                    body,
-                    location: span,
-                },
-            ))
+            .ignore_then(
+                r.clone()
+                    .then_ignore(just(Token::Then))
+                    .then(block_parser.clone())
+                    .map_with_span(|(condition, body), span| ast::IfBranch {
+                        condition,
+                        body,
+                        location: span,
+                    }),
+            )
             .then(
                 just(Token::Else)
                     .ignore_then(just(Token::If))
-                    .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
-                        |(condition, body), span| ast::IfBranch {
-                            condition,
-                            body,
-                            location: span,
-                        },
-                    ))
+                    .ignore_then(
+                        r.clone()
+                            .then_ignore(just(Token::Then))
+                            .then(block_parser.clone())
+                            .map_with_span(|(condition, body), span| ast::IfBranch {
+                                condition,
+                                body,
+                                location: span,
+                            }),
+                    )
                     .repeated(),
             )
             .then_ignore(just(Token::Else))
@@ -792,6 +960,9 @@ pub fn expr_parser(
         let expr_unit_parser = choice((
             string_parser,
             int_parser,
+            record_update_parser,
+            record_parser,
+            field_access_constructor,
             var_parser,
             todo_parser,
             tuple,
@@ -819,41 +990,13 @@ pub fn expr_parser(
         enum Chain {
             Call(Vec<ParserArg>, Span),
             FieldAccess(String, Span),
-            RecordUpdate(
-                Box<(expr::UntypedExpr, Vec<ast::UntypedRecordUpdateArg>)>,
-                Span,
-            ),
         }
 
         let field_access_parser = just(Token::Dot)
             .ignore_then(select! {
                 Token::Name { name } => name,
-                Token::UpName { name } => name
             })
             .map_with_span(Chain::FieldAccess);
-
-        let record_update_parser = just(Token::DotDot)
-            .ignore_then(r.clone())
-            .then(
-                just(Token::Comma)
-                    .ignore_then(
-                        select! { Token::Name {name} => name }
-                            .then_ignore(just(Token::Colon))
-                            .then(r.clone())
-                            .map_with_span(|(label, value), span| ast::UntypedRecordUpdateArg {
-                                label,
-                                value,
-                                location: span,
-                            })
-                            .separated_by(just(Token::Comma))
-                            .allow_trailing(),
-                    )
-                    .or_not(),
-            )
-            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
-            .map_with_span(|(spread, args_opt), span| {
-                Chain::RecordUpdate(Box::new((spread, args_opt.unwrap_or_default())), span)
-            });
 
         let call_parser = choice((
             select! { Token::Name { name } => name }
@@ -881,7 +1024,7 @@ pub fn expr_parser(
         .delimited_by(just(Token::LeftParen), just(Token::RightParen))
         .map_with_span(Chain::Call);
 
-        let chain = choice((field_access_parser, record_update_parser, call_parser));
+        let chain = choice((field_access_parser, call_parser));
 
         let chained = expr_unit_parser
             .then(chain.repeated())
@@ -941,24 +1084,6 @@ pub fn expr_parser(
                     label,
                     container: Box::new(e),
                 },
-
-                Chain::RecordUpdate(data, span) => {
-                    let (spread, arguments) = *data;
-
-                    let location = span.union(spread.location());
-
-                    let spread = ast::RecordUpdateSpread {
-                        base: Box::new(spread),
-                        location,
-                    };
-
-                    expr::UntypedExpr::RecordUpdate {
-                        location: e.location().union(span),
-                        constructor: Box::new(e),
-                        spread,
-                        arguments,
-                    }
-                }
             });
 
         // Negate
