@@ -1,86 +1,34 @@
-use std::{cmp::Ordering, collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc, vec};
 
 use indexmap::IndexMap;
-
+use itertools::Itertools;
 use uplc::{
-    ast::{Constant, Name, Program, Term, Type as UplcType, Unique},
+    ast::{
+        builder::{self, constr_index_exposer, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD},
+        Constant as UplcConstant, Name, Program, Term,
+    },
     builtins::DefaultFunction,
     parser::interner::Interner,
     BigInt, PlutusData,
 };
 
 use crate::{
-    ast::{AssignmentKind, BinOp, DataType, Function, Pattern, Span, TypedArg, TypedPattern},
+    ast::{
+        ArgName, AssignmentKind, BinOp, Clause, Constant, DataType, Function, Pattern, Span,
+        TypedArg,
+    },
     expr::TypedExpr,
-    tipo::{self, ModuleValueConstructor, Type, ValueConstructor, ValueConstructorVariant},
+    ir::IR,
+    tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
+    IdGenerator,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ScopeLevels {
-    scope_tracker: Vec<i32>,
-    field_depth: i32,
-}
-
-impl ScopeLevels {
-    pub fn new() -> Self {
-        ScopeLevels {
-            scope_tracker: vec![0],
-            field_depth: 0,
-        }
-    }
-
-    pub fn is_less_than(&self, other: &ScopeLevels, include_depth: bool) -> bool {
-        if self.scope_tracker.is_empty() && !other.scope_tracker.is_empty() {
-            return true;
-        } else if other.scope_tracker.is_empty() {
-            return false;
-        }
-
-        let mut result = self.scope_tracker.len() < other.scope_tracker.len()
-            || (self.scope_tracker.len() == other.scope_tracker.len()
-                && include_depth
-                && self.field_depth < other.field_depth);
-
-        for (scope_self, scope_other) in self.scope_tracker.iter().zip(other.scope_tracker.iter()) {
-            match scope_self.cmp(scope_other) {
-                std::cmp::Ordering::Less => {
-                    result = true;
-                    break;
-                }
-                std::cmp::Ordering::Equal => {}
-                std::cmp::Ordering::Greater => {
-                    result = false;
-                    break;
-                }
-            }
-        }
-        result
-    }
-
-    pub fn scope_increment_sequence(&self, inc: i32) -> ScopeLevels {
-        let mut new_scope = self.clone();
-        *new_scope.scope_tracker.last_mut().unwrap() += inc;
-        new_scope.scope_tracker.push(0);
-        new_scope
-    }
-
-    pub fn scope_increment(&self, inc: i32) -> ScopeLevels {
-        let mut new_scope = self.clone();
-        *new_scope.scope_tracker.last_mut().unwrap() += inc;
-        new_scope
-    }
-
-    pub fn depth_increment(&self, inc: i32) -> ScopeLevels {
-        let mut new_scope = self.clone();
-        new_scope.field_depth += inc;
-        new_scope
-    }
-}
-
-impl Default for ScopeLevels {
-    fn default() -> Self {
-        Self::new()
-    }
+#[derive(Clone, Debug)]
+pub struct FuncComponents {
+    ir: Vec<IR>,
+    dependencies: Vec<FunctionAccessKey>,
+    args: Vec<String>,
+    recursive: bool,
 }
 
 #[derive(Clone, Eq, Debug, PartialEq, Hash)]
@@ -104,32 +52,24 @@ pub struct FunctionAccessKey {
 }
 
 #[derive(Clone, Debug)]
-pub struct ConstrConversionInfo {
-    local_var: String,
-    field: Option<String>,
-    scope: ScopeLevels,
-    index: Option<u64>,
-    returning_type: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct ScopedExpr {
-    scope: ScopeLevels,
-    expr: TypedExpr,
+pub struct ClauseProperties {
+    clause_var_name: String,
+    needs_constr_var: bool,
+    is_complex_clause: bool,
+    current_index: usize,
+    original_subject_name: String,
 }
 
 pub struct CodeGenerator<'a> {
-    uplc_function_holder: Vec<(String, Term<Name>)>,
-    uplc_function_holder_lookup: IndexMap<FunctionAccessKey, ScopeLevels>,
-    uplc_data_holder_lookup: IndexMap<ConstrFieldKey, ScopedExpr>,
-    uplc_data_constr_lookup: IndexMap<DataTypeKey, ScopeLevels>,
-    uplc_data_usage_holder_lookup: IndexMap<ConstrUsageKey, ScopeLevels>,
-    function_recurse_lookup: IndexMap<FunctionAccessKey, usize>,
+    defined_functions: HashMap<FunctionAccessKey, ()>,
     functions: &'a HashMap<FunctionAccessKey, &'a Function<Arc<tipo::Type>, TypedExpr>>,
     // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
     data_types: &'a HashMap<DataTypeKey, &'a DataType<Arc<tipo::Type>>>,
     // imports: &'a HashMap<(String, String), &'a Use<String>>,
     // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
+    module_types: &'a HashMap<String, TypeInfo>,
+    id_gen: IdGenerator,
+    needs_field_access: bool,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -139,106 +79,51 @@ impl<'a> CodeGenerator<'a> {
         data_types: &'a HashMap<DataTypeKey, &'a DataType<Arc<tipo::Type>>>,
         // imports: &'a HashMap<(String, String), &'a Use<String>>,
         // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
+        module_types: &'a HashMap<String, TypeInfo>,
     ) -> Self {
         CodeGenerator {
-            uplc_function_holder: Vec::new(),
-            uplc_function_holder_lookup: IndexMap::new(),
-            uplc_data_holder_lookup: IndexMap::new(),
-            uplc_data_constr_lookup: IndexMap::new(),
-            uplc_data_usage_holder_lookup: IndexMap::new(),
-            function_recurse_lookup: IndexMap::new(),
+            defined_functions: HashMap::new(),
             functions,
             // type_aliases,
             data_types,
             // imports,
             // constants,
+            module_types,
+            id_gen: IdGenerator::new(),
+            needs_field_access: false,
         }
     }
 
     pub fn generate(&mut self, body: TypedExpr, arguments: Vec<TypedArg>) -> Program<Name> {
-        self.recurse_scope_level(&body, ScopeLevels::new());
+        let mut ir_stack = vec![];
+        let scope = vec![self.id_gen.next()];
 
-        self.uplc_function_holder_lookup
-            .sort_by(|_key1, value1, _key2, value2| {
-                if value1.is_less_than(value2, true) {
-                    Ordering::Less
-                } else if value2.is_less_than(value1, true) {
-                    Ordering::Greater
-                } else {
-                    Ordering::Equal
-                }
-            });
+        self.build_ir(&body, &mut ir_stack, scope);
 
-        println!("DATA HOLDER LOOKUP{:#?}", self.uplc_data_holder_lookup);
+        println!("INITIAL: {ir_stack:#?}");
 
-        println!(
-            "DATA USAGE HOLDER {:#?}",
-            self.uplc_data_usage_holder_lookup
-        );
+        self.define_ir(&mut ir_stack);
 
-        let mut term = self.recurse_code_gen(&body, ScopeLevels::new());
+        println!("AFTER FUNCTION DEFINITIONS: {ir_stack:#?}");
 
-        // Apply constr exposer to top level.
-        term = Term::Apply {
-            function: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_fields_exposer".to_string(),
-                    unique: 0.into(),
-                },
-                body: term.into(),
-            }
-            .into(),
-            argument: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_var".to_string(),
-                    unique: 0.into(),
-                },
-                body: Term::Apply {
-                    function: Term::Force(
-                        Term::Force(Term::Builtin(DefaultFunction::SndPair).into()).into(),
-                    )
-                    .into(),
-                    argument: Term::Apply {
-                        function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                        argument: Term::Var(Name {
-                            text: "constr_var".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-            }
-            .into(),
-        };
+        let mut term = self.uplc_code_gen(&mut ir_stack);
 
-        term = self.add_arg_getter(term);
+        if self.needs_field_access {
+            term = builder::constr_get_field(term);
 
-        term = Term::Force(
-            Term::Apply {
-                function: Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Force(Term::Builtin(DefaultFunction::IfThenElse).into())
-                            .into(),
-                        argument: term.into(),
-                    }
-                    .into(),
-                    argument: Term::Delay(Term::Constant(Constant::Unit).into()).into(),
-                }
-                .into(),
-                argument: Term::Delay(Term::Error.into()).into(),
-            }
-            .into(),
-        );
+            term = builder::constr_fields_exposer(term);
+        }
+
+        // Wrap the validator body if ifThenElse term unit error
+        term = builder::final_wrapper(term);
 
         for arg in arguments.iter().rev() {
             term = Term::Lambda {
                 parameter_name: uplc::ast::Name {
                     text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                    unique: Unique::new(0),
+                    unique: 0.into(),
                 },
-                body: Rc::new(term),
+                body: term.into(),
             }
         }
 
@@ -256,610 +141,42 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
-    pub(crate) fn recurse_scope_level(&mut self, body: &TypedExpr, scope_level: ScopeLevels) {
-        match dbg!(body) {
-            TypedExpr::Int { .. } => {}
-            TypedExpr::String { .. } => {}
-            TypedExpr::ByteArray { .. } => {}
-            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
-                // let mut terms = Vec::new();
-                for (i, exp) in expressions.iter().enumerate().rev() {
-                    self.recurse_scope_level(
-                        exp,
-                        scope_level.scope_increment_sequence(i as i32 + 1),
-                    );
-                }
-            }
-
-            TypedExpr::Var { constructor, .. } => {
-                match constructor.variant.clone() {
-                    ValueConstructorVariant::LocalVariable { .. } => {}
-                    ValueConstructorVariant::ModuleConstant { .. } => todo!(),
-                    ValueConstructorVariant::ModuleFn { name, module, .. } => {
-                        if self
-                            .uplc_function_holder_lookup
-                            .get(&FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            })
-                            .is_none()
-                        {
-                            let func_def = self
-                                .functions
-                                .get(&FunctionAccessKey {
-                                    module_name: module.to_string(),
-                                    function_name: name.to_string(),
-                                })
-                                .unwrap();
-
-                            self.uplc_function_holder_lookup.insert(
-                                FunctionAccessKey {
-                                    module_name: module,
-                                    function_name: name,
-                                },
-                                scope_level.clone(),
-                            );
-
-                            self.recurse_scope_level(&func_def.body, scope_level);
-                        } else if scope_level.is_less_than(
-                            self.uplc_function_holder_lookup
-                                .get(&FunctionAccessKey {
-                                    module_name: module.to_string(),
-                                    function_name: name.to_string(),
-                                })
-                                .unwrap(),
-                            false,
-                        ) {
-                            self.uplc_function_holder_lookup.insert(
-                                FunctionAccessKey {
-                                    module_name: module,
-                                    function_name: name,
-                                },
-                                scope_level,
-                            );
-                        }
-                    }
-                    ValueConstructorVariant::Record { .. } => {
-                        match &*constructor.tipo {
-                            Type::App { .. } => {}
-                            Type::Fn { .. } | Type::Var { .. } | Type::Tuple { .. } => {}
-                        };
-                    }
-                };
-            }
-            TypedExpr::Fn { .. } => todo!(),
-            TypedExpr::List { elements, tail, .. } => {
-                for element in elements {
-                    self.recurse_scope_level(element, scope_level.clone());
-                }
-                if let Some(tail_element) = tail {
-                    self.recurse_scope_level(tail_element, scope_level)
-                }
-            }
-            TypedExpr::Call { fun, args, .. } => {
-                self.recurse_scope_level(fun, scope_level.clone());
-
-                for (index, arg) in args.iter().enumerate() {
-                    self.recurse_scope_level(
-                        &arg.value,
-                        scope_level.scope_increment(index as i32 + 2),
-                    );
-                }
-            }
-            TypedExpr::BinOp { left, right, .. } => {
-                self.recurse_scope_level(left, scope_level.clone());
-                self.recurse_scope_level(right, scope_level);
-            }
-            TypedExpr::Assignment { value, pattern, .. } => {
-                self.recurse_scope_level_pattern(pattern, value, scope_level, &[])
-            }
-            TypedExpr::Trace { .. } => todo!(),
-            TypedExpr::When {
-                subjects, clauses, ..
-            } => {
-                for clause in clauses {
-                    for pattern in clause.pattern.iter() {
-                        self.recurse_scope_level_pattern(
-                            pattern,
-                            &clause.then,
-                            scope_level.scope_increment_sequence(1),
-                            subjects,
-                        );
-                    }
-                }
-                for subject in subjects {
-                    self.recurse_scope_level(subject, scope_level.clone());
-                }
-            }
-            // if statements increase scope due to branching.
-            TypedExpr::If {
-                branches,
-                final_else,
-                ..
-            } => {
-                self.recurse_scope_level(final_else, scope_level.scope_increment_sequence(1));
-
-                for branch in branches {
-                    // Need some scoping count to potentially replace condition with var since we should assume a condition
-                    // may be repeated 3 + times or be large enough series of binops to warrant var replacement
-                    self.recurse_scope_level(
-                        &branch.condition,
-                        scope_level.scope_increment_sequence(1), // Since this happens before branching. Maybe not increase scope level
-                    );
-
-                    self.recurse_scope_level(&branch.body, scope_level.scope_increment_sequence(1));
-                }
-            }
-            expr @ TypedExpr::RecordAccess { label, record, .. } => {
-                self.recurse_scope_level(record, scope_level.clone());
-                let mut is_var = false;
-                let mut current_var_name = String::new();
-                let mut current_record = *record.clone();
-                let mut current_scope = scope_level;
-                while !is_var {
-                    match current_record.clone() {
-                        TypedExpr::Var {
-                            constructor, name, ..
-                        } => match (
-                            constructor.clone().variant.clone(),
-                            (*constructor.tipo).clone(),
-                        ) {
-                            (ValueConstructorVariant::LocalVariable { .. }, Type::App { .. }) => {
-                                current_var_name = if current_var_name.is_empty() {
-                                    name
-                                } else {
-                                    format!("{name}_field_{current_var_name}")
-                                };
-                                is_var = true;
-                            }
-                            _ => todo!(),
-                        },
-                        TypedExpr::RecordAccess { label, record, .. } => {
-                            current_var_name = if current_var_name.is_empty() {
-                                label.to_string()
-                            } else {
-                                format!("{label}_field_{current_var_name}")
-                            };
-                            current_record = *record.clone();
-                            current_scope = current_scope.depth_increment(1);
-                        }
-                        _ => {}
-                    }
-                }
-
-                if let Some(val) = self.uplc_data_holder_lookup.get(&ConstrFieldKey {
-                    local_var: current_var_name.clone(),
-                    field_name: label.clone(),
-                }) {
-                    if current_scope.is_less_than(&val.scope, false) {
-                        self.uplc_data_holder_lookup.insert(
-                            ConstrFieldKey {
-                                local_var: current_var_name.clone(),
-                                field_name: label.clone(),
-                            },
-                            ScopedExpr {
-                                scope: current_scope.clone(),
-                                expr: expr.clone(),
-                            },
-                        );
-                    }
-                } else {
-                    self.uplc_data_holder_lookup.insert(
-                        ConstrFieldKey {
-                            local_var: current_var_name.clone(),
-                            field_name: label.clone(),
-                        },
-                        ScopedExpr {
-                            scope: current_scope.clone(),
-                            expr: expr.clone(),
-                        },
-                    );
-                }
-
-                if let Some(val) = self
-                    .uplc_data_usage_holder_lookup
-                    .get(&current_var_name.clone())
-                {
-                    if current_scope.is_less_than(val, false) {
-                        self.uplc_data_usage_holder_lookup
-                            .insert(current_var_name, current_scope);
-                    }
-                } else {
-                    self.uplc_data_usage_holder_lookup
-                        .insert(current_var_name, current_scope);
-                }
-            }
-            TypedExpr::ModuleSelect { constructor, .. } => match constructor {
-                ModuleValueConstructor::Record { .. } => {}
-                ModuleValueConstructor::Fn { module, name, .. } => {
-                    if self
-                        .uplc_function_holder_lookup
-                        .get(&FunctionAccessKey {
-                            module_name: module.to_string(),
-                            function_name: name.to_string(),
-                        })
-                        .is_none()
-                    {
-                        let func_def = self
-                            .functions
-                            .get(&FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            })
-                            .unwrap();
-
-                        self.recurse_scope_level(
-                            &func_def.body,
-                            scope_level
-                                .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
-                        );
-
-                        self.uplc_function_holder_lookup.insert(
-                            FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            },
-                            scope_level,
-                        );
-                    } else if scope_level.is_less_than(
-                        self.uplc_function_holder_lookup
-                            .get(&FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            })
-                            .unwrap(),
-                        false,
-                    ) {
-                        let func_def = self
-                            .functions
-                            .get(&FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            })
-                            .unwrap();
-
-                        self.uplc_function_holder_lookup.insert(
-                            FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            },
-                            scope_level
-                                .scope_increment_sequence(func_def.arguments.len() as i32 + 1),
-                        );
-                    }
-                }
-                ModuleValueConstructor::Constant { .. } => todo!(),
-            },
-            TypedExpr::Todo { .. } => todo!(),
-            TypedExpr::RecordUpdate { .. } => todo!(),
-            TypedExpr::Negate { .. } => todo!(),
-            TypedExpr::Tuple { .. } => todo!(),
-        }
-    }
-
-    fn recurse_scope_level_pattern(
-        &mut self,
-        pattern: &TypedPattern,
-        value: &TypedExpr,
-        scope_level: ScopeLevels,
-        vars: &[TypedExpr],
-    ) {
-        match pattern {
-            Pattern::Int { .. }
-            | Pattern::String { .. }
-            | Pattern::Var { .. }
-            | Pattern::List { .. }
-            | Pattern::Discard { .. } => {
-                self.recurse_scope_level(value, scope_level);
-            }
-
-            Pattern::VarUsage { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
-            Pattern::Constructor {
-                name: constructor_name,
-                tipo,
-                arguments,
-                constructor,
-                module,
-                ..
-            } => {
-                self.recurse_scope_level(value, scope_level.scope_increment_sequence(1));
-
-                match &**tipo {
-                    Type::App { module, name, .. } => {
-                        if let Some(val) = self.uplc_data_constr_lookup.get(&DataTypeKey {
-                            module_name: module.to_string(),
-                            defined_type: name.clone(),
-                        }) {
-                            if scope_level.is_less_than(val, false) {
-                                self.uplc_data_constr_lookup.insert(
-                                    DataTypeKey {
-                                        module_name: module.to_string(),
-                                        defined_type: name.clone(),
-                                    },
-                                    scope_level,
-                                );
-                            }
-                        } else {
-                            self.uplc_data_constr_lookup.insert(
-                                DataTypeKey {
-                                    module_name: module.to_string(),
-                                    defined_type: name.clone(),
-                                },
-                                scope_level,
-                            );
-                        }
-                    }
-                    Type::Fn { .. } => {
-                        let mut mapping_index: IndexMap<String, usize> = IndexMap::new();
-
-                        match constructor {
-                            tipo::PatternConstructor::Record { field_map, .. } => {
-                                if let Some(fields_mapping) = field_map {
-                                    mapping_index.extend(fields_mapping.fields.clone());
-                                    mapping_index
-                                        .sort_by(|_, value1, _, value2| value1.cmp(value2));
-                                    mapping_index.reverse();
-                                }
-                            }
-                        };
-
-                        let module = module.clone().unwrap_or_default();
-                        // TODO: support multiple subjects
-                        let (var_name, tipo) = match &vars[0] {
-                            TypedExpr::Var {
-                                name, constructor, ..
-                            } => (name, constructor.tipo.clone()),
-                            rest => todo!("implement: {:#?}", rest),
-                        };
-
-                        let mut type_name = String::new();
-                        let mut is_app = false;
-                        let current_tipo = &*tipo;
-                        while !is_app {
-                            match current_tipo {
-                                Type::App { name, .. } => {
-                                    type_name = name.to_string();
-                                    is_app = true;
-                                }
-                                _ => todo!(),
-                            };
-                        }
-
-                        for (ind, arg) in arguments.iter().rev().enumerate() {
-                            let (label, index) = if let Some(arg_label) = &arg.label {
-                                (
-                                    arg_label.to_string(),
-                                    mapping_index.remove(arg_label).unwrap() as u64,
-                                )
-                            } else {
-                                let arg_field =
-                                    mapping_index.pop().unwrap_or((format!("{ind}"), ind));
-                                (arg_field.0, arg_field.1 as u64)
-                            };
-
-                            match &arg.value {
-                                Pattern::Var {
-                                    name: field_name, ..
-                                } => {
-                                    let record_access = TypedExpr::Assignment {
-                                        location: Span::empty(),
-                                        tipo: Type::App {
-                                            public: true,
-                                            module: module.clone(),
-                                            name: constructor_name.to_string(),
-                                            args: vec![],
-                                        }
-                                        .into(),
-                                        value: TypedExpr::RecordAccess {
-                                            location: Span::empty(),
-                                            tipo: Type::App {
-                                                public: true,
-                                                module: module.clone(),
-                                                name: constructor_name.to_string(),
-                                                args: vec![],
-                                            }
-                                            .into(),
-                                            label: label.clone(),
-                                            index,
-                                            record: TypedExpr::Var {
-                                                location: Span::empty(),
-                                                constructor: tipo::ValueConstructor {
-                                                    public: false,
-                                                    variant:
-                                                        ValueConstructorVariant::LocalVariable {
-                                                            location: Span::empty(),
-                                                        },
-                                                    tipo: Type::App {
-                                                        public: true,
-                                                        module: module.clone(),
-                                                        name: type_name.clone(),
-                                                        args: vec![],
-                                                    }
-                                                    .into(),
-                                                },
-                                                name: var_name.clone(),
-                                            }
-                                            .into(),
-                                        }
-                                        .into(),
-                                        pattern: TypedPattern::Var {
-                                            location: Span::empty(),
-                                            name: field_name.clone(),
-                                        },
-                                        kind: AssignmentKind::Let,
-                                    };
-
-                                    if let Some(val) =
-                                        self.uplc_data_holder_lookup.get(&ConstrFieldKey {
-                                            local_var: var_name.clone(),
-                                            field_name: label.clone(),
-                                        })
-                                    {
-                                        if scope_level.is_less_than(&val.scope, false) {
-                                            self.uplc_data_holder_lookup.insert(
-                                                ConstrFieldKey {
-                                                    local_var: var_name.clone(),
-                                                    field_name: label.clone(),
-                                                },
-                                                ScopedExpr {
-                                                    scope: scope_level.scope_increment(1),
-                                                    expr: record_access.clone(),
-                                                },
-                                            );
-                                        }
-                                    } else {
-                                        self.uplc_data_holder_lookup.insert(
-                                            ConstrFieldKey {
-                                                local_var: var_name.clone(),
-                                                field_name: label.clone(),
-                                            },
-                                            ScopedExpr {
-                                                scope: scope_level.scope_increment(1),
-                                                expr: record_access.clone(),
-                                            },
-                                        );
-                                    }
-
-                                    if let Some(val) =
-                                        self.uplc_data_usage_holder_lookup.get(&var_name.clone())
-                                    {
-                                        if scope_level.is_less_than(val, false) {
-                                            self.uplc_data_usage_holder_lookup
-                                                .insert(var_name.clone(), scope_level.clone());
-                                        }
-                                    } else {
-                                        self.uplc_data_usage_holder_lookup
-                                            .insert(var_name.clone(), scope_level.clone());
-                                    }
-
-                                    if let Some(val) =
-                                        self.uplc_data_constr_lookup.get(&DataTypeKey {
-                                            module_name: module.to_string(),
-                                            defined_type: type_name.clone(),
-                                        })
-                                    {
-                                        if scope_level.is_less_than(val, false) {
-                                            self.uplc_data_constr_lookup.insert(
-                                                DataTypeKey {
-                                                    module_name: module.to_string(),
-                                                    defined_type: type_name.clone(),
-                                                },
-                                                scope_level.clone(),
-                                            );
-                                        }
-                                    } else {
-                                        self.uplc_data_constr_lookup.insert(
-                                            DataTypeKey {
-                                                module_name: module.to_string(),
-                                                defined_type: type_name.clone(),
-                                            },
-                                            scope_level.clone(),
-                                        );
-                                    }
-                                }
-                                Pattern::Discard { .. } => {}
-                                _ => todo!(),
-                            };
-                        }
-                    }
-                    _ => todo!(),
-                };
-            }
-            Pattern::Tuple { .. } => todo!(),
-        }
-    }
-
-    fn recurse_code_gen(&mut self, body: &TypedExpr, scope_level: ScopeLevels) -> Term<Name> {
+    pub(crate) fn build_ir(&mut self, body: &TypedExpr, ir_stack: &mut Vec<IR>, scope: Vec<u64>) {
         match body {
-            TypedExpr::Int { value, .. } => {
-                Term::Constant(Constant::Integer(value.parse::<i128>().unwrap()))
-            }
-            TypedExpr::String { value, .. } => Term::Constant(Constant::String(value.clone())),
-            TypedExpr::ByteArray { bytes, .. } => {
-                Term::Constant(Constant::ByteString(bytes.clone()))
-            }
-            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
-                for (i, exp) in expressions.iter().enumerate().rev() {
-                    let mut term = self
-                        .recurse_code_gen(exp, scope_level.scope_increment_sequence(i as i32 + 1));
-
-                    term =
-                        self.maybe_insert_def(term, scope_level.scope_increment_sequence(i as i32));
-
-                    self.uplc_function_holder
-                        .push((String::new(), term.clone()));
+            TypedExpr::Int { value, .. } => ir_stack.push(IR::Int {
+                scope,
+                value: value.to_string(),
+            }),
+            TypedExpr::String { value, .. } => ir_stack.push(IR::String {
+                scope,
+                value: value.to_string(),
+            }),
+            TypedExpr::ByteArray { bytes, .. } => ir_stack.push(IR::ByteArray {
+                scope,
+                bytes: bytes.to_vec(),
+            }),
+            TypedExpr::Sequence { expressions, .. } => {
+                for expr in expressions {
+                    let mut scope = scope.clone();
+                    scope.push(self.id_gen.next());
+                    self.build_ir(expr, ir_stack, scope);
                 }
-
-                self.maybe_insert_def(
-                    self.uplc_function_holder.clone().pop().unwrap().1,
-                    scope_level,
-                )
+            }
+            TypedExpr::Pipeline { expressions, .. } => {
+                for expr in expressions {
+                    let mut scope = scope.clone();
+                    scope.push(self.id_gen.next());
+                    self.build_ir(expr, ir_stack, scope);
+                }
             }
             TypedExpr::Var {
                 constructor, name, ..
             } => {
-                if name == "True" || name == "False" {
-                    Term::Constant(Constant::Bool(name == "True"))
-                } else {
-                    match constructor.variant.clone() {
-                        ValueConstructorVariant::LocalVariable { .. } => Term::Var(Name {
-                            text: name.to_string(),
-                            unique: 0.into(),
-                        }),
-                        ValueConstructorVariant::ModuleConstant { .. } => todo!(),
-                        ValueConstructorVariant::ModuleFn { module, name, .. } => Term::Var(Name {
-                            text: format!("{module}_{name}"),
-                            unique: 0.into(),
-                        }),
-                        ValueConstructorVariant::Record {
-                            name: constr_name, ..
-                        } => {
-                            let data_type_key = match &*constructor.tipo {
-                                Type::App { module, name, .. } => DataTypeKey {
-                                    module_name: module.to_string(),
-                                    defined_type: name.to_string(),
-                                },
-                                Type::Fn { .. } => todo!(),
-                                Type::Var { .. } => todo!(),
-                                Type::Tuple { .. } => todo!(),
-                            };
-
-                            if let Some(data_type) = self.data_types.get(&data_type_key) {
-                                let (constr_index, _constr) = data_type
-                                    .constructors
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, x)| x.name == *constr_name)
-                                    .unwrap();
-
-                                Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::ConstrData).into(),
-                                    argument: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Builtin(DefaultFunction::MkPairData)
-                                                .into(),
-                                            argument: Term::Constant(Constant::Data(
-                                                PlutusData::BigInt(BigInt::Int(
-                                                    (constr_index as i128).try_into().unwrap(),
-                                                )),
-                                            ))
-                                            .into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Constant(Constant::Data(
-                                            PlutusData::Array(vec![]),
-                                        ))
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
-                            } else {
-                                todo!()
-                            }
-                        }
-                    }
-                }
+                ir_stack.push(IR::Var {
+                    scope,
+                    constructor: constructor.clone(),
+                    name: name.clone(),
+                });
             }
             TypedExpr::Fn { .. } => todo!(),
             TypedExpr::List {
@@ -868,1985 +185,1556 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let mut type_list = vec![];
-                let mut is_final_type = false;
-                // TODO use lifetimes instead of clone
-                // Skip first type since we know we have a list
-                let mut current_tipo = match (**tipo).clone() {
-                    Type::App { args, .. } => (*args[0]).clone(),
-                    Type::Fn { .. } => todo!(),
-                    Type::Var { .. } => todo!(),
-                    Type::Tuple { .. } => todo!(),
-                };
-                while !is_final_type {
-                    match current_tipo.clone() {
-                        Type::App { name, args, .. } => {
-                            if args.is_empty() {
-                                type_list.push(name);
-                                is_final_type = true;
-                            } else {
-                                type_list.push(name);
-                                current_tipo = (*args[0]).clone();
-                            }
-                        }
-                        Type::Fn { .. } => todo!(),
-                        Type::Var { tipo } => match (*tipo).borrow().clone() {
-                            tipo::TypeVar::Unbound { .. } => todo!(),
-                            tipo::TypeVar::Link { tipo } => {
-                                current_tipo = (*tipo).clone();
-                            }
-                            tipo::TypeVar::Generic { .. } => todo!(),
-                        },
-                        Type::Tuple { .. } => todo!(),
-                    };
-                }
-
-                let mut list_term = if let Some(tail_list) = tail {
-                    // Get list of tail items
-                    self.recurse_code_gen(tail_list, scope_level.clone())
-                } else {
-                    // Or get empty list of correct type
-                    let mut current_type = vec![];
-                    for type_name in type_list.into_iter().rev() {
-                        match type_name.as_str() {
-                            "ByteArray" => current_type.push(UplcType::ByteString),
-                            "Int" => current_type.push(UplcType::Integer),
-                            "String" => current_type.push(UplcType::String),
-                            "Bool" => current_type.push(UplcType::Bool),
-                            "List" => {
-                                if let Some(prev_type) = current_type.pop() {
-                                    current_type.push(UplcType::List(prev_type.into()));
-                                } else {
-                                    unreachable!()
-                                }
-                            }
-                            "Pair" => todo!(),
-                            _ => current_type.push(UplcType::Data),
-                        };
-                    }
-                    Term::Constant(Constant::ProtoList(current_type.pop().unwrap(), vec![]))
-                };
-
-                // use mkCons to prepend all elements in reverse
-                for element in elements.iter().rev() {
-                    let element_term = self.recurse_code_gen(element, scope_level.clone());
-
-                    list_term = Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Force(Term::Builtin(DefaultFunction::MkCons).into())
-                                .into(),
-                            argument: element_term.into(),
-                        }
-                        .into(),
-                        argument: list_term.into(),
-                    }
-                }
-                list_term
-            }
-            TypedExpr::Call {
-                fun, args, tipo, ..
-            } => {
-                match (&**tipo, &**fun) {
-                    (
-                        Type::App {
-                            name: tipo_name, ..
-                        },
-                        TypedExpr::Var {
-                            constructor: ValueConstructor { variant, .. },
-                            ..
-                        },
-                    ) => match variant {
-                        ValueConstructorVariant::LocalVariable { .. } => todo!(),
-                        ValueConstructorVariant::ModuleConstant { .. } => todo!(),
-                        ValueConstructorVariant::ModuleFn { name, module, .. } => {
-                            let func_key = FunctionAccessKey {
-                                module_name: module.to_string(),
-                                function_name: name.to_string(),
-                            };
-                            if let Some(val) = self.function_recurse_lookup.get(&func_key) {
-                                self.function_recurse_lookup.insert(func_key, *val + 1);
-                            } else {
-                                self.function_recurse_lookup.insert(func_key, 1);
-                            }
-                            let mut term =
-                                self.recurse_code_gen(fun, scope_level.scope_increment(1));
-
-                            for (i, arg) in args.iter().enumerate() {
-                                term = Term::Apply {
-                                    function: term.into(),
-                                    argument: self
-                                        .recurse_code_gen(
-                                            &arg.value,
-                                            scope_level.scope_increment(i as i32 + 2),
-                                        )
-                                        .into(),
-                                };
-                            }
-                            term
-                        }
-                        ValueConstructorVariant::Record {
-                            name: constr_name,
-                            module,
-                            ..
-                        } => {
-                            let mut term: Term<Name> =
-                                Term::Constant(Constant::ProtoList(uplc::ast::Type::Data, vec![]));
-
-                            if let Some(data_type) = self.data_types.get(&DataTypeKey {
-                                module_name: module.to_string(),
-                                defined_type: tipo_name.to_string(),
-                            }) {
-                                let (constr_index, constr) = data_type
-                                    .constructors
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, x)| x.name == *constr_name)
-                                    .unwrap();
-
-                                // TODO: order arguments by data type field map
-                                let arg_to_data: Vec<(bool, Term<Name>)> = constr
-                                    .arguments
-                                    .iter()
-                                    .map(|x| {
-                                        if let Type::App { name, .. } = &*x.tipo {
-                                            if name == "ByteArray" {
-                                                (true, Term::Builtin(DefaultFunction::BData))
-                                            } else if name == "Int" {
-                                                (true, Term::Builtin(DefaultFunction::IData))
-                                            } else {
-                                                (false, Term::Constant(Constant::Unit))
-                                            }
-                                        } else {
-                                            unreachable!()
-                                        }
-                                    })
-                                    .collect();
-
-                                for (i, arg) in args.iter().enumerate().rev() {
-                                    let arg_term = self.recurse_code_gen(
-                                        &arg.value,
-                                        scope_level.scope_increment(i as i32 + 1),
-                                    );
-
-                                    term = Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Force(
-                                                Term::Builtin(DefaultFunction::MkCons).into(),
-                                            )
-                                            .into(),
-                                            argument: if arg_to_data[i].0 {
-                                                Term::Apply {
-                                                    function: arg_to_data[i].1.clone().into(),
-                                                    argument: arg_term.into(),
-                                                }
-                                                .into()
-                                            } else {
-                                                arg_term.into()
-                                            },
-                                        }
-                                        .into(),
-                                        argument: term.into(),
-                                    };
-                                }
-
-                                term = Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::ConstrData).into(),
-                                    argument: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Builtin(DefaultFunction::MkPairData)
-                                                .into(),
-                                            argument: Term::Constant(Constant::Data(
-                                                PlutusData::BigInt(BigInt::Int(
-                                                    (constr_index as i128).try_into().unwrap(),
-                                                )),
-                                            ))
-                                            .into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Apply {
-                                            function: Term::Builtin(DefaultFunction::ListData)
-                                                .into(),
-                                            argument: term.into(),
-                                        }
-                                        .into(),
-                                    }
-                                    .into(),
-                                };
-
-                                term
-                            } else {
-                                let mut term =
-                                    self.recurse_code_gen(fun, scope_level.scope_increment(1));
-
-                                for (i, arg) in args.iter().enumerate() {
-                                    term = Term::Apply {
-                                        function: term.into(),
-                                        argument: self
-                                            .recurse_code_gen(
-                                                &arg.value,
-                                                scope_level.scope_increment(i as i32 + 2),
-                                            )
-                                            .into(),
-                                    };
-                                }
-                                term
-                            }
-                        }
+                ir_stack.push(IR::List {
+                    scope: scope.clone(),
+                    count: if tail.is_some() {
+                        elements.len() + 1
+                    } else {
+                        elements.len()
                     },
+                    tipo: tipo.clone(),
+                    tail: tail.is_some(),
+                });
 
-                    (
-                        Type::App {
-                            name: tipo_name, ..
-                        },
-                        TypedExpr::ModuleSelect {
-                            constructor,
-                            module_name: module,
-                            ..
-                        },
-                    ) => {
-                        match constructor {
-                            ModuleValueConstructor::Constant { .. } => todo!(),
-                            ModuleValueConstructor::Fn { name, module, .. } => {
-                                let func_key = FunctionAccessKey {
-                                    module_name: module.to_string(),
-                                    function_name: name.to_string(),
-                                };
-                                if let Some(val) = self.function_recurse_lookup.get(&func_key) {
-                                    self.function_recurse_lookup.insert(func_key, *val + 1);
-                                } else {
-                                    self.function_recurse_lookup.insert(func_key, 1);
-                                }
-                                let mut term =
-                                    self.recurse_code_gen(fun, scope_level.scope_increment(1));
+                for element in elements {
+                    let mut scope = scope.clone();
+                    scope.push(self.id_gen.next());
+                    self.build_ir(element, ir_stack, scope.clone())
+                }
 
-                                for (i, arg) in args.iter().enumerate() {
-                                    term = Term::Apply {
-                                        function: term.into(),
-                                        argument: self
-                                            .recurse_code_gen(
-                                                &arg.value,
-                                                scope_level.scope_increment(i as i32 + 2),
-                                            )
-                                            .into(),
-                                    };
-                                }
-                                term
-                            }
-                            ModuleValueConstructor::Record {
-                                name: constr_name, ..
-                            } => {
-                                let mut term: Term<Name> = Term::Constant(Constant::ProtoList(
-                                    uplc::ast::Type::Data,
-                                    vec![],
-                                ));
+                if let Some(tail) = tail {
+                    let mut scope = scope;
+                    scope.push(self.id_gen.next());
 
-                                if let Some(data_type) = self.data_types.get(&DataTypeKey {
-                                    module_name: module.to_string(),
-                                    defined_type: tipo_name.to_string(),
-                                }) {
-                                    let (constr_index, constr) = data_type
-                                        .constructors
-                                        .iter()
-                                        .enumerate()
-                                        .find(|(_, x)| x.name == *constr_name)
-                                        .unwrap();
+                    self.build_ir(tail, ir_stack, scope);
+                }
+            }
+            TypedExpr::Call { fun, args, .. } => {
+                ir_stack.push(IR::Call {
+                    scope: scope.clone(),
+                    count: args.len() + 1,
+                });
+                let mut scope_fun = scope.clone();
+                scope_fun.push(self.id_gen.next());
+                self.build_ir(fun, ir_stack, scope_fun);
 
-                                    // TODO: order arguments by data type field map
-                                    let arg_to_data: Vec<(bool, Term<Name>)> = constr
-                                        .arguments
-                                        .iter()
-                                        .map(|x| {
-                                            if let Type::App { name, .. } = &*x.tipo {
-                                                if name == "ByteArray" {
-                                                    (true, Term::Builtin(DefaultFunction::BData))
-                                                } else if name == "Int" {
-                                                    (true, Term::Builtin(DefaultFunction::IData))
-                                                } else {
-                                                    (false, Term::Constant(Constant::Unit))
-                                                }
-                                            } else {
-                                                unreachable!()
-                                            }
-                                        })
-                                        .collect();
-
-                                    for (i, arg) in args.iter().enumerate().rev() {
-                                        let arg_term = self.recurse_code_gen(
-                                            &arg.value,
-                                            scope_level.scope_increment(i as i32 + 1),
-                                        );
-
-                                        term = Term::Apply {
-                                            function: Term::Apply {
-                                                function: Term::Force(
-                                                    Term::Builtin(DefaultFunction::MkCons).into(),
-                                                )
-                                                .into(),
-                                                argument: if arg_to_data[i].0 {
-                                                    Term::Apply {
-                                                        function: arg_to_data[i].1.clone().into(),
-                                                        argument: arg_term.into(),
-                                                    }
-                                                    .into()
-                                                } else {
-                                                    arg_term.into()
-                                                },
-                                            }
-                                            .into(),
-                                            argument: term.into(),
-                                        };
-                                    }
-
-                                    term = Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::ConstrData).into(),
-                                        argument: Term::Apply {
-                                            function: Term::Apply {
-                                                function: Term::Builtin(
-                                                    DefaultFunction::MkPairData,
-                                                )
-                                                .into(),
-                                                argument: Term::Constant(Constant::Data(
-                                                    PlutusData::BigInt(BigInt::Int(
-                                                        (constr_index as i128).try_into().unwrap(),
-                                                    )),
-                                                ))
-                                                .into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Apply {
-                                                function: Term::Builtin(DefaultFunction::ListData)
-                                                    .into(),
-                                                argument: term.into(),
-                                            }
-                                            .into(),
-                                        }
-                                        .into(),
-                                    };
-
-                                    term
-                                } else {
-                                    let mut term =
-                                        self.recurse_code_gen(fun, scope_level.scope_increment(1));
-
-                                    for (i, arg) in args.iter().enumerate() {
-                                        term = Term::Apply {
-                                            function: term.into(),
-                                            argument: self
-                                                .recurse_code_gen(
-                                                    &arg.value,
-                                                    scope_level.scope_increment(i as i32 + 2),
-                                                )
-                                                .into(),
-                                        };
-                                    }
-                                    term
-                                }
-                            }
-                        }
-                    }
-                    _ => todo!(),
+                for arg in args {
+                    let mut scope = scope.clone();
+                    scope.push(self.id_gen.next());
+                    self.build_ir(&arg.value, ir_stack, scope);
                 }
             }
             TypedExpr::BinOp {
                 name, left, right, ..
             } => {
-                let left_term = self.recurse_code_gen(left, scope_level.clone());
+                ir_stack.push(IR::BinOp {
+                    scope: scope.clone(),
+                    name: *name,
+                    count: 2,
+                    tipo: left.tipo(),
+                });
+                let mut scope_left = scope.clone();
+                scope_left.push(self.id_gen.next());
 
-                let right_term = self.recurse_code_gen(right, scope_level);
+                let mut scope_right = scope;
+                scope_right.push(self.id_gen.next());
 
-                match name {
-                    BinOp::Eq => match &*left.tipo() {
-                        Type::App { name, .. } => match name.as_str() {
-                            "Int" => Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::EqualsInteger).into(),
-                                    argument: left_term.into(),
-                                }
-                                .into(),
-                                argument: right_term.into(),
-                            },
-
-                            "String" => Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::EqualsString).into(),
-                                    argument: left_term.into(),
-                                }
-                                .into(),
-                                argument: right_term.into(),
-                            },
-
-                            "ByteArray" => Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::EqualsByteString)
-                                        .into(),
-                                    argument: left_term.into(),
-                                }
-                                .into(),
-                                argument: right_term.into(),
-                            },
-
-                            _ => todo!(),
-                        },
-                        Type::Fn { .. } => todo!(),
-                        Type::Var { .. } => todo!(),
-                        Type::Tuple { .. } => todo!(),
-                    },
-                    BinOp::And => Term::Force(
-                        Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Force(
-                                        Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                    )
-                                    .into(),
-                                    argument: left_term.into(),
-                                }
-                                .into(),
-                                argument: Term::Delay(
-                                    Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Apply {
-                                                function: Term::Force(
-                                                    Term::Builtin(DefaultFunction::IfThenElse)
-                                                        .into(),
-                                                )
-                                                .into(),
-                                                argument: right_term.into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Constant(Constant::Bool(true)).into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Constant(Constant::Bool(false)).into(),
-                                    }
-                                    .into(),
-                                )
-                                .into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(Term::Constant(Constant::Bool(false)).into())
-                                .into(),
-                        }
-                        .into(),
-                    ),
-                    BinOp::Or => Term::Force(
-                        Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Force(
-                                        Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                    )
-                                    .into(),
-                                    argument: left_term.into(),
-                                }
-                                .into(),
-                                argument: Term::Delay(Term::Constant(Constant::Bool(true)).into())
-                                    .into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(
-                                Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Force(
-                                                Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                            )
-                                            .into(),
-                                            argument: right_term.into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Constant(Constant::Bool(true)).into(),
-                                    }
-                                    .into(),
-                                    argument: Term::Constant(Constant::Bool(false)).into(),
-                                }
-                                .into(),
-                            )
-                            .into(),
-                        }
-                        .into(),
-                    ),
-                    BinOp::NotEq => match &*left.tipo() {
-                        Type::App { name, .. } => {
-                            let equality = match name.as_str() {
-                                "Int" => Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::EqualsInteger)
-                                            .into(),
-                                        argument: left_term.into(),
-                                    }
-                                    .into(),
-                                    argument: right_term.into(),
-                                },
-
-                                "String" => Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::EqualsString)
-                                            .into(),
-                                        argument: left_term.into(),
-                                    }
-                                    .into(),
-                                    argument: right_term.into(),
-                                },
-
-                                "ByteArray" => Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::EqualsByteString)
-                                            .into(),
-                                        argument: left_term.into(),
-                                    }
-                                    .into(),
-                                    argument: right_term.into(),
-                                },
-
-                                _ => todo!(),
-                            };
-                            Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Force(
-                                            Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                        )
-                                        .into(),
-                                        argument: equality.into(),
-                                    }
-                                    .into(),
-                                    argument: Term::Constant(Constant::Bool(false)).into(),
-                                }
-                                .into(),
-                                argument: Term::Constant(Constant::Bool(true)).into(),
-                            }
-                        }
-                        Type::Fn { .. } => todo!(),
-                        Type::Var { .. } => todo!(),
-                        Type::Tuple { .. } => todo!(),
-                    },
-                    BinOp::LtInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                    BinOp::LtEqInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                    BinOp::GtEqInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
-                            argument: right_term.into(),
-                        }
-                        .into(),
-                        argument: left_term.into(),
-                    },
-                    BinOp::GtInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
-                            argument: right_term.into(),
-                        }
-                        .into(),
-                        argument: left_term.into(),
-                    },
-                    BinOp::AddInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::AddInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                    BinOp::SubInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::SubtractInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                    BinOp::MultInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::MultiplyInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                    BinOp::DivInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::DivideInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                    BinOp::ModInt => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::ModInteger).into(),
-                            argument: left_term.into(),
-                        }
-                        .into(),
-                        argument: right_term.into(),
-                    },
-                }
+                self.build_ir(left, ir_stack, scope_left);
+                self.build_ir(right, ir_stack, scope_right);
             }
-            TypedExpr::Assignment { value, pattern, .. } => match pattern {
-                Pattern::Int { .. } => todo!(),
-                Pattern::String { .. } => todo!(),
-                Pattern::Var { name, .. } => Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: name.to_string(),
-                            unique: 0.into(),
-                        },
-                        body: self.uplc_function_holder.pop().unwrap().1.into(),
-                    }
-                    .into(),
-                    argument: self
-                        .recurse_code_gen(value, scope_level.scope_increment(1))
-                        .into(),
-                },
+            TypedExpr::Assignment {
+                value,
+                pattern,
+                kind,
+                tipo,
+                ..
+            } => {
+                let mut define_vec: Vec<IR> = vec![];
+                let mut value_vec: Vec<IR> = vec![];
+                let mut pattern_vec: Vec<IR> = vec![];
 
-                Pattern::VarUsage { .. } => todo!(),
-                Pattern::Assign { .. } => todo!(),
-                Pattern::Discard { .. } => todo!(),
-                Pattern::List { .. } => todo!(),
-                Pattern::Constructor { .. } => todo!(),
-                Pattern::Tuple { .. } => todo!(),
-            },
+                let mut value_scope = scope.clone();
+                value_scope.push(self.id_gen.next());
+
+                self.build_ir(value, &mut value_vec, value_scope);
+
+                self.assignment_ir(
+                    pattern,
+                    &mut pattern_vec,
+                    &mut value_vec,
+                    tipo,
+                    *kind,
+                    scope,
+                );
+
+                ir_stack.append(&mut define_vec);
+                ir_stack.append(&mut pattern_vec);
+            }
             TypedExpr::Trace { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
-                let subject = &subjects[0];
+                let subject_name = format!("__subject_name_{}", self.id_gen.next());
+                let constr_var = format!("__constr_name_{}", self.id_gen.next());
 
-                let mut is_var = false;
+                // assuming one subject at the moment
+                let subject = subjects[0].clone();
+                let mut needs_subject_var = false;
 
-                let mut current_var_name = String::new();
-
-                let mut current_subject = subject.clone();
-
-                while !is_var {
-                    match current_subject.clone() {
-                        TypedExpr::Var {
-                            constructor, name, ..
-                        } => match (
-                            constructor.clone().variant.clone(),
-                            (*constructor.tipo).clone(),
-                        ) {
-                            (ValueConstructorVariant::LocalVariable { .. }, Type::App { .. }) => {
-                                current_var_name = if current_var_name.is_empty() {
-                                    name
-                                } else {
-                                    format!("{name}_field_{current_var_name}")
-                                };
-                                is_var = true;
-                            }
-                            _ => todo!(),
-                        },
-                        TypedExpr::RecordAccess { label, record, .. } => {
-                            current_var_name = if current_var_name.is_empty() {
-                                label.to_string()
-                            } else {
-                                format!("{label}_field_{current_var_name}")
-                            };
-                            current_subject = *record.clone();
-                        }
-                        _ => {}
-                    }
-                }
-
-                let current_clauses = clauses.clone();
-
-                let mut current_module = String::new();
-
-                let mut total_constr_length = 0;
-                let pattern = &clauses[0].pattern[0];
-
-                let key = match pattern {
-                    Pattern::Constructor { tipo, .. } => {
-                        let mut is_app = false;
-                        let mut tipo = &**tipo;
-                        let mut key = DataTypeKey {
-                            module_name: String::new(),
-                            defined_type: String::new(),
-                        };
-                        while !is_app {
-                            match tipo {
-                                Type::App { module, name, .. } => {
-                                    is_app = true;
-                                    key.module_name = module.clone();
-                                    key.defined_type = name.clone();
-                                }
-                                Type::Fn { ret, .. } => {
-                                    tipo = ret;
-                                }
-                                _ => todo!(),
-                            };
-                        }
-
-                        Some(key)
-                    }
-                    Pattern::List { .. } => None,
-                    Pattern::Discard { .. } => None,
-                    Pattern::Int { .. } => None,
-                    rest => todo!("{rest:?}"),
+                let clauses = if matches!(clauses[0].pattern[0], Pattern::List { .. }) {
+                    rearrange_clauses(clauses.clone())
+                } else {
+                    clauses.clone()
                 };
 
-                if let Some(key) = key {
-                    let dt = self.data_types.get(&key).unwrap();
-                    let data_type = &dt.name;
-                    let mut new_current_clauses: Vec<(usize, Term<Name>)> = current_clauses
-                        .iter()
-                        .map(|clause| {
-                            let pattern = &clause.pattern[0];
-                            let pair = match pattern {
-                                Pattern::Constructor { name, module, .. } => {
-                                    let index =
-                                        dt.constructors.iter().position(|c| name.clone() == c.name);
-                                    let mut current_term = self.recurse_code_gen(
-                                        &clause.then,
-                                        scope_level.scope_increment_sequence(1),
-                                    );
-                                    if let Some(ind) = index {
-                                        for (index, field) in
-                                            dt.constructors[ind].arguments.iter().enumerate()
-                                        {
-                                            let label =
-                                                field.clone().label.unwrap_or(format!("{index}"));
+                if let Some((last_clause, clauses)) = clauses.split_last() {
+                    let mut clauses_vec = vec![];
+                    let mut pattern_vec = vec![];
 
-                                            if let Some(ScopedExpr {
-                                                expr: TypedExpr::Assignment { pattern, .. },
-                                                ..
-                                            }) =
-                                                self.uplc_data_holder_lookup.get(&ConstrFieldKey {
-                                                    local_var: current_var_name.to_string(),
-                                                    field_name: label.clone(),
-                                                })
-                                            {
-                                                let var_name = match pattern {
-                                                    Pattern::Var { name, .. } => name,
-                                                    _ => todo!(),
-                                                };
-
-                                                current_term = Term::Apply {
-                                                    function: Term::Lambda {
-                                                        parameter_name: Name {
-                                                            text: var_name.to_string(),
-                                                            unique: 0.into(),
-                                                        },
-                                                        body: current_term.into(),
-                                                    }
-                                                    .into(),
-                                                    argument: Term::Var(Name {
-                                                        text: format!(
-                                                            "{current_var_name}_field_{label}"
-                                                        ),
-                                                        unique: 0.into(),
-                                                    })
-                                                    .into(),
-                                                };
-                                            }
-                                        }
-                                    }
-
-                                    current_module = module.clone().unwrap_or_default();
-                                    total_constr_length = dt.constructors.len();
-
-                                    (index.unwrap_or(dt.constructors.len()), current_term)
-                                }
-                                Pattern::Discard { .. } => (
-                                    dt.constructors.len(),
-                                    self.recurse_code_gen(
-                                        &clause.then,
-                                        scope_level.scope_increment_sequence(1),
-                                    ),
-                                ),
-                                rest => todo!("{rest:?}"),
-                            };
-                            pair
-                        })
-                        .collect();
-
-                    new_current_clauses.sort_by(|a, b| a.0.cmp(&b.0));
-
-                    let mut term = Term::Apply {
-                        function: Term::Var(Name {
-                            text: format!("choose_{current_module}_{data_type}_constr"),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                        argument: Term::Var(Name {
-                            text: current_var_name,
-                            unique: 0.into(),
-                        })
-                        .into(),
+                    let mut clause_properties = ClauseProperties {
+                        clause_var_name: constr_var.clone(),
+                        needs_constr_var: false,
+                        is_complex_clause: false,
+                        current_index: 0,
+                        original_subject_name: subject_name.clone(),
                     };
-                    let need_lam = total_constr_length - new_current_clauses.len() > 0;
 
-                    let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
+                    for (index, clause) in clauses.iter().enumerate() {
+                        // scope per clause is different
+                        let mut scope = scope.clone();
+                        scope.push(self.id_gen.next());
 
-                    let mut new_current_clauses = new_current_clauses.to_vec();
-                    new_current_clauses.reverse();
-                    let last_term = last.1.clone();
+                        // holds when clause pattern IR
+                        let mut clause_subject_vec = vec![];
 
-                    let mut current: Option<(usize, Term<Name>)> = None;
-                    for index in 0..total_constr_length - 1 {
-                        if current.is_none() {
-                            current = new_current_clauses.pop();
+                        // reset complex clause setting per clause back to default
+                        clause_properties.is_complex_clause = false;
+
+                        self.build_ir(&clause.then, &mut clauses_vec, scope.clone());
+
+                        self.when_ir(
+                            &clause.pattern[0],
+                            &mut clause_subject_vec,
+                            &mut clauses_vec,
+                            &subject.tipo(),
+                            &mut clause_properties,
+                            scope.clone(),
+                        );
+
+                        if clause_properties.needs_constr_var {
+                            needs_subject_var = true;
                         }
-                        if let Some(val) = current.clone() {
-                            if val.0 == index {
-                                let branch_term = val.1;
 
-                                term = Term::Apply {
-                                    function: term.into(),
-                                    argument: Term::Delay(branch_term.into()).into(),
-                                };
-                                current = None;
+                        let subject_name = if clause_properties.current_index == 0 {
+                            subject_name.clone()
+                        } else {
+                            format!("__tail_{}", clause_properties.current_index - 1)
+                        };
+
+                        // Clause is first in IR pattern vec
+                        if subject.tipo().is_list() {
+                            let next_tail = if index == clauses.len() - 1 {
+                                None
                             } else {
-                                term = Term::Apply {
-                                    function: term.into(),
-                                    argument: Term::Var(Name {
-                                        text: "last_constr_then".to_string(),
-                                        unique: 0.into(),
-                                    })
-                                    .into(),
-                                }
-                            }
+                                Some(format!("__tail_{}", clause_properties.current_index))
+                            };
+
+                            pattern_vec.push(IR::ListClause {
+                                scope,
+                                tipo: subject.tipo().clone(),
+                                tail_name: subject_name,
+                                complex_clause: clause_properties.is_complex_clause,
+                                next_tail_name: next_tail,
+                            });
+
+                            clause_properties.current_index += 1;
                         } else {
-                            term = Term::Apply {
-                                function: term.into(),
-                                argument: Term::Var(Name {
-                                    text: "last_constr_then".to_string(),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
+                            pattern_vec.push(IR::Clause {
+                                scope,
+                                tipo: subject.tipo().clone(),
+                                subject_name,
+                                complex_clause: clause_properties.is_complex_clause,
+                            });
                         }
-                    }
-                    if need_lam {
-                        term = Term::Apply {
-                            function: Term::Lambda {
-                                parameter_name: Name {
-                                    text: "last_constr_then".to_string(),
-                                    unique: 0.into(),
-                                },
-                                body: Term::Apply {
-                                    function: term.into(),
-                                    argument: Term::Var(Name {
-                                        text: "last_constr_then".to_string(),
-                                        unique: 0.into(),
-                                    })
-                                    .into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(last_term.into()).into(),
-                        }
-                    } else {
-                        term = Term::Apply {
-                            function: term.into(),
-                            argument: Term::Delay(last_term.into()).into(),
-                        };
+
+                        pattern_vec.append(&mut clause_subject_vec);
                     }
 
-                    term
-                } else {
-                    let mut type_list = vec![];
-                    let mut is_final_type = false;
-                    // TODO use lifetimes instead of clone
-                    // Skip first type since we know we have a list
-                    let tipo = match subject {
-                        TypedExpr::Var { constructor, .. } => &constructor.tipo,
-                        rest => todo!("{rest:?}"),
-                    };
-                    let mut current_tipo = match (**tipo).clone() {
-                        Type::App { args, .. } => (*args[0]).clone(),
-                        Type::Fn { .. } => todo!(),
-                        Type::Var { .. } => todo!(),
-                        Type::Tuple { .. } => todo!(),
-                    };
+                    let last_pattern = &last_clause.pattern[0];
 
-                    while !is_final_type {
-                        match current_tipo.clone() {
-                            Type::App { name, args, .. } => {
-                                if args.is_empty() {
-                                    type_list.push(name);
-                                    is_final_type = true;
-                                } else {
-                                    type_list.push(name);
-                                    current_tipo = (*args[0]).clone();
-                                }
-                            }
-                            Type::Fn { .. } => todo!(),
-                            Type::Var { tipo } => match (*tipo).borrow().clone() {
-                                tipo::TypeVar::Unbound { .. } => todo!(),
-                                tipo::TypeVar::Link { tipo } => {
-                                    current_tipo = (*tipo).clone();
-                                }
-                                tipo::TypeVar::Generic { .. } => todo!(),
-                            },
-                            Type::Tuple { .. } => todo!(),
-                        };
-                    }
-
-                    let mut new_current_clauses: Vec<(Option<usize>, bool, Term<Name>)> =
-                        current_clauses
-                            .iter()
-                            .map(|clause| {
-                                let pattern = &clause.pattern[0];
-                                let mut current_term = self.recurse_code_gen(
-                                    &clause.then,
-                                    scope_level.scope_increment_sequence(1),
-                                );
-                                let triplet = match pattern {
-                                    Pattern::List { elements, tail, .. } => {
-                                        let element_names: Vec<String> = elements
-                                            .clone()
-                                            .iter()
-                                            .map(|element| match element {
-                                                Pattern::Var { name, .. } => name.to_string(),
-                                                _ => todo!(),
-                                            })
-                                            .collect();
-
-                                        let tail_name: Option<String> = if let Some(tail) = tail {
-                                            match &**tail {
-                                                Pattern::Var { name, .. } => Some(name.to_string()),
-                                                _ => todo!(),
-                                            }
-                                        } else {
-                                            None
-                                        };
-
-                                        for (index, var_name) in element_names.iter().enumerate() {
-                                            current_term = Term::Apply {
-                                                function: Term::Lambda {
-                                                    parameter_name: Name {
-                                                        text: var_name.to_string(),
-                                                        unique: 0.into(),
-                                                    },
-                                                    body: current_term.into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Var(Name {
-                                                    text: format!(
-                                                        "{current_var_name}_item_{index}"
-                                                    ),
-                                                    unique: 0.into(),
-                                                })
-                                                .into(),
-                                            };
-                                        }
-
-                                        if let Some(tail_name) = tail_name {
-                                            current_term = Term::Apply {
-                                                function: Term::Lambda {
-                                                    parameter_name: Name {
-                                                        text: tail_name,
-                                                        unique: 0.into(),
-                                                    },
-                                                    body: current_term.into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Var(Name {
-                                                    text: format!("{current_var_name}_rest"),
-                                                    unique: 0.into(),
-                                                })
-                                                .into(),
-                                            };
-                                        }
-
-                                        (Some(elements.len()), tail.is_some(), current_term)
-                                    }
-                                    Pattern::Discard { .. } => (None, false, current_term),
-                                    _ => todo!(),
-                                };
-                                triplet
-                            })
-                            .collect();
-
-                    new_current_clauses.sort_by(|item1, item2| {
-                        if item1.0.is_none() && item2.0.is_some() {
-                            Ordering::Greater
-                        } else if item2.0.is_none() && item1.0.is_some() {
-                            Ordering::Less
-                        } else {
-                            match item1.0.cmp(&item2.0) {
-                                Ordering::Less => Ordering::Less,
-                                Ordering::Equal => item1.1.cmp(&item2.1),
-                                Ordering::Greater => Ordering::Greater,
-                            }
-                        }
+                    let mut final_scope = scope.clone();
+                    final_scope.push(self.id_gen.next());
+                    pattern_vec.push(IR::Finally {
+                        scope: final_scope.clone(),
                     });
 
-                    let (last, new_current_clauses) = new_current_clauses.split_last().unwrap();
+                    self.build_ir(&last_clause.then, &mut clauses_vec, final_scope.clone());
 
-                    let new_current_clauses = new_current_clauses.to_vec();
+                    self.when_ir(
+                        last_pattern,
+                        &mut pattern_vec,
+                        &mut clauses_vec,
+                        &subject.tipo(),
+                        &mut clause_properties,
+                        final_scope,
+                    );
 
-                    let mut current_term: Term<Name> = last.2.clone();
-                    let last_term = last.2.clone();
+                    if needs_subject_var || clause_properties.needs_constr_var {
+                        ir_stack.push(IR::Lam {
+                            scope: scope.clone(),
+                            name: constr_var.clone(),
+                        });
 
-                    //if last clause had a tail then we need the lambda to expose rest
-                    if last.1 && last.0.is_some() {
-                        let last_index = last.0.unwrap() - 1;
-                        current_term = Term::Apply {
-                            function: Term::Lambda {
-                                parameter_name: Name {
-                                    text: format!("{current_var_name}_rest"),
-                                    unique: 0.into(),
+                        self.build_ir(&subject, ir_stack, scope.clone());
+
+                        ir_stack.push(IR::When {
+                            scope: scope.clone(),
+                            subject_name,
+                            tipo: subject.tipo(),
+                        });
+
+                        let mut scope = scope;
+                        scope.push(self.id_gen.next());
+
+                        ir_stack.push(IR::Var {
+                            scope,
+                            constructor: ValueConstructor::public(
+                                subject.tipo(),
+                                ValueConstructorVariant::LocalVariable {
+                                    location: Span::empty(),
                                 },
-                                body: current_term.into(),
-                            }
-                            .into(),
-                            argument: Term::Var(Name {
-                                text: format!("{current_var_name}_tail_{last_index}"),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        };
+                            ),
+                            name: constr_var,
+                        })
+                    } else {
+                        ir_stack.push(IR::When {
+                            scope: scope.clone(),
+                            subject_name,
+                            tipo: subject.tipo(),
+                        });
+
+                        let mut scope = scope;
+                        scope.push(self.id_gen.next());
+
+                        self.build_ir(&subject, ir_stack, scope);
                     }
 
-                    for (index, (array_length, has_tail, then)) in
-                        new_current_clauses.iter().enumerate().rev()
-                    {
-                        let prev_length: Option<usize> = if index == 0 {
-                            None
-                        } else {
-                            new_current_clauses
-                                .get(index - 1)
-                                .and_then(|(index_opt, _, _)| *index_opt)
-                        };
-
-                        match (*array_length, prev_length) {
-                            (Some(length), Some(prev_length)) => {
-                                let check_length = if prev_length == length {
-                                    length + 2
-                                } else {
-                                    length + 1
-                                };
-                                // 0, 3, 3, None
-                                // Go index by index to create cases for each possible len
-                                for expose_index in (prev_length + 1..check_length).rev() {
-                                    let prev_exposed = expose_index - 1;
-                                    let list_var_name =
-                                        format!("{current_var_name}_tail_{prev_exposed}");
-
-                                    if prev_length != length {
-                                        // Just expose head list and tail list. Check for empty list happens above
-                                        current_term = Term::Apply {
-                                                function: Term::Lambda {
-                                                    parameter_name: Name {
-                                                        text: format!(
-                                                            "{current_var_name}_item_{expose_index}"
-                                                        ),
-                                                        unique: 0.into(),
-                                                    },
-                                                    body: Term::Apply {
-                                                        function: Term::Lambda {
-                                                            parameter_name: Name {
-                                                                text: format!(
-                                                                    "{current_var_name}_tail_{expose_index}"
-                                                                ),
-                                                                unique: 0.into(),
-                                                            },
-                                                            body: current_term.into(),
-                                                        }
-                                                        .into(),
-                                                        argument: Term::Apply {
-                                                            function: Term::Force(
-                                                                Term::Builtin(
-                                                                    DefaultFunction::TailList,
-                                                                )
-                                                                .into(),
-                                                            )
-                                                            .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: list_var_name.to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Apply {
-                                                    function: Term::Force(
-                                                        Term::Builtin(DefaultFunction::HeadList).into(),
-                                                    )
-                                                    .into(),
-                                                    argument: Term::Var(Name {
-                                                        text: list_var_name.to_string(),
-                                                        unique: 0.into(),
-                                                    })
-                                                    .into(),
-                                                }
-                                                .into(),
-                                            };
-                                    }
-
-                                    // For a given list length if we encounter a tail and we are checking a clause length = current index
-                                    // then expose a var for tail and run clause then
-                                    current_term = if *has_tail
-                                        && (expose_index == check_length - 1
-                                            || prev_length == length)
-                                    {
-                                        Term::Apply {
-                                            function: Term::Lambda {
-                                                parameter_name: Name {
-                                                    text: format!("{current_var_name}_rest"),
-                                                    unique: 0.into(),
-                                                },
-                                                body: then.clone().into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Var(Name {
-                                                text: format!(
-                                                    "{current_var_name}_tail_{prev_exposed}"
-                                                ),
-                                                unique: 0.into(),
-                                            })
-                                            .into(),
-                                        }
-                                    // we are checking a clause length = current index so check empty tail list and run clause then if tail list is empty
-                                    } else if expose_index == check_length - 1 {
-                                        Term::Force(
-                                            Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Force(
-                                                                Term::Builtin(
-                                                                    DefaultFunction::ChooseList,
-                                                                )
-                                                                .into(),
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: format!(
-                                                                "{current_var_name}_tail_{prev_exposed}"
-                                                            ),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                    argument: Term::Delay(then.clone().into())
-                                                        .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Delay(current_term.into()).into(),
-                                            }
-                                            .into(),
-                                        )
-                                    // We are not checking for a list of this length, so fallback to last clause then if tail list is empty
-                                    } else {
-                                        Term::Force(
-                                            Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Force(
-                                                                Term::Builtin(
-                                                                    DefaultFunction::ChooseList,
-                                                                )
-                                                                .into(),
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: format!(
-                                                                "{current_var_name}_tail_{prev_exposed}"
-                                                            ),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                    argument: Term::Delay(last_term.clone().into())
-                                                        .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Delay(current_term.into()).into(),
-                                            }
-                                            .into(),
-                                        )
-                                    };
-                                }
-                            }
-                            (Some(length), None) => {
-                                for expose_index in 0..length + 1 {
-                                    let list_var_name = if expose_index == 0 {
-                                        current_var_name.clone()
-                                    } else {
-                                        let prev_exposed = expose_index - 1;
-                                        format!("{current_var_name}_tail_{prev_exposed}")
-                                    };
-
-                                    // Just expose head list and tail list. Check for empty list happens above
-                                    current_term = Term::Apply {
-                                        function: Term::Lambda {
-                                            parameter_name: Name {
-                                                text: format!(
-                                                    "{current_var_name}_item_{expose_index}"
-                                                ),
-                                                unique: 0.into(),
-                                            },
-                                            body: Term::Apply {
-                                                function: Term::Lambda {
-                                                    parameter_name: Name {
-                                                        text: format!(
-                                                            "{current_var_name}_tail_{expose_index}"
-                                                        ),
-                                                        unique: 0.into(),
-                                                    },
-                                                    body: current_term.into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Apply {
-                                                    function: Term::Force(
-                                                        Term::Builtin(DefaultFunction::TailList)
-                                                            .into(),
-                                                    )
-                                                    .into(),
-                                                    argument: Term::Var(Name {
-                                                        text: list_var_name.to_string(),
-                                                        unique: 0.into(),
-                                                    })
-                                                    .into(),
-                                                }
-                                                .into(),
-                                            }
-                                            .into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Apply {
-                                            function: Term::Force(
-                                                Term::Builtin(DefaultFunction::HeadList).into(),
-                                            )
-                                            .into(),
-                                            argument: Term::Var(Name {
-                                                text: list_var_name.to_string(),
-                                                unique: 0.into(),
-                                            })
-                                            .into(),
-                                        }
-                                        .into(),
-                                    };
-
-                                    // For a given list length if we encounter a tail and we are checking a clause length = current index
-                                    // then expose a var for tail and run clause then
-                                    current_term = if *has_tail && expose_index == length {
-                                        Term::Apply {
-                                            function: Term::Lambda {
-                                                parameter_name: Name {
-                                                    text: format!("{current_var_name}_rest"),
-                                                    unique: 0.into(),
-                                                },
-                                                body: then.clone().into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Var(Name {
-                                                text: list_var_name.clone(),
-                                                unique: 0.into(),
-                                            })
-                                            .into(),
-                                        }
-                                    // we are checking a clause length = current index so check empty tail list and run clause then if tail list is empty
-                                    } else if expose_index == length {
-                                        Term::Force(
-                                            Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Force(
-                                                                Term::Builtin(
-                                                                    DefaultFunction::ChooseList,
-                                                                )
-                                                                .into(),
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: list_var_name.clone(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                    argument: Term::Delay(then.clone().into())
-                                                        .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Delay(current_term.into()).into(),
-                                            }
-                                            .into(),
-                                        )
-                                    // We are not checking for a list of this length, so fallback to last clause then if tail list is empty
-                                    } else {
-                                        Term::Force(
-                                            Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Force(
-                                                                Term::Builtin(
-                                                                    DefaultFunction::ChooseList,
-                                                                )
-                                                                .into(),
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: list_var_name.clone(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                    argument: Term::Delay(last_term.clone().into())
-                                                        .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Delay(current_term.into()).into(),
-                                            }
-                                            .into(),
-                                        )
-                                    };
-                                }
-                            }
-                            (None, None) => todo!(),
-                            (None, Some(_)) => todo!(),
-                        }
-                    }
-                    current_term
-                }
+                    ir_stack.append(&mut pattern_vec);
+                };
             }
-            // if statements increase scope due to branching.
             TypedExpr::If {
                 branches,
                 final_else,
                 ..
             } => {
-                let mut final_if_term =
-                    self.recurse_code_gen(final_else, scope_level.scope_increment_sequence(1));
+                let mut if_ir = vec![];
 
-                if branches.len() == 1 {
-                    let condition_term = self.recurse_code_gen(
-                        &branches[0].condition,
-                        scope_level.scope_increment_sequence(1),
-                    );
+                for (index, branch) in branches.iter().enumerate() {
+                    let mut branch_scope = scope.clone();
+                    branch_scope.push(self.id_gen.next());
 
-                    let branch_term = self.recurse_code_gen(
-                        &branches[0].body,
-                        scope_level.scope_increment_sequence(1),
-                    );
-
-                    match (final_if_term.clone(), branch_term.clone()) {
-                        (
-                            Term::Var(..) | Term::Constant(..),
-                            Term::Var(..) | Term::Constant(..),
-                        ) => {
-                            final_if_term = Term::Apply {
-                                function: Rc::new(Term::Apply {
-                                    function: Rc::new(Term::Apply {
-                                        function: Rc::new(Term::Force(Rc::new(Term::Builtin(
-                                            DefaultFunction::IfThenElse,
-                                        )))),
-                                        argument: Rc::new(condition_term),
-                                    }),
-                                    //If this is just a var then don't include delay
-                                    argument: Rc::new(branch_term),
-                                }),
-                                //If this is just a var then don't include delay
-                                argument: Rc::new(final_if_term.clone()),
-                            };
-                        }
-                        _ => {
-                            final_if_term = Term::Force(
-                                Term::Apply {
-                                    function: Rc::new(Term::Apply {
-                                        function: Rc::new(Term::Apply {
-                                            function: Rc::new(Term::Force(Rc::new(Term::Builtin(
-                                                DefaultFunction::IfThenElse,
-                                            )))),
-                                            argument: Rc::new(condition_term),
-                                        }),
-                                        argument: Rc::new(Term::Delay(Rc::new(branch_term))),
-                                    }),
-                                    argument: Rc::new(Term::Delay(Rc::new(final_if_term.clone()))),
-                                }
-                                .into(),
-                            );
-                        }
+                    if index == 0 {
+                        if_ir.push(IR::If {
+                            scope: scope.clone(),
+                        });
+                    } else {
+                        if_ir.push(IR::If {
+                            scope: branch_scope.clone(),
+                        });
                     }
-                } else {
-                    // TODO: for multi branch if statements we can insert function definitions between branches
-                    for branch in branches {
-                        let condition_term = self.recurse_code_gen(
-                            &branch.condition,
-                            scope_level.scope_increment_sequence(1),
-                        );
-
-                        let branch_term = self.recurse_code_gen(
-                            &branch.body,
-                            scope_level.scope_increment_sequence(1),
-                        );
-
-                        final_if_term = Term::Force(
-                            Term::Apply {
-                                function: Rc::new(Term::Apply {
-                                    function: Rc::new(Term::Apply {
-                                        function: Rc::new(Term::Force(Rc::new(Term::Builtin(
-                                            DefaultFunction::IfThenElse,
-                                        )))),
-                                        argument: Rc::new(condition_term),
-                                    }),
-                                    argument: Rc::new(Term::Delay(Rc::new(branch_term))),
-                                }),
-                                argument: Rc::new(Term::Delay(Rc::new(final_if_term.clone()))),
-                            }
-                            .into(),
-                        );
-                    }
+                    self.build_ir(&branch.condition, &mut if_ir, branch_scope.clone());
+                    self.build_ir(&branch.body, &mut if_ir, branch_scope);
                 }
 
-                self.maybe_insert_def(final_if_term, scope_level)
+                let mut branch_scope = scope;
+                branch_scope.push(self.id_gen.next());
+
+                self.build_ir(final_else, &mut if_ir, branch_scope);
+
+                ir_stack.append(&mut if_ir);
             }
-            TypedExpr::RecordAccess { label, record, .. } => {
-                let mut is_var = false;
-                let mut current_var_name = String::new();
-                let mut current_record = *record.clone();
-                while !is_var {
-                    match current_record.clone() {
-                        TypedExpr::Var {
-                            constructor, name, ..
-                        } => match (
-                            constructor.clone().variant.clone(),
-                            (*constructor.tipo).clone(),
-                        ) {
-                            (ValueConstructorVariant::LocalVariable { .. }, Type::App { .. }) => {
-                                current_var_name = if current_var_name.is_empty() {
-                                    name
-                                } else {
-                                    format!("{name}_field_{current_var_name}")
-                                };
-                                is_var = true;
+            TypedExpr::RecordAccess {
+                record,
+                index,
+                tipo,
+                ..
+            } => {
+                self.needs_field_access = true;
+
+                ir_stack.push(IR::RecordAccess {
+                    scope: scope.clone(),
+                    index: *index,
+                    tipo: tipo.clone(),
+                });
+
+                self.build_ir(record, ir_stack, scope);
+            }
+            TypedExpr::ModuleSelect {
+                constructor,
+                module_name,
+                ..
+            } => match constructor {
+                tipo::ModuleValueConstructor::Record { .. } => todo!(),
+                tipo::ModuleValueConstructor::Fn { name, module, .. } => {
+                    let func = self.functions.get(&FunctionAccessKey {
+                        module_name: module_name.clone(),
+                        function_name: name.clone(),
+                    });
+
+                    if let Some(func) = func {
+                        ir_stack.push(IR::Var {
+                            scope,
+                            constructor: ValueConstructor::public(
+                                func.return_type.clone(),
+                                ValueConstructorVariant::ModuleFn {
+                                    name: name.clone(),
+                                    field_map: None,
+                                    module: module.clone(),
+                                    arity: func.arguments.len(),
+                                    location: Span::empty(),
+                                    builtin: None,
+                                },
+                            ),
+                            name: format!("{module}_{name}"),
+                        });
+                    } else {
+                        let type_info = self.module_types.get(module_name).unwrap();
+                        let value = type_info.values.get(name).unwrap();
+                        match &value.variant {
+                            ValueConstructorVariant::ModuleFn { builtin, .. } => {
+                                let builtin = builtin.unwrap();
+
+                                ir_stack.push(IR::Builtin {
+                                    func: builtin,
+                                    scope,
+                                });
                             }
-                            _ => todo!(),
-                        },
-                        TypedExpr::RecordAccess { label, record, .. } => {
-                            current_var_name = if current_var_name.is_empty() {
-                                label.to_string()
-                            } else {
-                                format!("{label}_field_{current_var_name}")
-                            };
-                            current_record = *record.clone();
+                            _ => unreachable!(),
                         }
-                        _ => {}
                     }
                 }
-                Term::Var(Name {
-                    text: format!("{current_var_name}_field_{label}"),
-                    unique: 0.into(),
-                })
-            }
-            TypedExpr::ModuleSelect { constructor, .. } => match constructor {
-                ModuleValueConstructor::Record { .. } => todo!(),
-                ModuleValueConstructor::Fn { module, name, .. } => Term::Var(Name {
-                    text: format!("{module}_{name}"),
-                    unique: 0.into(),
-                }),
-                ModuleValueConstructor::Constant { .. } => todo!(),
+                tipo::ModuleValueConstructor::Constant { literal, .. } => {
+                    constants_ir(literal, ir_stack, scope);
+                }
             },
-            TypedExpr::Todo { .. } => todo!(),
+            TypedExpr::Todo { label, tipo, .. } => {
+                ir_stack.push(IR::Todo {
+                    scope,
+                    label: label.clone(),
+                    tipo: tipo.clone(),
+                });
+            }
             TypedExpr::RecordUpdate { .. } => todo!(),
             TypedExpr::Negate { .. } => todo!(),
             TypedExpr::Tuple { .. } => todo!(),
         }
     }
 
-    fn maybe_insert_def(
+    fn when_ir(
         &mut self,
-        current_term: Term<Name>,
-        scope_level: ScopeLevels,
-    ) -> Term<Name> {
-        let mut term = current_term;
-        // attempt to insert function definitions where needed
-        for func_key in self.uplc_function_holder_lookup.clone().keys() {
-            if scope_level.is_less_than(
-                self.uplc_function_holder_lookup
-                    .clone()
-                    .get(func_key)
-                    .unwrap(),
-                false,
-            ) {
-                let func_def = self.functions.get(func_key).unwrap();
-
-                let current_called = *self.function_recurse_lookup.get(func_key).unwrap_or(&0);
-
-                let mut function_body = self.recurse_code_gen(
-                    &func_def.body,
-                    scope_level.scope_increment_sequence(func_def.arguments.len() as i32),
-                );
-
-                let recurse_called = *self.function_recurse_lookup.get(func_key).unwrap_or(&0);
-
-                if recurse_called > current_called {
-                    for arg in func_def.arguments.iter().rev() {
-                        function_body = Term::Lambda {
-                            parameter_name: Name {
-                                text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                                unique: Unique::new(0),
-                            },
-                            body: Rc::new(function_body),
-                        }
-                    }
-
-                    function_body = Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("{}_{}", func_key.module_name, func_key.function_name),
-                            unique: 0.into(),
-                        },
-                        body: function_body.into(),
-                    };
-
-                    let mut recurse_term = Term::Apply {
-                        function: Term::Var(Name {
-                            text: "recurse".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                        argument: Term::Var(Name {
-                            text: "recurse".into(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    };
-
-                    for arg in func_def.arguments.iter() {
-                        recurse_term = Term::Apply {
-                            function: recurse_term.into(),
-                            argument: Term::Var(Name {
-                                text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        };
-                    }
-
-                    function_body = Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "recurse".into(),
-                                unique: 0.into(),
-                            },
-                            body: recurse_term.into(),
-                        }
-                        .into(),
-                        argument: function_body.into(),
-                    }
-                }
-
-                for arg in func_def.arguments.iter().rev() {
-                    function_body = Term::Lambda {
-                        parameter_name: Name {
-                            text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                            unique: Unique::new(0),
-                        },
-                        body: Rc::new(function_body),
-                    }
-                }
-
-                term = Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("{}_{}", func_key.module_name, func_key.function_name),
-                            unique: 0.into(),
-                        },
-                        body: term.into(),
-                    }
-                    .into(),
-                    argument: function_body.into(),
-                };
-                self.uplc_function_holder_lookup.shift_remove(func_key);
-            }
-        }
-
-        for (key, scope) in self.uplc_data_constr_lookup.clone().iter() {
-            if scope_level.is_less_than(scope, false) {
-                let data_constrs = *self.data_types.get(key).unwrap();
-                let mut constr_term = Term::Var(Name {
-                    text: "last_constructor_result".to_string(),
-                    unique: 0.into(),
+        pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
+        pattern_vec: &mut Vec<IR>,
+        values: &mut Vec<IR>,
+        tipo: &Type,
+        clause_properties: &mut ClauseProperties,
+        scope: Vec<u64>,
+    ) {
+        match pattern {
+            Pattern::Int { value, .. } => {
+                pattern_vec.push(IR::Int {
+                    scope,
+                    value: value.clone(),
                 });
 
-                let length = data_constrs.constructors.len();
+                pattern_vec.append(values);
+            }
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { name, .. } => {
+                pattern_vec.push(IR::Discard {
+                    scope: scope.clone(),
+                });
+                pattern_vec.push(IR::Lam {
+                    scope: scope.clone(),
+                    name: name.clone(),
+                });
 
-                for index in (0..length - 1).rev() {
-                    constr_term = Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Force(
-                                    Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                )
-                                .into(),
-                                argument: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::EqualsInteger)
-                                            .into(),
-                                        argument: Term::Constant(Constant::Integer(index as i128))
-                                            .into(),
+                pattern_vec.push(IR::Var {
+                    scope,
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: clause_properties.original_subject_name.clone(),
+                });
+                pattern_vec.append(values);
+            }
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { name, pattern, .. } => {
+                let mut new_vec = vec![];
+                new_vec.push(IR::Lam {
+                    scope: scope.clone(),
+                    name: name.clone(),
+                });
+                new_vec.push(IR::Var {
+                    scope: scope.clone(),
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: clause_properties.original_subject_name.clone(),
+                });
+
+                new_vec.append(values);
+
+                // pattern_vec.push(value)
+                self.when_ir(
+                    pattern,
+                    pattern_vec,
+                    &mut new_vec,
+                    tipo,
+                    clause_properties,
+                    scope,
+                );
+            }
+            Pattern::Discard { .. } => {
+                pattern_vec.push(IR::Discard { scope });
+                pattern_vec.append(values);
+            }
+            Pattern::List { elements, tail, .. } => {
+                let mut needs_clause_guard = false;
+
+                for element in elements {
+                    check_when_pattern_needs(element, &mut false, &mut needs_clause_guard);
+                }
+
+                if let Some(tail) = tail {
+                    check_when_pattern_needs(tail, &mut false, &mut needs_clause_guard);
+                }
+
+                if needs_clause_guard {
+                    clause_properties.is_complex_clause = true;
+                }
+
+                pattern_vec.push(IR::Discard {
+                    scope: scope.clone(),
+                });
+
+                self.when_recursive_ir(
+                    pattern,
+                    pattern_vec,
+                    &mut vec![],
+                    clause_properties.clone(),
+                    tipo,
+                    scope,
+                );
+
+                pattern_vec.append(values);
+            }
+            Pattern::Constructor {
+                arguments,
+                name: constr_name,
+                ..
+            } => {
+                let mut needs_access_to_constr_var = false;
+                let mut needs_clause_guard = false;
+
+                for arg in arguments {
+                    check_when_pattern_needs(
+                        &arg.value,
+                        &mut needs_access_to_constr_var,
+                        &mut needs_clause_guard,
+                    );
+                }
+
+                let data_type_key = match tipo {
+                    Type::Fn { ret, .. } => match ret.as_ref() {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
+                        },
+                        _ => unreachable!(),
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+
+                let (index, _) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
+
+                let mut new_vec = vec![IR::Var {
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: clause_properties.clause_var_name.clone(),
+                    scope: scope.clone(),
+                }];
+
+                // if only one constructor, no need to check
+                if data_type.constructors.len() > 1 {
+                    // push constructor Index
+                    pattern_vec.push(IR::Int {
+                        value: index.to_string(),
+                        scope: scope.clone(),
+                    });
+                }
+
+                if needs_clause_guard {
+                    clause_properties.is_complex_clause = true;
+                }
+
+                if needs_access_to_constr_var {
+                    clause_properties.needs_constr_var = true;
+
+                    self.when_recursive_ir(
+                        pattern,
+                        pattern_vec,
+                        &mut new_vec,
+                        clause_properties.clone(),
+                        tipo,
+                        scope,
+                    );
+                    pattern_vec.append(values);
+                } else {
+                    self.when_recursive_ir(
+                        pattern,
+                        pattern_vec,
+                        &mut vec![],
+                        clause_properties.clone(),
+                        tipo,
+                        scope,
+                    );
+                    pattern_vec.append(values);
+                }
+            }
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn when_recursive_ir(
+        &mut self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
+        pattern_vec: &mut Vec<IR>,
+        values: &mut Vec<IR>,
+        clause_properties: ClauseProperties,
+        _tipo: &Type,
+        scope: Vec<u64>,
+    ) {
+        match pattern {
+            Pattern::Int { .. } => todo!(),
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { .. } => todo!(),
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => {
+                pattern_vec.push(IR::Discard { scope });
+
+                pattern_vec.append(values);
+            }
+            Pattern::List { elements, tail, .. } => {
+                // let mut elements_vec = vec![];
+
+                let mut names = vec![];
+                for element in elements {
+                    match element {
+                        Pattern::Var { name, .. } => {
+                            names.push(name.clone());
+                        }
+                        Pattern::Discard { .. } => {
+                            names.push("_".to_string());
+                        }
+                        Pattern::List { .. } => {
+                            todo!("Nested List Patterns Not Yet Done");
+                            // let mut var_vec = vec![];
+                            // let item_name = format!("list_item_id_{}", self.id_gen.next());
+                            // names.push(item_name.clone());
+                            // var_vec.push(IR::Var {
+                            //     constructor: ValueConstructor::public(
+                            //         Type::App {
+                            //             public: true,
+                            //             module: String::new(),
+                            //             name: String::new(),
+                            //             args: vec![],
+                            //         }
+                            //         .into(),
+                            //         ValueConstructorVariant::LocalVariable {
+                            //             location: Span::empty(),
+                            //         },
+                            //     ),
+                            //     name: item_name,
+                            //     scope: scope.clone(),
+                            // });
+                            // self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
+                        }
+                        _ => todo!(),
+                    }
+                }
+
+                let mut tail_name = String::new();
+
+                if let Some(tail) = tail {
+                    match &**tail {
+                        Pattern::Var { name, .. } => {
+                            tail_name = name.clone();
+                        }
+                        Pattern::Discard { .. } => {}
+                        _ => todo!(),
+                    }
+                }
+
+                let tail_head_names = names
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, name)| *name != &"_".to_string())
+                    .map(|(index, name)| {
+                        if index == 0 {
+                            (
+                                clause_properties.original_subject_name.clone(),
+                                name.clone(),
+                            )
+                        } else {
+                            (format!("__tail_{}", index - 1), name.clone())
+                        }
+                    })
+                    .collect_vec();
+
+                if tail.is_some() && !elements.is_empty() {
+                    let tail_var = if elements.len() == 1 {
+                        clause_properties.original_subject_name
+                    } else {
+                        format!("__tail_{}", elements.len() - 2)
+                    };
+
+                    pattern_vec.push(IR::ListExpose {
+                        scope,
+                        tail_head_names,
+                        tail: Some((tail_var, tail_name)),
+                    });
+                } else {
+                    pattern_vec.push(IR::ListExpose {
+                        scope,
+                        tail_head_names,
+                        tail: None,
+                    });
+                }
+
+                pattern_vec.append(values);
+            }
+            Pattern::Constructor {
+                is_record,
+                name: constr_name,
+                arguments,
+                constructor,
+                tipo,
+                ..
+            } => {
+                let data_type_key = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => match &**ret {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
+                        },
+                        _ => unreachable!(),
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let (_, constructor_type) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
+                let mut nested_pattern = vec![];
+                if *is_record {
+                    let field_map = match constructor {
+                        tipo::PatternConstructor::Record { field_map, .. } => {
+                            field_map.clone().unwrap()
+                        }
+                    };
+
+                    let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
+
+                    for arg in &constructor_type.arguments {
+                        let label = arg.label.clone().unwrap();
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(label, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .map(|item| {
+                            let label = item.label.clone().unwrap_or_default();
+                            let field_index = field_map.fields.get(&label).unwrap_or(&0);
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_var_name = format!("{constr_name}_{id}");
+                                    let data_type_key = match tipo.as_ref() {
+                                        Type::Fn { ret, .. } => match &**ret {
+                                            Type::App { module, name, .. } => DataTypeKey {
+                                                module_name: module.clone(),
+                                                defined_type: name.clone(),
+                                            },
+                                            _ => unreachable!(),
+                                        },
+                                        Type::App { module, name, .. } => DataTypeKey {
+                                            module_name: module.clone(),
+                                            defined_type: name.clone(),
+                                        },
+                                        _ => unreachable!(),
+                                    };
+
+                                    let data_type = self.data_types.get(&data_type_key).unwrap();
+
+                                    if data_type.constructors.len() > 1 {
+                                        nested_pattern.push(IR::ClauseGuard {
+                                            scope: scope.clone(),
+                                            tipo: tipo.clone(),
+                                            subject_name: constr_var_name.clone(),
+                                        });
+                                    }
+
+                                    let mut clause_complexity = ClauseProperties {
+                                        clause_var_name: constr_var_name.clone(),
+                                        needs_constr_var: false,
+                                        is_complex_clause: false,
+                                        current_index: 0,
+                                        original_subject_name: constr_var_name.clone(),
+                                    };
+
+                                    self.when_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![],
+                                        tipo,
+                                        &mut clause_complexity,
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_var_name)
+                                }
+                                _ => todo!(),
+                            };
+
+                            (label, var_name, *field_index, discard)
+                        })
+                        .filter(|(_, _, _, discard)| !discard)
+                        .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
+                        .collect::<Vec<(String, String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(label, var_name, index, _)| {
+                                    let field_type = type_map.get(label).unwrap();
+                                    (*index, var_name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                            scope,
+                        });
+                    }
+                } else {
+                    let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
+
+                    for (index, arg) in constructor_type.arguments.iter().enumerate() {
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(index, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, item)| {
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_var_name = format!("{constr_name}_{id}");
+                                    let data_type_key = match tipo.as_ref() {
+                                        Type::Fn { ret, .. } => match &**ret {
+                                            Type::App { module, name, .. } => DataTypeKey {
+                                                module_name: module.clone(),
+                                                defined_type: name.clone(),
+                                            },
+                                            _ => unreachable!(),
+                                        },
+                                        Type::App { module, name, .. } => DataTypeKey {
+                                            module_name: module.clone(),
+                                            defined_type: name.clone(),
+                                        },
+                                        _ => unreachable!(),
+                                    };
+
+                                    let data_type = self.data_types.get(&data_type_key).unwrap();
+
+                                    if data_type.constructors.len() > 1 {
+                                        nested_pattern.push(IR::ClauseGuard {
+                                            scope: scope.clone(),
+                                            tipo: tipo.clone(),
+                                            subject_name: constr_var_name.clone(),
+                                        });
+                                    }
+                                    let mut clause_complexity = ClauseProperties {
+                                        clause_var_name: constr_var_name.clone(),
+                                        needs_constr_var: false,
+                                        is_complex_clause: false,
+                                        current_index: 0,
+                                        original_subject_name: constr_var_name.clone(),
+                                    };
+
+                                    self.when_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![],
+                                        tipo,
+                                        &mut clause_complexity,
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_var_name)
+                                }
+                                _ => todo!(),
+                            };
+
+                            (var_name, index, discard)
+                        })
+                        .filter(|(_, _, discard)| !discard)
+                        .collect::<Vec<(String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(name, index, _)| {
+                                    let field_type = type_map.get(index).unwrap();
+
+                                    (*index, name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                            scope,
+                        });
+                    }
+                }
+
+                pattern_vec.append(values);
+                pattern_vec.append(&mut nested_pattern);
+            }
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn assignment_ir(
+        &mut self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
+        pattern_vec: &mut Vec<IR>,
+        value_vec: &mut Vec<IR>,
+        _tipo: &Type,
+        kind: AssignmentKind,
+        scope: Vec<u64>,
+    ) {
+        match pattern {
+            Pattern::Int { .. } => todo!(),
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { name, .. } => {
+                pattern_vec.push(IR::Assignment {
+                    name: name.clone(),
+                    kind,
+                    scope,
+                });
+
+                pattern_vec.append(value_vec);
+            }
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => todo!(),
+            list @ Pattern::List { .. } => {
+                self.pattern_ir(list, pattern_vec, value_vec, scope);
+            }
+            Pattern::Constructor { .. } => {
+                self.pattern_ir(pattern, pattern_vec, value_vec, scope);
+            }
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn pattern_ir(
+        &mut self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
+        pattern_vec: &mut Vec<IR>,
+        values: &mut Vec<IR>,
+        scope: Vec<u64>,
+    ) {
+        match pattern {
+            Pattern::Int { .. } => todo!(),
+            Pattern::String { .. } => todo!(),
+            Pattern::Var { .. } => todo!(),
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => {
+                pattern_vec.push(IR::Discard { scope });
+
+                pattern_vec.append(values);
+            }
+            Pattern::List { elements, tail, .. } => {
+                let mut elements_vec = vec![];
+
+                let mut names = vec![];
+                for element in elements {
+                    match element {
+                        Pattern::Var { name, .. } => {
+                            names.push(name.clone());
+                        }
+                        a @ Pattern::List { .. } => {
+                            let mut var_vec = vec![];
+                            let item_name = format!("list_item_id_{}", self.id_gen.next());
+                            names.push(item_name.clone());
+                            var_vec.push(IR::Var {
+                                constructor: ValueConstructor::public(
+                                    Type::App {
+                                        public: true,
+                                        module: String::new(),
+                                        name: String::new(),
+                                        args: vec![],
                                     }
                                     .into(),
-                                    argument: Term::Var(Name {
-                                        text: "constr_index".to_string(),
-                                        unique: 0.into(),
-                                    })
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: item_name,
+                                scope: scope.clone(),
+                            });
+                            self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
+                        }
+                        _ => todo!(),
+                    }
+                }
+
+                if let Some(tail) = tail {
+                    match &**tail {
+                        Pattern::Var { name, .. } => names.push(name.clone()),
+                        Pattern::Discard { .. } => {}
+                        _ => unreachable!(),
+                    }
+                }
+
+                pattern_vec.push(IR::ListAccessor {
+                    names,
+                    tail: tail.is_some(),
+                    scope,
+                });
+
+                pattern_vec.append(values);
+                pattern_vec.append(&mut elements_vec);
+            }
+            Pattern::Constructor {
+                is_record,
+                name: constr_name,
+                arguments,
+                constructor,
+                tipo,
+                ..
+            } => {
+                let data_type_key = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => match &**ret {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
+                        },
+                        _ => unreachable!(),
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let (_, constructor_type) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
+                let mut nested_pattern = vec![];
+                if *is_record {
+                    let field_map = match constructor {
+                        tipo::PatternConstructor::Record { field_map, .. } => {
+                            field_map.clone().unwrap()
+                        }
+                    };
+
+                    let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
+
+                    for arg in &constructor_type.arguments {
+                        let label = arg.label.clone().unwrap();
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(label, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .map(|item| {
+                            let label = item.label.clone().unwrap_or_default();
+                            let field_index = field_map.fields.get(&label).unwrap_or(&0);
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_name = format!("{constr_name}_{id}");
+                                    self.pattern_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![IR::Var {
+                                            scope: scope.clone(),
+                                            constructor: ValueConstructor::public(
+                                                tipo.clone(),
+                                                ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                            ),
+                                            name: constr_name.clone(),
+                                        }],
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_name)
+                                }
+                                _ => todo!(),
+                            };
+
+                            (label, var_name, *field_index, discard)
+                        })
+                        .filter(|(_, _, _, discard)| !discard)
+                        .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
+                        .collect::<Vec<(String, String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(label, var_name, index, _)| {
+                                    let field_type = type_map.get(label).unwrap();
+                                    (*index, var_name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                            scope,
+                        });
+                    }
+                } else {
+                    let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
+
+                    for (index, arg) in constructor_type.arguments.iter().enumerate() {
+                        let field_type = arg.tipo.clone();
+
+                        type_map.insert(index, field_type);
+                    }
+
+                    let arguments_index = arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, item)| {
+                            let (discard, var_name) = match &item.value {
+                                Pattern::Var { name, .. } => (false, name.clone()),
+                                Pattern::Discard { .. } => (true, "".to_string()),
+                                Pattern::List { .. } => todo!(),
+                                a @ Pattern::Constructor {
+                                    tipo,
+                                    name: constr_name,
+                                    ..
+                                } => {
+                                    let id = self.id_gen.next();
+                                    let constr_name = format!("{constr_name}_{id}");
+                                    self.pattern_ir(
+                                        a,
+                                        &mut nested_pattern,
+                                        &mut vec![IR::Var {
+                                            scope: scope.clone(),
+                                            constructor: ValueConstructor::public(
+                                                tipo.clone(),
+                                                ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                            ),
+                                            name: constr_name.clone(),
+                                        }],
+                                        scope.clone(),
+                                    );
+
+                                    (false, constr_name)
+                                }
+                                _ => todo!(),
+                            };
+
+                            (var_name, index, discard)
+                        })
+                        .filter(|(_, _, discard)| !discard)
+                        .collect::<Vec<(String, usize, bool)>>();
+
+                    if !arguments_index.is_empty() {
+                        pattern_vec.push(IR::FieldsExpose {
+                            count: arguments_index.len() + 2,
+                            indices: arguments_index
+                                .iter()
+                                .map(|(name, index, _)| {
+                                    let field_type = type_map.get(index).unwrap();
+
+                                    (*index, name.clone(), field_type.clone())
+                                })
+                                .collect_vec(),
+                            scope,
+                        });
+                    }
+                }
+
+                pattern_vec.append(values);
+                pattern_vec.append(&mut nested_pattern);
+            }
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn uplc_code_gen(&mut self, ir_stack: &mut Vec<IR>) -> Term<Name> {
+        let mut arg_stack: Vec<Term<Name>> = vec![];
+
+        while let Some(ir_element) = ir_stack.pop() {
+            self.gen_uplc(ir_element, &mut arg_stack);
+        }
+
+        arg_stack[0].clone()
+    }
+
+    fn gen_uplc(&mut self, ir: IR, arg_stack: &mut Vec<Term<Name>>) {
+        match ir {
+            IR::Int { value, .. } => {
+                let integer = value.parse().unwrap();
+
+                let term = Term::Constant(UplcConstant::Integer(integer));
+
+                arg_stack.push(term);
+            }
+            IR::String { value, .. } => {
+                let term = Term::Constant(UplcConstant::String(value));
+
+                arg_stack.push(term);
+            }
+            IR::ByteArray { bytes, .. } => {
+                let term = Term::Constant(UplcConstant::ByteString(bytes));
+                arg_stack.push(term);
+            }
+            IR::Var {
+                name, constructor, ..
+            } => match constructor.variant {
+                ValueConstructorVariant::LocalVariable { .. } => arg_stack.push(Term::Var(Name {
+                    text: name,
+                    unique: 0.into(),
+                })),
+                ValueConstructorVariant::ModuleConstant { .. } => todo!(),
+                ValueConstructorVariant::ModuleFn {
+                    name: func_name,
+                    module,
+                    ..
+                } => {
+                    let name = if func_name == name {
+                        format!("{module}_{func_name}")
+                    } else {
+                        name
+                    };
+                    arg_stack.push(Term::Var(Name {
+                        text: name,
+                        unique: 0.into(),
+                    }));
+                }
+                ValueConstructorVariant::Record {
+                    name: constr_name,
+                    field_map,
+                    ..
+                } => {
+                    let data_type_key = match &*constructor.tipo {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.to_string(),
+                            defined_type: name.to_string(),
+                        },
+                        Type::Fn { ret, .. } => match ret.deref() {
+                            Type::App { module, name, .. } => DataTypeKey {
+                                module_name: module.to_string(),
+                                defined_type: name.to_string(),
+                            },
+                            _ => unreachable!(),
+                        },
+                        Type::Var { .. } => todo!(),
+                        Type::Tuple { .. } => todo!(),
+                    };
+
+                    if data_type_key.defined_type == "Bool" {
+                        arg_stack.push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
+                    } else {
+                        let data_type = self.data_types.get(&data_type_key).unwrap();
+                        let (constr_index, _constr) = data_type
+                            .constructors
+                            .iter()
+                            .enumerate()
+                            .find(|(_, x)| x.name == *constr_name)
+                            .unwrap();
+
+                        let mut fields =
+                            Term::Constant(UplcConstant::Data(PlutusData::Array(vec![])));
+
+                        if let Some(field_map) = field_map.clone() {
+                            for field in field_map
+                                .fields
+                                .iter()
+                                .sorted_by(|item1, item2| item1.1.cmp(item2.1))
+                                .rev()
+                            {
+                                fields = Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::MkCons)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: Term::Var(Name {
+                                            text: field.0.clone(),
+                                            unique: 0.into(),
+                                        })
+                                        .into(),
+                                    }
                                     .into(),
+                                    argument: fields.into(),
+                                };
+                            }
+                        }
+
+                        let mut term = Term::Apply {
+                            function: Term::Builtin(DefaultFunction::ConstrData).into(),
+                            argument: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::MkPairData).into(),
+                                    argument: Term::Constant(UplcConstant::Data(
+                                        PlutusData::BigInt(BigInt::Int(
+                                            (constr_index as i128).try_into().unwrap(),
+                                        )),
+                                    ))
+                                    .into(),
+                                }
+                                .into(),
+                                argument: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::ListData).into(),
+                                    argument: fields.into(),
                                 }
                                 .into(),
                             }
                             .into(),
-                            argument: Term::Var(Name {
-                                text: format!("constr_{index}_result"),
-                                unique: 0.into(),
-                            })
-                            .into(),
+                        };
+
+                        if let Some(field_map) = field_map {
+                            for field in field_map
+                                .fields
+                                .iter()
+                                .sorted_by(|item1, item2| item1.1.cmp(item2.1))
+                                .rev()
+                            {
+                                term = Term::Lambda {
+                                    parameter_name: Name {
+                                        text: field.0.clone(),
+                                        unique: 0.into(),
+                                    },
+                                    body: term.into(),
+                                };
+                            }
                         }
-                        .into(),
-                        argument: constr_term.into(),
+
+                        arg_stack.push(term);
+                    }
+                }
+            },
+            IR::Discard { .. } => {
+                arg_stack.push(Term::Constant(UplcConstant::Unit));
+            }
+            IR::List {
+                count, tipo, tail, ..
+            } => {
+                let mut args = vec![];
+
+                for _ in 0..count {
+                    let arg = arg_stack.pop().unwrap();
+                    args.push(arg);
+                }
+                let mut constants = vec![];
+                for arg in &args {
+                    if let Term::Constant(c) = arg {
+                        constants.push(c.clone())
                     }
                 }
 
-                constr_term = Term::Lambda {
-                    parameter_name: Name {
-                        text: "last_constructor_result".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Force(constr_term.into()).into(),
+                let list_type = match tipo.deref() {
+                    Type::App { args, .. } => &args[0],
+                    _ => unreachable!(),
                 };
 
-                for index in (0..length - 1).rev() {
-                    constr_term = Term::Lambda {
+                if constants.len() == args.len() && !tail {
+                    let list = Term::Constant(UplcConstant::ProtoList(
+                        list_type.get_uplc_type(),
+                        constants,
+                    ));
+
+                    arg_stack.push(list);
+                } else {
+                    let mut term = if tail {
+                        arg_stack.pop().unwrap()
+                    } else {
+                        Term::Constant(UplcConstant::ProtoList(list_type.get_uplc_type(), vec![]))
+                    };
+
+                    for arg in args {
+                        term = Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Force(
+                                    Term::Builtin(DefaultFunction::MkCons).into(),
+                                )
+                                .into(),
+                                argument: arg.into(),
+                            }
+                            .into(),
+                            argument: term.into(),
+                        };
+                    }
+                    arg_stack.push(term);
+                }
+            }
+
+            IR::Tail { .. } => todo!(),
+            IR::ListAccessor { names, tail, .. } => {
+                let value = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                let mut id_list = vec![];
+
+                for _ in 0..names.len() {
+                    id_list.push(self.id_gen.next());
+                }
+
+                let current_index = 0;
+                let (first_name, names) = names.split_first().unwrap();
+
+                term = Term::Apply {
+                    function: Term::Lambda {
                         parameter_name: Name {
-                            text: format!("constr_{index}_result"),
+                            text: first_name.clone(),
                             unique: 0.into(),
                         },
-                        body: constr_term.into(),
-                    }
-                }
-                let data_type_name = data_constrs.name.clone();
-
-                constr_term = Term::Lambda {
-                    parameter_name: Name {
-                        text: "constr_data".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "constr_index".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: constr_term.into(),
-                        }
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Force(
-                                Term::Force(Term::Builtin(DefaultFunction::FstPair).into()).into(),
+                        body: Term::Apply {
+                            function: list_access_to_uplc(
+                                names,
+                                &id_list,
+                                tail,
+                                current_index,
+                                term,
                             )
                             .into(),
                             argument: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                                argument: Term::Var(Name {
-                                    text: "constr_data".to_string(),
-                                    unique: 0.into(),
-                                })
+                                function: Term::Force(
+                                    Term::Builtin(DefaultFunction::TailList).into(),
+                                )
                                 .into(),
+                                argument: value.clone().into(),
                             }
                             .into(),
                         }
                         .into(),
                     }
                     .into(),
-                };
-                let module = &key.module_name;
-
-                term = Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("choose_{module}_{data_type_name}_constr"),
-                            unique: 0.into(),
-                        },
-                        body: term.into(),
-                    }
-                    .into(),
-                    argument: constr_term.into(),
-                };
-                self.uplc_data_constr_lookup.shift_remove(key);
-            }
-        }
-
-        // Pull out all uplc data holder fields and data usage, filter by Scope Level, Sort By Scope Depth, Then Apply
-        let mut data_holder: Vec<ConstrConversionInfo> = self
-            .uplc_data_usage_holder_lookup
-            .clone()
-            .into_iter()
-            .filter(|record_scope| scope_level.is_less_than(&record_scope.1, false))
-            .map(|(var_name, scope)| ConstrConversionInfo {
-                local_var: var_name,
-                field: None,
-                scope,
-                index: None,
-                returning_type: String::new(),
-            })
-            .collect();
-
-        data_holder.extend(
-            self.uplc_data_holder_lookup
-                .clone()
-                .into_iter()
-                .filter(|record_scope| scope_level.is_less_than(&record_scope.1.scope, false))
-                .map(
-                    |(
-                        ConstrFieldKey {
-                            local_var,
-                            field_name,
-                        },
-                        ScopedExpr { scope, expr },
-                    )| {
-                        let index_type = match expr {
-                            TypedExpr::RecordAccess { index, tipo, .. } => {
-                                let tipo = &*tipo;
-
-                                let name = match tipo {
-                                    Type::App { name, .. } => name,
-                                    Type::Fn { .. } => todo!(),
-                                    Type::Var { .. } => todo!(),
-                                    Type::Tuple { .. } => todo!(),
-                                };
-                                (index, name.clone())
-                            }
-                            TypedExpr::Assignment { value, .. } => match *value {
-                                TypedExpr::RecordAccess { index, tipo, .. } => {
-                                    let tipo = &*tipo;
-
-                                    let name = match tipo {
-                                        Type::App { name, .. } => name,
-                                        Type::Fn { .. } => todo!(),
-                                        Type::Var { .. } => todo!(),
-                                        Type::Tuple { .. } => todo!(),
-                                    };
-                                    (index, name.clone())
-                                }
-                                _ => todo!(),
-                            },
-                            _ => todo!(),
-                        };
-
-                        ConstrConversionInfo {
-                            local_var,
-                            field: Some(field_name),
-                            scope,
-                            index: Some(index_type.0),
-                            returning_type: index_type.1,
-                        }
-                    },
-                )
-                .collect::<Vec<ConstrConversionInfo>>(),
-        );
-        data_holder.sort_by(|item1, item2| {
-            if item1.scope.is_less_than(&item2.scope, true) {
-                Ordering::Less
-            } else if item2.scope.is_less_than(&item1.scope, true) {
-                Ordering::Greater
-            } else if item1.index < item2.index {
-                Ordering::Less
-            } else if item2.index < item1.index {
-                Ordering::Greater
-            } else {
-                Ordering::Equal
-            }
-        });
-
-        println!("SCOPE LEVEL IS {scope_level:#?}");
-        println!("DATA HOLDER COMBINED {:#?}", data_holder);
-
-        for ConstrConversionInfo {
-            local_var,
-            field,
-            index,
-            returning_type,
-            ..
-        } in data_holder.into_iter().rev()
-        {
-            if let (Some(index), Some(field)) = (index, field) {
-                let var_term = Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Var(Name {
-                            text: "constr_field_get_arg".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                        argument: Term::Var(Name {
-                            text: format!("{local_var}_fields"),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    }
-                    .into(),
-                    argument: Term::Constant(Constant::Integer(index as i128)).into(),
-                };
-
-                let type_conversion = match returning_type.as_str() {
-                    "ByteArray" => Term::Apply {
-                        function: Term::Builtin(DefaultFunction::UnBData).into(),
-                        argument: var_term.into(),
-                    },
-                    "Int" => Term::Apply {
-                        function: Term::Builtin(DefaultFunction::UnIData).into(),
-                        argument: var_term.into(),
-                    },
-                    _ => var_term,
-                };
-
-                term = Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("{local_var}_field_{field}"),
-                            unique: 0.into(),
-                        },
-                        body: term.into(),
-                    }
-                    .into(),
-                    argument: type_conversion.into(),
-                };
-                self.uplc_data_holder_lookup.shift_remove(&ConstrFieldKey {
-                    local_var,
-                    field_name: field,
-                });
-            } else {
-                term = Term::Apply {
-                    function: Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("{local_var}_fields"),
-                            unique: 0.into(),
-                        },
-                        body: term.into(),
-                    }
-                    .into(),
-                    // TODO: Find proper scope for this function if at all.
                     argument: Term::Apply {
-                        function: Term::Var(Name {
-                            text: "constr_fields_exposer".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                        argument: Term::Var(Name {
-                            text: local_var.to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
+                        function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into())
+                            .into(),
+                        argument: value.into(),
                     }
                     .into(),
                 };
 
-                self.uplc_data_usage_holder_lookup.shift_remove(&local_var);
+                arg_stack.push(term);
             }
-        }
+            IR::ListExpose {
+                tail_head_names,
+                tail,
+                ..
+            } => {
+                let mut term = arg_stack.pop().unwrap();
 
-        term
-    }
-
-    fn add_arg_getter(&self, term: Term<Name>) -> Term<Name> {
-        // Apply constr arg getter to top level.
-        Term::Apply {
-            function: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_field_get_arg".to_string(),
-                    unique: 0.into(),
-                },
-                body: term.into(),
-            }
-            .into(),
-            argument: Term::Lambda {
-                parameter_name: Name {
-                    text: "constr_list".to_string(),
-                    unique: 0.into(),
-                },
-                body: Term::Lambda {
-                    parameter_name: Name {
-                        text: "arg_number".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
+                if let Some((tail_var, tail_name)) = tail {
+                    term = Term::Apply {
                         function: Term::Lambda {
                             parameter_name: Name {
-                                text: "recurse".to_string(),
+                                text: tail_name,
                                 unique: 0.into(),
                             },
-                            body: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Var(Name {
-                                            text: "recurse".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                        argument: Term::Var(Name {
-                                            text: "recurse".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-
-                                    // Start recursive with index 0 of list
-                                    argument: Term::Constant(Constant::Integer(0.into())).into(),
-                                }
-                                .into(),
-                                argument: Term::Var(Name {
-                                    text: "constr_list".to_string(),
-                                    unique: 0.into(),
-                                })
-                                .into(),
-                            }
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
+                            argument: Term::Var(Name {
+                                text: tail_var,
+                                unique: 0.into(),
+                            })
                             .into(),
                         }
                         .into(),
-
-                        argument: Term::Lambda {
+                    };
+                }
+                for (tail_var, head_name) in tail_head_names.into_iter().rev() {
+                    term = Term::Apply {
+                        function: Term::Lambda {
                             parameter_name: Name {
-                                text: "self_recursor".to_string(),
+                                text: head_name,
                                 unique: 0.into(),
                             },
-                            body: Term::Lambda {
-                                parameter_name: Name {
-                                    text: "current_arg_number".to_string(),
-                                    unique: 0.into(),
-                                },
-                                body: Term::Lambda {
-                                    parameter_name: Name {
-                                        text: "list_of_constr_args".to_string(),
-                                        unique: 0.into(),
-                                    },
-                                    body: Term::Apply {
-                                        function: Term::Apply {
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: Term::Var(Name {
+                                text: tail_var,
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                    };
+                }
+
+                arg_stack.push(term);
+            }
+            IR::Call { count, .. } => {
+                if count >= 2 {
+                    let mut term = arg_stack.pop().unwrap();
+
+                    for _ in 0..count - 1 {
+                        let arg = arg_stack.pop().unwrap();
+
+                        term = Term::Apply {
+                            function: term.into(),
+                            argument: arg.into(),
+                        };
+                    }
+                    arg_stack.push(term);
+                } else {
+                    todo!()
+                }
+            }
+            IR::Builtin { func, .. } => {
+                let mut term = Term::Builtin(func);
+                for _ in 0..func.force_count() {
+                    term = Term::Force(term.into());
+                }
+                arg_stack.push(term);
+            }
+            IR::BinOp { name, tipo, .. } => {
+                let left = arg_stack.pop().unwrap();
+                let right = arg_stack.pop().unwrap();
+
+                let default_builtin = match tipo.deref() {
+                    Type::App { name, .. } => {
+                        if name == "Int" {
+                            Term::Builtin(DefaultFunction::EqualsInteger)
+                        } else if name == "String" {
+                            Term::Builtin(DefaultFunction::EqualsString)
+                        } else if name == "ByteArray" {
+                            Term::Builtin(DefaultFunction::EqualsByteString)
+                        } else {
+                            Term::Builtin(DefaultFunction::EqualsData)
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+
+                let term = match name {
+                    BinOp::And => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::IfThenElse)
+                                    .force_wrap()
+                                    .into(),
+                                argument: left.into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(right.into()).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(Term::Constant(UplcConstant::Bool(false)).into())
+                            .into(),
+                    }
+                    .force_wrap(),
+                    BinOp::Or => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::IfThenElse)
+                                    .force_wrap()
+                                    .into(),
+                                argument: left.into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(Term::Constant(UplcConstant::Bool(false)).into())
+                                .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(right.into()).into(),
+                    }
+                    .force_wrap(),
+                    BinOp::Eq => {
+                        match tipo.deref() {
+                            Type::App { name, .. } => {
+                                if name == "Bool" {
+                                    let term = Term::Force(
+                                        Term::Apply {
                                             function: Term::Apply {
                                                 function: Term::Apply {
                                                     function: Term::Force(
@@ -2854,111 +1742,1404 @@ impl<'a> CodeGenerator<'a> {
                                                             .into(),
                                                     )
                                                     .into(),
-                                                    argument: Term::Apply {
+                                                    argument: left.into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(right.clone().into()).into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Delay(
+                                                Term::Apply {
+                                                    function: Term::Apply {
                                                         function: Term::Apply {
-                                                            function: Term::Builtin(
-                                                                DefaultFunction::EqualsInteger,
+                                                            function: Term::Force(
+                                                                Term::Builtin(
+                                                                    DefaultFunction::IfThenElse,
+                                                                )
+                                                                .into(),
                                                             )
                                                             .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "arg_number".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
+                                                            argument: right.into(),
                                                         }
                                                         .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: "current_arg_number".to_string(),
-                                                            unique: 0.into(),
-                                                        })
+                                                        argument: Term::Constant(
+                                                            UplcConstant::Bool(false),
+                                                        )
                                                         .into(),
                                                     }
                                                     .into(),
+                                                    argument: Term::Constant(UplcConstant::Bool(
+                                                        true,
+                                                    ))
+                                                    .into(),
                                                 }
                                                 .into(),
-                                                argument: Term::Force(
-                                                    Term::Builtin(DefaultFunction::HeadList).into(),
+                                            )
+                                            .into(),
+                                        }
+                                        .into(),
+                                    );
+
+                                    arg_stack.push(term);
+                                    return;
+                                }
+                            }
+                            _ => unreachable!(),
+                        };
+
+                        Term::Apply {
+                            function: Term::Apply {
+                                function: default_builtin.into(),
+                                argument: left.into(),
+                            }
+                            .into(),
+                            argument: right.into(),
+                        }
+                    }
+                    BinOp::NotEq => {
+                        match tipo.deref() {
+                            Type::App { name, .. } => {
+                                if name == "Bool" {
+                                    let term = Term::Force(
+                                        Term::Apply {
+                                            function: Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Force(
+                                                        Term::Builtin(DefaultFunction::IfThenElse)
+                                                            .into(),
+                                                    )
+                                                    .into(),
+                                                    argument: left.into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(
+                                                    Term::Apply {
+                                                        function: Term::Apply {
+                                                            function: Term::Apply {
+                                                                function: Term::Force(
+                                                                    Term::Builtin(
+                                                                        DefaultFunction::IfThenElse,
+                                                                    )
+                                                                    .into(),
+                                                                )
+                                                                .into(),
+                                                                argument: right.clone().into(),
+                                                            }
+                                                            .into(),
+                                                            argument: Term::Constant(
+                                                                UplcConstant::Bool(false),
+                                                            )
+                                                            .into(),
+                                                        }
+                                                        .into(),
+                                                        argument: Term::Constant(
+                                                            UplcConstant::Bool(true),
+                                                        )
+                                                        .into(),
+                                                    }
+                                                    .into(),
                                                 )
                                                 .into(),
                                             }
                                             .into(),
-                                            argument: Term::Lambda {
-                                                parameter_name: Name {
-                                                    text: "current_list_of_constr_args".to_string(),
-                                                    unique: 0.into(),
-                                                },
-                                                body: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Apply {
-                                                            function: Term::Var(Name {
-                                                                text: "self_recursor".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "self_recursor".to_string(),
-                                                                unique: 0.into(),
-                                                            })
-                                                            .into(),
-                                                        }
-                                                        .into(),
-
-                                                        argument: Term::Apply {
-                                                            function: Term::Apply {
-                                                                function: Term::Builtin(
-                                                                    DefaultFunction::AddInteger,
-                                                                )
-                                                                .into(),
-                                                                argument: Term::Var(Name {
-                                                                    text: "current_arg_number"
-                                                                        .to_string(),
-                                                                    unique: 0.into(),
-                                                                })
-                                                                .into(),
-                                                            }
-                                                            .into(),
-                                                            argument: Term::Constant(
-                                                                Constant::Integer(1.into()),
-                                                            )
-                                                            .into(),
-                                                        }
-                                                        .into(),
-                                                    }
-                                                    .into(),
-
-                                                    argument: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Builtin(
-                                                                DefaultFunction::TailList,
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-
-                                                        argument: Term::Var(Name {
-                                                            text: "current_list_of_constr_args"
-                                                                .to_string(),
-                                                            unique: 0.into(),
-                                                        })
-                                                        .into(),
-                                                    }
-                                                    .into(),
-                                                }
-                                                .into(),
-                                            }
-                                            .into(),
+                                            argument: Term::Delay(right.into()).into(),
                                         }
                                         .into(),
-                                        argument: Term::Var(Name {
-                                            text: "list_of_constr_args".to_string(),
-                                            unique: 0.into(),
-                                        })
+                                    );
+
+                                    arg_stack.push(term);
+                                    return;
+                                }
+                            }
+                            _ => unreachable!(),
+                        };
+                        Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::IfThenElse)
+                                        .force_wrap()
+                                        .into(),
+                                    argument: Term::Apply {
+                                        function: Term::Apply {
+                                            function: default_builtin.into(),
+                                            argument: left.into(),
+                                        }
+                                        .into(),
+                                        argument: right.into(),
+                                    }
+                                    .into(),
+                                }
+                                .into(),
+                                argument: Term::Constant(UplcConstant::Bool(false)).into(),
+                            }
+                            .into(),
+                            argument: Term::Constant(UplcConstant::Bool(true)).into(),
+                        }
+                    }
+                    BinOp::LtInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::LtEqInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::GtEqInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanEqualsInteger).into(),
+                            argument: right.into(),
+                        }
+                        .into(),
+                        argument: left.into(),
+                    },
+                    BinOp::GtInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
+                            argument: right.into(),
+                        }
+                        .into(),
+                        argument: left.into(),
+                    },
+                    BinOp::AddInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::AddInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::SubInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::SubtractInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::MultInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::MultiplyInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::DivInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::DivideInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                    BinOp::ModInt => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::ModInteger).into(),
+                            argument: left.into(),
+                        }
+                        .into(),
+                        argument: right.into(),
+                    },
+                };
+                arg_stack.push(term);
+            }
+            IR::Assignment { name, .. } => {
+                let right_hand = arg_stack.pop().unwrap();
+                let lam_body = arg_stack.pop().unwrap();
+
+                let term = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: name,
+                            unique: 0.into(),
+                        },
+                        body: lam_body.into(),
+                    }
+                    .into(),
+                    argument: right_hand.into(),
+                };
+
+                arg_stack.push(term);
+            }
+            IR::DefineFunc {
+                func_name,
+                params,
+                recursive,
+                module_name,
+                ..
+            } => {
+                let func_name = if module_name.is_empty() {
+                    func_name
+                } else {
+                    format!("{module_name}_{func_name}")
+                };
+                let mut func_body = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+
+                for param in params.iter().rev() {
+                    func_body = Term::Lambda {
+                        parameter_name: Name {
+                            text: param.clone(),
+                            unique: 0.into(),
+                        },
+                        body: func_body.into(),
+                    };
+                }
+
+                if !recursive {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: func_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: func_body.into(),
+                    };
+                    arg_stack.push(term);
+                } else {
+                    func_body = Term::Lambda {
+                        parameter_name: Name {
+                            text: func_name.clone(),
+                            unique: 0.into(),
+                        },
+                        body: func_body.into(),
+                    };
+
+                    let mut boostrap_recurse = Term::Apply {
+                        function: Term::Var(Name {
+                            text: "__recurse".to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: Term::Var(Name {
+                            text: "__recurse".to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    };
+
+                    for param in params.iter() {
+                        boostrap_recurse = Term::Apply {
+                            function: boostrap_recurse.into(),
+                            argument: Term::Var(Name {
+                                text: param.clone(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        };
+                    }
+
+                    func_body = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "__recurse".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: boostrap_recurse.into(),
+                        }
+                        .into(),
+                        argument: func_body.into(),
+                    };
+
+                    for param in params.iter().rev() {
+                        func_body = Term::Lambda {
+                            parameter_name: Name {
+                                text: param.clone(),
+                                unique: 0.into(),
+                            },
+                            body: func_body.into(),
+                        };
+                    }
+
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: func_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: func_body.into(),
+                    };
+
+                    arg_stack.push(term);
+                }
+            }
+            IR::DefineConst { .. } => todo!(),
+            IR::DefineConstrFields { .. } => todo!(),
+            IR::DefineConstrFieldAccess { .. } => todo!(),
+            IR::Lam { name, .. } => {
+                let arg = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+
+                term = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: name,
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    }
+                    .into(),
+                    argument: arg.into(),
+                };
+                arg_stack.push(term);
+            }
+            IR::When {
+                subject_name, tipo, ..
+            } => {
+                let subject = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+
+                term = if tipo.is_int() || tipo.is_bytearray() || tipo.is_string() || tipo.is_list()
+                {
+                    Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: subject_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: subject.into(),
+                    }
+                } else {
+                    Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: subject_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: constr_index_exposer(subject).into(),
+                    }
+                };
+
+                arg_stack.push(term);
+            }
+            IR::Clause {
+                tipo,
+                subject_name,
+                complex_clause,
+                ..
+            } => {
+                // clause to compare
+                let clause = arg_stack.pop().unwrap();
+
+                // the body to be run if the clause matches
+                let body = arg_stack.pop().unwrap();
+
+                // the next branch in the when expression
+                let mut term = arg_stack.pop().unwrap();
+
+                let checker = if tipo.is_int() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsInteger.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_bytearray() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsByteString.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_bool() {
+                    todo!()
+                } else if tipo.is_string() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsString.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_list() {
+                    unreachable!()
+                } else {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsInteger.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                };
+
+                if complex_clause {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::IfThenElse)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: Term::Apply {
+                                            function: checker.into(),
+                                            argument: clause.into(),
+                                        }
+                                        .into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Delay(body.into()).into(),
+                                }
+                                .into(),
+                                argument: Term::Var(Name {
+                                    text: "__other_clauses_delayed".to_string(),
+                                    unique: 0.into(),
+                                })
+                                .into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(term.into()).into(),
+                    }
+                    .force_wrap()
+                } else {
+                    term = Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Force(DefaultFunction::IfThenElse.into()).into(),
+                                argument: Term::Apply {
+                                    function: checker.into(),
+                                    argument: clause.into(),
+                                }
+                                .into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(body.into()).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(term.into()).into(),
+                    }
+                    .force_wrap();
+                }
+
+                arg_stack.push(term);
+            }
+
+            IR::ListClause {
+                tail_name,
+                next_tail_name,
+                ..
+            } => {
+                // discard to pop off
+                let _ = arg_stack.pop().unwrap();
+
+                // the body to be run if the clause matches
+                let body = arg_stack.pop().unwrap();
+
+                // the next branch in the when expression
+                let mut term = arg_stack.pop().unwrap();
+
+                let arg = if let Some(next_tail_name) = next_tail_name {
+                    Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: next_tail_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
+                            argument: Term::Var(Name {
+                                text: tail_name.clone(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                    }
+                } else {
+                    term
+                };
+
+                term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::ChooseList)
+                                .force_wrap()
+                                .force_wrap()
+                                .into(),
+                            argument: Term::Var(Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(body.into()).into(),
+                    }
+                    .into(),
+                    argument: Term::Delay(arg.into()).into(),
+                }
+                .force_wrap();
+
+                arg_stack.push(term);
+            }
+            IR::ClauseGuard {
+                subject_name, tipo, ..
+            } => {
+                let condition = arg_stack.pop().unwrap();
+
+                let then = arg_stack.pop().unwrap();
+
+                let checker = if tipo.is_int() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsInteger.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_bytearray() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsByteString.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_bool() {
+                    todo!()
+                } else if tipo.is_string() {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsString.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                } else if tipo.is_list() {
+                    unreachable!()
+                } else {
+                    Term::Apply {
+                        function: DefaultFunction::EqualsInteger.into(),
+                        argument: Term::Var(Name {
+                            text: subject_name,
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    }
+                };
+
+                let term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::IfThenElse)
+                                .force_wrap()
+                                .into(),
+                            argument: Term::Apply {
+                                function: checker.into(),
+                                argument: condition.into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(then.into()).into(),
+                    }
+                    .into(),
+                    argument: Term::Var(Name {
+                        text: "__other_clauses_delayed".to_string(),
+                        unique: 0.into(),
+                    })
+                    .into(),
+                }
+                .force_wrap();
+
+                arg_stack.push(term);
+            }
+            IR::Finally { .. } => {
+                let _clause = arg_stack.pop().unwrap();
+            }
+            IR::If { .. } => {
+                let condition = arg_stack.pop().unwrap();
+                let then = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                term = Term::Force(
+                    Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::IfThenElse)
+                                    .force_wrap()
+                                    .into(),
+                                argument: condition.into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(then.into()).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(term.into()).into(),
+                    }
+                    .into(),
+                );
+
+                arg_stack.push(term);
+            }
+            IR::Constr { .. } => todo!(),
+            IR::Fields { .. } => todo!(),
+            IR::RecordAccess { index, tipo, .. } => {
+                let constr = arg_stack.pop().unwrap();
+
+                let mut term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Var(Name {
+                            text: CONSTR_GET_FIELD.to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Var(Name {
+                                text: CONSTR_FIELDS_EXPOSER.to_string(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                            argument: constr.into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    argument: Term::Constant(UplcConstant::Integer(index.into())).into(),
+                };
+
+                if tipo.is_int() {
+                    term = Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnIData).into(),
+                        argument: term.into(),
+                    };
+                } else if tipo.is_bytearray() {
+                    term = Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnBData).into(),
+                        argument: term.into(),
+                    };
+                } else if tipo.is_list() {
+                    term = Term::Apply {
+                        function: Term::Builtin(DefaultFunction::UnListData).into(),
+                        argument: term.into(),
+                    };
+                }
+
+                arg_stack.push(term);
+            }
+            IR::FieldsExpose { indices, .. } => {
+                self.needs_field_access = true;
+
+                let constr_var = arg_stack.pop().unwrap();
+                let mut body = arg_stack.pop().unwrap();
+
+                let mut indices = indices.into_iter().rev();
+                let highest = indices.next().unwrap();
+                let mut id_list = vec![];
+
+                for _ in 0..highest.0 {
+                    id_list.push(self.id_gen.next());
+                }
+
+                let constr_name_lam = format!("__constr_fields_{}", self.id_gen.next());
+                let highest_loop_index = highest.0 as i32 - 1;
+                let last_prev_tail = Term::Var(Name {
+                    text: if highest_loop_index == -1 {
+                        constr_name_lam.clone()
+                    } else {
+                        format!(
+                            "__tail_{}_{}",
+                            highest_loop_index, id_list[highest_loop_index as usize]
+                        )
+                    },
+                    unique: 0.into(),
+                });
+
+                let unwrapper = if highest.2.is_int() {
+                    Term::Apply {
+                        function: DefaultFunction::UnIData.into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: last_prev_tail.into(),
+                        }
+                        .into(),
+                    }
+                } else if highest.2.is_bytearray() {
+                    Term::Apply {
+                        function: DefaultFunction::UnBData.into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: last_prev_tail.into(),
+                        }
+                        .into(),
+                    }
+                } else if highest.2.is_list() {
+                    Term::Apply {
+                        function: DefaultFunction::UnListData.into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: last_prev_tail.into(),
+                        }
+                        .into(),
+                    }
+                } else {
+                    Term::Apply {
+                        function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                        argument: last_prev_tail.into(),
+                    }
+                };
+
+                body = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: highest.1,
+                            unique: 0.into(),
+                        },
+                        body: body.into(),
+                    }
+                    .into(),
+                    argument: unwrapper.into(),
+                };
+
+                let mut current_field = None;
+                for index in (0..highest.0).rev() {
+                    let current_tail_index = index;
+                    let previous_tail_index = if index == 0 { 0 } else { index - 1 };
+                    let current_tail_id = id_list[index];
+                    let previous_tail_id = if index == 0 { 0 } else { id_list[index - 1] };
+                    if current_field.is_none() {
+                        current_field = indices.next();
+                    }
+
+                    let prev_tail = if index == 0 {
+                        Term::Var(Name {
+                            text: constr_name_lam.clone(),
+                            unique: 0.into(),
+                        })
+                    } else {
+                        Term::Var(Name {
+                            text: format!("__tail_{previous_tail_index}_{previous_tail_id}"),
+                            unique: 0.into(),
+                        })
+                    };
+
+                    if let Some(ref field) = current_field {
+                        if field.0 == index {
+                            let unwrapper = if field.2.is_int() {
+                                Term::Apply {
+                                    function: DefaultFunction::UnIData.into(),
+                                    argument: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::HeadList)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: prev_tail.clone().into(),
+                                    }
+                                    .into(),
+                                }
+                            } else if field.2.is_bytearray() {
+                                Term::Apply {
+                                    function: DefaultFunction::UnBData.into(),
+                                    argument: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::HeadList)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: prev_tail.clone().into(),
+                                    }
+                                    .into(),
+                                }
+                            } else if field.2.is_list() {
+                                Term::Apply {
+                                    function: DefaultFunction::UnListData.into(),
+                                    argument: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::HeadList)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: prev_tail.clone().into(),
+                                    }
+                                    .into(),
+                                }
+                            } else {
+                                Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::HeadList)
+                                        .force_wrap()
+                                        .into(),
+                                    argument: prev_tail.clone().into(),
+                                }
+                            };
+
+                            body = Term::Apply {
+                                function: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: field.1.clone(),
+                                        unique: 0.into(),
+                                    },
+                                    body: Term::Apply {
+                                        function: Term::Lambda {
+                                            parameter_name: Name {
+                                                text: format!(
+                                                    "__tail_{current_tail_index}_{current_tail_id}"
+                                                ),
+                                                unique: 0.into(),
+                                            },
+                                            body: body.into(),
+                                        }
+                                        .into(),
+                                        argument: Term::Apply {
+                                            function: Term::Builtin(DefaultFunction::TailList)
+                                                .force_wrap()
+                                                .into(),
+                                            argument: prev_tail.into(),
+                                        }
                                         .into(),
                                     }
                                     .into(),
                                 }
                                 .into(),
+                                argument: unwrapper.into(),
+                            };
+
+                            current_field = None;
+                        } else {
+                            body = Term::Apply {
+                                function: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: format!(
+                                            "__tail_{current_tail_index}_{current_tail_id}"
+                                        ),
+                                        unique: 0.into(),
+                                    },
+                                    body: body.into(),
+                                }
+                                .into(),
+                                argument: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::TailList)
+                                        .force_wrap()
+                                        .force_wrap()
+                                        .into(),
+                                    argument: prev_tail.into(),
+                                }
+                                .into(),
                             }
+                        }
+                    } else {
+                        body = Term::Apply {
+                            function: Term::Lambda {
+                                parameter_name: Name {
+                                    text: format!("__tail_{current_tail_index}_{current_tail_id}"),
+                                    unique: 0.into(),
+                                },
+                                body: body.into(),
+                            }
+                            .into(),
+                            argument: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::TailList)
+                                    .force_wrap()
+                                    .force_wrap()
+                                    .into(),
+                                argument: prev_tail.into(),
+                            }
+                            .into(),
+                        }
+                    }
+                }
+
+                body = Term::Apply {
+                    function: Term::Lambda {
+                        parameter_name: Name {
+                            text: constr_name_lam,
+                            unique: 0.into(),
+                        },
+                        body: body.into(),
+                    }
+                    .into(),
+                    argument: Term::Apply {
+                        function: Term::Var(Name {
+                            text: CONSTR_FIELDS_EXPOSER.to_string(),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                        argument: constr_var.into(),
+                    }
+                    .into(),
+                };
+
+                arg_stack.push(body);
+            }
+            IR::Todo { .. } => {
+                arg_stack.push(Term::Error);
+            }
+            IR::Record { .. } => todo!(),
+            IR::RecordUpdate { .. } => todo!(),
+            IR::Negate { .. } => todo!(),
+        }
+    }
+
+    pub(crate) fn define_ir(&mut self, ir_stack: &mut Vec<IR>) {
+        let mut func_components = IndexMap::new();
+        let mut func_index_map = IndexMap::new();
+
+        let recursion_func_map = IndexMap::new();
+
+        self.define_recurse_ir(
+            ir_stack,
+            &mut func_components,
+            &mut func_index_map,
+            recursion_func_map,
+        );
+
+        let mut final_func_dep_ir = IndexMap::new();
+
+        for func in func_index_map.clone() {
+            if self.defined_functions.contains_key(&func.0) {
+                continue;
+            }
+
+            let mut funt_comp = func_components.get(&func.0).unwrap().clone();
+            let func_scope = func_index_map.get(&func.0).unwrap();
+
+            let mut dep_ir = vec![];
+
+            while let Some(dependency) = funt_comp.dependencies.pop() {
+                if self.defined_functions.contains_key(&dependency) {
+                    continue;
+                }
+
+                let depend_comp = func_components.get(&dependency).unwrap();
+
+                let dep_scope = func_index_map.get(&dependency).unwrap();
+
+                if get_common_ancestor(dep_scope, func_scope) == func_scope.clone() {
+                    funt_comp
+                        .dependencies
+                        .extend(depend_comp.dependencies.clone());
+
+                    let mut temp_ir = vec![IR::DefineFunc {
+                        scope: func_scope.clone(),
+                        func_name: dependency.function_name.clone(),
+                        module_name: dependency.module_name.clone(),
+                        params: depend_comp.args.clone(),
+                        recursive: depend_comp.recursive,
+                    }];
+
+                    temp_ir.extend(depend_comp.ir.clone());
+
+                    temp_ir.append(&mut dep_ir);
+
+                    dep_ir = temp_ir;
+                    self.defined_functions.insert(dependency, ());
+                }
+            }
+
+            final_func_dep_ir.insert(func.0, dep_ir);
+        }
+
+        for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
+            match ir {
+                IR::Var { constructor, .. } => {
+                    if let ValueConstructorVariant::ModuleFn { .. } = &constructor.variant {}
+                }
+                a => {
+                    let temp_func_index_map = func_index_map.clone();
+                    let to_insert = temp_func_index_map
+                        .iter()
+                        .filter(|func| {
+                            func.1.clone() == a.scope()
+                                && !self.defined_functions.contains_key(func.0)
+                        })
+                        .collect_vec();
+
+                    for item in to_insert.into_iter() {
+                        func_index_map.remove(item.0);
+                        self.defined_functions.insert(item.0.clone(), ());
+
+                        let mut full_func_ir = final_func_dep_ir.get(item.0).unwrap().clone();
+
+                        let funt_comp = func_components.get(item.0).unwrap();
+
+                        full_func_ir.push(IR::DefineFunc {
+                            scope: item.1.clone(),
+                            func_name: item.0.function_name.clone(),
+                            module_name: item.0.module_name.clone(),
+                            params: funt_comp.args.clone(),
+                            recursive: funt_comp.recursive,
+                        });
+
+                        full_func_ir.extend(funt_comp.ir.clone());
+
+                        for ir in full_func_ir.into_iter().rev() {
+                            ir_stack.insert(index, ir);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn define_recurse_ir(
+        &mut self,
+        ir_stack: &[IR],
+        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
+        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+        recursion_func_map: IndexMap<FunctionAccessKey, ()>,
+    ) {
+        self.process_define_ir(ir_stack, func_components, func_index_map);
+
+        let mut recursion_func_map = recursion_func_map;
+
+        for func_index in func_index_map.clone().iter() {
+            let func = func_index.0;
+
+            let function_components = func_components.get(func).unwrap();
+            let function_ir = function_components.ir.clone();
+
+            for ir in function_ir.clone() {
+                if let IR::Var {
+                    constructor:
+                        ValueConstructor {
+                            variant:
+                                ValueConstructorVariant::ModuleFn {
+                                    name: func_name,
+                                    module,
+                                    ..
+                                },
+                            ..
+                        },
+                    ..
+                } = ir
+                {
+                    if recursion_func_map.contains_key(&FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: func_name.clone(),
+                    }) {
+                        return;
+                    } else {
+                        recursion_func_map.insert(
+                            FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: func_name.clone(),
+                            },
+                            (),
+                        );
+                    }
+                }
+            }
+
+            let mut inner_func_components = IndexMap::new();
+
+            let mut inner_func_index_map = IndexMap::new();
+
+            self.define_recurse_ir(
+                &function_ir,
+                &mut inner_func_components,
+                &mut inner_func_index_map,
+                recursion_func_map.clone(),
+            );
+
+            //now unify
+            for item in inner_func_components {
+                if !func_components.contains_key(&item.0) {
+                    func_components.insert(item.0, item.1);
+                }
+            }
+
+            for item in inner_func_index_map {
+                if let Some(entry) = func_index_map.get_mut(&item.0) {
+                    *entry = get_common_ancestor(entry, &item.1);
+                } else {
+                    func_index_map.insert(item.0, item.1);
+                }
+            }
+        }
+    }
+
+    fn process_define_ir(
+        &mut self,
+        ir_stack: &[IR],
+        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
+        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+    ) {
+        let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
+        for ir in ir_stack.iter().rev() {
+            match ir {
+                IR::Var {
+                    scope, constructor, ..
+                } => {
+                    if let ValueConstructorVariant::ModuleFn {
+                        name,
+                        module,
+                        builtin,
+                        ..
+                    } = &constructor.variant
+                    {
+                        if builtin.is_none() {
+                            let function_key = FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: name.clone(),
+                            };
+
+                            if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
+                                let new_scope = get_common_ancestor(scope, scope_prev);
+
+                                to_be_defined_map.insert(function_key, new_scope);
+                            } else if func_components.get(&function_key).is_some() {
+                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                            } else {
+                                let function = self.functions.get(&function_key).unwrap();
+
+                                let mut func_ir = vec![];
+
+                                self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+
+                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                                let mut func_calls = vec![];
+
+                                for ir in func_ir.clone() {
+                                    if let IR::Var {
+                                        constructor:
+                                            ValueConstructor {
+                                                variant:
+                                                    ValueConstructorVariant::ModuleFn {
+                                                        name: func_name,
+                                                        module,
+                                                        ..
+                                                    },
+                                                ..
+                                            },
+                                        ..
+                                    } = ir
+                                    {
+                                        func_calls.push(FunctionAccessKey {
+                                            module_name: module.clone(),
+                                            function_name: func_name.clone(),
+                                        })
+                                    }
+                                }
+
+                                let mut args = vec![];
+
+                                for arg in function.arguments.iter() {
+                                    match &arg.arg_name {
+                                        ArgName::Named { name, .. }
+                                        | ArgName::NamedLabeled { name, .. } => {
+                                            args.push(name.clone());
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                let recursive =
+                                    if let Ok(index) = func_calls.binary_search(&function_key) {
+                                        func_calls.remove(index);
+                                        true
+                                    } else {
+                                        false
+                                    };
+
+                                func_components.insert(
+                                    function_key,
+                                    FuncComponents {
+                                        ir: func_ir,
+                                        dependencies: func_calls,
+                                        recursive,
+                                        args,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                }
+                a => {
+                    let scope = a.scope();
+
+                    for func in to_be_defined_map.clone().iter() {
+                        if get_common_ancestor(&scope, func.1) == scope.to_vec() {
+                            if let Some(index_scope) = func_index_map.get(func.0) {
+                                if get_common_ancestor(index_scope, func.1) == scope.to_vec() {
+                                    func_index_map.insert(func.0.clone(), scope.clone());
+                                    to_be_defined_map.shift_remove(func.0);
+                                } else {
+                                    to_be_defined_map.insert(
+                                        func.0.clone(),
+                                        get_common_ancestor(index_scope, func.1),
+                                    );
+                                }
+                            } else {
+                                func_index_map.insert(func.0.clone(), scope.clone());
+                                to_be_defined_map.shift_remove(func.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //Still to be defined
+        for func in to_be_defined_map.clone().iter() {
+            let index_scope = func_index_map.get(func.0).unwrap();
+            func_index_map.insert(func.0.clone(), get_common_ancestor(func.1, index_scope));
+        }
+    }
+}
+
+fn constants_ir(literal: &Constant<Arc<Type>, String>, ir_stack: &mut Vec<IR>, scope: Vec<u64>) {
+    match literal {
+        Constant::Int { value, .. } => {
+            ir_stack.push(IR::Int {
+                scope,
+                value: value.clone(),
+            });
+        }
+        Constant::String { value, .. } => {
+            ir_stack.push(IR::String {
+                scope,
+                value: value.clone(),
+            });
+        }
+        Constant::Tuple { .. } => {
+            todo!()
+        }
+        Constant::List { elements, tipo, .. } => {
+            ir_stack.push(IR::List {
+                scope: scope.clone(),
+                count: elements.len(),
+                tipo: tipo.clone(),
+                tail: false,
+            });
+
+            for element in elements {
+                constants_ir(element, ir_stack, scope.clone());
+            }
+        }
+        Constant::Record { .. } => {
+            // ir_stack.push(IR::Record { scope,  });
+            todo!()
+        }
+        Constant::ByteArray { bytes, .. } => {
+            ir_stack.push(IR::ByteArray {
+                scope,
+                bytes: bytes.clone(),
+            });
+        }
+        Constant::Var { .. } => todo!(),
+    };
+}
+
+fn check_when_pattern_needs(
+    pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
+    needs_access_to_constr_var: &mut bool,
+    needs_clause_guard: &mut bool,
+) {
+    match pattern {
+        Pattern::Var { .. } => {
+            *needs_access_to_constr_var = true;
+        }
+        Pattern::List { .. }
+        | Pattern::Constructor { .. }
+        | Pattern::Tuple { .. }
+        | Pattern::Int { .. } => {
+            *needs_access_to_constr_var = true;
+            *needs_clause_guard = true;
+        }
+        Pattern::Discard { .. } => {}
+
+        _ => todo!("{pattern:#?}"),
+    }
+}
+
+fn get_common_ancestor(scope: &[u64], scope_prev: &[u64]) -> Vec<u64> {
+    let longest_length = if scope.len() >= scope_prev.len() {
+        scope.len()
+    } else {
+        scope_prev.len()
+    };
+
+    if *scope == *scope_prev {
+        return scope.to_vec();
+    }
+
+    for index in 0..longest_length {
+        if scope.get(index).is_none() {
+            return scope.to_vec();
+        } else if scope_prev.get(index).is_none() {
+            return scope_prev.to_vec();
+        } else if scope[index] != scope_prev[index] {
+            return scope[0..index].to_vec();
+        }
+    }
+    vec![]
+}
+
+fn list_access_to_uplc(
+    names: &[String],
+    id_list: &[u64],
+    tail: bool,
+    current_index: usize,
+    term: Term<Name>,
+) -> Term<Name> {
+    let (first, names) = names.split_first().unwrap();
+
+    if names.len() == 1 && tail {
+        Term::Lambda {
+            parameter_name: Name {
+                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                unique: 0.into(),
+            },
+            body: Term::Apply {
+                function: Term::Lambda {
+                    parameter_name: Name {
+                        text: first.clone(),
+                        unique: 0.into(),
+                    },
+                    body: Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: names[0].clone(),
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
+                                .into(),
+                            argument: Term::Var(Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
+                                ),
+                                unique: 0.into(),
+                            })
                             .into(),
                         }
                         .into(),
@@ -2966,61 +3147,249 @@ impl<'a> CodeGenerator<'a> {
                     .into(),
                 }
                 .into(),
+                argument: Term::Apply {
+                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
+                    argument: Term::Var(Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    })
+                    .into(),
+                }
+                .into(),
+            }
+            .into(),
+        }
+    } else if names.is_empty() {
+        Term::Lambda {
+            parameter_name: Name {
+                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                unique: 0.into(),
+            },
+            body: Term::Apply {
+                function: Term::Lambda {
+                    parameter_name: Name {
+                        text: first.clone(),
+                        unique: 0.into(),
+                    },
+                    body: term.into(),
+                }
+                .into(),
+                argument: Term::Apply {
+                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
+                    argument: Term::Var(Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    })
+                    .into(),
+                }
+                .into(),
+            }
+            .into(),
+        }
+    } else {
+        Term::Lambda {
+            parameter_name: Name {
+                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                unique: 0.into(),
+            },
+            body: Term::Apply {
+                function: Term::Lambda {
+                    parameter_name: Name {
+                        text: first.clone(),
+                        unique: 0.into(),
+                    },
+                    body: Term::Apply {
+                        function: list_access_to_uplc(
+                            names,
+                            id_list,
+                            tail,
+                            current_index + 1,
+                            term,
+                        )
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
+                                .into(),
+                            argument: Term::Var(Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
+                                ),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                }
+                .into(),
+                argument: Term::Apply {
+                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
+                    argument: Term::Var(Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    })
+                    .into(),
+                }
+                .into(),
             }
             .into(),
         }
     }
+}
 
-    // fn add_field_length_check(&self, term: Term<Name>) -> Term<Name> {
-    // Term::Apply {
-    //     function: Term::Lambda {
-    //         parameter_name: Name {
-    //             text: "field_length_check".to_string(),
-    //             unique: 0.into(),
-    //         },
-    //         body: term.into(),
-    //     }
-    //     .into(),
-    //     argument: Term::Lambda {
-    //         parameter_name: Name {
-    //             text: "expected_field_length".to_string(),
-    //             unique: 0.into(),
-    //         },
-    //         body: Term::Lambda {
-    //             parameter_name: Name {
-    //                 text: "type_to_check".to_string(),
-    //                 unique: 0.into(),
-    //             },
-    //             body: Term::Apply {
-    //                 function: Term::Apply {
-    //                     function: Term::Apply {
-    //                         function: Term::Force(
-    //                             Term::Builtin(DefaultFunction::IfThenElse).into(),
-    //                         )
-    //                         .into(),
-    //                         argument: Term::Apply {
-    //                             function: Term::Apply {
-    //                                 function: Term::Apply {
-    //                                     function: Term::Builtin(DefaultFunction::EqualsInteger),
-    //                                     argument: Term::Apply { function: , argument: () },
-    //                                 },
-    //                                 argument: (),
-    //                             },
-    //                             argument: (),
-    //                         },
-    //                     }
-    //                     .into(),
-    //                     argument: (),
-    //                 }
-    //                 .into(),
-    //                 argument: (),
-    //             }
-    //             .into(),
-    //         }
-    //         .into(),
-    //     }
-    //     .into(),
-    // }
-    // todo!()
-    // }
+fn rearrange_clauses(
+    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>>,
+) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>> {
+    let mut sorted_clauses = clauses;
+
+    // if we have a list sort clauses so we can plug holes for cases not covered by clauses
+    // TODO: while having 10000000 element list is impossible to destructure in plutus budget,
+    // let's sort clauses by a safer manner
+    // TODO: how shall tails be weighted? Since any clause after will not run
+    sorted_clauses.sort_by(|clause1, clause2| {
+        let clause1_len = match &clause1.pattern[0] {
+            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
+            _ => 10000000,
+        };
+        let clause2_len = match &clause2.pattern[0] {
+            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
+            _ => 10000001,
+        };
+
+        clause1_len.cmp(&clause2_len)
+    });
+
+    let mut elems_len = 0;
+    let mut final_clauses = sorted_clauses.clone();
+    let mut holes_to_fill = vec![];
+    let mut assign_plug_in_name = None;
+    let mut last_clause_index = 0;
+    let mut last_clause_set = false;
+
+    // If we have a catch all, use that. Otherwise use todo which will result in error
+    // TODO: fill in todo label with description
+    let plug_in_then = match &sorted_clauses[sorted_clauses.len() - 1].pattern[0] {
+        Pattern::Var { name, .. } => {
+            assign_plug_in_name = Some(name);
+            sorted_clauses[sorted_clauses.len() - 1].clone().then
+        }
+        Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
+        _ => TypedExpr::Todo {
+            location: Span::empty(),
+            label: None,
+            tipo: sorted_clauses[sorted_clauses.len() - 1].then.tipo(),
+        },
+    };
+
+    for (index, clause) in sorted_clauses.iter().enumerate() {
+        if let Pattern::List { elements, .. } = &clause.pattern[0] {
+            // found a hole and now we plug it
+            while elems_len < elements.len() {
+                let mut discard_elems = vec![];
+
+                for _ in 0..elems_len {
+                    discard_elems.push(Pattern::Discard {
+                        name: "_".to_string(),
+                        location: Span::empty(),
+                    });
+                }
+
+                // If we have a named catch all then in scope the name and create list of discards, otherwise list of discards
+                let clause_to_fill = if let Some(name) = assign_plug_in_name {
+                    Clause {
+                        location: Span::empty(),
+                        pattern: vec![Pattern::Assign {
+                            name: name.clone(),
+                            location: Span::empty(),
+                            pattern: Pattern::List {
+                                location: Span::empty(),
+                                elements: discard_elems,
+                                tail: None,
+                            }
+                            .into(),
+                        }],
+                        alternative_patterns: vec![],
+                        guard: None,
+                        then: plug_in_then.clone(),
+                    }
+                } else {
+                    Clause {
+                        location: Span::empty(),
+                        pattern: vec![Pattern::List {
+                            location: Span::empty(),
+                            elements: discard_elems,
+                            tail: None,
+                        }],
+                        alternative_patterns: vec![],
+                        guard: None,
+                        then: plug_in_then.clone(),
+                    }
+                };
+
+                holes_to_fill.push((index, clause_to_fill));
+                elems_len += 1;
+            }
+        }
+
+        // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
+        if let Pattern::List {
+            elements,
+            tail: Some(tail),
+            ..
+        } = &clause.pattern[0]
+        {
+            let mut elements = elements.clone();
+            elements.push(*tail.clone());
+            if elements
+                .iter()
+                .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
+                && !last_clause_set
+            {
+                last_clause_index = index;
+                last_clause_set = true;
+            }
+        }
+
+        // If the last condition doesn't have a catch all or tail then add a catch all with a todo
+        if index == sorted_clauses.len() - 1 {
+            if let Pattern::List {
+                elements,
+                tail: Some(tail),
+                ..
+            } = &clause.pattern[0]
+            {
+                let mut elements = elements.clone();
+                elements.push(*tail.clone());
+                if !elements
+                    .iter()
+                    .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
+                {
+                    final_clauses.push(Clause {
+                        location: Span::empty(),
+                        pattern: vec![Pattern::Discard {
+                            name: "_".to_string(),
+                            location: Span::empty(),
+                        }],
+                        alternative_patterns: vec![],
+                        guard: None,
+                        then: plug_in_then.clone(),
+                    });
+                }
+            }
+        }
+
+        elems_len += 1;
+    }
+
+    // Encountered a tail so stop there with that as last clause
+    final_clauses = final_clauses[0..(last_clause_index + 1)].to_vec();
+
+    // insert hole fillers into clauses
+    for (index, clause) in holes_to_fill.into_iter().rev() {
+        final_clauses.insert(index, clause);
+    }
+
+    final_clauses
 }

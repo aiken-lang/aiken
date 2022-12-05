@@ -15,7 +15,7 @@ use aiken_lang::{
     builtins,
     tipo::TypeInfo,
     uplc::{DataTypeKey, FunctionAccessKey},
-    uplc_two::CodeGenerator,
+    uplc::CodeGenerator,
     IdGenerator,
 };
 use miette::NamedSource;
