@@ -839,17 +839,34 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn call<'a>(&mut self, fun: &'a UntypedExpr, args: &'a [CallArg<UntypedExpr>]) -> Document<'a> {
+        let is_constr = match fun {
+            UntypedExpr::Var { name, .. } => name[0..1].chars().all(|c| c.is_uppercase()),
+            UntypedExpr::FieldAccess { container, .. } => {
+                matches!(&**container, UntypedExpr::Var { name, .. } if name[0..1].chars().all(|c| c.is_uppercase()))
+            }
+            _ => false,
+        };
+
+        let needs_curly = if is_constr {
+            args.iter().all(|arg| arg.label.is_some())
+        } else {
+            false
+        };
+
         match args {
             [arg] if is_breakable_expr(&arg.value) => self
                 .expr(fun)
-                .append("(")
-                .append(self.call_arg(arg))
-                .append(")")
+                .append(if needs_curly { "{" } else { "(" })
+                .append(self.call_arg(arg, needs_curly))
+                .append(if needs_curly { "}" } else { ")" })
                 .group(),
 
             _ => self
                 .expr(fun)
-                .append(wrap_args(args.iter().map(|a| (self.call_arg(a), false))))
+                .append(wrap_args(
+                    args.iter()
+                        .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
+                ))
                 .group(),
         }
     }
@@ -978,12 +995,18 @@ impl<'comments> Formatter<'comments> {
             self.expr(fun)
         } else if hole_in_first_position {
             // x |> fun(_, 2, 3)
-            self.expr(fun)
-                .append(wrap_args(args.iter().skip(1).map(|a| (self.call_arg(a), false))).group())
+            self.expr(fun).append(
+                wrap_args(
+                    args.iter()
+                        .skip(1)
+                        .map(|a| (self.call_arg(a, false), false)),
+                )
+                .group(),
+            )
         } else {
             // x |> fun(1, _, 3)
             self.expr(fun)
-                .append(wrap_args(args.iter().map(|a| (self.call_arg(a), false))).group())
+                .append(wrap_args(args.iter().map(|a| (self.call_arg(a, false), false))).group())
         }
     }
 
@@ -997,14 +1020,14 @@ impl<'comments> Formatter<'comments> {
                 [first, second] if is_breakable_expr(&second.value) && first.is_capture_hole() => {
                     self.expr(fun)
                         .append("(_, ")
-                        .append(self.call_arg(second))
+                        .append(self.call_arg(second, false))
                         .append(")")
                         .group()
                 }
 
-                _ => self
-                    .expr(fun)
-                    .append(wrap_args(args.iter().map(|a| (self.call_arg(a), false))).group()),
+                _ => self.expr(fun).append(
+                    wrap_args(args.iter().map(|a| (self.call_arg(a, false), false))).group(),
+                ),
             },
 
             // The body of a capture being not a fn shouldn't be possible...
@@ -1188,12 +1211,18 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn call_arg<'a>(&mut self, arg: &'a CallArg<UntypedExpr>) -> Document<'a> {
+    fn call_arg<'a>(&mut self, arg: &'a CallArg<UntypedExpr>, can_pun: bool) -> Document<'a> {
         match &arg.label {
-            Some(s) => commented(
-                s.to_doc().append(": "),
-                self.pop_comments(arg.location.start),
-            ),
+            Some(s) => {
+                if can_pun && matches!(&arg.value, UntypedExpr::Var {  name, .. } if name == s) {
+                    nil()
+                } else {
+                    commented(
+                        s.to_doc().append(": "),
+                        self.pop_comments(arg.location.start),
+                    )
+                }
+            }
             None => nil(),
         }
         .append(self.wrap_expr(&arg.value))
