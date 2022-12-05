@@ -115,6 +115,12 @@ pub enum Pattern {
         "If no label is provided then only variables\nmatching a field name are allowed"
     ))]
     RecordPunning,
+    #[error("Unexpected label")]
+    #[diagnostic(help("You can only use labels with curly braces"))]
+    Label,
+    #[error("Unexpected hole")]
+    #[diagnostic(help("You can only use capture syntax with functions not constructors"))]
+    Discard,
 }
 
 impl From<char> for Pattern {

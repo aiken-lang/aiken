@@ -650,21 +650,60 @@ pub fn expr_parser(
                     choice((
                         select! {Token::Name {name} => name}
                             .then_ignore(just(Token::Colon))
-                            .then(r.clone())
+                            .then(choice((
+                                r.clone(),
+                                select! {Token::DiscardName {name} => name }.validate(
+                                    |_name, span, emit| {
+                                        emit(ParseError::expected_input_found(
+                                            span,
+                                            None,
+                                            Some(error::Pattern::Discard),
+                                        ));
+
+                                        expr::UntypedExpr::Var {
+                                            location: span,
+                                            name: CAPTURE_VARIABLE.to_string(),
+                                        }
+                                    },
+                                ),
+                            )))
                             .map_with_span(|(label, value), span| ast::CallArg {
                                 location: span,
                                 value,
                                 label: Some(label),
                             }),
-                        select! {Token::Name {name} => name}.map_with_span(|name, span| {
-                            ast::CallArg {
-                                location: span,
-                                value: expr::UntypedExpr::Var {
-                                    name: name.clone(),
-                                    location: span,
+                        choice((
+                            select! {Token::Name {name} => name}.map_with_span(|name, span| {
+                                (
+                                    expr::UntypedExpr::Var {
+                                        name: name.clone(),
+                                        location: span,
+                                    },
+                                    name,
+                                )
+                            }),
+                            select! {Token::DiscardName {name} => name }.validate(
+                                |name, span, emit| {
+                                    emit(ParseError::expected_input_found(
+                                        span,
+                                        None,
+                                        Some(error::Pattern::Discard),
+                                    ));
+
+                                    (
+                                        expr::UntypedExpr::Var {
+                                            location: span,
+                                            name: CAPTURE_VARIABLE.to_string(),
+                                        },
+                                        name,
+                                    )
                                 },
-                                label: Some(name),
-                            }
+                            ),
+                        ))
+                        .map(|(value, name)| ast::CallArg {
+                            location: value.location(),
+                            value,
+                            label: Some(name),
                         }),
                     ))
                     .separated_by(just(Token::Comma))
@@ -680,9 +719,36 @@ pub fn expr_parser(
                         .map_with_span(|name, span| (name, span)),
                 )
                 .then(
-                    r.clone()
-                        .map_with_span(|value, span| ast::CallArg {
-                            location: span,
+                    select! {Token::Name {name} => name}
+                        .ignored()
+                        .then_ignore(just(Token::Colon))
+                        .validate(|_label, span, emit| {
+                            emit(ParseError::expected_input_found(
+                                span,
+                                None,
+                                Some(error::Pattern::Label),
+                            ))
+                        })
+                        .or_not()
+                        .then(choice((
+                            r.clone(),
+                            select! {Token::DiscardName {name} => name }.validate(
+                                |_name, span, emit| {
+                                    emit(ParseError::expected_input_found(
+                                        span,
+                                        None,
+                                        Some(error::Pattern::Discard),
+                                    ));
+
+                                    expr::UntypedExpr::Var {
+                                        location: span,
+                                        name: CAPTURE_VARIABLE.to_string(),
+                                    }
+                                },
+                            ),
+                        )))
+                        .map(|(_label, value)| ast::CallArg {
+                            location: value.location(),
                             value,
                             label: None,
                         })
@@ -1340,8 +1406,8 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
 
         let tuple_constructor_pattern_arg_parser = r
             .clone()
-            .map_with_span(|pattern, span| ast::CallArg {
-                location: span,
+            .map(|pattern| ast::CallArg {
+                location: pattern.location(),
                 value: pattern,
                 label: None,
             })

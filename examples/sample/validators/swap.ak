@@ -50,7 +50,8 @@ pub type Datum {
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
-  let x = Buy1 { signer: #[4, 4, 255], amount: 1000 }
+  let amount = 1000
+  let x = Buy1 { signer: #[4, 4, 255], amount }
   when x is {
     Buy1 { signer, .. } -> signer == #[3, 3, 255]
     Stuff(signer, _) -> signer == #[3, 3, 255]
