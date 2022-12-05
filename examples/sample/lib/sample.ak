@@ -45,3 +45,5 @@ pub fn incrementor(counter: Int, target: Int) -> Int {
     incrementor(counter + 1, target)
   }
 }
+
+pub const big_a = 5

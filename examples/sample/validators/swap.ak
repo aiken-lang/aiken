@@ -64,8 +64,8 @@ pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
         [] -> True
         [a] -> True
         [a, b, c] -> True
-        [a, b, c, d, ..e] -> 1 == 1
-        rest -> False
+        [a, b, c, d, ..e] -> sample.big_a == a
+
       }
     _ -> False
   }

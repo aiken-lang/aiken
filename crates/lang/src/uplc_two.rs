@@ -5,7 +5,7 @@ use itertools::Itertools;
 use uplc::{
     ast::{
         builder::{self, constr_index_exposer, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD},
-        Constant, Name, Program, Term,
+        Constant as UplcConstant, Name, Program, Term,
     },
     builtins::DefaultFunction,
     parser::interner::Interner,
@@ -13,7 +13,10 @@ use uplc::{
 };
 
 use crate::{
-    ast::{ArgName, AssignmentKind, BinOp, Clause, DataType, Function, Pattern, Span, TypedArg},
+    ast::{
+        ArgName, AssignmentKind, BinOp, Clause, Constant, DataType, Function, Pattern, Span,
+        TypedArg,
+    },
     expr::TypedExpr,
     ir::IR,
     tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
@@ -499,9 +502,17 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 }
-                tipo::ModuleValueConstructor::Constant { .. } => todo!(),
+                tipo::ModuleValueConstructor::Constant { literal, .. } => {
+                    constants_ir(literal, ir_stack, scope);
+                }
             },
-            TypedExpr::Todo { .. } => todo!(),
+            TypedExpr::Todo { label, tipo, .. } => {
+                ir_stack.push(IR::Todo {
+                    scope,
+                    label: label.clone(),
+                    tipo: tipo.clone(),
+                });
+            }
             TypedExpr::RecordUpdate { .. } => todo!(),
             TypedExpr::Negate { .. } => todo!(),
             TypedExpr::Tuple { .. } => todo!(),
@@ -1335,17 +1346,17 @@ impl<'a> CodeGenerator<'a> {
             IR::Int { value, .. } => {
                 let integer = value.parse().unwrap();
 
-                let term = Term::Constant(Constant::Integer(integer));
+                let term = Term::Constant(UplcConstant::Integer(integer));
 
                 arg_stack.push(term);
             }
             IR::String { value, .. } => {
-                let term = Term::Constant(Constant::String(value));
+                let term = Term::Constant(UplcConstant::String(value));
 
                 arg_stack.push(term);
             }
             IR::ByteArray { bytes, .. } => {
-                let term = Term::Constant(Constant::ByteString(bytes));
+                let term = Term::Constant(UplcConstant::ByteString(bytes));
                 arg_stack.push(term);
             }
             IR::Var {
@@ -1391,7 +1402,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     if data_type_key.defined_type == "Bool" {
-                        arg_stack.push(Term::Constant(Constant::Bool(constr_name == "True")));
+                        arg_stack.push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
                     } else {
                         let data_type = self.data_types.get(&data_type_key).unwrap();
                         let (constr_index, _constr) = data_type
@@ -1406,14 +1417,18 @@ impl<'a> CodeGenerator<'a> {
                             argument: Term::Apply {
                                 function: Term::Apply {
                                     function: Term::Builtin(DefaultFunction::MkPairData).into(),
-                                    argument: Term::Constant(Constant::Data(PlutusData::BigInt(
-                                        BigInt::Int((constr_index as i128).try_into().unwrap()),
-                                    )))
+                                    argument: Term::Constant(UplcConstant::Data(
+                                        PlutusData::BigInt(BigInt::Int(
+                                            (constr_index as i128).try_into().unwrap(),
+                                        )),
+                                    ))
                                     .into(),
                                 }
                                 .into(),
-                                argument: Term::Constant(Constant::Data(PlutusData::Array(vec![])))
-                                    .into(),
+                                argument: Term::Constant(UplcConstant::Data(PlutusData::Array(
+                                    vec![],
+                                )))
+                                .into(),
                             }
                             .into(),
                         };
@@ -1423,7 +1438,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             },
             IR::Discard { .. } => {
-                arg_stack.push(Term::Constant(Constant::Unit));
+                arg_stack.push(Term::Constant(UplcConstant::Unit));
             }
             IR::List {
                 count, tipo, tail, ..
@@ -1447,15 +1462,17 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if constants.len() == args.len() && !tail {
-                    let list =
-                        Term::Constant(Constant::ProtoList(list_type.get_uplc_type(), constants));
+                    let list = Term::Constant(UplcConstant::ProtoList(
+                        list_type.get_uplc_type(),
+                        constants,
+                    ));
 
                     arg_stack.push(list);
                 } else {
                     let mut term = if tail {
                         arg_stack.pop().unwrap()
                     } else {
-                        Term::Constant(Constant::ProtoList(list_type.get_uplc_type(), vec![]))
+                        Term::Constant(UplcConstant::ProtoList(list_type.get_uplc_type(), vec![]))
                     };
 
                     for arg in args {
@@ -1648,14 +1665,16 @@ impl<'a> CodeGenerator<'a> {
                                                             argument: right.into(),
                                                         }
                                                         .into(),
-                                                        argument: Term::Constant(Constant::Bool(
-                                                            false,
-                                                        ))
+                                                        argument: Term::Constant(
+                                                            UplcConstant::Bool(false),
+                                                        )
                                                         .into(),
                                                     }
                                                     .into(),
-                                                    argument: Term::Constant(Constant::Bool(true))
-                                                        .into(),
+                                                    argument: Term::Constant(UplcConstant::Bool(
+                                                        true,
+                                                    ))
+                                                    .into(),
                                                 }
                                                 .into(),
                                             )
@@ -2244,7 +2263,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                     .into(),
-                    argument: Term::Constant(Constant::Integer(index.into())).into(),
+                    argument: Term::Constant(UplcConstant::Integer(index.into())).into(),
                 };
 
                 if tipo.is_int() {
@@ -2504,7 +2523,9 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(body);
             }
-            IR::Todo { .. } => todo!(),
+            IR::Todo { .. } => {
+                arg_stack.push(Term::Error);
+            }
             IR::RecordUpdate { .. } => todo!(),
             IR::Negate { .. } => todo!(),
         }
@@ -2816,6 +2837,46 @@ impl<'a> CodeGenerator<'a> {
     }
 }
 
+fn constants_ir(literal: &Constant<Arc<Type>, String>, ir_stack: &mut Vec<IR>, scope: Vec<u64>) {
+    match literal {
+        Constant::Int { value, .. } => {
+            ir_stack.push(IR::Int {
+                scope,
+                value: value.clone(),
+            });
+        }
+        Constant::String { value, .. } => {
+            ir_stack.push(IR::String {
+                scope,
+                value: value.clone(),
+            });
+        }
+        Constant::Tuple { .. } => {
+            todo!()
+        }
+        Constant::List { elements, tipo, .. } => {
+            ir_stack.push(IR::List {
+                scope: scope.clone(),
+                count: elements.len(),
+                tipo: tipo.clone(),
+                tail: false,
+            });
+
+            for element in elements {
+                constants_ir(element, ir_stack, scope.clone());
+            }
+        }
+        Constant::Record { .. } => todo!(),
+        Constant::ByteArray { bytes, .. } => {
+            ir_stack.push(IR::ByteArray {
+                scope,
+                bytes: bytes.clone(),
+            });
+        }
+        Constant::Var { .. } => todo!(),
+    };
+}
+
 fn check_when_pattern_needs(
     pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
     needs_access_to_constr_var: &mut bool,
@@ -3006,14 +3067,17 @@ fn rearrange_clauses(
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
+    // TODO: while having 10000000 element list is impossible to destructure in plutus budget,
+    // let's sort clauses by a safer manner
+    // TODO: how shall tails be weighted? Since any clause after will not run
     sorted_clauses.sort_by(|clause1, clause2| {
         let clause1_len = match &clause1.pattern[0] {
             Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
-            _ => 1000000,
+            _ => 10000000,
         };
         let clause2_len = match &clause2.pattern[0] {
             Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
-            _ => 1000001,
+            _ => 10000001,
         };
 
         clause1_len.cmp(&clause2_len)
@@ -3043,6 +3107,7 @@ fn rearrange_clauses(
 
     for (index, clause) in sorted_clauses.iter().enumerate() {
         if let Pattern::List { elements, .. } = &clause.pattern[0] {
+            // found a hole and now we plug it
             while elems_len < elements.len() {
                 let mut discard_elems = vec![];
 
@@ -3053,6 +3118,7 @@ fn rearrange_clauses(
                     });
                 }
 
+                // If we have a named catch all then in scope the name and create list of discards, otherwise list of discards
                 let clause_to_fill = if let Some(name) = assign_plug_in_name {
                     Clause {
                         location: Span::empty(),
@@ -3089,6 +3155,7 @@ fn rearrange_clauses(
             }
         }
 
+        // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
         if let Pattern::List {
             elements,
             tail: Some(tail),
@@ -3107,6 +3174,7 @@ fn rearrange_clauses(
             }
         }
 
+        // If the last condition doesn't have a catch all or tail then add a catch all with a todo
         if index == sorted_clauses.len() - 1 {
             if let Pattern::List {
                 elements,
@@ -3137,8 +3205,10 @@ fn rearrange_clauses(
         elems_len += 1;
     }
 
+    // Encountered a tail so stop there with that as last clause
     final_clauses = final_clauses[0..(last_clause_index + 1)].to_vec();
 
+    // insert hole fillers into clauses
     for (index, clause) in holes_to_fill.into_iter().rev() {
         final_clauses.insert(index, clause);
     }
