@@ -1261,3 +1261,171 @@ fn record_update() {
         }),
     )
 }
+
+#[test]
+fn record_create_labeled() {
+    let code = indoc! {r#"
+        fn create() {
+          User { name: "Aiken", age, thing: 2 }
+        }
+    "#};
+
+    assert_definition(
+        code,
+        ast::UntypedDefinition::Fn(ast::Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Call {
+                arguments: vec![
+                    ast::CallArg {
+                        label: Some("name".to_string()),
+                        location: Span::new((), 23..36),
+                        value: expr::UntypedExpr::String {
+                            location: Span::new((), 29..36),
+                            value: "Aiken".to_string(),
+                        },
+                    },
+                    ast::CallArg {
+                        label: Some("age".to_string()),
+                        location: Span::new((), 38..41),
+                        value: expr::UntypedExpr::Var {
+                            location: Span::new((), 38..41),
+                            name: "age".to_string(),
+                        },
+                    },
+                    ast::CallArg {
+                        label: Some("thing".to_string()),
+                        location: Span::new((), 43..51),
+                        value: expr::UntypedExpr::Int {
+                            location: Span::new((), 50..51),
+                            value: "2".to_string(),
+                        },
+                    },
+                ],
+                fun: Box::new(expr::UntypedExpr::Var {
+                    location: Span::new((), 16..20),
+                    name: "User".to_string(),
+                }),
+                location: Span::new((), 16..53),
+            },
+            doc: None,
+            location: Span::new((), 0..11),
+            name: "create".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 66,
+        }),
+    )
+}
+
+#[test]
+fn record_create_labeled_with_field_access() {
+    let code = indoc! {r#"
+        fn create() {
+          some_module.User { name: "Aiken", age, thing: 2 }
+        }
+    "#};
+
+    assert_definition(
+        code,
+        ast::UntypedDefinition::Fn(ast::Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Call {
+                arguments: vec![
+                    ast::CallArg {
+                        label: Some("name".to_string()),
+                        location: Span::new((), 35..48),
+                        value: expr::UntypedExpr::String {
+                            location: Span::new((), 41..48),
+                            value: "Aiken".to_string(),
+                        },
+                    },
+                    ast::CallArg {
+                        label: Some("age".to_string()),
+                        location: Span::new((), 50..53),
+                        value: expr::UntypedExpr::Var {
+                            location: Span::new((), 50..53),
+                            name: "age".to_string(),
+                        },
+                    },
+                    ast::CallArg {
+                        label: Some("thing".to_string()),
+                        location: Span::new((), 55..63),
+                        value: expr::UntypedExpr::Int {
+                            location: Span::new((), 62..63),
+                            value: "2".to_string(),
+                        },
+                    },
+                ],
+                fun: Box::new(expr::UntypedExpr::FieldAccess {
+                    location: Span::new((), 16..32),
+                    label: "User".to_string(),
+                    container: Box::new(expr::UntypedExpr::Var {
+                        location: Span::new((), 16..27),
+                        name: "some_module".to_string(),
+                    }),
+                }),
+                location: Span::new((), 16..65),
+            },
+            doc: None,
+            location: Span::new((), 0..11),
+            name: "create".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 78,
+        }),
+    )
+}
+
+#[test]
+fn record_create_unlabeled() {
+    let code = indoc! {r#"
+        fn create() {
+          some_module.Thing(1, a)
+        }
+    "#};
+
+    assert_definition(
+        code,
+        ast::UntypedDefinition::Fn(ast::Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Call {
+                arguments: vec![
+                    ast::CallArg {
+                        label: None,
+                        location: Span::new((), 34..35),
+                        value: expr::UntypedExpr::Int {
+                            location: Span::new((), 34..35),
+                            value: "1".to_string(),
+                        },
+                    },
+                    ast::CallArg {
+                        label: None,
+                        location: Span::new((), 37..38),
+                        value: expr::UntypedExpr::Var {
+                            location: Span::new((), 37..38),
+                            name: "a".to_string(),
+                        },
+                    },
+                ],
+                fun: Box::new(expr::UntypedExpr::FieldAccess {
+                    location: Span::new((), 16..33),
+                    label: "Thing".to_string(),
+                    container: Box::new(expr::UntypedExpr::Var {
+                        location: Span::new((), 16..27),
+                        name: "some_module".to_string(),
+                    }),
+                }),
+                location: Span::new((), 16..39),
+            },
+            doc: None,
+            location: Span::new((), 0..11),
+            name: "create".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 40,
+        }),
+    )
+}
