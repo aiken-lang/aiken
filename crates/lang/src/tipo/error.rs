@@ -64,7 +64,7 @@ pub enum Error {
         name: String,
     },
 
-    #[error("Incorrect arity\n\nExpected\n\n{expected}\n\nGiven\n\n{given}\n")]
+    #[error("Incorrect arity\n\nExpected\n\n    {expected}\n\nGiven\n\n    {given}\n")]
     IncorrectArity {
         #[label]
         location: Span,

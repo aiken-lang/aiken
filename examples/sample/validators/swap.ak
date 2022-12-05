@@ -13,6 +13,7 @@ pub type Redeemer {
 
 pub type Reen {
   Buy1 { signer: ByteArray, amount: Int }
+  Stuff(ByteArray, Int)
   Sell1
 }
 
@@ -49,42 +50,10 @@ pub type Datum {
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
-  // when datum is {
-  //   Sell -> sample.eqIntPlusOne(sample.incrementor(0, 8), 9)
-  //   Offer {
-  //     prices: p,
-  //     asset_class: ac,
-  //     other_thing: Offer {
-  //       other_thing: Offer { asset_class: nested_signer, prices: amounts, .. },
-  //       ..
-  //     },
-  //   } -> 1 == 1
-  //   Offer { prices, other_thing: thing, .. } ->
-  //     when prices is {
-  //       [] -> True
-  //       [a] -> True
-  //       [a, b, c] -> True
-  //       [a, b, c, d, ..e] -> sample.big_a == a
-  //     }
-  //   _ -> False
-  // }
-  let x = Buy1{signer: #[4, 4, 255], amount: 1000}
+  let x = Buy1 { signer: #[4, 4, 255], amount: 1000 }
   when x is {
-    Buy1{signer, ..} -> signer == #[3,3,255]
+    Buy1 { signer, .. } -> signer == #[3, 3, 255]
+    Stuff(signer, _) -> signer == #[3, 3, 255]
     _ -> False
   }
 }
-// let Redeemer{ signer, amount: amount2, other_thing: Redeemer{ signer: nested_signer, ..}} = datum
-// True
-// when datum is {
-//   Offer{ price: p, asset_class: ac, thing: thing, other_thing: Redeemer{ other_thing: Redeemer{ signer: nested_signer, amount: amount, ..}, .. } } -> True
-//   _ -> False
-// }
-//  Offer{ prices, other_thing: thing, .. } -> {
-//     when prices is {
-//       [] -> True
-//       [1] -> False
-//       [a, b] -> True
-//       [a, b, ..[a]] -> False
-//     }
-//   }

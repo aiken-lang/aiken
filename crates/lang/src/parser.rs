@@ -1319,24 +1319,13 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     label: Some(name),
                     value: pattern,
                 }),
-            r.clone().validate(|pattern, span, emit| {
-                let label = if let ast::UntypedPattern::Var { name, .. } = &pattern {
-                    Some(name.clone())
-                } else {
-                    emit(ParseError::expected_input_found(
-                        pattern.location(),
-                        None,
-                        Some(error::Pattern::RecordPunning),
-                    ));
-
-                    None
-                };
-
-                ast::CallArg {
+            select! {Token::Name{name} => name}.map_with_span(|name, span| ast::CallArg {
+                location: span,
+                value: ast::UntypedPattern::Var {
+                    name: name.clone(),
                     location: span,
-                    value: pattern,
-                    label,
-                }
+                },
+                label: Some(name),
             }),
         ))
         .separated_by(just(Token::Comma))
