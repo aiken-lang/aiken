@@ -7,10 +7,8 @@ use crate::{
     tipo::{Type, ValueConstructor},
 };
 
-// []
-
 #[derive(Debug, Clone)]
-pub enum IR {
+pub enum Air {
     Int {
         scope: Vec<u64>,
         value: String,
@@ -236,78 +234,41 @@ pub enum IR {
     },
 }
 
-impl IR {
+impl Air {
     pub fn scope(&self) -> Vec<u64> {
         match self {
-            IR::Int { scope, .. }
-            | IR::String { scope, .. }
-            | IR::ByteArray { scope, .. }
-            | IR::Var { scope, .. }
-            | IR::List { scope, .. }
-            | IR::Tail { scope, .. }
-            | IR::ListAccessor { scope, .. }
-            | IR::ListExpose { scope, .. }
-            | IR::Call { scope, .. }
-            | IR::Builtin { scope, .. }
-            | IR::BinOp { scope, .. }
-            | IR::Assignment { scope, .. }
-            | IR::DefineFunc { scope, .. }
-            | IR::DefineConst { scope, .. }
-            | IR::DefineConstrFields { scope, .. }
-            | IR::DefineConstrFieldAccess { scope, .. }
-            | IR::Lam { scope, .. }
-            | IR::When { scope, .. }
-            | IR::Clause { scope, .. }
-            | IR::ListClause { scope, .. }
-            | IR::ClauseGuard { scope, .. }
-            | IR::Discard { scope }
-            | IR::Finally { scope }
-            | IR::If { scope, .. }
-            | IR::Constr { scope, .. }
-            | IR::Fields { scope, .. }
-            | IR::RecordAccess { scope, .. }
-            | IR::FieldsExpose { scope, .. }
-            | IR::Todo { scope, .. }
-            | IR::Record { scope, .. }
-            | IR::RecordUpdate { scope, .. }
-            | IR::Negate { scope, .. } => scope.to_vec(),
+            Air::Int { scope, .. }
+            | Air::String { scope, .. }
+            | Air::ByteArray { scope, .. }
+            | Air::Var { scope, .. }
+            | Air::List { scope, .. }
+            | Air::Tail { scope, .. }
+            | Air::ListAccessor { scope, .. }
+            | Air::ListExpose { scope, .. }
+            | Air::Call { scope, .. }
+            | Air::Builtin { scope, .. }
+            | Air::BinOp { scope, .. }
+            | Air::Assignment { scope, .. }
+            | Air::DefineFunc { scope, .. }
+            | Air::DefineConst { scope, .. }
+            | Air::DefineConstrFields { scope, .. }
+            | Air::DefineConstrFieldAccess { scope, .. }
+            | Air::Lam { scope, .. }
+            | Air::When { scope, .. }
+            | Air::Clause { scope, .. }
+            | Air::ListClause { scope, .. }
+            | Air::ClauseGuard { scope, .. }
+            | Air::Discard { scope }
+            | Air::Finally { scope }
+            | Air::If { scope, .. }
+            | Air::Constr { scope, .. }
+            | Air::Fields { scope, .. }
+            | Air::RecordAccess { scope, .. }
+            | Air::FieldsExpose { scope, .. }
+            | Air::Todo { scope, .. }
+            | Air::Record { scope, .. }
+            | Air::RecordUpdate { scope, .. }
+            | Air::Negate { scope, .. } => scope.to_vec(),
         }
     }
 }
-// pub fn get(r: Int) -> This{g: Int}{
-// This{ g: r }
-// }
-//let x = get(rdmr)       when datum is { Hold(h, thing: f) -> h > x.g, Sell{price} -> x.g == price }
-
-// [ When(3) datum_var Clause(2) FieldsExpose(3) datum_var h_field_var  f_field_var Binop(Greater, 2) h_var FieldAccess(2) x_var g_field Finally(2) Binop(2, EqualsInteger)  FieldAccess x_var g_field_var ]
-
-// [ Assignment(2) ]
-
-// [ Assignment(2) x_var ]
-
-// [ Assignment(2) x_var Call(2) ]
-
-// [ Assignment(2) x_var Call(2) func_get_var ]
-//                                    ^Mark this index function insertion
-
-// [ Assignment(2) x_var Call(2) func_get_var rdmr_var When(4)]
-
-// [ Assignment(2) x_var Call(2) func_get_var ]
-
-//  (var rdmr)
-
-// [ Assignment(2) x_var Call(2) ]
-
-// (var func_get)
-
-// arg stack [ (var rdmr)]
-
-// [ Assignment(2) x_var ]
-
-// [(var func_get) (var rdmr)]
-
-// [ Assignment(2)]
-
-// (var x)
-
-// arg stack [ [(var func_get) (var rdmr)] ]
