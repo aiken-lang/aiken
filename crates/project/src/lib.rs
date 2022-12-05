@@ -14,8 +14,7 @@ use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedFunction},
     builtins,
     tipo::TypeInfo,
-    uplc::{DataTypeKey, FunctionAccessKey},
-    uplc::CodeGenerator,
+    uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
     IdGenerator,
 };
 use miette::NamedSource;
