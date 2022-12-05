@@ -49,24 +49,28 @@ pub type Datum {
 }
 
 pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
-  when datum is {
-    Sell -> sample.eqIntPlusOne(sample.incrementor(0, 8), 9)
-    Offer {
-      prices: p,
-      asset_class: ac,
-      other_thing: Offer {
-        other_thing: Offer { asset_class: nested_signer, prices: amounts, .. },
-        ..
-      },
-    } -> 1 == 1
-    Offer { prices, other_thing: thing, .. } ->
-      when prices is {
-        [] -> True
-        [a] -> True
-        [a, b, c] -> True
-        [a, b, c, d, ..e] -> sample.big_a == a
-
-      }
+  // when datum is {
+  //   Sell -> sample.eqIntPlusOne(sample.incrementor(0, 8), 9)
+  //   Offer {
+  //     prices: p,
+  //     asset_class: ac,
+  //     other_thing: Offer {
+  //       other_thing: Offer { asset_class: nested_signer, prices: amounts, .. },
+  //       ..
+  //     },
+  //   } -> 1 == 1
+  //   Offer { prices, other_thing: thing, .. } ->
+  //     when prices is {
+  //       [] -> True
+  //       [a] -> True
+  //       [a, b, c] -> True
+  //       [a, b, c, d, ..e] -> sample.big_a == a
+  //     }
+  //   _ -> False
+  // }
+  let x = Buy1{signer: #[4, 4, 255], amount: 1000}
+  when x is {
+    Buy1{signer, ..} -> signer == #[3,3,255]
     _ -> False
   }
 }
