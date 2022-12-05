@@ -1383,7 +1383,9 @@ impl<'a> CodeGenerator<'a> {
                     }));
                 }
                 ValueConstructorVariant::Record {
-                    name: constr_name, ..
+                    name: constr_name,
+                    field_map,
+                    ..
                 } => {
                     let data_type_key = match &*constructor.tipo {
                         Type::App { module, name, .. } => DataTypeKey {
@@ -1412,7 +1414,34 @@ impl<'a> CodeGenerator<'a> {
                             .find(|(_, x)| x.name == *constr_name)
                             .unwrap();
 
-                        let term = Term::Apply {
+                        let mut fields =
+                            Term::Constant(UplcConstant::Data(PlutusData::Array(vec![])));
+
+                        if let Some(field_map) = field_map.clone() {
+                            for field in field_map
+                                .fields
+                                .iter()
+                                .sorted_by(|item1, item2| item1.1.cmp(item2.1))
+                                .rev()
+                            {
+                                fields = Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::MkCons)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: Term::Var(Name {
+                                            text: field.0.clone(),
+                                            unique: 0.into(),
+                                        })
+                                        .into(),
+                                    }
+                                    .into(),
+                                    argument: fields.into(),
+                                };
+                            }
+                        }
+
+                        let mut term = Term::Apply {
                             function: Term::Builtin(DefaultFunction::ConstrData).into(),
                             argument: Term::Apply {
                                 function: Term::Apply {
@@ -1425,13 +1454,31 @@ impl<'a> CodeGenerator<'a> {
                                     .into(),
                                 }
                                 .into(),
-                                argument: Term::Constant(UplcConstant::Data(PlutusData::Array(
-                                    vec![],
-                                )))
+                                argument: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::ListData).into(),
+                                    argument: fields.into(),
+                                }
                                 .into(),
                             }
                             .into(),
                         };
+
+                        if let Some(field_map) = field_map {
+                            for field in field_map
+                                .fields
+                                .iter()
+                                .sorted_by(|item1, item2| item1.1.cmp(item2.1))
+                                .rev()
+                            {
+                                term = Term::Lambda {
+                                    parameter_name: Name {
+                                        text: field.0.clone(),
+                                        unique: 0.into(),
+                                    },
+                                    body: term.into(),
+                                };
+                            }
+                        }
 
                         arg_stack.push(term);
                     }
@@ -1623,19 +1670,58 @@ impl<'a> CodeGenerator<'a> {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
 
+                let default_builtin = match tipo.deref() {
+                    Type::App { name, .. } => {
+                        if name == "Int" {
+                            Term::Builtin(DefaultFunction::EqualsInteger)
+                        } else if name == "String" {
+                            Term::Builtin(DefaultFunction::EqualsString)
+                        } else if name == "ByteArray" {
+                            Term::Builtin(DefaultFunction::EqualsByteString)
+                        } else {
+                            Term::Builtin(DefaultFunction::EqualsData)
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+
                 let term = match name {
-                    BinOp::And => todo!(),
-                    BinOp::Or => todo!(),
+                    BinOp::And => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::IfThenElse)
+                                    .force_wrap()
+                                    .into(),
+                                argument: left.into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(right.into()).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(Term::Constant(UplcConstant::Bool(false)).into())
+                            .into(),
+                    }
+                    .force_wrap(),
+                    BinOp::Or => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Builtin(DefaultFunction::IfThenElse)
+                                    .force_wrap()
+                                    .into(),
+                                argument: left.into(),
+                            }
+                            .into(),
+                            argument: Term::Delay(Term::Constant(UplcConstant::Bool(false)).into())
+                                .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(right.into()).into(),
+                    }
+                    .force_wrap(),
                     BinOp::Eq => {
-                        let default_builtin = match tipo.deref() {
+                        match tipo.deref() {
                             Type::App { name, .. } => {
-                                if name == "Int" {
-                                    Term::Builtin(DefaultFunction::EqualsInteger)
-                                } else if name == "String" {
-                                    Term::Builtin(DefaultFunction::EqualsString)
-                                } else if name == "ByteArray" {
-                                    Term::Builtin(DefaultFunction::EqualsByteString)
-                                } else if name == "Bool" {
+                                if name == "Bool" {
                                     let term = Term::Force(
                                         Term::Apply {
                                             function: Term::Apply {
@@ -1685,8 +1771,6 @@ impl<'a> CodeGenerator<'a> {
 
                                     arg_stack.push(term);
                                     return;
-                                } else {
-                                    Term::Builtin(DefaultFunction::EqualsData)
                                 }
                             }
                             _ => unreachable!(),
@@ -1701,7 +1785,86 @@ impl<'a> CodeGenerator<'a> {
                             argument: right.into(),
                         }
                     }
-                    BinOp::NotEq => todo!(),
+                    BinOp::NotEq => {
+                        match tipo.deref() {
+                            Type::App { name, .. } => {
+                                if name == "Bool" {
+                                    let term = Term::Force(
+                                        Term::Apply {
+                                            function: Term::Apply {
+                                                function: Term::Apply {
+                                                    function: Term::Force(
+                                                        Term::Builtin(DefaultFunction::IfThenElse)
+                                                            .into(),
+                                                    )
+                                                    .into(),
+                                                    argument: left.into(),
+                                                }
+                                                .into(),
+                                                argument: Term::Delay(
+                                                    Term::Apply {
+                                                        function: Term::Apply {
+                                                            function: Term::Apply {
+                                                                function: Term::Force(
+                                                                    Term::Builtin(
+                                                                        DefaultFunction::IfThenElse,
+                                                                    )
+                                                                    .into(),
+                                                                )
+                                                                .into(),
+                                                                argument: right.clone().into(),
+                                                            }
+                                                            .into(),
+                                                            argument: Term::Constant(
+                                                                UplcConstant::Bool(false),
+                                                            )
+                                                            .into(),
+                                                        }
+                                                        .into(),
+                                                        argument: Term::Constant(
+                                                            UplcConstant::Bool(true),
+                                                        )
+                                                        .into(),
+                                                    }
+                                                    .into(),
+                                                )
+                                                .into(),
+                                            }
+                                            .into(),
+                                            argument: Term::Delay(right.into()).into(),
+                                        }
+                                        .into(),
+                                    );
+
+                                    arg_stack.push(term);
+                                    return;
+                                }
+                            }
+                            _ => unreachable!(),
+                        };
+                        Term::Apply {
+                            function: Term::Apply {
+                                function: Term::Apply {
+                                    function: Term::Builtin(DefaultFunction::IfThenElse)
+                                        .force_wrap()
+                                        .into(),
+                                    argument: Term::Apply {
+                                        function: Term::Apply {
+                                            function: default_builtin.into(),
+                                            argument: left.into(),
+                                        }
+                                        .into(),
+                                        argument: right.into(),
+                                    }
+                                    .into(),
+                                }
+                                .into(),
+                                argument: Term::Constant(UplcConstant::Bool(false)).into(),
+                            }
+                            .into(),
+                            argument: Term::Constant(UplcConstant::Bool(true)).into(),
+                        }
+                    }
                     BinOp::LtInt => Term::Apply {
                         function: Term::Apply {
                             function: Term::Builtin(DefaultFunction::LessThanInteger).into(),
@@ -2174,7 +2337,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                 } else if tipo.is_list() {
-                    todo!()
+                    unreachable!()
                 } else {
                     Term::Apply {
                         function: DefaultFunction::EqualsInteger.into(),
@@ -2526,6 +2689,7 @@ impl<'a> CodeGenerator<'a> {
             IR::Todo { .. } => {
                 arg_stack.push(Term::Error);
             }
+            IR::Record { .. } => todo!(),
             IR::RecordUpdate { .. } => todo!(),
             IR::Negate { .. } => todo!(),
         }
@@ -2866,7 +3030,10 @@ fn constants_ir(literal: &Constant<Arc<Type>, String>, ir_stack: &mut Vec<IR>, s
                 constants_ir(element, ir_stack, scope.clone());
             }
         }
-        Constant::Record { .. } => todo!(),
+        Constant::Record { .. } => {
+            // ir_stack.push(IR::Record { scope,  });
+            todo!()
+        }
         Constant::ByteArray { bytes, .. } => {
             ir_stack.push(IR::ByteArray {
                 scope,

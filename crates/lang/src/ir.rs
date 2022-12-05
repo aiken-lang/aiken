@@ -219,6 +219,10 @@ pub enum IR {
         tipo: Arc<Type>,
     },
 
+    Record {
+        scope: Vec<u64>,
+    },
+
     RecordUpdate {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -264,6 +268,7 @@ impl IR {
             | IR::RecordAccess { scope, .. }
             | IR::FieldsExpose { scope, .. }
             | IR::Todo { scope, .. }
+            | IR::Record { scope, .. }
             | IR::RecordUpdate { scope, .. }
             | IR::Negate { scope, .. } => scope.to_vec(),
         }
