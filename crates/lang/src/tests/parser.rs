@@ -1313,7 +1313,7 @@ fn record_create_labeled() {
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 66,
+            end_position: 54,
         }),
     )
 }
@@ -1373,7 +1373,7 @@ fn record_create_labeled_with_field_access() {
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 78,
+            end_position: 66,
         }),
     )
 }
