@@ -3,11 +3,11 @@ use std::sync::{
     Arc,
 };
 
+pub mod air;
 pub mod ast;
 pub mod builtins;
 pub mod expr;
 pub mod format;
-pub mod ir;
 pub mod parser;
 pub mod pretty;
 pub mod tipo;
