@@ -42,10 +42,6 @@ pub fn incrementor(counter: Int, target: Int) -> Int {
   }
 }
 
-pub fn who(a: ByteArray) -> ByteArray {
-  builtin.append_bytearray(a, #[12, 255])
-}
-
 pub type Datum {
   Offer { prices: List(Int), asset_class: ByteArray, other_thing: Datum }
   Sell
@@ -63,10 +59,17 @@ pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
         ..
       },
     } -> 1 == 1
+    Offer { prices, other_thing: thing, .. } ->
+      when prices is {
+        [] -> True
+        [a] -> True
+        [a, b, c] -> True
+        [a, b, c, d, ..e] -> 1 == 1
+        rest -> False
+      }
     _ -> False
   }
 }
-
 // let Redeemer{ signer, amount: amount2, other_thing: Redeemer{ signer: nested_signer, ..}} = datum
 // True
 // when datum is {
@@ -78,6 +81,6 @@ pub fn spend(datum: Datum, _rdmr: Nil, _ctx: Nil) -> Bool {
 //       [] -> True
 //       [1] -> False
 //       [a, b] -> True
-//       [a, b, ..c] -> False
+//       [a, b, ..[a]] -> False
 //     }
 //   }

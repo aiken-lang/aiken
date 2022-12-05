@@ -13,10 +13,10 @@ use uplc::{
 };
 
 use crate::{
-    ast::{ArgName, AssignmentKind, BinOp, DataType, Function, Pattern, Span, TypedArg},
+    ast::{ArgName, AssignmentKind, BinOp, Clause, DataType, Function, Pattern, Span, TypedArg},
     expr::TypedExpr,
     ir::IR,
-    tipo::{self, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
+    tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
     uplc::{DataTypeKey, FunctionAccessKey},
     IdGenerator,
 };
@@ -37,10 +37,13 @@ pub struct FuncComponents {
 
 // }
 
-pub struct ClauseComplexity {
-    subject_var_name: String,
-    needs_subject_var: bool,
+#[derive(Clone, Debug)]
+pub struct ClauseProperties {
+    clause_var_name: String,
+    needs_constr_var: bool,
     is_complex_clause: bool,
+    current_index: usize,
+    original_subject_name: String,
 }
 
 pub struct CodeGenerator<'a> {
@@ -83,11 +86,11 @@ impl<'a> CodeGenerator<'a> {
 
         self.build_ir(&body, &mut ir_stack, scope);
 
-        println!("{ir_stack:#?}");
+        println!("INITIAL: {ir_stack:#?}");
 
         self.define_ir(&mut ir_stack);
 
-        println!("{ir_stack:#?}");
+        println!("AFTER FUNCTION DEFINITIONS: {ir_stack:#?}");
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -188,10 +191,7 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(tail) = tail {
                     let mut scope = scope;
                     scope.push(self.id_gen.next());
-                    ir_stack.push(IR::Tail {
-                        scope: scope.clone(),
-                        count: 1,
-                    });
+
                     self.build_ir(tail, ir_stack, scope);
                 }
             }
@@ -267,20 +267,34 @@ impl<'a> CodeGenerator<'a> {
                 let subject = subjects[0].clone();
                 let mut needs_subject_var = false;
 
+                let clauses = if matches!(clauses[0].pattern[0], Pattern::List { .. }) {
+                    rearrange_clauses(clauses.clone())
+                } else {
+                    clauses.clone()
+                };
+
                 if let Some((last_clause, clauses)) = clauses.split_last() {
                     let mut clauses_vec = vec![];
                     let mut pattern_vec = vec![];
 
-                    for clause in clauses {
+                    let mut clause_properties = ClauseProperties {
+                        clause_var_name: constr_var.clone(),
+                        needs_constr_var: false,
+                        is_complex_clause: false,
+                        current_index: 0,
+                        original_subject_name: subject_name.clone(),
+                    };
+
+                    for (index, clause) in clauses.iter().enumerate() {
+                        // scope per clause is different
                         let mut scope = scope.clone();
                         scope.push(self.id_gen.next());
+
+                        // holds when clause pattern IR
                         let mut clause_subject_vec = vec![];
 
-                        let mut clause_complexity = ClauseComplexity {
-                            subject_var_name: constr_var.clone(),
-                            needs_subject_var: false,
-                            is_complex_clause: false,
-                        };
+                        // reset complex clause setting per clause back to default
+                        clause_properties.is_complex_clause = false;
 
                         self.build_ir(&clause.then, &mut clauses_vec, scope.clone());
 
@@ -289,32 +303,50 @@ impl<'a> CodeGenerator<'a> {
                             &mut clause_subject_vec,
                             &mut clauses_vec,
                             &subject.tipo(),
-                            &mut clause_complexity,
+                            &mut clause_properties,
                             scope.clone(),
                         );
 
-                        pattern_vec.push(IR::Clause {
-                            scope: scope.clone(),
-                            count: 2,
-                            tipo: subject.tipo().clone(),
-                            subject_name: subject_name.clone(),
-                            complex_clause: clause_complexity.is_complex_clause,
-                        });
-
-                        pattern_vec.append(&mut clause_subject_vec);
-
-                        if clause_complexity.needs_subject_var {
+                        if clause_properties.needs_constr_var {
                             needs_subject_var = true;
                         }
+
+                        let subject_name = if clause_properties.current_index == 0 {
+                            subject_name.clone()
+                        } else {
+                            format!("__tail_{}", clause_properties.current_index - 1)
+                        };
+
+                        // Clause is first in IR pattern vec
+                        if subject.tipo().is_list() {
+                            let next_tail = if index == clauses.len() - 1 {
+                                None
+                            } else {
+                                Some(format!("__tail_{}", clause_properties.current_index))
+                            };
+
+                            pattern_vec.push(IR::ListClause {
+                                scope,
+                                tipo: subject.tipo().clone(),
+                                tail_name: subject_name,
+                                complex_clause: clause_properties.is_complex_clause,
+                                next_tail_name: next_tail,
+                            });
+
+                            clause_properties.current_index += 1;
+                        } else {
+                            pattern_vec.push(IR::Clause {
+                                scope,
+                                tipo: subject.tipo().clone(),
+                                subject_name,
+                                complex_clause: clause_properties.is_complex_clause,
+                            });
+                        }
+
+                        pattern_vec.append(&mut clause_subject_vec);
                     }
 
                     let last_pattern = &last_clause.pattern[0];
-
-                    let mut final_clause_complexity = ClauseComplexity {
-                        subject_var_name: constr_var.clone(),
-                        needs_subject_var: false,
-                        is_complex_clause: false,
-                    };
 
                     let mut final_scope = scope.clone();
                     final_scope.push(self.id_gen.next());
@@ -323,16 +355,17 @@ impl<'a> CodeGenerator<'a> {
                     });
 
                     self.build_ir(&last_clause.then, &mut clauses_vec, final_scope.clone());
+
                     self.when_ir(
                         last_pattern,
                         &mut pattern_vec,
                         &mut clauses_vec,
                         &subject.tipo(),
-                        &mut final_clause_complexity,
+                        &mut clause_properties,
                         final_scope,
                     );
 
-                    if needs_subject_var || final_clause_complexity.needs_subject_var {
+                    if needs_subject_var || clause_properties.needs_constr_var {
                         ir_stack.push(IR::Lam {
                             scope: scope.clone(),
                             name: constr_var.clone(),
@@ -342,7 +375,6 @@ impl<'a> CodeGenerator<'a> {
 
                         ir_stack.push(IR::When {
                             scope: scope.clone(),
-                            count: clauses.len() + 1,
                             subject_name,
                             tipo: subject.tipo(),
                         });
@@ -363,7 +395,6 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         ir_stack.push(IR::When {
                             scope: scope.clone(),
-                            count: clauses.len() + 1,
                             subject_name,
                             tipo: subject.tipo(),
                         });
@@ -391,12 +422,10 @@ impl<'a> CodeGenerator<'a> {
                     if index == 0 {
                         if_ir.push(IR::If {
                             scope: scope.clone(),
-                            count: 3,
                         });
                     } else {
                         if_ir.push(IR::If {
                             scope: branch_scope.clone(),
-                            count: 3,
                         });
                     }
                     self.build_ir(&branch.condition, &mut if_ir, branch_scope.clone());
@@ -485,7 +514,7 @@ impl<'a> CodeGenerator<'a> {
         pattern_vec: &mut Vec<IR>,
         values: &mut Vec<IR>,
         tipo: &Type,
-        when_complexity: &mut ClauseComplexity,
+        clause_properties: &mut ClauseProperties,
         scope: Vec<u64>,
     ) {
         match pattern {
@@ -499,25 +528,90 @@ impl<'a> CodeGenerator<'a> {
             }
             Pattern::String { .. } => todo!(),
             Pattern::Var { name, .. } => {
+                pattern_vec.push(IR::Discard {
+                    scope: scope.clone(),
+                });
+                pattern_vec.push(IR::Lam {
+                    scope: scope.clone(),
+                    name: name.clone(),
+                });
+
                 pattern_vec.push(IR::Var {
                     scope,
-                    name: name.clone(),
                     constructor: ValueConstructor::public(
                         tipo.clone().into(),
                         ValueConstructorVariant::LocalVariable {
                             location: Span::empty(),
                         },
                     ),
+                    name: clause_properties.original_subject_name.clone(),
                 });
                 pattern_vec.append(values);
             }
             Pattern::VarUsage { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
+            Pattern::Assign { name, pattern, .. } => {
+                let mut new_vec = vec![];
+                new_vec.push(IR::Lam {
+                    scope: scope.clone(),
+                    name: name.clone(),
+                });
+                new_vec.push(IR::Var {
+                    scope: scope.clone(),
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: clause_properties.original_subject_name.clone(),
+                });
+
+                new_vec.append(values);
+
+                // pattern_vec.push(value)
+                self.when_ir(
+                    pattern,
+                    pattern_vec,
+                    &mut new_vec,
+                    tipo,
+                    clause_properties,
+                    scope,
+                );
+            }
             Pattern::Discard { .. } => {
                 pattern_vec.push(IR::Discard { scope });
                 pattern_vec.append(values);
             }
-            Pattern::List { .. } => todo!(),
+            Pattern::List { elements, tail, .. } => {
+                let mut needs_clause_guard = false;
+
+                for element in elements {
+                    check_when_pattern_needs(element, &mut false, &mut needs_clause_guard);
+                }
+
+                if let Some(tail) = tail {
+                    check_when_pattern_needs(tail, &mut false, &mut needs_clause_guard);
+                }
+
+                if needs_clause_guard {
+                    clause_properties.is_complex_clause = true;
+                }
+
+                pattern_vec.push(IR::Discard {
+                    scope: scope.clone(),
+                });
+
+                self.when_recursive_ir(
+                    pattern,
+                    pattern_vec,
+                    &mut vec![],
+                    clause_properties.clone(),
+                    tipo,
+                    scope,
+                );
+
+                pattern_vec.append(values);
+            }
             Pattern::Constructor {
                 arguments,
                 name: constr_name,
@@ -527,20 +621,11 @@ impl<'a> CodeGenerator<'a> {
                 let mut needs_clause_guard = false;
 
                 for arg in arguments {
-                    match arg.value {
-                        Pattern::Var { .. } => {
-                            needs_access_to_constr_var = true;
-                        }
-                        Pattern::List { .. }
-                        | Pattern::Constructor { .. }
-                        | Pattern::Tuple { .. } => {
-                            needs_access_to_constr_var = true;
-                            needs_clause_guard = true;
-                        }
-                        Pattern::Discard { .. } => {}
-
-                        _ => todo!("{arg:#?}"),
-                    }
+                    check_when_pattern_needs(
+                        &arg.value,
+                        &mut needs_access_to_constr_var,
+                        &mut needs_clause_guard,
+                    );
                 }
 
                 let data_type_key = match tipo {
@@ -574,7 +659,7 @@ impl<'a> CodeGenerator<'a> {
                             location: Span::empty(),
                         },
                     ),
-                    name: when_complexity.subject_var_name.clone(),
+                    name: clause_properties.clause_var_name.clone(),
                     scope: scope.clone(),
                 }];
 
@@ -588,16 +673,30 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 if needs_clause_guard {
-                    when_complexity.is_complex_clause = true;
+                    clause_properties.is_complex_clause = true;
                 }
 
                 if needs_access_to_constr_var {
-                    when_complexity.needs_subject_var = true;
+                    clause_properties.needs_constr_var = true;
 
-                    self.when_recursive_ir(pattern, pattern_vec, &mut new_vec, tipo, scope);
+                    self.when_recursive_ir(
+                        pattern,
+                        pattern_vec,
+                        &mut new_vec,
+                        clause_properties.clone(),
+                        tipo,
+                        scope,
+                    );
                     pattern_vec.append(values);
                 } else {
-                    self.when_recursive_ir(pattern, pattern_vec, &mut vec![], tipo, scope);
+                    self.when_recursive_ir(
+                        pattern,
+                        pattern_vec,
+                        &mut vec![],
+                        clause_properties.clone(),
+                        tipo,
+                        scope,
+                    );
                     pattern_vec.append(values);
                 }
             }
@@ -610,6 +709,7 @@ impl<'a> CodeGenerator<'a> {
         pattern: &Pattern<tipo::PatternConstructor, Arc<tipo::Type>>,
         pattern_vec: &mut Vec<IR>,
         values: &mut Vec<IR>,
+        clause_properties: ClauseProperties,
         _tipo: &Type,
         scope: Vec<u64>,
     ) {
@@ -625,7 +725,7 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(values);
             }
             Pattern::List { elements, tail, .. } => {
-                let mut elements_vec = vec![];
+                // let mut elements_vec = vec![];
 
                 let mut names = vec![];
                 for element in elements {
@@ -633,49 +733,85 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
-                        a @ Pattern::List { .. } => {
-                            let mut var_vec = vec![];
-                            let item_name = format!("list_item_id_{}", self.id_gen.next());
-                            names.push(item_name.clone());
-                            var_vec.push(IR::Var {
-                                constructor: ValueConstructor::public(
-                                    Type::App {
-                                        public: true,
-                                        module: String::new(),
-                                        name: String::new(),
-                                        args: vec![],
-                                    }
-                                    .into(),
-                                    ValueConstructorVariant::LocalVariable {
-                                        location: Span::empty(),
-                                    },
-                                ),
-                                name: item_name,
-                                scope: scope.clone(),
-                            });
-                            self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
+                        Pattern::Discard { .. } => {
+                            names.push("_".to_string());
+                        }
+                        Pattern::List { .. } => {
+                            todo!("Nested List Patterns Not Yet Done");
+                            // let mut var_vec = vec![];
+                            // let item_name = format!("list_item_id_{}", self.id_gen.next());
+                            // names.push(item_name.clone());
+                            // var_vec.push(IR::Var {
+                            //     constructor: ValueConstructor::public(
+                            //         Type::App {
+                            //             public: true,
+                            //             module: String::new(),
+                            //             name: String::new(),
+                            //             args: vec![],
+                            //         }
+                            //         .into(),
+                            //         ValueConstructorVariant::LocalVariable {
+                            //             location: Span::empty(),
+                            //         },
+                            //     ),
+                            //     name: item_name,
+                            //     scope: scope.clone(),
+                            // });
+                            // self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
                         }
                         _ => todo!(),
                     }
                 }
 
+                let mut tail_name = String::new();
+
                 if let Some(tail) = tail {
                     match &**tail {
-                        Pattern::Var { name, .. } => names.push(name.clone()),
+                        Pattern::Var { name, .. } => {
+                            tail_name = name.clone();
+                        }
                         Pattern::Discard { .. } => {}
-                        _ => unreachable!(),
+                        _ => todo!(),
                     }
                 }
 
-                pattern_vec.push(IR::ListAccessor {
-                    names,
-                    tail: tail.is_some(),
-                    scope,
-                });
+                let tail_head_names = names
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, name)| *name != &"_".to_string())
+                    .map(|(index, name)| {
+                        if index == 0 {
+                            (
+                                clause_properties.original_subject_name.clone(),
+                                name.clone(),
+                            )
+                        } else {
+                            (format!("__tail_{}", index - 1), name.clone())
+                        }
+                    })
+                    .collect_vec();
+
+                if tail.is_some() && !elements.is_empty() {
+                    let tail_var = if elements.len() == 1 {
+                        clause_properties.original_subject_name
+                    } else {
+                        format!("__tail_{}", elements.len() - 2)
+                    };
+
+                    pattern_vec.push(IR::ListExpose {
+                        scope,
+                        tail_head_names,
+                        tail: Some((tail_var, tail_name)),
+                    });
+                } else {
+                    pattern_vec.push(IR::ListExpose {
+                        scope,
+                        tail_head_names,
+                        tail: None,
+                    });
+                }
 
                 pattern_vec.append(values);
-                pattern_vec.append(&mut elements_vec);
-                todo!();
             }
             Pattern::Constructor {
                 is_record,
@@ -765,10 +901,12 @@ impl<'a> CodeGenerator<'a> {
                                         });
                                     }
 
-                                    let mut clause_complexity = ClauseComplexity {
-                                        subject_var_name: constr_var_name.clone(),
-                                        needs_subject_var: false,
+                                    let mut clause_complexity = ClauseProperties {
+                                        clause_var_name: constr_var_name.clone(),
+                                        needs_constr_var: false,
                                         is_complex_clause: false,
+                                        current_index: 0,
+                                        original_subject_name: constr_var_name.clone(),
                                     };
 
                                     self.when_ir(
@@ -852,10 +990,12 @@ impl<'a> CodeGenerator<'a> {
                                             subject_name: constr_var_name.clone(),
                                         });
                                     }
-                                    let mut clause_complexity = ClauseComplexity {
-                                        subject_var_name: constr_var_name.clone(),
-                                        needs_subject_var: false,
+                                    let mut clause_complexity = ClauseProperties {
+                                        clause_var_name: constr_var_name.clone(),
+                                        needs_constr_var: false,
                                         is_complex_clause: false,
+                                        current_index: 0,
+                                        original_subject_name: constr_var_name.clone(),
                                     };
 
                                     self.when_ir(
@@ -1386,6 +1526,58 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
+            IR::ListExpose {
+                tail_head_names,
+                tail,
+                ..
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                if let Some((tail_var, tail_name)) = tail {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
+                            argument: Term::Var(Name {
+                                text: tail_var,
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                    };
+                }
+                for (tail_var, head_name) in tail_head_names.into_iter().rev() {
+                    term = Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: head_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::HeadList).force_wrap().into(),
+                            argument: Term::Var(Name {
+                                text: tail_var,
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                    };
+                }
+
+                arg_stack.push(term);
+            }
             IR::Call { count, .. } => {
                 if count >= 2 {
                     let mut term = arg_stack.pop().unwrap();
@@ -1762,7 +1954,7 @@ impl<'a> CodeGenerator<'a> {
                 // the body to be run if the clause matches
                 let body = arg_stack.pop().unwrap();
 
-                // the final branch in the when expression
+                // the next branch in the when expression
                 let mut term = arg_stack.pop().unwrap();
 
                 let checker = if tipo.is_int() {
@@ -1795,7 +1987,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                 } else if tipo.is_list() {
-                    todo!()
+                    unreachable!()
                 } else {
                     Term::Apply {
                         function: DefaultFunction::EqualsInteger.into(),
@@ -1861,6 +2053,68 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .force_wrap();
                 }
+
+                arg_stack.push(term);
+            }
+
+            IR::ListClause {
+                tail_name,
+                next_tail_name,
+                ..
+            } => {
+                // discard to pop off
+                let _ = arg_stack.pop().unwrap();
+
+                // the body to be run if the clause matches
+                let body = arg_stack.pop().unwrap();
+
+                // the next branch in the when expression
+                let mut term = arg_stack.pop().unwrap();
+
+                let arg = if let Some(next_tail_name) = next_tail_name {
+                    Term::Apply {
+                        function: Term::Lambda {
+                            parameter_name: Name {
+                                text: next_tail_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        }
+                        .into(),
+                        argument: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
+                            argument: Term::Var(Name {
+                                text: tail_name.clone(),
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                    }
+                } else {
+                    term
+                };
+
+                term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::ChooseList)
+                                .force_wrap()
+                                .force_wrap()
+                                .into(),
+                            argument: Term::Var(Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            })
+                            .into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(body.into()).into(),
+                    }
+                    .into(),
+                    argument: Term::Delay(arg.into()).into(),
+                }
+                .force_wrap();
 
                 arg_stack.push(term);
             }
@@ -2562,6 +2816,28 @@ impl<'a> CodeGenerator<'a> {
     }
 }
 
+fn check_when_pattern_needs(
+    pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
+    needs_access_to_constr_var: &mut bool,
+    needs_clause_guard: &mut bool,
+) {
+    match pattern {
+        Pattern::Var { .. } => {
+            *needs_access_to_constr_var = true;
+        }
+        Pattern::List { .. }
+        | Pattern::Constructor { .. }
+        | Pattern::Tuple { .. }
+        | Pattern::Int { .. } => {
+            *needs_access_to_constr_var = true;
+            *needs_clause_guard = true;
+        }
+        Pattern::Discard { .. } => {}
+
+        _ => todo!("{pattern:#?}"),
+    }
+}
+
 fn get_common_ancestor(scope: &[u64], scope_prev: &[u64]) -> Vec<u64> {
     let longest_length = if scope.len() >= scope_prev.len() {
         scope.len()
@@ -2722,4 +2998,150 @@ fn list_access_to_uplc(
             .into(),
         }
     }
+}
+
+fn rearrange_clauses(
+    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>>,
+) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>> {
+    let mut sorted_clauses = clauses;
+
+    // if we have a list sort clauses so we can plug holes for cases not covered by clauses
+    sorted_clauses.sort_by(|clause1, clause2| {
+        let clause1_len = match &clause1.pattern[0] {
+            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
+            _ => 1000000,
+        };
+        let clause2_len = match &clause2.pattern[0] {
+            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
+            _ => 1000001,
+        };
+
+        clause1_len.cmp(&clause2_len)
+    });
+
+    let mut elems_len = 0;
+    let mut final_clauses = sorted_clauses.clone();
+    let mut holes_to_fill = vec![];
+    let mut assign_plug_in_name = None;
+    let mut last_clause_index = 0;
+    let mut last_clause_set = false;
+
+    // If we have a catch all, use that. Otherwise use todo which will result in error
+    // TODO: fill in todo label with description
+    let plug_in_then = match &sorted_clauses[sorted_clauses.len() - 1].pattern[0] {
+        Pattern::Var { name, .. } => {
+            assign_plug_in_name = Some(name);
+            sorted_clauses[sorted_clauses.len() - 1].clone().then
+        }
+        Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
+        _ => TypedExpr::Todo {
+            location: Span::empty(),
+            label: None,
+            tipo: sorted_clauses[sorted_clauses.len() - 1].then.tipo(),
+        },
+    };
+
+    for (index, clause) in sorted_clauses.iter().enumerate() {
+        if let Pattern::List { elements, .. } = &clause.pattern[0] {
+            while elems_len < elements.len() {
+                let mut discard_elems = vec![];
+
+                for _ in 0..elems_len {
+                    discard_elems.push(Pattern::Discard {
+                        name: "_".to_string(),
+                        location: Span::empty(),
+                    });
+                }
+
+                let clause_to_fill = if let Some(name) = assign_plug_in_name {
+                    Clause {
+                        location: Span::empty(),
+                        pattern: vec![Pattern::Assign {
+                            name: name.clone(),
+                            location: Span::empty(),
+                            pattern: Pattern::List {
+                                location: Span::empty(),
+                                elements: discard_elems,
+                                tail: None,
+                            }
+                            .into(),
+                        }],
+                        alternative_patterns: vec![],
+                        guard: None,
+                        then: plug_in_then.clone(),
+                    }
+                } else {
+                    Clause {
+                        location: Span::empty(),
+                        pattern: vec![Pattern::List {
+                            location: Span::empty(),
+                            elements: discard_elems,
+                            tail: None,
+                        }],
+                        alternative_patterns: vec![],
+                        guard: None,
+                        then: plug_in_then.clone(),
+                    }
+                };
+
+                holes_to_fill.push((index, clause_to_fill));
+                elems_len += 1;
+            }
+        }
+
+        if let Pattern::List {
+            elements,
+            tail: Some(tail),
+            ..
+        } = &clause.pattern[0]
+        {
+            let mut elements = elements.clone();
+            elements.push(*tail.clone());
+            if elements
+                .iter()
+                .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
+                && !last_clause_set
+            {
+                last_clause_index = index;
+                last_clause_set = true;
+            }
+        }
+
+        if index == sorted_clauses.len() - 1 {
+            if let Pattern::List {
+                elements,
+                tail: Some(tail),
+                ..
+            } = &clause.pattern[0]
+            {
+                let mut elements = elements.clone();
+                elements.push(*tail.clone());
+                if !elements
+                    .iter()
+                    .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
+                {
+                    final_clauses.push(Clause {
+                        location: Span::empty(),
+                        pattern: vec![Pattern::Discard {
+                            name: "_".to_string(),
+                            location: Span::empty(),
+                        }],
+                        alternative_patterns: vec![],
+                        guard: None,
+                        then: plug_in_then.clone(),
+                    });
+                }
+            }
+        }
+
+        elems_len += 1;
+    }
+
+    final_clauses = final_clauses[0..(last_clause_index + 1)].to_vec();
+
+    for (index, clause) in holes_to_fill.into_iter().rev() {
+        final_clauses.insert(index, clause);
+    }
+
+    final_clauses
 }

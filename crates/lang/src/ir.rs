@@ -49,7 +49,8 @@ pub enum IR {
 
     Tail {
         scope: Vec<u64>,
-        count: usize,
+        name: String,
+        prev_tail_name: String,
     },
 
     ListAccessor {
@@ -58,10 +59,12 @@ pub enum IR {
         tail: bool,
     },
 
-    // func(x, other(y))
-    //[ Define(3) x  definition *lam_body* -> [ (x [ (func [ func x [ (y [ other y ]) *definition* ] ]) *definition* ]) *definition* ], Define func -> [ (func [ func x [ (y [ other y ]) *definition* ] ]) *definition* ] , Call func -> [ func x [ (y [ other y ]) *definition* ] ], Var x -> x, Define y -> [ (y [ other y ]) *definition* ], Call other -> [ other y ], Var y -> y]
+    ListExpose {
+        scope: Vec<u64>,
+        tail_head_names: Vec<(String, String)>,
+        tail: Option<(String, String)>,
+    },
 
-    // [y_varCall other_var Call Call x_defCall func_var ]
     Call {
         scope: Vec<u64>,
         count: usize,
@@ -128,17 +131,23 @@ pub enum IR {
     // },
     When {
         scope: Vec<u64>,
-        count: usize,
         tipo: Arc<Type>,
         subject_name: String,
     },
 
     Clause {
         scope: Vec<u64>,
-        count: usize,
         tipo: Arc<Type>,
         subject_name: String,
         complex_clause: bool,
+    },
+
+    ListClause {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+        tail_name: String,
+        complex_clause: bool,
+        next_tail_name: Option<String>,
     },
 
     ClauseGuard {
@@ -157,7 +166,6 @@ pub enum IR {
 
     If {
         scope: Vec<u64>,
-        count: usize,
     },
 
     Constr {
@@ -234,6 +242,7 @@ impl IR {
             | IR::List { scope, .. }
             | IR::Tail { scope, .. }
             | IR::ListAccessor { scope, .. }
+            | IR::ListExpose { scope, .. }
             | IR::Call { scope, .. }
             | IR::Builtin { scope, .. }
             | IR::BinOp { scope, .. }
@@ -245,6 +254,7 @@ impl IR {
             | IR::Lam { scope, .. }
             | IR::When { scope, .. }
             | IR::Clause { scope, .. }
+            | IR::ListClause { scope, .. }
             | IR::ClauseGuard { scope, .. }
             | IR::Discard { scope }
             | IR::Finally { scope }
