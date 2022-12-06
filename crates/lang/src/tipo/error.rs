@@ -215,7 +215,7 @@ pub enum Error {
         types: Vec<String>,
     },
 
-    #[error("Unknown variable\n\n{name}\n")]
+    #[error("Unknown variable\n\n    {name}\n")]
     UnknownVariable {
         #[label]
         location: Span,

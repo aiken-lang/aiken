@@ -33,6 +33,7 @@ where
         miette::bail!("failed: {} error(s), {warning_count} warning(s)", err.len(),);
     };
 
-    println!("finished with {warning_count} warning(s)");
+    println!("\nfinished with {warning_count} warning(s)\n");
+
     Ok(())
 }

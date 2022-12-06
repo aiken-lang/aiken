@@ -14,12 +14,31 @@ pub struct Args {
     #[clap(short, long)]
     flat: bool,
 
+    #[clap(short, long)]
+    cbor: bool,
+
     /// Arguments to pass to the uplc program
     args: Vec<String>,
 }
 
-pub fn exec(Args { script, flat, args }: Args) -> miette::Result<()> {
-    let mut program = if flat {
+pub fn exec(
+    Args {
+        script,
+        flat,
+        args,
+        cbor,
+    }: Args,
+) -> miette::Result<()> {
+    let mut program = if cbor {
+        let cbor_hex = std::fs::read_to_string(&script).into_diagnostic()?;
+
+        let raw_cbor = hex::decode(&cbor_hex).into_diagnostic()?;
+
+        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&raw_cbor, &mut Vec::new())
+            .into_diagnostic()?;
+
+        prog.into()
+    } else if flat {
         let bytes = std::fs::read(&script).into_diagnostic()?;
 
         let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes).into_diagnostic()?;

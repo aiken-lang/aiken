@@ -306,10 +306,12 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
             });
 
         let constant_tuple_parser = just(Token::Hash)
-            .ignore_then(r.clone())
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+            .ignore_then(
+                r.clone()
+                    .separated_by(just(Token::Comma))
+                    .allow_trailing()
+                    .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
+            )
             .map_with_span(|elements, span| ast::UntypedConstant::Tuple {
                 location: span,
                 elements,
@@ -317,26 +319,27 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
 
         let constant_bytearray_parser = just(Token::Hash)
             .ignore_then(
-                select! {Token::Int {value} => value}.validate(|value, span, emit| {
-                    let byte: u8 = match value.parse() {
-                        Ok(b) => b,
-                        Err(_) => {
-                            emit(ParseError::expected_input_found(
-                                span,
-                                None,
-                                Some(error::Pattern::Byte),
-                            ));
+                select! {Token::Int {value} => value}
+                    .validate(|value, span, emit| {
+                        let byte: u8 = match value.parse() {
+                            Ok(b) => b,
+                            Err(_) => {
+                                emit(ParseError::expected_input_found(
+                                    span,
+                                    None,
+                                    Some(error::Pattern::Byte),
+                                ));
 
-                            0
-                        }
-                    };
+                                0
+                            }
+                        };
 
-                    byte
-                }),
+                        byte
+                    })
+                    .separated_by(just(Token::Comma))
+                    .allow_trailing()
+                    .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
             )
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare))
             .map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
                 location: span,
                 bytes,
@@ -453,8 +456,8 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
         choice((
             constant_string_parser,
             constant_int_parser,
-            constant_tuple_parser,
             constant_bytearray_parser,
+            constant_tuple_parser,
             constant_list_parser,
             constant_record_parser,
             constant_var_parser,
@@ -1271,6 +1274,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                 .ignore_then(
                     r.clone()
                         .separated_by(just(Token::Comma))
+                        .allow_trailing()
                         .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
                 )
                 .map_with_span(|elems, span| ast::Annotation::Tuple {
@@ -1497,6 +1501,7 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                 .ignore_then(
                     r.clone()
                         .separated_by(just(Token::Comma))
+                        .allow_trailing()
                         .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
                 )
                 .map_with_span(|elems, span| ast::UntypedPattern::Tuple {
