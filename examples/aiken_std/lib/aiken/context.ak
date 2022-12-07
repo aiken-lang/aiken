@@ -1,3 +1,5 @@
+use aiken/map.{Map}
+
 pub type ScriptContext(purpose) {
   transaction: Transaction,
   purpose: purpose,
@@ -39,11 +41,11 @@ pub type Transaction {
   fee: Value,
   mint: Value,
   certificates: List(Certificate),
-  withdrawals: List(Pair(StakeCredential, Int)),
+  withdrawals: Map(StakeCredential, Int),
   validity_range: Interval(Int),
   extra_signatories: List(PublicKeyHash),
-  redeemers: List(Pair(ScriptPurpose, Redeemer)),
-  datums: List(Pair(Hash(Data), Data)),
+  redeemers: Map(ScriptPurpose, Redeemer),
+  datums: Map(Hash(Data), Data),
   id: TransactionId,
 }
 
@@ -107,11 +109,8 @@ pub type DatumOption {
 pub type AssetName =
   ByteArray
 
-pub type Pair(a, b) =
-  Nil
-
 pub type Value =
-  List(Pair(PolicyId, List(Pair(AssetName, Int))))
+  Map(PolicyId, Map(AssetName, Int))
 
 pub type Certificate {
   CredentialRegistration { delegator: StakeCredential }

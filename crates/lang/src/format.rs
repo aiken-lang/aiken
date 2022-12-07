@@ -856,9 +856,17 @@ impl<'comments> Formatter<'comments> {
         match args {
             [arg] if is_breakable_expr(&arg.value) => self
                 .expr(fun)
-                .append(if needs_curly { "{" } else { "(" })
+                .append(if needs_curly {
+                    break_(" {", " { ")
+                } else {
+                    break_("(", "(")
+                })
                 .append(self.call_arg(arg, needs_curly))
-                .append(if needs_curly { "}" } else { ")" })
+                .append(if needs_curly {
+                    break_("}", " }")
+                } else {
+                    break_(")", ")")
+                })
                 .group(),
 
             _ => self
