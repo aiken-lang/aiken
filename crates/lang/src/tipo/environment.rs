@@ -1200,6 +1200,19 @@ impl<'a> Environment<'a> {
                 Ok(())
             }
 
+            (Type::Tuple { elems: elems1, .. }, Type::Tuple { elems: elems2, .. })
+                if elems1.len() == elems2.len() =>
+            {
+                for (a, b) in elems1.iter().zip(elems2) {
+                    unify_enclosed_type(
+                        t1.clone(),
+                        t2.clone(),
+                        self.unify(a.clone(), b.clone(), location),
+                    )?;
+                }
+                Ok(())
+            }
+
             (
                 Type::Fn {
                     args: args1,
