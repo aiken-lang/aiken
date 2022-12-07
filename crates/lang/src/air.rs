@@ -45,20 +45,16 @@ pub enum Air {
         tail: bool,
     },
 
-    Tail {
-        scope: Vec<u64>,
-        name: String,
-        prev_tail_name: String,
-    },
-
     ListAccessor {
         scope: Vec<u64>,
+        tipo: Arc<Type>,
         names: Vec<String>,
         tail: bool,
     },
 
     ListExpose {
         scope: Vec<u64>,
+        tipo: Arc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
     },
@@ -120,13 +116,6 @@ pub enum Air {
         name: String,
     },
 
-    // Try {
-    //  scope: Vec<u64>,
-    //     tipo: Arc<Type>,
-    //     value: Box<Self>,
-    //     then: Box<Self>,
-    //     pattern: Pattern<PatternConstructor, Arc<Type>>,
-    // },
     When {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -196,13 +185,11 @@ pub enum Air {
     //     module_alias: String,
     //     constructor: ModuleValueConstructor,
     // },
-
-    // Tuple {
-    //  scope: Vec<u64>,
-    //
-    // tipo: Arc<Type>,
-    // elems: Vec<Self>,
-    // },
+    Tuple {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+        count: usize,
+    },
 
     // TupleIndex {
     //  scope: Vec<u64>,
@@ -242,7 +229,6 @@ impl Air {
             | Air::ByteArray { scope, .. }
             | Air::Var { scope, .. }
             | Air::List { scope, .. }
-            | Air::Tail { scope, .. }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
             | Air::Call { scope, .. }
@@ -265,6 +251,7 @@ impl Air {
             | Air::Fields { scope, .. }
             | Air::RecordAccess { scope, .. }
             | Air::FieldsExpose { scope, .. }
+            | Air::Tuple { scope, .. }
             | Air::Todo { scope, .. }
             | Air::Record { scope, .. }
             | Air::RecordUpdate { scope, .. }

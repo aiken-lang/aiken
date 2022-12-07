@@ -853,7 +853,7 @@ impl DefaultFunction {
     }
 }
 
-fn convert_tag_to_constr(tag: i128) -> i128 {
+pub fn convert_tag_to_constr(tag: i128) -> i128 {
     if tag < 128 {
         tag - 121
     } else if (1280..1401).contains(&tag) {
@@ -863,7 +863,7 @@ fn convert_tag_to_constr(tag: i128) -> i128 {
     }
 }
 
-fn convert_constr_to_tag(constr: u64) -> u64 {
+pub fn convert_constr_to_tag(constr: u64) -> u64 {
     if constr < 7 {
         constr + 121
     } else if constr < 128 {

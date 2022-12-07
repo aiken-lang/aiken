@@ -18,29 +18,44 @@
                       (lam
                         __constr_get_field
                         [
-                          [
+                          (lam
+                            x
                             [
-                              (force (builtin ifThenElse))
                               [
+                                (builtin equalsByteString)
                                 [
-                                  (builtin equalsByteString)
+                                  (builtin unBData)
                                   [
-                                    (builtin unBData)
                                     [
-                                      [
-                                        __constr_get_field
-                                        [ __constr_fields_exposer datum ]
-                                      ]
-                                      (con integer 0)
+                                      __constr_get_field
+                                      [ __constr_fields_exposer datum ]
                                     ]
+                                    (con integer 0)
                                   ]
                                 ]
-                                (con bytestring #0102)
+                              ]
+                              [
+                                (builtin unBData)
+                                [
+                                  [
+                                    __constr_get_field
+                                    [ __constr_fields_exposer rdmr ]
+                                  ]
+                                  (con integer 0)
+                                ]
                               ]
                             ]
-                            (con bool False)
+                          )
+                          [
+                            [
+                              (builtin mkCons)
+                              [ (builtin bData) (con bytestring #f4) ]
+                            ]
+                            [
+                              [ (builtin mkCons) rdmr ]
+                              [ [ (builtin mkCons) datum ] (con listdata []) ]
+                            ]
                           ]
-                          (con bool True)
                         ]
                       )
                       (lam

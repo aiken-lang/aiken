@@ -135,6 +135,43 @@ impl Type {
         }
     }
 
+    pub fn is_map(&self) -> bool {
+        match self {
+            Self::App {
+                module, name, args, ..
+            } if "List" == name && module.is_empty() => {
+                if let Type::Tuple { elems } = &*args[0] {
+                    elems.len() == 2
+                } else {
+                    false
+                }
+            }
+            Self::Var { tipo } => tipo.borrow().is_map(),
+            _ => false,
+        }
+    }
+
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, Self::Tuple { .. })
+    }
+
+    pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
+        if self.is_list() {
+            match self {
+                Self::App { args, .. } => args.clone(),
+                Self::Var { tipo } => tipo.borrow().get_inner_type(),
+                _ => vec![],
+            }
+        } else if self.is_tuple() {
+            match self {
+                Self::Tuple { elems } => elems.to_vec(),
+                _ => vec![],
+            }
+        } else {
+            vec![]
+        }
+    }
+
     pub fn get_uplc_type(&self) -> UplcType {
         if self.is_int() {
             UplcType::Integer
@@ -144,21 +181,21 @@ impl Type {
             UplcType::String
         } else if self.is_bool() {
             UplcType::Bool
+        } else if self.is_map() {
+            UplcType::List(UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into())
         } else if self.is_list() {
-            let args_type = match self {
-                Self::App {
-                    module, name, args, ..
-                } if "List" == name && module.is_empty() => args[0].clone(),
-                Self::Var { tipo } => {
-                    if let TypeVar::Link { tipo } = tipo.borrow().clone() {
-                        tipo
+            UplcType::List(UplcType::Data.into())
+        } else if self.is_tuple() {
+            match self {
+                Self::Tuple { elems } => {
+                    if elems.len() == 2 {
+                        UplcType::Pair(UplcType::Data.into(), UplcType::Data.into())
                     } else {
-                        todo!()
+                        UplcType::List(UplcType::Data.into())
                     }
                 }
                 _ => todo!(),
-            };
-            UplcType::List(Box::new(args_type.get_uplc_type()))
+            }
         } else {
             UplcType::Data
         }
@@ -332,6 +369,20 @@ impl TypeVar {
         match self {
             Self::Link { tipo } => tipo.is_list(),
             _ => false,
+        }
+    }
+
+    pub fn is_map(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_map(),
+            _ => false,
+        }
+    }
+
+    pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
+        match self {
+            Self::Link { tipo } => tipo.get_inner_type(),
+            _ => vec![],
         }
     }
 }

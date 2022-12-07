@@ -7,7 +7,7 @@ use crate::{
 
 pub mod cost_model;
 mod error;
-mod runtime;
+pub mod runtime;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
