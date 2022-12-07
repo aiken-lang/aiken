@@ -138,6 +138,8 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     Use(Use<PackageName>),
 
     ModuleConstant(ModuleConstant<T, ConstantRecordTag>),
+
+    Test(Function<T, Expr>),
 }
 
 impl<A, B, C, E> Definition<A, B, C, E> {
@@ -147,7 +149,8 @@ impl<A, B, C, E> Definition<A, B, C, E> {
             | Definition::Use(Use { location, .. })
             | Definition::TypeAlias(TypeAlias { location, .. })
             | Definition::DataType(DataType { location, .. })
-            | Definition::ModuleConstant(ModuleConstant { location, .. }) => *location,
+            | Definition::ModuleConstant(ModuleConstant { location, .. })
+            | Definition::Test(Function { location, .. }) => *location,
         }
     }
 
@@ -157,7 +160,8 @@ impl<A, B, C, E> Definition<A, B, C, E> {
             Definition::Fn(Function { doc, .. })
             | Definition::TypeAlias(TypeAlias { doc, .. })
             | Definition::DataType(DataType { doc, .. })
-            | Definition::ModuleConstant(ModuleConstant { doc, .. }) => {
+            | Definition::ModuleConstant(ModuleConstant { doc, .. })
+            | Definition::Test(Function { doc, .. }) => {
                 let _ = std::mem::replace(doc, Some(new_doc));
             }
         }
