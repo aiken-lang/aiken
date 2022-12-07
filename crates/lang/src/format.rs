@@ -215,7 +215,24 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 end_position,
                 ..
-            }) => self.definition_fn(public, name, args, return_annotation, body, *end_position),
+            }) => self.definition_fn(
+                public,
+                "fn",
+                name,
+                args,
+                return_annotation,
+                body,
+                *end_position,
+            ),
+
+            Definition::Test(Function {
+                name,
+                arguments: args,
+                body,
+                public,
+                end_position,
+                ..
+            }) => self.definition_fn(public, "test", name, args, &None, body, *end_position),
 
             Definition::TypeAlias(TypeAlias {
                 alias,
@@ -496,6 +513,7 @@ impl<'comments> Formatter<'comments> {
     fn definition_fn<'a>(
         &mut self,
         public: &'a bool,
+        keyword: &'a str,
         name: &'a str,
         args: &'a [UntypedArg],
         return_annotation: &'a Option<Annotation>,
@@ -504,7 +522,8 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         // Fn name and args
         let head = pub_(*public)
-            .append("fn ")
+            .append(keyword)
+            .append(" ")
             .append(name)
             .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
 

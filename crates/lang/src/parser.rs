@@ -74,6 +74,7 @@ fn module_parser() -> impl Parser<Token, Vec<UntypedDefinition>, Error = ParseEr
         data_parser(),
         type_alias_parser(),
         fn_parser(),
+        test_parser(),
         constant_parser(),
     ))
     .repeated()
@@ -264,6 +265,36 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                 })
             },
         )
+}
+
+pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
+    just(Token::Test)
+        .ignore_then(select! {Token::Name {name} => name})
+        .then_ignore(just(Token::LeftParen))
+        .then_ignore(just(Token::RightParen))
+        .map_with_span(|name, span| (name, span))
+        .then(
+            expr_seq_parser()
+                .or_not()
+                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+        )
+        .map_with_span(|((name, span_end), body), span| {
+            ast::UntypedDefinition::Fn(ast::Function {
+                arguments: vec![],
+                body: body.unwrap_or(expr::UntypedExpr::Todo {
+                    kind: TodoKind::EmptyFunction,
+                    location: span,
+                    label: None,
+                }),
+                doc: None,
+                location: span_end,
+                end_position: span.end - 1,
+                name,
+                public: true,
+                return_annotation: None,
+                return_type: (),
+            })
+        })
 }
 
 fn constant_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
