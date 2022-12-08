@@ -78,11 +78,11 @@ impl Project {
     }
 
     pub fn build(&mut self, uplc: bool) -> Result<(), Error> {
-        self.compile(true, uplc)
+        self.compile(true, uplc, false)
     }
 
     pub fn check(&mut self) -> Result<(), Error> {
-        self.compile(false, false)
+        self.compile(false, false, true)
     }
 
     pub fn compile(
@@ -101,10 +101,17 @@ impl Project {
 
         let validators = self.validate_validators(&mut checked_modules)?;
 
+        // TODO: In principle, uplc_gen and run_tests can't be true together. We probably want to
+        // model the options differently to make it obvious at the type-level.
         if uplc_gen {
             let programs = self.code_gen(validators, &checked_modules)?;
 
             self.write_build_outputs(programs, uplc_dump)?;
+        }
+
+        if run_tests {
+            let tests = self.test_gen(&checked_modules)?;
+            self.run_tests(tests);
         }
 
         Ok(())
@@ -470,6 +477,21 @@ impl Project {
         }
 
         Ok(programs)
+    }
+
+    fn run_tests(&self, tests: Vec<Script>) {
+        for test in tests {
+            let result = test.program.eval();
+            match result {
+                (Ok(..), _, _) => {
+                    println!("{}::{} ✓", test.module, test.name);
+                }
+                (Err(e), _, _) => {
+                    println!("{}::{} x", test.module, test.name);
+                    println!("{}", e);
+                }
+            }
+        }
     }
 
     fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
