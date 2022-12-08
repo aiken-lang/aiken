@@ -528,12 +528,11 @@ impl Project {
         let max_mem = max_mem.to_string().len() as i32;
         let max_cpu = max_cpu.to_string().len() as i32;
 
-        let fmt_tests = |is_passing: bool, test: Script, spent_budget: ExBudget| -> String {
+        let fmt_tests = |is_passing: &bool, test: &Script, spent_budget: &ExBudget| -> String {
             let ExBudget { mem, cpu } = spent_budget;
-
             format!(
                 "    [{}] [mem: {}, cpu: {}] {}::{}",
-                if is_passing {
+                if *is_passing {
                     "PASS".bold().green().to_string()
                 } else {
                     "FAIL".bold().red().to_string()
@@ -545,9 +544,31 @@ impl Project {
             )
         };
 
-        for (is_passing, test, spent_budget) in results {
+        for (is_passing, test, spent_budget) in &results {
             println!("{}", fmt_tests(is_passing, test, spent_budget))
         }
+
+        let (n_passed, n_failed) =
+            results
+                .iter()
+                .fold((0, 0), |(n_passed, n_failed), (is_passing, _, _)| {
+                    if *is_passing {
+                        (n_passed + 1, n_failed)
+                    } else {
+                        (n_passed, n_failed + 1)
+                    }
+                });
+
+        println!(
+            "{}",
+            format!(
+                "\n    Summary: {} test(s), {}; {}.",
+                results.len(),
+                format!("{} passed", n_passed).bright_green(),
+                format!("{} failed", n_failed).bright_red()
+            )
+            .bold()
+        )
     }
 
     fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
