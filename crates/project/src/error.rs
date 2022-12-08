@@ -293,7 +293,7 @@ impl Diagnostic for Warning {
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Warning::Type { .. } => Some(Box::new("aiken::typecheck")),
+            Warning::Type { .. } => Some(Box::new("aiken::check")),
         }
     }
 }

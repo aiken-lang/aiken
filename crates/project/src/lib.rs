@@ -25,7 +25,10 @@ use pallas::{
 use pallas_traverse::ComputeHash;
 use script::Script;
 use serde_json::json;
-use uplc::ast::{DeBruijn, Program};
+use uplc::{
+    ast::{DeBruijn, Program},
+    machine::cost_model::ExBudget,
+};
 
 use crate::{
     config::Config,
@@ -481,14 +484,31 @@ impl Project {
 
     fn run_tests(&self, tests: Vec<Script>) {
         for test in tests {
-            let result = test.program.eval();
+            // TODO: in the future we probably just want to be able to
+            // tell the machine to not explode on budget consumption.
+            let initial_budget = ExBudget {
+                mem: i64::MAX,
+                cpu: i64::MAX,
+            };
+
+            let result = test.program.eval(initial_budget);
+
             match result {
-                (Ok(..), _, _) => {
-                    println!("{}::{} ✓", test.module, test.name);
+                (Ok(..), remaining_budget, _) => {
+                    let ExBudget { mem, cpu } = initial_budget - remaining_budget;
+
+                    println!(
+                        "    [PASS] [mem: {}, cpu: {}] {}::{}",
+                        mem, cpu, test.module, test.name
+                    );
                 }
-                (Err(e), _, _) => {
-                    println!("{}::{} x", test.module, test.name);
-                    println!("{}", e);
+                (Err(_), remaining_budget, _) => {
+                    let ExBudget { mem, cpu } = initial_budget - remaining_budget;
+
+                    println!(
+                        "    [FAIL] [mem: {}, cpu: {}] {}::{}",
+                        mem, cpu, test.module, test.name
+                    );
                 }
             }
         }
