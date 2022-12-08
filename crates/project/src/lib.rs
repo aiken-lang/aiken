@@ -336,6 +336,9 @@ impl Project {
                             func,
                         );
                     }
+                    Definition::Test(_) => {
+                        todo!()
+                    }
                     Definition::TypeAlias(ta) => {
                         type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
                     }

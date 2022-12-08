@@ -11,3 +11,7 @@ pub fn spend(datum: sample.Datum, rdmr: sample.Redeemer, _ctx: Nil) -> Bool {
 
   z == #(#[222], #[222])
 }
+
+test foo() {
+  1 + 1 == 2
+}

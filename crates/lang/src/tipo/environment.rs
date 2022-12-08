@@ -255,6 +255,7 @@ impl<'a> Environment<'a> {
             definition @ (Definition::TypeAlias { .. }
             | Definition::DataType { .. }
             | Definition::Use { .. }
+            | Definition::Test { .. }
             | Definition::ModuleConstant { .. }) => definition,
         }
     }
@@ -911,7 +912,10 @@ impl<'a> Environment<'a> {
                 }
             }
 
-            Definition::Fn { .. } | Definition::Use { .. } | Definition::ModuleConstant { .. } => {}
+            Definition::Fn { .. }
+            | Definition::Test { .. }
+            | Definition::Use { .. }
+            | Definition::ModuleConstant { .. } => {}
         }
 
         Ok(())
@@ -988,6 +992,24 @@ impl<'a> Environment<'a> {
                 if !public {
                     self.init_usage(name.clone(), EntityKind::PrivateFunction, *location);
                 }
+            }
+
+            Definition::Test(Function { name, location, .. }) => {
+                hydrators.insert(name.clone(), Hydrator::new());
+                let arg_types = vec![];
+                let return_type = builtins::bool();
+                self.insert_variable(
+                    name.clone(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: name.clone(),
+                        field_map: None,
+                        module: module_name.to_owned(),
+                        arity: 0,
+                        location: *location,
+                        builtin: None,
+                    },
+                    function(arg_types, return_type),
+                );
             }
 
             Definition::DataType(DataType {

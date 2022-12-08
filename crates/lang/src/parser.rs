@@ -279,7 +279,7 @@ pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(|((name, span_end), body), span| {
-            ast::UntypedDefinition::Fn(ast::Function {
+            ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
                 body: body.unwrap_or(expr::UntypedExpr::Todo {
                     kind: TodoKind::EmptyFunction,
