@@ -483,32 +483,32 @@ impl Project {
     }
 
     fn run_tests(&self, tests: Vec<Script>) {
+        // TODO: in the future we probably just want to be able to
+        // tell the machine to not explode on budget consumption.
+        let initial_budget = ExBudget {
+            mem: i64::MAX,
+            cpu: i64::MAX,
+        };
+
+        let fmt_tests = |is_passing: bool, test: Script, remaining_budget: ExBudget| -> String {
+            let ExBudget { mem, cpu } = initial_budget - remaining_budget;
+            format!(
+                "    [{}] [mem: {}, cpu: {}] {}::{}",
+                if is_passing { "PASS" } else { "FAIL" },
+                mem,
+                cpu,
+                test.module,
+                test.name
+            )
+        };
+
         for test in tests {
-            // TODO: in the future we probably just want to be able to
-            // tell the machine to not explode on budget consumption.
-            let initial_budget = ExBudget {
-                mem: i64::MAX,
-                cpu: i64::MAX,
-            };
-
-            let result = test.program.eval(initial_budget);
-
-            match result {
+            match test.program.eval(initial_budget) {
                 (Ok(..), remaining_budget, _) => {
-                    let ExBudget { mem, cpu } = initial_budget - remaining_budget;
-
-                    println!(
-                        "    [PASS] [mem: {}, cpu: {}] {}::{}",
-                        mem, cpu, test.module, test.name
-                    );
+                    println!("{}", fmt_tests(true, test, remaining_budget));
                 }
                 (Err(_), remaining_budget, _) => {
-                    let ExBudget { mem, cpu } = initial_budget - remaining_budget;
-
-                    println!(
-                        "    [FAIL] [mem: {}, cpu: {}] {}::{}",
-                        mem, cpu, test.module, test.name
-                    );
+                    println!("{}", fmt_tests(false, test, remaining_budget));
                 }
             }
         }
