@@ -538,8 +538,8 @@ impl Project {
                 } else {
                     "FAIL".bold().red().to_string()
                 },
-                padding_right(mem.to_string(), max_mem, " "),
-                padding_right(cpu.to_string(), max_cpu, " "),
+                pad_left(mem.to_string(), max_mem, " "),
+                pad_left(cpu.to_string(), max_cpu, " "),
                 test.module.blue(),
                 test.name.bright_blue()
             )
@@ -707,13 +707,13 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
     )
 }
 
-fn padding_right(text: String, n: i32, delimiter: &str) -> String {
+fn pad_left(text: String, n: i32, delimiter: &str) -> String {
     let mut text = text.clone();
     let diff = n - text.len() as i32;
 
     if diff.is_positive() {
         for _ in 0..diff {
-            text.push_str(delimiter);
+            text.insert_str(0, delimiter);
         }
     }
 
