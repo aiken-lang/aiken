@@ -219,6 +219,12 @@ pub enum Air {
         scope: Vec<u64>,
         value: Box<Self>,
     },
+
+    TupleAccessor {
+        scope: Vec<u64>,
+        names: Vec<String>,
+        tipo: Arc<Type>,
+    },
 }
 
 impl Air {
@@ -255,7 +261,8 @@ impl Air {
             | Air::Todo { scope, .. }
             | Air::Record { scope, .. }
             | Air::RecordUpdate { scope, .. }
-            | Air::Negate { scope, .. } => scope.to_vec(),
+            | Air::Negate { scope, .. }
+            | Air::TupleAccessor { scope, .. } => scope.to_vec(),
         }
     }
 }
