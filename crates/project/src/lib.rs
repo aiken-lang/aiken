@@ -492,14 +492,45 @@ impl Project {
         };
 
         if !tests.is_empty() {
-            println!(
-                "\n{}\n",
-                "Running tests...".bold().underline().purple().to_string()
-            );
+            println!("\n{}\n", "Running tests...".bold().underline().purple());
         }
 
-        let fmt_tests = |is_passing: bool, test: Script, remaining_budget: ExBudget| -> String {
-            let ExBudget { mem, cpu } = initial_budget - remaining_budget;
+        let mut results = Vec::new();
+
+        for test in tests {
+            match test.program.eval(initial_budget) {
+                (Ok(..), remaining_budget, _) => {
+                    results.push((true, test, initial_budget - remaining_budget));
+                    // println!("{}", fmt_tests);
+                }
+                (Err(_), remaining_budget, _) => {
+                    results.push((false, test, initial_budget - remaining_budget));
+                    // println!("{}", fmt_tests());
+                }
+            }
+        }
+
+        let (max_mem, max_cpu) =
+            results
+                .iter()
+                .fold((0, 0), |(max_mem, max_cpu), (_, _, budget)| {
+                    if budget.mem >= max_mem && budget.cpu >= max_cpu {
+                        (budget.mem, budget.cpu)
+                    } else if budget.mem > max_mem {
+                        (budget.mem, max_cpu)
+                    } else if budget.cpu > max_cpu {
+                        (max_mem, budget.cpu)
+                    } else {
+                        (max_mem, max_cpu)
+                    }
+                });
+
+        let max_mem = max_mem.to_string().len() as i32;
+        let max_cpu = max_cpu.to_string().len() as i32;
+
+        let fmt_tests = |is_passing: bool, test: Script, spent_budget: ExBudget| -> String {
+            let ExBudget { mem, cpu } = spent_budget;
+
             format!(
                 "    [{}] [mem: {}, cpu: {}] {}::{}",
                 if is_passing {
@@ -507,22 +538,15 @@ impl Project {
                 } else {
                     "FAIL".bold().red().to_string()
                 },
-                mem,
-                cpu,
-                test.module,
-                test.name
+                padding_right(mem.to_string(), max_mem, " "),
+                padding_right(cpu.to_string(), max_cpu, " "),
+                test.module.blue(),
+                test.name.bright_blue()
             )
         };
 
-        for test in tests {
-            match test.program.eval(initial_budget) {
-                (Ok(..), remaining_budget, _) => {
-                    println!("{}", fmt_tests(true, test, remaining_budget));
-                }
-                (Err(_), remaining_budget, _) => {
-                    println!("{}", fmt_tests(false, test, remaining_budget));
-                }
-            }
+        for (is_passing, test, spent_budget) in results {
+            println!("{}", fmt_tests(is_passing, test, spent_budget))
         }
     }
 
@@ -681,4 +705,17 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
+}
+
+fn padding_right(text: String, n: i32, delimiter: &str) -> String {
+    let mut text = text.clone();
+    let diff = n - text.len() as i32;
+
+    if diff.is_positive() {
+        for _ in 0..diff {
+            text.push_str(delimiter);
+        }
+    }
+
+    text
 }
