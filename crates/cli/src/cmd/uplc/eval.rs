@@ -61,7 +61,9 @@ pub fn exec(
         program = program.apply_term(&term);
     }
 
-    let (term, cost, logs) = program.eval();
+    let budget = ExBudget::default();
+
+    let (term, cost, logs) = program.eval(budget);
 
     match term {
         Ok(term) => {
@@ -73,8 +75,6 @@ pub fn exec(
             eprintln!("\nError\n-----\n\n{}\n", err);
         }
     }
-
-    let budget = ExBudget::default();
 
     println!(
         "\nCosts\n-----\ncpu: {}\nmemory: {}",

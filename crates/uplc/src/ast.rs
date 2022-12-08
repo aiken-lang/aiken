@@ -495,6 +495,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 impl Program<NamedDeBruijn> {
     pub fn eval(
         &self,
+        initial_budget: ExBudget,
     ) -> (
         Result<Term<NamedDeBruijn>, crate::machine::Error>,
         ExBudget,
@@ -503,7 +504,7 @@ impl Program<NamedDeBruijn> {
         let mut machine = Machine::new(
             Language::PlutusV2,
             CostModel::default(),
-            ExBudget::default(),
+            initial_budget,
             200,
         );
 
@@ -558,6 +559,7 @@ impl Program<NamedDeBruijn> {
 impl Program<DeBruijn> {
     pub fn eval(
         &self,
+        initial_budget: ExBudget,
     ) -> (
         Result<Term<NamedDeBruijn>, crate::machine::Error>,
         ExBudget,
@@ -565,7 +567,7 @@ impl Program<DeBruijn> {
     ) {
         let program: Program<NamedDeBruijn> = self.clone().into();
 
-        program.eval()
+        program.eval(initial_budget)
     }
 }
 

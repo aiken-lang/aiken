@@ -786,7 +786,7 @@ pub fn eval_redeemer(
 
                         program.eval_as(&Language::PlutusV2, costs, initial_budget)
                     } else {
-                        program.eval()
+                        program.eval(ExBudget::default())
                     };
 
                     match result {
@@ -889,7 +889,7 @@ pub fn eval_redeemer(
 
                         program.eval_as(&Language::PlutusV2, costs, initial_budget)
                     } else {
-                        program.eval()
+                        program.eval(ExBudget::default())
                     };
 
                     match result {
