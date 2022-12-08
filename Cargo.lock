@@ -110,6 +110,7 @@ dependencies = [
  "hex",
  "ignore",
  "miette",
+ "owo-colors",
  "pallas",
  "pallas-traverse",
  "petgraph",

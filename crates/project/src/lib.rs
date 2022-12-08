@@ -18,6 +18,7 @@ use aiken_lang::{
     IdGenerator,
 };
 use miette::NamedSource;
+use owo_colors::OwoColorize;
 use pallas::{
     codec::minicbor,
     ledger::{addresses::Address, primitives::babbage},
@@ -490,11 +491,22 @@ impl Project {
             cpu: i64::MAX,
         };
 
+        if !tests.is_empty() {
+            println!(
+                "\n{}\n",
+                "Running tests...".bold().underline().purple().to_string()
+            );
+        }
+
         let fmt_tests = |is_passing: bool, test: Script, remaining_budget: ExBudget| -> String {
             let ExBudget { mem, cpu } = initial_budget - remaining_budget;
             format!(
                 "    [{}] [mem: {}, cpu: {}] {}::{}",
-                if is_passing { "PASS" } else { "FAIL" },
+                if is_passing {
+                    "PASS".bold().green().to_string()
+                } else {
+                    "FAIL".bold().red().to_string()
+                },
                 mem,
                 cpu,
                 test.module,
