@@ -85,7 +85,12 @@ impl Project {
         self.compile(false, false)
     }
 
-    pub fn compile(&mut self, uplc_gen: bool, uplc_dump: bool) -> Result<(), Error> {
+    pub fn compile(
+        &mut self,
+        uplc_gen: bool,
+        uplc_dump: bool,
+        run_tests: bool,
+    ) -> Result<(), Error> {
         self.read_source_files()?;
 
         let parsed_modules = self.parse_sources()?;
@@ -336,9 +341,7 @@ impl Project {
                             func,
                         );
                     }
-                    Definition::Test(_) => {
-                        todo!()
-                    }
+                    Definition::Test(_) => {}
                     Definition::TypeAlias(ta) => {
                         type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
                     }
@@ -381,6 +384,87 @@ impl Project {
             let program = generator.generate(body, arguments);
 
             let script = Script::new(module_name, name, program.try_into().unwrap());
+
+            programs.push(script);
+        }
+
+        Ok(programs)
+    }
+
+    // TODO: revisit ownership and lifetimes of data in this function
+    fn test_gen(&mut self, checked_modules: &CheckedModules) -> Result<Vec<Script>, Error> {
+        let mut programs = Vec::new();
+        let mut functions = HashMap::new();
+        let mut type_aliases = HashMap::new();
+        let mut data_types = HashMap::new();
+        let mut imports = HashMap::new();
+        let mut constants = HashMap::new();
+
+        // let mut indices_to_remove = Vec::new();
+        let mut tests = Vec::new();
+
+        for module in checked_modules.values() {
+            for (_index, def) in module.ast.definitions().enumerate() {
+                match def {
+                    Definition::Fn(func) => {
+                        functions.insert(
+                            FunctionAccessKey {
+                                module_name: module.name.clone(),
+                                function_name: func.name.clone(),
+                            },
+                            func,
+                        );
+                    }
+                    Definition::Test(func) => {
+                        tests.push((module.name.clone(), func));
+                        // indices_to_remove.push(index);
+                    }
+                    Definition::TypeAlias(ta) => {
+                        type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
+                    }
+                    Definition::DataType(dt) => {
+                        data_types.insert(
+                            DataTypeKey {
+                                module_name: module.name.clone(),
+                                defined_type: dt.name.clone(),
+                            },
+                            dt,
+                        );
+                    }
+                    Definition::Use(import) => {
+                        imports.insert((module.name.clone(), import.module.join("/")), import);
+                    }
+                    Definition::ModuleConstant(mc) => {
+                        constants.insert((module.name.clone(), mc.name.clone()), mc);
+                    }
+                }
+            }
+
+            // for index in indices_to_remove.drain(0..) {
+            //     module.ast.definitions.remove(index);
+            // }
+        }
+
+        for (module_name, func_def) in tests {
+            let Function {
+                arguments,
+                name,
+                body,
+                ..
+            } = func_def;
+
+            let mut generator = CodeGenerator::new(
+                &functions,
+                // &type_aliases,
+                &data_types,
+                // &imports,
+                // &constants,
+                &self.module_types,
+            );
+
+            let program = generator.generate(body.clone(), arguments.clone());
+
+            let script = Script::new(module_name, name.to_string(), program.try_into().unwrap());
 
             programs.push(script);
         }

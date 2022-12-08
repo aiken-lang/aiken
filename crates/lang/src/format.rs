@@ -510,6 +510,7 @@ impl<'comments> Formatter<'comments> {
         commented(doc, comments)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn definition_fn<'a>(
         &mut self,
         public: &'a bool,
