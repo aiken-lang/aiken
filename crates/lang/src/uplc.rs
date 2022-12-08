@@ -1573,7 +1573,7 @@ impl<'a> CodeGenerator<'a> {
                         term = Term::Apply {
                             function: Term::Apply {
                                 function: Term::Force(
-                                    Term::Builtin(DefaultFunction::MkCons).into(),
+                                    Term::Builtin(DefaultFunction::MkCons).force_wrap().into(),
                                 )
                                 .into(),
                                 argument: convert_type_to_data(arg, &list_type).into(),
@@ -2718,7 +2718,9 @@ impl<'a> CodeGenerator<'a> {
                     for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()) {
                         term = Term::Apply {
                             function: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::MkCons).into(),
+                                function: Term::Builtin(DefaultFunction::MkCons)
+                                    .force_wrap()
+                                    .into(),
                                 argument: convert_type_to_data(arg, &tipo).into(),
                             }
                             .into(),
