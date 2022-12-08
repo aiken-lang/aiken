@@ -67,7 +67,15 @@
 
 4. **Donation**
 
-   Want to give some financial support? Have a look at the [sponsors page](https://github.com/sponsors/rvcas/) for more details.
+   Want to give some financial support? Have a look at the ways to sponsor below for more details.
+
+   - [rvcas](https://github.com/sponsors/rvcas/)
+   - [microproofs](https://github.com/sponsors/microproofs/)
+
+   Want to support with crypto?
+
+   - Our Ada address is `addr1q83nlzwu4zjeu927m8t24xa68upgmwgt5w29ww5ka695hc5rez2r4q7gcvj7z0ma6d88w3j220szsqk05sn43ghcsn4szvuklq`
+   - Our Ada handle is `$aiken_lang`
 
 ## About Issues
 
