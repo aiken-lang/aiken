@@ -9,6 +9,7 @@ pub mod error;
 pub mod format;
 pub mod module;
 pub mod script;
+pub mod telemetry;
 
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedFunction},
@@ -18,7 +19,6 @@ use aiken_lang::{
     IdGenerator,
 };
 use miette::NamedSource;
-use owo_colors::OwoColorize;
 use pallas::{
     codec::minicbor,
     ledger::{addresses::Address, primitives::babbage},
@@ -26,6 +26,7 @@ use pallas::{
 use pallas_traverse::ComputeHash;
 use script::Script;
 use serde_json::json;
+use telemetry::{EventListener, TestInfo};
 use uplc::{
     ast::{DeBruijn, Program},
     machine::cost_model::ExBudget,
@@ -35,6 +36,7 @@ use crate::{
     config::Config,
     error::{Error, Warning},
     module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    telemetry::Event,
 };
 
 #[derive(Debug)]
@@ -51,7 +53,10 @@ pub const MINT: &str = "mint";
 pub const WITHDRAWL: &str = "withdrawl";
 pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAWL];
 
-pub struct Project {
+pub struct Project<T>
+where
+    T: EventListener,
+{
     config: Config,
     defined_modules: HashMap<String, PathBuf>,
     id_gen: IdGenerator,
@@ -59,10 +64,14 @@ pub struct Project {
     root: PathBuf,
     sources: Vec<Source>,
     pub warnings: Vec<Warning>,
+    event_listener: T,
 }
 
-impl Project {
-    pub fn new(config: Config, root: PathBuf) -> Project {
+impl<T> Project<T>
+where
+    T: EventListener,
+{
+    pub fn new(config: Config, root: PathBuf, event_listener: T) -> Project<T> {
         let id_gen = IdGenerator::new();
 
         let mut module_types = HashMap::new();
@@ -78,6 +87,7 @@ impl Project {
             root,
             sources: vec![],
             warnings: vec![],
+            event_listener,
         }
     }
 
@@ -492,7 +502,7 @@ impl Project {
         };
 
         if !tests.is_empty() {
-            println!("\n{}\n", "Running tests...".bold().underline().purple());
+            self.event_listener.handle_event(Event::RunningTests);
         }
 
         let mut results = Vec::new();
@@ -500,75 +510,28 @@ impl Project {
         for test in tests {
             match test.program.eval(initial_budget) {
                 (Ok(..), remaining_budget, _) => {
-                    results.push((true, test, initial_budget - remaining_budget));
-                    // println!("{}", fmt_tests);
+                    let test_info = TestInfo {
+                        is_passing: true,
+                        test,
+                        spent_budget: initial_budget - remaining_budget,
+                    };
+
+                    results.push(test_info);
                 }
                 (Err(_), remaining_budget, _) => {
-                    results.push((false, test, initial_budget - remaining_budget));
-                    // println!("{}", fmt_tests());
+                    let test_info = TestInfo {
+                        is_passing: false,
+                        test,
+                        spent_budget: initial_budget - remaining_budget,
+                    };
+
+                    results.push(test_info);
                 }
             }
         }
 
-        let (max_mem, max_cpu) =
-            results
-                .iter()
-                .fold((0, 0), |(max_mem, max_cpu), (_, _, budget)| {
-                    if budget.mem >= max_mem && budget.cpu >= max_cpu {
-                        (budget.mem, budget.cpu)
-                    } else if budget.mem > max_mem {
-                        (budget.mem, max_cpu)
-                    } else if budget.cpu > max_cpu {
-                        (max_mem, budget.cpu)
-                    } else {
-                        (max_mem, max_cpu)
-                    }
-                });
-
-        let max_mem = max_mem.to_string().len() as i32;
-        let max_cpu = max_cpu.to_string().len() as i32;
-
-        let fmt_tests = |is_passing: &bool, test: &Script, spent_budget: &ExBudget| -> String {
-            let ExBudget { mem, cpu } = spent_budget;
-            format!(
-                "    [{}] [mem: {}, cpu: {}] {}::{}",
-                if *is_passing {
-                    "PASS".bold().green().to_string()
-                } else {
-                    "FAIL".bold().red().to_string()
-                },
-                pad_left(mem.to_string(), max_mem, " "),
-                pad_left(cpu.to_string(), max_cpu, " "),
-                test.module.blue(),
-                test.name.bright_blue()
-            )
-        };
-
-        for (is_passing, test, spent_budget) in &results {
-            println!("{}", fmt_tests(is_passing, test, spent_budget))
-        }
-
-        let (n_passed, n_failed) =
-            results
-                .iter()
-                .fold((0, 0), |(n_passed, n_failed), (is_passing, _, _)| {
-                    if *is_passing {
-                        (n_passed + 1, n_failed)
-                    } else {
-                        (n_passed, n_failed + 1)
-                    }
-                });
-
-        println!(
-            "{}",
-            format!(
-                "\n    Summary: {} test(s), {}; {}.",
-                results.len(),
-                format!("{} passed", n_passed).bright_green(),
-                format!("{} failed", n_failed).bright_red()
-            )
-            .bold()
-        )
+        self.event_listener
+            .handle_event(Event::FinishedTests { tests: results });
     }
 
     fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
@@ -726,17 +689,4 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
-}
-
-fn pad_left(text: String, n: i32, delimiter: &str) -> String {
-    let mut text = text.clone();
-    let diff = n - text.len() as i32;
-
-    if diff.is_positive() {
-        for _ in 0..diff {
-            text.insert_str(0, delimiter);
-        }
-    }
-
-    text
 }
