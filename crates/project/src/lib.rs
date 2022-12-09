@@ -95,8 +95,8 @@ where
         self.compile(true, uplc, false)
     }
 
-    pub fn check(&mut self) -> Result<(), Error> {
-        self.compile(false, false, true)
+    pub fn check(&mut self, skip_tests: bool) -> Result<(), Error> {
+        self.compile(false, false, !skip_tests)
     }
 
     pub fn compile(
@@ -119,7 +119,6 @@ where
         // model the options differently to make it obvious at the type-level.
         if uplc_gen {
             let programs = self.code_gen(validators, &checked_modules)?;
-
             self.write_build_outputs(programs, uplc_dump)?;
         }
 
