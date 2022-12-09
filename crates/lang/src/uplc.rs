@@ -773,7 +773,19 @@ impl<'a> CodeGenerator<'a> {
                     pattern_vec.append(values);
                 }
             }
-            Pattern::Tuple { .. } => todo!(),
+            Pattern::Tuple { elems, .. } => {
+                let mut needs_clause_guard = false;
+
+                for elem in elems {
+                    check_when_pattern_needs(elem, &mut false, &mut needs_clause_guard);
+                }
+
+                if needs_clause_guard {
+                    clause_properties.is_complex_clause = true;
+                }
+
+                todo!()
+            }
         }
     }
 
@@ -1068,6 +1080,7 @@ impl<'a> CodeGenerator<'a> {
                                             subject_name: constr_var_name.clone(),
                                         });
                                     }
+
                                     let mut clause_complexity = ClauseProperties {
                                         clause_var_name: constr_var_name.clone(),
                                         needs_constr_var: false,
@@ -2958,7 +2971,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = arg_stack.pop().unwrap();
 
-                term = if tipo.is_int() || tipo.is_bytearray() || tipo.is_string() || tipo.is_list()
+                term = if tipo.is_int()
+                    || tipo.is_bytearray()
+                    || tipo.is_string()
+                    || tipo.is_list()
+                    || tipo.is_tuple()
                 {
                     Term::Apply {
                         function: Term::Lambda {
