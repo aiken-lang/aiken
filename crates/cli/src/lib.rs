@@ -50,9 +50,34 @@ pub struct Terminal;
 impl telemetry::EventListener for Terminal {
     fn handle_event(&self, event: telemetry::Event) {
         match event {
-            telemetry::Event::CompilingPackage { .. } => todo!(),
+            telemetry::Event::StartingCompilation {
+                name,
+                version,
+                root,
+            } => {
+                println!(
+                    "{} {} {} ({})",
+                    "Compiling".bold().purple(),
+                    name.bold(),
+                    version,
+                    root.to_str().unwrap_or("").bright_blue()
+                );
+            }
+            telemetry::Event::ParsingProjectFiles => {
+                println!("{}", "...Parsing project files".bold().purple());
+            }
+            telemetry::Event::TypeChecking => {
+                println!("{}", "...Type-checking project".bold().purple());
+            }
+            telemetry::Event::GeneratingUPLC { output_path } => {
+                println!(
+                    "{} in {}",
+                    "...Generating Untyped Plutus Core".bold().purple(),
+                    output_path.to_str().unwrap_or("").bright_blue()
+                );
+            }
             telemetry::Event::RunningTests => {
-                println!("\n{}\n", "Running tests...".bold().underline().purple());
+                println!("{}\n", "...Running tests".bold().purple());
             }
             telemetry::Event::FinishedTests { tests } => {
                 let (max_mem, max_cpu) = tests.iter().fold(

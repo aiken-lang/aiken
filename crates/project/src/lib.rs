@@ -105,11 +105,22 @@ where
         uplc_dump: bool,
         run_tests: bool,
     ) -> Result<(), Error> {
+        self.event_listener
+            .handle_event(Event::StartingCompilation {
+                root: self.root.clone(),
+                name: self.config.name.clone(),
+                version: self.config.version.clone(),
+            });
+
+        self.event_listener.handle_event(Event::ParsingProjectFiles);
+
         self.read_source_files()?;
 
         let parsed_modules = self.parse_sources()?;
 
         let processing_sequence = parsed_modules.sequence()?;
+
+        self.event_listener.handle_event(Event::TypeChecking);
 
         let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
 
@@ -118,6 +129,9 @@ where
         // TODO: In principle, uplc_gen and run_tests can't be true together. We probably want to
         // model the options differently to make it obvious at the type-level.
         if uplc_gen {
+            self.event_listener.handle_event(Event::GeneratingUPLC {
+                output_path: self.output_path(),
+            });
             let programs = self.code_gen(validators, &checked_modules)?;
             self.write_build_outputs(programs, uplc_dump)?;
         }
@@ -533,11 +547,13 @@ where
             .handle_event(Event::FinishedTests { tests: results });
     }
 
-    fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
-        let assets = self.root.join("assets");
+    fn output_path(&self) -> PathBuf {
+        self.root.join("assets")
+    }
 
+    fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
         for script in programs {
-            let script_output_dir = assets.join(script.module).join(script.name);
+            let script_output_dir = self.output_path().join(script.module).join(script.name);
 
             fs::create_dir_all(&script_output_dir)?;
 
