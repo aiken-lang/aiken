@@ -229,10 +229,9 @@ impl<'comments> Formatter<'comments> {
                 name,
                 arguments: args,
                 body,
-                public,
                 end_position,
                 ..
-            }) => self.definition_fn(public, "test", name, args, &None, body, *end_position),
+            }) => self.definition_fn(&false, "test", name, args, &None, body, *end_position),
 
             Definition::TypeAlias(TypeAlias {
                 alias,
