@@ -47,6 +47,17 @@ impl Default for ExBudget {
     }
 }
 
+impl std::ops::Sub for ExBudget {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        ExBudget {
+            mem: self.mem - rhs.mem,
+            cpu: self.cpu - rhs.cpu,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct CostModel {
     pub machine_costs: MachineCosts,

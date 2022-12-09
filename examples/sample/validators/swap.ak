@@ -1,7 +1,7 @@
 use sample
 
 pub fn spend(datum: sample.Datum, rdmr: sample.Redeemer, _ctx: Nil) -> Bool {
-  let x = #(datum,  #[244])
+  let _x = #(datum, rdmr, #[244])
 
   let y = [#(#[222], #[222]), #(#[233], #[52])]
 
@@ -10,4 +10,8 @@ pub fn spend(datum: sample.Datum, rdmr: sample.Redeemer, _ctx: Nil) -> Bool {
   let #(a, b) = x
 
   z == #(#[222], #[222])
+}
+
+test foo() {
+  1 + 1 == 2
 }

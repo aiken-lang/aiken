@@ -59,6 +59,7 @@ dependencies = [
  "ignore",
  "indoc",
  "miette",
+ "owo-colors",
  "pallas-addresses",
  "pallas-codec",
  "pallas-crypto",

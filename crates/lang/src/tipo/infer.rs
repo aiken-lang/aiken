@@ -6,6 +6,7 @@ use crate::{
         RecordConstructorArg, TypeAlias, TypedDefinition, TypedModule, UntypedDefinition,
         UntypedModule, Use,
     },
+    builtins,
     builtins::function,
     parser::token::Token,
     IdGenerator,
@@ -66,8 +67,8 @@ impl UntypedModule {
         for def in self.definitions().cloned() {
             match def {
                 Definition::ModuleConstant { .. } => consts.push(def),
-
                 Definition::Fn { .. }
+                | Definition::Test { .. }
                 | Definition::TypeAlias { .. }
                 | Definition::DataType { .. }
                 | Definition::Use { .. } => not_consts.push(def),
@@ -231,6 +232,17 @@ fn infer_definition(
                 body,
                 end_position,
             }))
+        }
+
+        Definition::Test(f) => {
+            if let Definition::Fn(f) =
+                infer_definition(Definition::Fn(f), module_name, hydrators, environment)?
+            {
+                environment.unify(f.return_type.clone(), builtins::bool(), f.location)?;
+                Ok(Definition::Test(f))
+            } else {
+                unreachable!("test defintion inferred as something else than a function?")
+            }
         }
 
         Definition::TypeAlias(TypeAlias {

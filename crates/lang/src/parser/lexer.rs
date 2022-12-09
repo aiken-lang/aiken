@@ -67,6 +67,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "check" => Token::Assert,
         "const" => Token::Const,
         "fn" => Token::Fn,
+        "test" => Token::Test,
         "if" => Token::If,
         "else" => Token::Else,
         "is" => Token::Is,

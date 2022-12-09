@@ -2,6 +2,30 @@
 
 ## [next] - 2022-MM-DD
 
+### Added
+
+- **aiken-lang**: integrated unit tests
+
+  Aiken now supports writing unit tests directly in source files using the new
+  `test` keyword. Tests are functions with no arguments that are implicitly typed
+  to `bool`. For example:
+
+  ```gleam
+  test foo () {
+    1 + 1 == 2
+  }
+  ```
+
+- **aiken**: new `--skip-tests` flag for the `check` command
+
+### Changed
+
+- **aiken**: `check` now also runs and reports on any `test` found in the project
+
+### Removed
+
+N/A
+
 ## [v0.0.26] - 2022-11-23
 
 ### Added
