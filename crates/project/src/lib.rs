@@ -8,6 +8,7 @@ pub mod config;
 pub mod error;
 pub mod format;
 pub mod module;
+pub mod options;
 pub mod script;
 pub mod telemetry;
 
@@ -19,6 +20,7 @@ use aiken_lang::{
     IdGenerator,
 };
 use miette::NamedSource;
+use options::{CodeGenMode, Options};
 use pallas::{
     codec::minicbor,
     ledger::{addresses::Address, primitives::babbage},
@@ -92,19 +94,26 @@ where
     }
 
     pub fn build(&mut self, uplc: bool) -> Result<(), Error> {
-        self.compile(true, uplc, false)
+        let options = Options {
+            code_gen_mode: CodeGenMode::Build(uplc),
+        };
+
+        self.compile(options)
     }
 
     pub fn check(&mut self, skip_tests: bool) -> Result<(), Error> {
-        self.compile(false, false, !skip_tests)
+        let options = Options {
+            code_gen_mode: if skip_tests {
+                CodeGenMode::NoOp
+            } else {
+                CodeGenMode::Test
+            },
+        };
+
+        self.compile(options)
     }
 
-    pub fn compile(
-        &mut self,
-        uplc_gen: bool,
-        uplc_dump: bool,
-        run_tests: bool,
-    ) -> Result<(), Error> {
+    pub fn compile(&mut self, options: Options) -> Result<(), Error> {
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
@@ -126,19 +135,22 @@ where
 
         let validators = self.validate_validators(&mut checked_modules)?;
 
-        // TODO: In principle, uplc_gen and run_tests can't be true together. We probably want to
-        // model the options differently to make it obvious at the type-level.
-        if uplc_gen {
-            self.event_listener.handle_event(Event::GeneratingUPLC {
-                output_path: self.output_path(),
-            });
-            let programs = self.code_gen(validators, &checked_modules)?;
-            self.write_build_outputs(programs, uplc_dump)?;
-        }
+        match options.code_gen_mode {
+            CodeGenMode::Build(uplc_dump) => {
+                self.event_listener.handle_event(Event::GeneratingUPLC {
+                    output_path: self.output_path(),
+                });
 
-        if run_tests {
-            let tests = self.test_gen(&checked_modules)?;
-            self.run_tests(tests);
+                let programs = self.code_gen(validators, &checked_modules)?;
+
+                self.write_build_outputs(programs, uplc_dump)?;
+            }
+            CodeGenMode::Test => {
+                let tests = self.test_gen(&checked_modules)?;
+
+                self.run_tests(tests);
+            }
+            CodeGenMode::NoOp => (),
         }
 
         Ok(())
