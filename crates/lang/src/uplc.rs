@@ -3362,78 +3362,87 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .collect_vec();
 
-                    for item in to_insert.into_iter() {
-                        func_index_map.remove(item.0);
-                        self.defined_functions.insert(item.0.clone(), ());
+                    for (function_access_key, scopes) in to_insert.into_iter() {
+                        func_index_map.remove(function_access_key);
 
-                        let mut full_func_ir = final_func_dep_ir.get(item.0).unwrap().clone();
+                        self.defined_functions
+                            .insert(function_access_key.clone(), ());
 
-                        let funt_comp = func_components.get(item.0).unwrap();
+                        let mut full_func_ir =
+                            final_func_dep_ir.get(function_access_key).unwrap().clone();
+
+                        let mut func_comp =
+                            func_components.get(function_access_key).unwrap().clone();
+
+                        dbg!(&func_comp);
 
                         full_func_ir.push(Air::DefineFunc {
-                            scope: item.1.clone(),
-                            func_name: item.0.function_name.clone(),
-                            module_name: item.0.module_name.clone(),
-                            params: funt_comp.args.clone(),
-                            recursive: funt_comp.recursive,
+                            scope: scopes.clone(),
+                            func_name: function_access_key.function_name.clone(),
+                            module_name: function_access_key.module_name.clone(),
+                            params: func_comp.args.clone(),
+                            recursive: func_comp.recursive,
                         });
 
-                        // let mut insert_var_vec = vec![];
+                        let mut insert_var_vec = vec![];
                         println!("FOund HERE");
 
-                        // for (index, air) in depend_comp.ir.clone().into_iter().enumerate().rev() {
-                        //     if let Air::Var {
-                        //         scope,
-                        //         constructor,
-                        //         name,
-                        //     } = air
-                        //     {
-                        //         println!("found a var at index: {}", index);
-                        //         if let ValueConstructorVariant::ModuleFn {
-                        //             name: func_name,
-                        //             module,
-                        //             ..
-                        //         } = constructor.clone().variant
-                        //         {
-                        //             println!(
-                        //                 "Func Name: {func_name}, Dependency Name: {}",
-                        //                 dependency.function_name
-                        //             );
-                        //             println!(
-                        //                 "Module Name: {module}, Dependency Module: {}",
-                        //                 dependency.module_name
-                        //             );
-                        //             if func_name.clone() == dependency.function_name.clone()
-                        //                 && module == dependency.module_name.clone()
-                        //             {
-                        //                 insert_var_vec.push((
-                        //                     index,
-                        //                     Air::Var {
-                        //                         scope: scope.clone(),
-                        //                         constructor: constructor.clone(),
-                        //                         name: func_name.clone(),
-                        //                     },
-                        //                 ));
-                        //             }
-                        //         }
-                        //     }
-                        // }
+                        for (index, air) in func_comp.ir.clone().into_iter().enumerate().rev() {
+                            if let Air::Var {
+                                scope,
+                                constructor,
+                                name,
+                            } = air
+                            {
+                                println!("found a var at index: {}", index);
+                                if let ValueConstructorVariant::ModuleFn {
+                                    name: func_name,
+                                    module,
+                                    ..
+                                } = constructor.clone().variant
+                                {
+                                    println!(
+                                        "Func Name: {func_name}, Dependency Name: {}",
+                                        function_access_key.function_name
+                                    );
+                                    println!(
+                                        "Module Name: {module}, Dependency Module: {}",
+                                        function_access_key.module_name
+                                    );
+                                    if func_name.clone()
+                                        == function_access_key.function_name.clone()
+                                        && module == function_access_key.module_name.clone()
+                                    {
+                                        insert_var_vec.push((
+                                            index,
+                                            Air::Var {
+                                                scope: scope.clone(),
+                                                constructor: constructor.clone(),
+                                                name: func_name.clone(),
+                                            },
+                                        ));
+                                    }
+                                }
+                            }
+                        }
 
-                        // for (index, ir) in insert_var_vec {
-                        //     new_ir.insert(index, ir);
-                        //     let current_call = new_ir[index - 1].clone();
-                        //     match current_call {
-                        //         Air::Call { scope, count } => {
-                        //             new_ir[index - 1] = Air::Call {
-                        //                 scope,
-                        //                 count: count + 1,
-                        //             }
-                        //         }
-                        //         _ => unreachable!(),
-                        //     }
-                        // }
+                        for (index, ir) in insert_var_vec {
+                            func_comp.ir.insert(index, ir);
 
-                        full_func_ir.extend(funt_comp.ir.clone());
+                            let current_call = func_comp.ir[index - 1].clone();
+
+                            match current_call {
+                                Air::Call { scope, count } => {
+                                    func_comp.ir[index - 1] = Air::Call {
+                                        scope,
+                                        count: count + 1,
+                                    }
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+
+                        full_func_ir.extend(func_comp.ir.clone());
 
                         for ir in full_func_ir.into_iter().rev() {
                             ir_stack.insert(index, ir);
