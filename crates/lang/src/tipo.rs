@@ -143,7 +143,7 @@ impl Type {
                 if let Type::Tuple { elems } = &*args[0] {
                     elems.len() == 2
                 } else if let Type::Var { tipo } = &*args[0] {
-                    matches!(tipo.borrow().get_uplc_type(), UplcType::Pair(_, _))
+                    matches!(tipo.borrow().get_uplc_type(), Some(UplcType::Pair(_, _)))
                 } else {
                     false
                 }
@@ -388,10 +388,10 @@ impl TypeVar {
         }
     }
 
-    pub fn get_uplc_type(&self) -> UplcType {
-        match self {
-            Self::Link { tipo } => tipo.get_uplc_type(),
-            _ => unreachable!(),
+    pub fn get_uplc_type(&self) -> Option<UplcType> {
+        match dbg!(self) {
+            Self::Link { tipo } => Some(tipo.get_uplc_type()),
+            _ => None,
         }
     }
 }

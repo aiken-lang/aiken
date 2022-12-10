@@ -548,7 +548,9 @@ where
 
                     results.push(test_info);
                 }
-                (Err(_), remaining_budget, _) => {
+                (Err(e), remaining_budget, _) => {
+                    println!("ERROR:\n{}", e);
+
                     let test_info = TestInfo {
                         is_passing: false,
                         test,

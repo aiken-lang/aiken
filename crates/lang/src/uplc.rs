@@ -101,7 +101,11 @@ impl<'a> CodeGenerator<'a> {
 
         self.build_ir(&body, &mut ir_stack, scope);
 
+        print!("{ir_stack:#?}");
+
         self.define_ir(&mut ir_stack);
+
+        print!("{ir_stack:#?}");
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -128,6 +132,8 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
+
+        println!("{}", program.to_pretty());
 
         let mut interner = Interner::new();
 
@@ -1877,6 +1883,7 @@ impl<'a> CodeGenerator<'a> {
                     DefaultFunction::EqualsData
                 };
 
+                println!("Equals Binop");
                 let term = match name {
                     BinOp::And => Term::Apply {
                         function: Term::Apply {
@@ -1974,7 +1981,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_tuple()
-                            && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
+                            && matches!(dbg!(tipo.clone()).get_uplc_type(), UplcType::Pair(_, _))
                         {
                             let term = Term::Apply {
                                 function: Term::Apply {
@@ -2029,7 +2036,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_list()
-                            || matches!(tipo.get_uplc_type(), UplcType::List(_))
+                            || matches!(dbg!(tipo.clone()).get_uplc_type(), UplcType::List(_))
                         {
                             let term = Term::Apply {
                                 function: Term::Apply {
@@ -2146,7 +2153,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_tuple()
-                            && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
+                            && matches!(dbg!(tipo.clone()).get_uplc_type(), UplcType::Pair(_, _))
                         {
                             // let term = Term::Apply {
                             //     function: Term::Apply {
@@ -2198,7 +2205,7 @@ impl<'a> CodeGenerator<'a> {
                             // return;
                             todo!()
                         } else if tipo.is_list()
-                            || matches!(tipo.get_uplc_type(), UplcType::List(_))
+                            || matches!(dbg!(tipo).get_uplc_type(), UplcType::List(_))
                         {
                             let term = Term::Apply {
                                 function: Term::Apply {
@@ -3270,8 +3277,65 @@ impl<'a> CodeGenerator<'a> {
                         params: depend_comp.args.clone(),
                         recursive: depend_comp.recursive,
                     }];
+                    let mut new_ir = depend_comp.ir.clone();
 
-                    temp_ir.extend(depend_comp.ir.clone());
+                    if depend_comp.recursive {
+                        let mut insert_var_vec = vec![];
+                        println!("FOund HERE");
+                        for (index, air) in depend_comp.ir.clone().into_iter().enumerate().rev() {
+                            if let Air::Var {
+                                scope,
+                                constructor,
+                                name,
+                            } = air
+                            {
+                                println!("found a var at index: {}", index);
+                                if let ValueConstructorVariant::ModuleFn {
+                                    name: func_name,
+                                    module,
+                                    ..
+                                } = constructor.clone().variant
+                                {
+                                    println!(
+                                        "Func Name: {func_name}, Dependency Name: {}",
+                                        dependency.function_name
+                                    );
+                                    println!(
+                                        "Module Name: {module}, Dependency Module: {}",
+                                        dependency.module_name
+                                    );
+                                    if func_name.clone() == dependency.function_name.clone()
+                                        && module == dependency.module_name.clone()
+                                    {
+                                        insert_var_vec.push((
+                                            index,
+                                            Air::Var {
+                                                scope: scope.clone(),
+                                                constructor: constructor.clone(),
+                                                name: func_name.clone(),
+                                            },
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+
+                        for (index, ir) in insert_var_vec {
+                            new_ir.insert(index, ir);
+                            let current_call = new_ir[index - 1].clone();
+                            match current_call {
+                                Air::Call { scope, count } => {
+                                    new_ir[index - 1] = Air::Call {
+                                        scope,
+                                        count: count + 1,
+                                    }
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                    }
+
+                    temp_ir.extend(new_ir);
 
                     temp_ir.append(&mut dep_ir);
 
@@ -3313,6 +3377,61 @@ impl<'a> CodeGenerator<'a> {
                             params: funt_comp.args.clone(),
                             recursive: funt_comp.recursive,
                         });
+
+                        // let mut insert_var_vec = vec![];
+                        println!("FOund HERE");
+
+                        // for (index, air) in depend_comp.ir.clone().into_iter().enumerate().rev() {
+                        //     if let Air::Var {
+                        //         scope,
+                        //         constructor,
+                        //         name,
+                        //     } = air
+                        //     {
+                        //         println!("found a var at index: {}", index);
+                        //         if let ValueConstructorVariant::ModuleFn {
+                        //             name: func_name,
+                        //             module,
+                        //             ..
+                        //         } = constructor.clone().variant
+                        //         {
+                        //             println!(
+                        //                 "Func Name: {func_name}, Dependency Name: {}",
+                        //                 dependency.function_name
+                        //             );
+                        //             println!(
+                        //                 "Module Name: {module}, Dependency Module: {}",
+                        //                 dependency.module_name
+                        //             );
+                        //             if func_name.clone() == dependency.function_name.clone()
+                        //                 && module == dependency.module_name.clone()
+                        //             {
+                        //                 insert_var_vec.push((
+                        //                     index,
+                        //                     Air::Var {
+                        //                         scope: scope.clone(),
+                        //                         constructor: constructor.clone(),
+                        //                         name: func_name.clone(),
+                        //                     },
+                        //                 ));
+                        //             }
+                        //         }
+                        //     }
+                        // }
+
+                        // for (index, ir) in insert_var_vec {
+                        //     new_ir.insert(index, ir);
+                        //     let current_call = new_ir[index - 1].clone();
+                        //     match current_call {
+                        //         Air::Call { scope, count } => {
+                        //             new_ir[index - 1] = Air::Call {
+                        //                 scope,
+                        //                 count: count + 1,
+                        //             }
+                        //         }
+                        //         _ => unreachable!(),
+                        //     }
+                        // }
 
                         full_func_ir.extend(funt_comp.ir.clone());
 
@@ -3981,6 +4100,7 @@ fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> 
             .into(),
         }
     } else if field_type.is_tuple() {
+        println!("Type to data");
         match field_type.get_uplc_type() {
             UplcType::List(_) => Term::Apply {
                 function: DefaultFunction::ListData.into(),
