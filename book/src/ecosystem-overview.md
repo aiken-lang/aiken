@@ -1,4 +1,4 @@
-# Comparisons
+# Ecosystem Overview
 
 Within the Cardano community there has been a flourishing ecosystem
 of alternative languages for writing smart contracts. So naturally, one might ask about
