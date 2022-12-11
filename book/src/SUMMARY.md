@@ -27,5 +27,5 @@
   - [Syntax](./uplc/syntax.md)
   - [Command-line utilities](./uplc/cli.md)
   - [Builtins](./uplc/builtins.md)
-- [Comparisons](./comparisons.md)
+- [Ecosystem Overview](./ecosystem-overview.md)
 - [Resources](./resources.md)
