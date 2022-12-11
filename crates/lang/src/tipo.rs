@@ -157,6 +157,33 @@ impl Type {
         matches!(self, Self::Tuple { .. })
     }
 
+    pub fn is_generic(&self) -> bool {
+        match self {
+            Type::App {
+                public,
+                module,
+                name,
+                args,
+            } => {
+                let mut is_a_generic = false;
+                for arg in args {
+                    is_a_generic = is_a_generic || arg.is_generic();
+                }
+                is_a_generic
+            }
+
+            Type::Var { tipo } => tipo.borrow().is_generic(),
+            Type::Tuple { elems } => {
+                let mut is_a_generic = false;
+                for elem in elems {
+                    is_a_generic = is_a_generic || elem.is_generic();
+                }
+                is_a_generic
+            }
+            _ => todo!(),
+        }
+    }
+
     pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
         if self.is_list() {
             match self {
@@ -377,6 +404,14 @@ impl TypeVar {
     pub fn is_map(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_map(),
+            _ => false,
+        }
+    }
+
+    pub fn is_generic(&self) -> bool {
+        match self {
+            TypeVar::Generic { .. } => true,
+            TypeVar::Link { tipo } => tipo.is_generic(),
             _ => false,
         }
     }

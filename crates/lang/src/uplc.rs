@@ -3277,65 +3277,8 @@ impl<'a> CodeGenerator<'a> {
                         params: depend_comp.args.clone(),
                         recursive: depend_comp.recursive,
                     }];
-                    let mut new_ir = depend_comp.ir.clone();
 
-                    if depend_comp.recursive {
-                        let mut insert_var_vec = vec![];
-                        println!("FOund HERE");
-                        for (index, air) in depend_comp.ir.clone().into_iter().enumerate().rev() {
-                            if let Air::Var {
-                                scope,
-                                constructor,
-                                name,
-                            } = air
-                            {
-                                println!("found a var at index: {}", index);
-                                if let ValueConstructorVariant::ModuleFn {
-                                    name: func_name,
-                                    module,
-                                    ..
-                                } = constructor.clone().variant
-                                {
-                                    println!(
-                                        "Func Name: {func_name}, Dependency Name: {}",
-                                        dependency.function_name
-                                    );
-                                    println!(
-                                        "Module Name: {module}, Dependency Module: {}",
-                                        dependency.module_name
-                                    );
-                                    if func_name.clone() == dependency.function_name.clone()
-                                        && module == dependency.module_name.clone()
-                                    {
-                                        insert_var_vec.push((
-                                            index,
-                                            Air::Var {
-                                                scope: scope.clone(),
-                                                constructor: constructor.clone(),
-                                                name: func_name.clone(),
-                                            },
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-
-                        for (index, ir) in insert_var_vec {
-                            new_ir.insert(index, ir);
-                            let current_call = new_ir[index - 1].clone();
-                            match current_call {
-                                Air::Call { scope, count } => {
-                                    new_ir[index - 1] = Air::Call {
-                                        scope,
-                                        count: count + 1,
-                                    }
-                                }
-                                _ => unreachable!(),
-                            }
-                        }
-                    }
-
-                    temp_ir.extend(new_ir);
+                    temp_ir.extend(depend_comp.ir.clone());
 
                     temp_ir.append(&mut dep_ir);
 
@@ -3374,8 +3317,6 @@ impl<'a> CodeGenerator<'a> {
                         let mut func_comp =
                             func_components.get(function_access_key).unwrap().clone();
 
-                        dbg!(&func_comp);
-
                         full_func_ir.push(Air::DefineFunc {
                             scope: scopes.clone(),
                             func_name: function_access_key.function_name.clone(),
@@ -3385,13 +3326,9 @@ impl<'a> CodeGenerator<'a> {
                         });
 
                         let mut insert_var_vec = vec![];
-                        println!("FOund HERE");
-
                         for (index, air) in func_comp.ir.clone().into_iter().enumerate().rev() {
                             if let Air::Var {
-                                scope,
-                                constructor,
-                                name,
+                                scope, constructor, ..
                             } = air
                             {
                                 println!("found a var at index: {}", index);
@@ -3550,7 +3487,7 @@ impl<'a> CodeGenerator<'a> {
                     } = &constructor.variant
                     {
                         if builtin.is_none() {
-                            let function_key = FunctionAccessKey {
+                            let mut function_key = FunctionAccessKey {
                                 module_name: module.clone(),
                                 function_name: name.clone(),
                             };
@@ -3567,6 +3504,33 @@ impl<'a> CodeGenerator<'a> {
                                 let mut func_ir = vec![];
 
                                 self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+
+                                let (param_types, _) = constructor.tipo.function_types().unwrap();
+
+                                let mut param_name_types = vec![];
+
+                                for (index, arg) in function.arguments.iter().enumerate() {
+                                    if arg.tipo.is_generic() {
+                                        param_name_types.push((
+                                            arg.arg_name
+                                                .get_variable_name()
+                                                .unwrap_or_default()
+                                                .to_string(),
+                                            param_types[index].clone(),
+                                        ));
+                                    }
+                                }
+
+                                let (variant_name, func_ir) =
+                                    self.monomorphize(func_ir, param_name_types);
+
+                                function_key = FunctionAccessKey {
+                                    module_name: module.clone(),
+                                    function_name: format!(
+                                        "{}_{variant_name}",
+                                        function_key.function_name
+                                    ),
+                                };
 
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
                                 let mut func_calls = vec![];
@@ -3588,8 +3552,8 @@ impl<'a> CodeGenerator<'a> {
                                     {
                                         func_calls.push(FunctionAccessKey {
                                             module_name: module.clone(),
-                                            function_name: func_name.clone(),
-                                        })
+                                            function_name: format!("{func_name}_{variant_name}"),
+                                        });
                                     }
                                 }
 
@@ -3604,13 +3568,17 @@ impl<'a> CodeGenerator<'a> {
                                         _ => {}
                                     }
                                 }
-                                let recursive =
-                                    if let Ok(index) = func_calls.binary_search(&function_key) {
+                                let recursive = if let Ok(index) =
+                                    func_calls.binary_search(&function_key)
+                                {
+                                    func_calls.remove(index);
+                                    while let Ok(index) = func_calls.binary_search(&function_key) {
                                         func_calls.remove(index);
-                                        true
-                                    } else {
-                                        false
-                                    };
+                                    }
+                                    true
+                                } else {
+                                    false
+                                };
 
                                 func_components.insert(
                                     function_key,
@@ -3656,6 +3624,80 @@ impl<'a> CodeGenerator<'a> {
             func_index_map.insert(func.0.clone(), get_common_ancestor(func.1, index_scope));
         }
     }
+
+    fn monomorphize(
+        &mut self,
+        ir: Vec<Air>,
+        param_types: Vec<(String, Arc<Type>)>,
+    ) -> (String, Vec<Air>) {
+        let mut used_param_to_type = vec![];
+        let mut new_air = ir.clone();
+
+        for (index, ir) in ir.into_iter().enumerate() {
+            if let Air::Var {
+                scope,
+                constructor:
+                    ValueConstructor {
+                        public, variant, ..
+                    },
+                name,
+            } = ir
+            {
+                let exists = param_types.iter().find(|(n, _)| n == &name);
+
+                if let Some((n, t)) = exists {
+                    used_param_to_type.push((n.clone(), t.clone()));
+
+                    new_air[index] = Air::Var {
+                        scope,
+                        constructor: ValueConstructor {
+                            public,
+                            variant,
+                            tipo: t.clone(),
+                        },
+                        name,
+                    }
+                }
+            }
+        }
+
+        let mut new_name = String::new();
+
+        for (_, t) in used_param_to_type {
+            get_variant_name(&mut new_name, t);
+        }
+
+        (new_name, new_air)
+    }
+}
+
+fn get_variant_name(new_name: &mut String, t: Arc<Type>) {
+    new_name.push_str(&format!(
+        "_{}",
+        if t.is_string() {
+            "string".to_string()
+        } else if t.is_int() {
+            "int".to_string()
+        } else if t.is_bool() {
+            "bool".to_string()
+        } else if t.is_map() {
+            let mut full_type = "map".to_string();
+            let pair_type = &t.get_inner_type()[0];
+            let fst_type = &pair_type.get_inner_type()[0];
+            let snd_type = &pair_type.get_inner_type()[1];
+
+            get_variant_name(&mut full_type, fst_type.clone());
+            get_variant_name(&mut full_type, snd_type.clone());
+            full_type
+        } else if t.is_list() {
+            let mut full_type = "list".to_string();
+            let list_type = &t.get_inner_type()[0];
+            get_variant_name(&mut full_type, list_type.clone());
+            full_type
+        } else {
+            "data".to_string()
+        }
+    ));
 }
 
 fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConstant> {
