@@ -175,11 +175,24 @@ impl Type {
                 }
                 is_a_generic
             }
-            _ => todo!(),
+            Type::Fn { args, .. } => {
+                let mut is_a_generic = false;
+                for arg in args {
+                    is_a_generic = is_a_generic || arg.is_generic();
+                }
+                is_a_generic
+            }
         }
     }
 
-    pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
+    pub fn get_generic(&self) -> Option<u64> {
+        match self {
+            Type::Var { tipo } => tipo.borrow().get_generic(),
+            _ => None,
+        }
+    }
+
+    pub fn get_inner_types(&self) -> Vec<Arc<Type>> {
         if self.is_list() {
             match self {
                 Self::App { args, .. } => args.clone(),
@@ -190,6 +203,13 @@ impl Type {
             match self {
                 Self::Tuple { elems } => elems.to_vec(),
                 _ => vec![],
+            }
+        } else if matches!(self.get_uplc_type(), UplcType::Data) {
+            match self {
+                Type::App { args, .. } => args.clone(),
+                Type::Fn { args, .. } => args.clone(),
+                Type::Var { tipo } => tipo.borrow().get_inner_type(),
+                _ => unreachable!(),
             }
         } else {
             vec![]
@@ -411,9 +431,16 @@ impl TypeVar {
         }
     }
 
+    pub fn get_generic(&self) -> Option<u64> {
+        match self {
+            TypeVar::Generic { id } => Some(*id),
+            _ => None,
+        }
+    }
+
     pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
         match self {
-            Self::Link { tipo } => tipo.get_inner_type(),
+            Self::Link { tipo } => tipo.get_inner_types(),
             _ => vec![],
         }
     }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref, sync::Arc, vec};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc, vec};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -1181,7 +1181,7 @@ impl<'a> CodeGenerator<'a> {
                                 a,
                                 &mut elements_vec,
                                 &mut var_vec,
-                                &tipo.get_inner_type()[0],
+                                &tipo.get_inner_types()[0],
                                 scope.clone(),
                             );
                         }
@@ -1417,7 +1417,7 @@ impl<'a> CodeGenerator<'a> {
                                 a,
                                 &mut elements_vec,
                                 &mut var_vec,
-                                &tipo.get_inner_type()[0],
+                                &tipo.get_inner_types()[0],
                                 scope.clone(),
                             );
                         }
@@ -1623,7 +1623,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                let list_type = tipo.get_inner_type()[0].clone();
+                let list_type = tipo.get_inner_types()[0].clone();
 
                 if constants.len() == args.len() && !tail {
                     let list = if tipo.is_map() {
@@ -1734,7 +1734,7 @@ impl<'a> CodeGenerator<'a> {
                             })
                             .into(),
                         },
-                        &tipo.get_inner_type()[0],
+                        &tipo.get_inner_types()[0],
                     )
                 };
 
@@ -1840,7 +1840,7 @@ impl<'a> CodeGenerator<'a> {
                                 })
                                 .into(),
                             },
-                            &tipo.get_inner_type()[0],
+                            &tipo.get_inner_types()[0],
                         )
                     };
                     term = Term::Apply {
@@ -3037,7 +3037,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                let tuple_sub_types = tipo.get_inner_type();
+                let tuple_sub_types = tipo.get_inner_types();
 
                 if constants.len() == args.len() {
                     let data_constants = convert_constants_to_data(constants);
@@ -3183,7 +3183,7 @@ impl<'a> CodeGenerator<'a> {
                                 })
                                 .into(),
                             },
-                            &tipo.get_inner_type()[0],
+                            &tipo.get_inner_types()[0],
                         )
                     };
 
@@ -3516,22 +3516,19 @@ impl<'a> CodeGenerator<'a> {
 
                                 let (param_types, _) = constructor.tipo.function_types().unwrap();
 
-                                let mut param_name_types = vec![];
+                                let mut generic_id_type_vec = vec![];
 
                                 for (index, arg) in function.arguments.iter().enumerate() {
                                     if arg.tipo.is_generic() {
-                                        param_name_types.push((
-                                            arg.arg_name
-                                                .get_variable_name()
-                                                .unwrap_or_default()
-                                                .to_string(),
-                                            param_types[index].clone(),
+                                        generic_id_type_vec.append(&mut get_generics_and_type(
+                                            &arg.tipo,
+                                            &param_types[index],
                                         ));
                                     }
                                 }
 
                                 let (variant_name, mut func_ir) =
-                                    self.monomorphize(func_ir, param_name_types);
+                                    self.monomorphize(func_ir, generic_id_type_vec);
 
                                 function_key = FunctionAccessKey {
                                     module_name: module.clone(),
@@ -3677,49 +3674,256 @@ impl<'a> CodeGenerator<'a> {
     fn monomorphize(
         &mut self,
         ir: Vec<Air>,
-        param_types: Vec<(String, Arc<Type>)>,
+        generic_types: Vec<(u64, Arc<Type>)>,
     ) -> (String, Vec<Air>) {
-        let mut used_param_to_type = vec![];
         let mut new_air = ir.clone();
 
         for (index, ir) in ir.into_iter().enumerate() {
-            if let Air::Var {
-                scope,
-                constructor:
-                    ValueConstructor {
-                        public, variant, ..
-                    },
-                name,
-                ..
-            } = ir
-            {
-                let exists = param_types.iter().find(|(n, _)| n == &name);
+            match ir {
+                Air::Var {
+                    constructor,
+                    scope,
+                    name,
+                    variant_name,
+                } => {
+                    if constructor.tipo.is_generic() {
+                        let mut tipo = constructor.tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
 
-                if let Some((n, t)) = exists {
-                    used_param_to_type.push((n.clone(), t.clone()));
+                        let mut constructor = constructor.clone();
+                        constructor.tipo = tipo;
 
-                    new_air[index] = Air::Var {
-                        scope,
-                        constructor: ValueConstructor {
-                            public,
-                            variant,
-                            tipo: t.clone(),
-                        },
-                        name,
-                        variant_name: String::new(),
+                        new_air[index] = Air::Var {
+                            scope,
+                            constructor,
+                            name,
+                            variant_name,
+                        };
                     }
                 }
+                Air::List {
+                    tipo,
+                    scope,
+                    count,
+                    tail,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::List {
+                            scope,
+                            count,
+                            tipo,
+                            tail,
+                        };
+                    }
+                }
+                Air::ListAccessor {
+                    scope,
+                    tipo,
+                    names,
+                    tail,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::ListAccessor {
+                            scope,
+                            names,
+                            tipo,
+                            tail,
+                        };
+                    }
+                }
+                Air::ListExpose {
+                    scope,
+                    tipo,
+                    tail_head_names,
+                    tail,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::ListExpose {
+                            scope,
+                            tail_head_names,
+                            tipo,
+                            tail,
+                        };
+                    }
+                }
+
+                Air::BinOp {
+                    scope,
+                    name,
+                    count,
+                    tipo,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::BinOp {
+                            scope,
+                            name,
+                            tipo,
+                            count,
+                        };
+                    }
+                }
+                Air::Assignment { .. } => {}
+                Air::When {
+                    scope,
+                    tipo,
+                    subject_name,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::When {
+                            scope,
+                            subject_name,
+                            tipo,
+                        };
+                    }
+                }
+                Air::Clause {
+                    scope,
+                    tipo,
+                    subject_name,
+                    complex_clause,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::Clause {
+                            scope,
+                            tipo,
+                            subject_name,
+                            complex_clause,
+                        };
+                    }
+                }
+                Air::ListClause { .. } => todo!(),
+                Air::ClauseGuard { .. } => todo!(),
+                Air::RecordAccess { .. } => todo!(),
+                Air::FieldsExpose { .. } => todo!(),
+                Air::Tuple { .. } => todo!(),
+                Air::Todo { .. } => todo!(),
+                Air::RecordUpdate { .. } => todo!(),
+                Air::TupleAccessor { .. } => todo!(),
+                _ => {}
             }
         }
 
         let mut new_name = String::new();
 
-        for (_, t) in used_param_to_type {
+        for (_, t) in generic_types {
             get_variant_name(&mut new_name, t);
         }
 
         (new_name, new_air)
     }
+}
+
+fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &[(u64, Arc<Type>)]) {
+    if let Some(id) = tipo.get_generic() {
+        if let Some((_, t)) = generic_types
+            .iter()
+            .find(|(generic_id, _)| id == *generic_id)
+        {
+            *tipo = t.clone();
+        }
+    } else if tipo.is_generic() {
+        match &**tipo {
+            Type::App {
+                args,
+                public,
+                module,
+                name,
+            } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let mut arg = arg.clone();
+                    find_generics_to_replace(&mut arg, generic_types);
+                    new_args.push(arg);
+                }
+                let t = Type::App {
+                    args: new_args,
+                    public: *public,
+                    module: module.clone(),
+                    name: name.clone(),
+                };
+                *tipo = t.into();
+            }
+            Type::Fn { args, ret } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let mut arg = arg.clone();
+                    find_generics_to_replace(&mut arg, generic_types);
+                    new_args.push(arg);
+                }
+
+                let mut ret = ret.clone();
+                find_generics_to_replace(&mut ret, generic_types);
+
+                let t = Type::Fn {
+                    args: new_args,
+                    ret,
+                };
+                *tipo = t.into();
+            }
+            Type::Tuple { elems } => {
+                let mut new_elems = vec![];
+                for elem in elems {
+                    let mut elem = elem.clone();
+                    find_generics_to_replace(&mut elem, generic_types);
+                    new_elems.push(elem);
+                }
+                let t = Type::Tuple { elems: new_elems };
+                *tipo = t.into();
+            }
+            Type::Var { tipo: var_tipo } => {
+                let var_type = var_tipo.as_ref().borrow().clone();
+                let var_tipo = match var_type {
+                    tipo::TypeVar::Unbound { .. } => todo!(),
+                    tipo::TypeVar::Link { tipo } => {
+                        let mut tipo = tipo;
+                        find_generics_to_replace(&mut tipo, generic_types);
+                        tipo
+                    }
+                    tipo::TypeVar::Generic { .. } => unreachable!(),
+                };
+
+                let t = Type::Var {
+                    tipo: RefCell::from(tipo::TypeVar::Link { tipo: var_tipo }).into(),
+                };
+                *tipo = t.into()
+            }
+        };
+    }
+}
+
+fn get_generics_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)> {
+    let mut generics_ids = vec![];
+
+    if let Some(id) = tipo.get_generic() {
+        generics_ids.push((id, param.clone().into()));
+    }
+
+    for (tipo, param_type) in tipo
+        .get_inner_types()
+        .iter()
+        .zip(param.get_inner_types().iter())
+    {
+        generics_ids.append(&mut get_generics_and_type(tipo, param_type));
+    }
+    generics_ids
 }
 
 fn get_variant_name(new_name: &mut String, t: Arc<Type>) {
@@ -3733,16 +3937,16 @@ fn get_variant_name(new_name: &mut String, t: Arc<Type>) {
             "bool".to_string()
         } else if t.is_map() {
             let mut full_type = "map".to_string();
-            let pair_type = &t.get_inner_type()[0];
-            let fst_type = &pair_type.get_inner_type()[0];
-            let snd_type = &pair_type.get_inner_type()[1];
+            let pair_type = &t.get_inner_types()[0];
+            let fst_type = &pair_type.get_inner_types()[0];
+            let snd_type = &pair_type.get_inner_types()[1];
 
             get_variant_name(&mut full_type, fst_type.clone());
             get_variant_name(&mut full_type, snd_type.clone());
             full_type
         } else if t.is_list() {
             let mut full_type = "list".to_string();
-            let list_type = &t.get_inner_type()[0];
+            let list_type = &t.get_inner_types()[0];
             get_variant_name(&mut full_type, list_type.clone());
             full_type
         } else {
@@ -3897,7 +4101,7 @@ fn list_access_to_uplc(
                 })
                 .into(),
             },
-            &tipo.clone().get_inner_type()[0],
+            &tipo.clone().get_inner_types()[0],
         )
     };
 
