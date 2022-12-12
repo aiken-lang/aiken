@@ -92,7 +92,7 @@ fn import_alias() {
 #[test]
 fn custom_type() {
     let code = indoc! {r#"
-        type Option(a) {
+        type Option<a> {
           Some(a, Int)
           None
           Wow { name: Int, age: Int }
@@ -225,7 +225,7 @@ fn opaque_type() {
 #[test]
 fn type_alias() {
     let code = indoc! {r#"
-        type Thing = Option(Int)
+        type Thing = Option<Int>
     "#};
 
     assert_definition(
@@ -255,7 +255,7 @@ fn type_alias() {
 #[test]
 fn pub_type_alias() {
     let code = indoc! {r#"
-        pub type Me = Option(String)
+        pub type Me = Option<String>
     "#};
 
     assert_definition(

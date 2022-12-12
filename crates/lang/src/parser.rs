@@ -1333,7 +1333,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                     r.clone()
                         .separated_by(just(Token::Comma))
                         .allow_trailing()
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                        .delimited_by(just(Token::Less), just(Token::Greater))
                         .or_not(),
                 )
                 .map_with_span(|(name, arguments), span| ast::Annotation::Constructor {
@@ -1399,7 +1399,7 @@ pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>)
             select! {Token::Name { name } => name}
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
-                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                .delimited_by(just(Token::Less), just(Token::Greater))
                 .or_not(),
         ),
     )
