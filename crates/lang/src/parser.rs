@@ -336,13 +336,11 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
                 }
             });
 
-        let constant_tuple_parser = just(Token::Hash)
-            .ignore_then(
-                r.clone()
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-            )
+        let constant_tuple_parser = r
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::LeftParen), just(Token::RightParen))
             .map_with_span(|elements, span| ast::UntypedConstant::Tuple {
                 location: span,
                 elements,
@@ -851,13 +849,11 @@ pub fn expr_parser(
                 label,
             });
 
-        let tuple = just(Token::Hash)
-            .ignore_then(
-                r.clone()
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-            )
+        let tuple = r
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::LeftParen), just(Token::RightParen))
             .map_with_span(|elems, span| expr::UntypedExpr::Tuple {
                 location: span,
                 elems,
@@ -1301,13 +1297,11 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                     name,
                 }
             }),
-            just(Token::Hash)
-                .ignore_then(
-                    r.clone()
-                        .separated_by(just(Token::Comma))
-                        .allow_trailing()
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-                )
+            // Tuple
+            r.clone()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                 .map_with_span(|elems, span| ast::Annotation::Tuple {
                     location: span,
                     elems,
@@ -1528,13 +1522,10 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     value,
                 }
             }),
-            just(Token::Hash)
-                .ignore_then(
-                    r.clone()
-                        .separated_by(just(Token::Comma))
-                        .allow_trailing()
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-                )
+            r.clone()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                 .map_with_span(|elems, span| ast::UntypedPattern::Tuple {
                     location: span,
                     elems,
