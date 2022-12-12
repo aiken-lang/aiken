@@ -36,7 +36,7 @@ $ aiken --help
 
 ### How to use
 
-For more information please see the [user manual](https://txpipe.github.io/aiken).
+For more information please see the [user manual](https://aiken-lang.github.io/aiken/).
 
 ## Roadmap
 
