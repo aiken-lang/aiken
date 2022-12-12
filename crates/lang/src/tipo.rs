@@ -159,12 +159,7 @@ impl Type {
 
     pub fn is_generic(&self) -> bool {
         match self {
-            Type::App {
-                public,
-                module,
-                name,
-                args,
-            } => {
+            Type::App { args, .. } => {
                 let mut is_a_generic = false;
                 for arg in args {
                     is_a_generic = is_a_generic || arg.is_generic();

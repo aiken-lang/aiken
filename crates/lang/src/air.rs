@@ -28,6 +28,7 @@ pub enum Air {
         scope: Vec<u64>,
         constructor: ValueConstructor,
         name: String,
+        variant_name: String,
     },
 
     // Fn {
@@ -88,6 +89,7 @@ pub enum Air {
         module_name: String,
         params: Vec<String>,
         recursive: bool,
+        variant_name: String,
     },
 
     DefineConst {

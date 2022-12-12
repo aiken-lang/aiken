@@ -50,6 +50,7 @@ pub type ConstrUsageKey = String;
 pub struct FunctionAccessKey {
     pub module_name: String,
     pub function_name: String,
+    pub variant_name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -182,6 +183,7 @@ impl<'a> CodeGenerator<'a> {
                         scope,
                         constructor: constructor.clone(),
                         name: name.clone(),
+                        variant_name: String::new(),
                     });
                 }
             }
@@ -194,11 +196,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 ir_stack.push(Air::List {
                     scope: scope.clone(),
-                    count: if tail.is_some() {
-                        elements.len() + 1
-                    } else {
-                        elements.len()
-                    },
+                    count: elements.len(),
                     tipo: tipo.clone(),
                     tail: tail.is_some(),
                 });
@@ -219,7 +217,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Call { fun, args, .. } => {
                 ir_stack.push(Air::Call {
                     scope: scope.clone(),
-                    count: args.len() + 1,
+                    count: args.len(),
                 });
                 let mut scope_fun = scope.clone();
                 scope_fun.push(self.id_gen.next());
@@ -412,6 +410,7 @@ impl<'a> CodeGenerator<'a> {
                                 },
                             ),
                             name: constr_var,
+                            variant_name: String::new(),
                         })
                     } else {
                         ir_stack.push(Air::When {
@@ -486,6 +485,7 @@ impl<'a> CodeGenerator<'a> {
                     let func = self.functions.get(&FunctionAccessKey {
                         module_name: module_name.clone(),
                         function_name: name.clone(),
+                        variant_name: String::new(),
                     });
 
                     if let Some(func) = func {
@@ -503,6 +503,7 @@ impl<'a> CodeGenerator<'a> {
                                 },
                             ),
                             name: format!("{module}_{name}"),
+                            variant_name: String::new(),
                         });
                     } else {
                         let type_info = self.module_types.get(module_name).unwrap();
@@ -590,6 +591,7 @@ impl<'a> CodeGenerator<'a> {
                         },
                     ),
                     name: clause_properties.original_subject_name.clone(),
+                    variant_name: String::new(),
                 });
                 pattern_vec.append(values);
             }
@@ -609,6 +611,7 @@ impl<'a> CodeGenerator<'a> {
                         },
                     ),
                     name: clause_properties.original_subject_name.clone(),
+                    variant_name: String::new(),
                 });
 
                 new_vec.append(values);
@@ -706,6 +709,7 @@ impl<'a> CodeGenerator<'a> {
                     ),
                     name: clause_properties.clause_var_name.clone(),
                     scope: scope.clone(),
+                    variant_name: String::new(),
                 }];
 
                 // if only one constructor, no need to check
@@ -1171,6 +1175,7 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 name: item_name,
                                 scope: scope.clone(),
+                                variant_name: String::new(),
                             });
                             self.pattern_ir(
                                 a,
@@ -1277,6 +1282,7 @@ impl<'a> CodeGenerator<'a> {
                                                 },
                                             ),
                                             name: constr_name.clone(),
+                                            variant_name: String::new(),
                                         }],
                                         tipo,
                                         scope.clone(),
@@ -1342,6 +1348,7 @@ impl<'a> CodeGenerator<'a> {
                                                 },
                                             ),
                                             name: constr_name.clone(),
+                                            variant_name: String::new(),
                                         }],
                                         tipo,
                                         scope.clone(),
@@ -1404,6 +1411,7 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 name: item_name,
                                 scope: scope.clone(),
+                                variant_name: String::new(),
                             });
                             self.pattern_ir(
                                 a,
@@ -1439,6 +1447,8 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) {
+        // println!("IR IS {ir:#?} AND ARG STACK IS {arg_stack:#?}");
+
         match ir {
             Air::Int { value, .. } => {
                 let integer = value.parse().unwrap();
@@ -1457,7 +1467,10 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::Var {
-                name, constructor, ..
+                name,
+                constructor,
+                variant_name,
+                ..
             } => {
                 match constructor.variant {
                     ValueConstructorVariant::LocalVariable { .. } => {
@@ -1475,10 +1488,11 @@ impl<'a> CodeGenerator<'a> {
                         ..
                     } => {
                         let name = if func_name == name {
-                            format!("{module}_{func_name}")
+                            format!("{module}_{func_name}{variant_name}")
                         } else {
-                            name
+                            format!("{func_name}{variant_name}")
                         };
+
                         arg_stack.push(Term::Var(Name {
                             text: name,
                             unique: 0.into(),
@@ -1670,10 +1684,9 @@ impl<'a> CodeGenerator<'a> {
                         };
                         term = Term::Apply {
                             function: Term::Apply {
-                                function: Term::Force(
-                                    Term::Builtin(DefaultFunction::MkCons).force_wrap().into(),
-                                )
-                                .into(),
+                                function: Term::Builtin(DefaultFunction::MkCons)
+                                    .force_wrap()
+                                    .into(),
                                 argument: list_item.into(),
                             }
                             .into(),
@@ -1846,10 +1859,10 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::Call { count, .. } => {
-                if count >= 2 {
+                if count >= 1 {
                     let mut term = arg_stack.pop().unwrap();
 
-                    for _ in 0..count - 1 {
+                    for _ in 0..count {
                         let arg = arg_stack.pop().unwrap();
 
                         term = Term::Apply {
@@ -1883,7 +1896,6 @@ impl<'a> CodeGenerator<'a> {
                     DefaultFunction::EqualsData
                 };
 
-                println!("Equals Binop");
                 let term = match name {
                     BinOp::And => Term::Apply {
                         function: Term::Apply {
@@ -1981,7 +1993,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_tuple()
-                            && matches!(dbg!(tipo.clone()).get_uplc_type(), UplcType::Pair(_, _))
+                            && matches!(tipo.clone().get_uplc_type(), UplcType::Pair(_, _))
                         {
                             let term = Term::Apply {
                                 function: Term::Apply {
@@ -2035,9 +2047,7 @@ impl<'a> CodeGenerator<'a> {
                             };
                             arg_stack.push(term);
                             return;
-                        } else if tipo.is_list()
-                            || matches!(dbg!(tipo.clone()).get_uplc_type(), UplcType::List(_))
-                        {
+                        } else if tipo.is_list() {
                             let term = Term::Apply {
                                 function: Term::Apply {
                                     function: default_builtin.into(),
@@ -2048,13 +2058,10 @@ impl<'a> CodeGenerator<'a> {
                                     .into(),
                                 }
                                 .into(),
+
                                 argument: Term::Apply {
-                                    function: default_builtin.into(),
-                                    argument: Term::Apply {
-                                        function: DefaultFunction::ListData.into(),
-                                        argument: right.into(),
-                                    }
-                                    .into(),
+                                    function: DefaultFunction::ListData.into(),
+                                    argument: right.into(),
                                 }
                                 .into(),
                             };
@@ -2153,7 +2160,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_tuple()
-                            && matches!(dbg!(tipo.clone()).get_uplc_type(), UplcType::Pair(_, _))
+                            && matches!(tipo.clone().get_uplc_type(), UplcType::Pair(_, _))
                         {
                             // let term = Term::Apply {
                             //     function: Term::Apply {
@@ -2205,7 +2212,7 @@ impl<'a> CodeGenerator<'a> {
                             // return;
                             todo!()
                         } else if tipo.is_list()
-                            || matches!(dbg!(tipo).get_uplc_type(), UplcType::List(_))
+                            || matches!(tipo.get_uplc_type(), UplcType::List(_))
                         {
                             let term = Term::Apply {
                                 function: Term::Apply {
@@ -2367,12 +2374,13 @@ impl<'a> CodeGenerator<'a> {
                 params,
                 recursive,
                 module_name,
+                variant_name,
                 ..
             } => {
                 let func_name = if module_name.is_empty() {
-                    func_name
+                    format!("{func_name}{variant_name}")
                 } else {
-                    format!("{module_name}_{func_name}")
+                    format!("{module_name}_{func_name}{variant_name}")
                 };
                 let mut func_body = arg_stack.pop().unwrap();
 
@@ -3276,6 +3284,7 @@ impl<'a> CodeGenerator<'a> {
                         module_name: dependency.module_name.clone(),
                         params: depend_comp.args.clone(),
                         recursive: depend_comp.recursive,
+                        variant_name: func.0.variant_name.clone(),
                     }];
 
                     temp_ir.extend(depend_comp.ir.clone());
@@ -3323,29 +3332,24 @@ impl<'a> CodeGenerator<'a> {
                             module_name: function_access_key.module_name.clone(),
                             params: func_comp.args.clone(),
                             recursive: func_comp.recursive,
+                            variant_name: function_access_key.variant_name.clone(),
                         });
 
                         let mut insert_var_vec = vec![];
                         for (index, air) in func_comp.ir.clone().into_iter().enumerate().rev() {
                             if let Air::Var {
-                                scope, constructor, ..
+                                scope,
+                                constructor,
+                                variant_name,
+                                ..
                             } = air
                             {
-                                println!("found a var at index: {}", index);
                                 if let ValueConstructorVariant::ModuleFn {
                                     name: func_name,
                                     module,
                                     ..
                                 } = constructor.clone().variant
                                 {
-                                    println!(
-                                        "Func Name: {func_name}, Dependency Name: {}",
-                                        function_access_key.function_name
-                                    );
-                                    println!(
-                                        "Module Name: {module}, Dependency Module: {}",
-                                        function_access_key.module_name
-                                    );
                                     if func_name.clone()
                                         == function_access_key.function_name.clone()
                                         && module == function_access_key.module_name.clone()
@@ -3356,6 +3360,7 @@ impl<'a> CodeGenerator<'a> {
                                                 scope: scope.clone(),
                                                 constructor: constructor.clone(),
                                                 name: func_name.clone(),
+                                                variant_name,
                                             },
                                         ));
                                     }
@@ -3392,7 +3397,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn define_recurse_ir(
         &mut self,
-        ir_stack: &[Air],
+        ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
         recursion_func_map: IndexMap<FunctionAccessKey, ()>,
@@ -3405,7 +3410,7 @@ impl<'a> CodeGenerator<'a> {
             let func = func_index.0;
 
             let function_components = func_components.get(func).unwrap();
-            let function_ir = function_components.ir.clone();
+            let mut function_ir = function_components.ir.clone();
 
             for ir in function_ir.clone() {
                 if let Air::Var {
@@ -3419,12 +3424,14 @@ impl<'a> CodeGenerator<'a> {
                                 },
                             ..
                         },
+                    variant_name,
                     ..
                 } = ir
                 {
                     if recursion_func_map.contains_key(&FunctionAccessKey {
                         module_name: module.clone(),
                         function_name: func_name.clone(),
+                        variant_name: variant_name.clone(),
                     }) {
                         return;
                     } else {
@@ -3432,6 +3439,7 @@ impl<'a> CodeGenerator<'a> {
                             FunctionAccessKey {
                                 module_name: module.clone(),
                                 function_name: func_name.clone(),
+                                variant_name: variant_name.clone(),
                             },
                             (),
                         );
@@ -3444,7 +3452,7 @@ impl<'a> CodeGenerator<'a> {
             let mut inner_func_index_map = IndexMap::new();
 
             self.define_recurse_ir(
-                &function_ir,
+                &mut function_ir,
                 &mut inner_func_components,
                 &mut inner_func_index_map,
                 recursion_func_map.clone(),
@@ -3469,12 +3477,12 @@ impl<'a> CodeGenerator<'a> {
 
     fn process_define_ir(
         &mut self,
-        ir_stack: &[Air],
+        ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
     ) {
         let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
-        for ir in ir_stack.iter().rev() {
+        for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
             match ir {
                 Air::Var {
                     scope, constructor, ..
@@ -3490,6 +3498,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut function_key = FunctionAccessKey {
                                 module_name: module.clone(),
                                 function_name: name.clone(),
+                                variant_name: String::new(),
                             };
 
                             if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
@@ -3521,21 +3530,19 @@ impl<'a> CodeGenerator<'a> {
                                     }
                                 }
 
-                                let (variant_name, func_ir) =
+                                let (variant_name, mut func_ir) =
                                     self.monomorphize(func_ir, param_name_types);
 
                                 function_key = FunctionAccessKey {
                                     module_name: module.clone(),
-                                    function_name: format!(
-                                        "{}_{variant_name}",
-                                        function_key.function_name
-                                    ),
+                                    function_name: function_key.function_name,
+                                    variant_name: variant_name.clone(),
                                 };
 
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
                                 let mut func_calls = vec![];
 
-                                for ir in func_ir.clone() {
+                                for (index, ir) in func_ir.clone().into_iter().enumerate() {
                                     if let Air::Var {
                                         constructor:
                                             ValueConstructor {
@@ -3543,17 +3550,52 @@ impl<'a> CodeGenerator<'a> {
                                                     ValueConstructorVariant::ModuleFn {
                                                         name: func_name,
                                                         module,
+                                                        field_map,
+                                                        arity,
+                                                        location,
                                                         ..
                                                     },
-                                                ..
+                                                public,
+                                                tipo,
                                             },
+                                        scope,
+                                        name,
                                         ..
                                     } = ir
                                     {
-                                        func_calls.push(FunctionAccessKey {
+                                        let current_func = FunctionAccessKey {
                                             module_name: module.clone(),
-                                            function_name: format!("{func_name}_{variant_name}"),
-                                        });
+                                            function_name: func_name.clone(),
+                                            variant_name: String::new(),
+                                        };
+
+                                        let current_func_as_variant = FunctionAccessKey {
+                                            module_name: module.clone(),
+                                            function_name: func_name.clone(),
+                                            variant_name: variant_name.clone(),
+                                        };
+                                        if function_key.clone() == current_func_as_variant {
+                                            func_ir[index] = Air::Var {
+                                                scope,
+                                                constructor: ValueConstructor {
+                                                    public,
+                                                    variant: ValueConstructorVariant::ModuleFn {
+                                                        name: func_name,
+                                                        field_map,
+                                                        module,
+                                                        arity,
+                                                        location,
+                                                        builtin: None,
+                                                    },
+                                                    tipo,
+                                                },
+                                                name,
+                                                variant_name: variant_name.clone(),
+                                            };
+                                            func_calls.push(current_func_as_variant);
+                                        } else {
+                                            func_calls.push(current_func);
+                                        }
                                     }
                                 }
 
@@ -3578,6 +3620,13 @@ impl<'a> CodeGenerator<'a> {
                                     true
                                 } else {
                                     false
+                                };
+
+                                ir_stack[index] = Air::Var {
+                                    scope: scope.clone(),
+                                    constructor: constructor.clone(),
+                                    name: name.clone(),
+                                    variant_name,
                                 };
 
                                 func_components.insert(
@@ -3641,6 +3690,7 @@ impl<'a> CodeGenerator<'a> {
                         public, variant, ..
                     },
                 name,
+                ..
             } = ir
             {
                 let exists = param_types.iter().find(|(n, _)| n == &name);
@@ -3656,6 +3706,7 @@ impl<'a> CodeGenerator<'a> {
                             tipo: t.clone(),
                         },
                         name,
+                        variant_name: String::new(),
                     }
                 }
             }
@@ -4151,7 +4202,6 @@ fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> 
             .into(),
         }
     } else if field_type.is_tuple() {
-        println!("Type to data");
         match field_type.get_uplc_type() {
             UplcType::List(_) => Term::Apply {
                 function: DefaultFunction::ListData.into(),
