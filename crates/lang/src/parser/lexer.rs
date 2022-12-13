@@ -117,10 +117,17 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             .map_with_span(|token, span| (token, span)),
     );
 
+    let comments_with_trailing_newline = just("//").ignore_then(
+        take_until(text::newline())
+            .then_ignore(text::newline().rewind())
+            .to(Token::Comment)
+            .map_with_span(|token, span| (token, span)),
+    );
+
     choice((
         module_comments,
         doc_comments,
-        comments,
+        choice((comments_with_trailing_newline, comments)),
         choice((keyword, int, op, grouping, string))
             .or(any().map(Token::Error).validate(|t, span, emit| {
                 emit(ParseError::expected_input_found(

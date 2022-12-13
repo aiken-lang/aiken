@@ -47,7 +47,6 @@ pub fn module(
             false
         }
         Token::EmptyLine => {
-            println!("{:?}", span);
             extra.empty_lines.push(span.start);
 
             false
