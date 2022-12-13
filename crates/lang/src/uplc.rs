@@ -96,7 +96,12 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn generate(&mut self, body: TypedExpr, arguments: Vec<TypedArg>) -> Program<Name> {
+    pub fn generate(
+        &mut self,
+        body: TypedExpr,
+        arguments: Vec<TypedArg>,
+        wrap_as_validator: bool,
+    ) -> Program<Name> {
         let mut ir_stack = vec![];
         let scope = vec![self.id_gen.next()];
 
@@ -113,7 +118,11 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Wrap the validator body if ifThenElse term unit error
-        term = builder::final_wrapper(term);
+        term = if wrap_as_validator {
+            builder::final_wrapper(term)
+        } else {
+            term
+        };
 
         for arg in arguments.iter().rev() {
             term = Term::Lambda {

@@ -13,7 +13,7 @@ pub mod script;
 pub mod telemetry;
 
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedFunction},
+    ast::{Definition, Function, ModuleKind, TypedDefinition, TypedFunction},
     builtins,
     tipo::TypeInfo,
     uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
@@ -28,9 +28,9 @@ use pallas::{
 use pallas_traverse::ComputeHash;
 use script::Script;
 use serde_json::json;
-use telemetry::{EventListener, TestInfo};
+use telemetry::{EvalInfo, EventListener};
 use uplc::{
-    ast::{DeBruijn, Program},
+    ast::{Constant, DeBruijn, Program, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -146,8 +146,25 @@ where
                 self.write_build_outputs(programs, uplc_dump)?;
             }
             CodeGenMode::Test(match_tests) => {
-                let tests = self.test_gen(&checked_modules)?;
-                self.run_tests(tests, match_tests);
+                let tests = self.scripts_gen(&checked_modules, |def| match def {
+                    Definition::Test(..) => true,
+                    _ => false,
+                })?;
+                if !tests.is_empty() {
+                    self.event_listener.handle_event(Event::RunningTests);
+                }
+                let results = self.eval_scripts(tests, match_tests);
+                self.event_listener
+                    .handle_event(Event::FinishedTests { tests: results });
+            }
+            CodeGenMode::Eval(func_name) => {
+                let scripts = self.scripts_gen(&checked_modules, |def| match def {
+                    Definition::Fn(..) => true,
+                    _ => false,
+                })?;
+                let results = self.eval_scripts(scripts, Some(func_name));
+                self.event_listener
+                    .handle_event(Event::EvaluatingFunction { results });
             }
             CodeGenMode::NoOp => (),
         }
@@ -427,7 +444,7 @@ where
                 &self.module_types,
             );
 
-            let program = generator.generate(body, arguments);
+            let program = generator.generate(body, arguments, true);
 
             let script = Script::new(module_name, name, program.try_into().unwrap());
 
@@ -438,7 +455,11 @@ where
     }
 
     // TODO: revisit ownership and lifetimes of data in this function
-    fn test_gen(&mut self, checked_modules: &CheckedModules) -> Result<Vec<Script>, Error> {
+    fn scripts_gen(
+        &mut self,
+        checked_modules: &CheckedModules,
+        should_collect: fn(&TypedDefinition) -> bool,
+    ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
         let mut functions = HashMap::new();
         let mut type_aliases = HashMap::new();
@@ -447,7 +468,7 @@ where
         let mut constants = HashMap::new();
 
         // let mut indices_to_remove = Vec::new();
-        let mut tests = Vec::new();
+        let mut scripts = Vec::new();
 
         for module in checked_modules.values() {
             for (_index, def) in module.ast.definitions().enumerate() {
@@ -461,9 +482,14 @@ where
                             },
                             func,
                         );
+                        if should_collect(def) {
+                            scripts.push((module.name.clone(), func));
+                        }
                     }
                     Definition::Test(func) => {
-                        tests.push((module.name.clone(), func));
+                        if should_collect(def) {
+                            scripts.push((module.name.clone(), func));
+                        }
                         // indices_to_remove.push(index);
                     }
                     Definition::TypeAlias(ta) => {
@@ -492,7 +518,7 @@ where
             // }
         }
 
-        for (module_name, func_def) in tests {
+        for (module_name, func_def) in scripts {
             let Function {
                 arguments,
                 name,
@@ -509,7 +535,7 @@ where
                 &self.module_types,
             );
 
-            let program = generator.generate(body.clone(), arguments.clone());
+            let program = generator.generate(body.clone(), arguments.clone(), false);
 
             let script = Script::new(module_name, name.to_string(), program.try_into().unwrap());
 
@@ -519,7 +545,7 @@ where
         Ok(programs)
     }
 
-    fn run_tests(&self, tests: Vec<Script>, match_tests: Option<String>) {
+    fn eval_scripts(&self, scripts: Vec<Script>, match_name: Option<String>) -> Vec<EvalInfo> {
         // TODO: in the future we probably just want to be able to
         // tell the machine to not explode on budget consumption.
         let initial_budget = ExBudget {
@@ -527,45 +553,41 @@ where
             cpu: i64::MAX,
         };
 
-        if !tests.is_empty() {
-            self.event_listener.handle_event(Event::RunningTests);
-        }
-
         let mut results = Vec::new();
 
-        for test in tests {
-            let path = format!("{}{}", test.module, test.name);
+        for script in scripts {
+            let path = format!("{}{}", script.module, script.name);
 
-            if matches!(&match_tests, Some(search_str) if !path.to_string().contains(search_str)) {
+            if matches!(&match_name, Some(search_str) if !path.to_string().contains(search_str)) {
                 continue;
             }
 
-            match test.program.eval(initial_budget) {
-                (Ok(..), remaining_budget, _) => {
-                    let test_info = TestInfo {
-                        is_passing: true,
-                        test,
+            match script.program.eval(initial_budget) {
+                (Ok(result), remaining_budget, _) => {
+                    let eval_info = EvalInfo {
+                        success: result != Term::Error
+                            && result != Term::Constant(Constant::Bool(false)),
+                        script,
                         spent_budget: initial_budget - remaining_budget,
+                        output: Some(result),
                     };
 
-                    results.push(test_info);
+                    results.push(eval_info);
                 }
-                (Err(e), remaining_budget, _) => {
-                    println!("ERROR:\n{}", e);
-
-                    let test_info = TestInfo {
-                        is_passing: false,
-                        test,
+                (Err(..), remaining_budget, _) => {
+                    let eval_info = EvalInfo {
+                        success: false,
+                        script,
                         spent_budget: initial_budget - remaining_budget,
+                        output: None,
                     };
 
-                    results.push(test_info);
+                    results.push(eval_info);
                 }
             }
         }
 
-        self.event_listener
-            .handle_event(Event::FinishedTests { tests: results });
+        results
     }
 
     fn output_path(&self) -> PathBuf {
