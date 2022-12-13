@@ -1,4 +1,4 @@
-pub fn repeat(x: a, n: Int) -> List(a) {
+pub fn repeat(x: a, n: Int) -> List<a> {
   if n <= 0 {
     []
   } else {
