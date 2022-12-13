@@ -434,6 +434,7 @@ impl TypeVar {
     pub fn get_generic(&self) -> Option<u64> {
         match self {
             TypeVar::Generic { id } => Some(*id),
+            TypeVar::Link { tipo } => tipo.get_generic(),
             _ => None,
         }
     }

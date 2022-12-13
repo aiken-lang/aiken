@@ -31,14 +31,10 @@ pub enum Air {
         variant_name: String,
     },
 
-    // Fn {
-    //  scope: Vec<u64>,
-    //     tipo: Arc<Type>,
-    //     is_capture: bool,
-    //     args: Vec<Arg<Arc<Type>>>,
-    //     body: Box<Self>,
-    //     return_annotation: Option<Annotation>,
-    // },
+    Fn {
+        scope: Vec<u64>,
+        params: Vec<String>,
+    },
     List {
         scope: Vec<u64>,
         count: usize,
@@ -239,6 +235,7 @@ impl Air {
             | Air::List { scope, .. }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
+            | Air::Fn { scope, .. }
             | Air::Call { scope, .. }
             | Air::Builtin { scope, .. }
             | Air::BinOp { scope, .. }
