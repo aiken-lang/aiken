@@ -534,13 +534,8 @@ where
         for test in tests {
             let path = format!("{}{}", test.module, test.name);
 
-            match match_tests.clone() {
-                None => {}
-                Some(search_str) => {
-                    if !path.to_string().contains(&search_str) {
-                        continue;
-                    }
-                }
+            if matches!(&match_tests, Some(search_str) if !path.to_string().contains(search_str)) {
+                continue;
             }
 
             match test.program.eval(initial_budget) {
