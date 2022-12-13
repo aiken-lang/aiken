@@ -995,6 +995,7 @@ impl<'a> Environment<'a> {
             }
 
             Definition::Test(Function { name, location, .. }) => {
+                assert_unique_value_name(names, name, location)?;
                 hydrators.insert(name.clone(), Hydrator::new());
                 let arg_types = vec![];
                 let return_type = builtins::bool();
