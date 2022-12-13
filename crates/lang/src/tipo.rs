@@ -135,6 +135,14 @@ impl Type {
         }
     }
 
+    pub fn is_option(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "Option" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_option(),
+            _ => false,
+        }
+    }
+
     pub fn is_map(&self) -> bool {
         match self {
             Self::App {
@@ -412,6 +420,13 @@ impl TypeVar {
     pub fn is_list(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_list(),
+            _ => false,
+        }
+    }
+
+    pub fn is_option(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_option(),
             _ => false,
         }
     }
