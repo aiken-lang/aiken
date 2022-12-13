@@ -446,7 +446,7 @@ impl TypeVar {
     }
 
     pub fn get_uplc_type(&self) -> Option<UplcType> {
-        match dbg!(self) {
+        match self {
             Self::Link { tipo } => Some(tipo.get_uplc_type()),
             _ => None,
         }

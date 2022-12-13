@@ -7,5 +7,5 @@ pub fn repeat(x: a, n: Int) -> List(a) {
 }
 
 test repeat_1() {
-  repeat("aiken", 1) == ["aiken"]
+  repeat("aiken", 2) == ["aiken", "aiken"]
 }

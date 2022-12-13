@@ -102,11 +102,7 @@ impl<'a> CodeGenerator<'a> {
 
         self.build_ir(&body, &mut ir_stack, scope);
 
-        print!("{ir_stack:#?}");
-
         self.define_ir(&mut ir_stack);
-
-        print!("{ir_stack:#?}");
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -133,8 +129,6 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
-
-        println!("{}", program.to_pretty());
 
         let mut interner = Interner::new();
 
@@ -1447,8 +1441,6 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) {
-        // println!("IR IS {ir:#?} AND ARG STACK IS {arg_stack:#?}");
-
         match ir {
             Air::Int { value, .. } => {
                 let integer = value.parse().unwrap();
@@ -3809,11 +3801,85 @@ impl<'a> CodeGenerator<'a> {
                         };
                     }
                 }
-                Air::ListClause { .. } => todo!(),
-                Air::ClauseGuard { .. } => todo!(),
-                Air::RecordAccess { .. } => todo!(),
-                Air::FieldsExpose { .. } => todo!(),
-                Air::Tuple { .. } => todo!(),
+                Air::ListClause {
+                    scope,
+                    tipo,
+                    tail_name,
+                    complex_clause,
+                    next_tail_name,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::ListClause {
+                            scope,
+                            tipo,
+                            tail_name,
+                            complex_clause,
+                            next_tail_name,
+                        };
+                    }
+                }
+                Air::ClauseGuard {
+                    tipo,
+                    scope,
+                    subject_name,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::ClauseGuard {
+                            scope,
+                            subject_name,
+                            tipo,
+                        };
+                    }
+                }
+                Air::RecordAccess {
+                    scope,
+                    index: record_index,
+                    tipo,
+                } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::RecordAccess {
+                            scope,
+                            index: record_index,
+                            tipo,
+                        };
+                    }
+                }
+                Air::FieldsExpose {
+                    scope,
+                    count,
+                    indices,
+                } => {
+                    let mut new_indices = vec![];
+                    for (ind, name, tipo) in indices {
+                        if tipo.is_generic() {
+                            let mut tipo = tipo.clone();
+                            find_generics_to_replace(&mut tipo, &generic_types);
+                        }
+                        new_indices.push((ind, name, tipo));
+                    }
+                    new_air[index] = Air::FieldsExpose {
+                        scope,
+                        count,
+                        indices: new_indices,
+                    };
+                }
+                Air::Tuple { scope, tipo, count } => {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+
+                        new_air[index] = Air::Tuple { scope, count, tipo };
+                    }
+                }
                 Air::Todo { .. } => todo!(),
                 Air::RecordUpdate { .. } => todo!(),
                 Air::TupleAccessor { .. } => todo!(),
