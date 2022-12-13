@@ -10,7 +10,7 @@ use uplc::{
     builtins::DefaultFunction,
     machine::runtime::convert_constr_to_tag,
     parser::interner::Interner,
-    BigInt, Constr, PlutusData,
+    BigInt, Constr, KeyValuePairs, PlutusData,
 };
 
 use crate::{
@@ -4155,8 +4155,32 @@ fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConstant> 
                 any_constructor: None,
                 fields: vec![],
             })),
-            UplcConstant::ProtoList(_, _) => todo!(),
-            UplcConstant::ProtoPair(_, _, _, _) => todo!(),
+            UplcConstant::ProtoList(_, constants) => {
+                let inner_constants = convert_constants_to_data(constants)
+                    .into_iter()
+                    .map(|constant| match constant {
+                        UplcConstant::Data(d) => d,
+                        _ => todo!(),
+                    })
+                    .collect_vec();
+
+                UplcConstant::Data(PlutusData::Array(inner_constants))
+            }
+            UplcConstant::ProtoPair(_, _, left, right) => {
+                let inner_constants = vec![*left, *right];
+                let inner_constants = convert_constants_to_data(inner_constants)
+                    .into_iter()
+                    .map(|constant| match constant {
+                        UplcConstant::Data(d) => d,
+                        _ => todo!(),
+                    })
+                    .collect_vec();
+
+                UplcConstant::Data(PlutusData::Map(KeyValuePairs::Def(vec![(
+                    inner_constants[0].clone(),
+                    inner_constants[1].clone(),
+                )])))
+            }
             d @ UplcConstant::Data(_) => d,
             _ => unreachable!(),
         };
