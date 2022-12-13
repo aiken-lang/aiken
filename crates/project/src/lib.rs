@@ -101,12 +101,12 @@ where
         self.compile(options)
     }
 
-    pub fn check(&mut self, skip_tests: bool) -> Result<(), Error> {
+    pub fn check(&mut self, skip_tests: bool, match_tests: Option<String>) -> Result<(), Error> {
         let options = Options {
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
-                CodeGenMode::Test
+                CodeGenMode::Test(match_tests)
             },
         };
 
@@ -145,10 +145,9 @@ where
 
                 self.write_build_outputs(programs, uplc_dump)?;
             }
-            CodeGenMode::Test => {
+            CodeGenMode::Test(match_tests) => {
                 let tests = self.test_gen(&checked_modules)?;
-
-                self.run_tests(tests);
+                self.run_tests(tests, match_tests);
             }
             CodeGenMode::NoOp => (),
         }
@@ -518,7 +517,7 @@ where
         Ok(programs)
     }
 
-    fn run_tests(&self, tests: Vec<Script>) {
+    fn run_tests(&self, tests: Vec<Script>, match_tests: Option<String>) {
         // TODO: in the future we probably just want to be able to
         // tell the machine to not explode on budget consumption.
         let initial_budget = ExBudget {
@@ -533,6 +532,17 @@ where
         let mut results = Vec::new();
 
         for test in tests {
+            let path = format!("{}{}", test.module, test.name);
+
+            match match_tests.clone() {
+                None => {}
+                Some(search_str) => {
+                    if !path.to_string().contains(&search_str) {
+                        continue;
+                    }
+                }
+            }
+
             match test.program.eval(initial_budget) {
                 (Ok(..), remaining_budget, _) => {
                     let test_info = TestInfo {
