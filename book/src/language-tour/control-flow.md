@@ -1,4 +1,25 @@
-# Matching
+# Control flow
+
+## Blocks
+
+Every block in Aiken is an expression. All expressions in the block are
+executed, and the result of the last expression is returned.
+
+```aiken
+let value: Bool = {
+    "Hello"
+    42 + 12
+    False
+} // False
+```
+
+Expression blocks can be used instead of parenthesis to change the precedence of operations.
+
+```aiken
+let celsius = { fahrenheit - 32 } * 5 / 9
+```
+
+## Matching
 
 The `when *expr* is` expression is the most common kind of flow control in Aiken code. It
 allows us to say "if the data has this shape then do that", which we call
@@ -17,19 +38,8 @@ when some_number is {
 }
 ```
 
-Pattern matching on a `Bool` value is discouraged and `if else`
-expressions should be use instead.
-
-```aiken
-if some_bool {
-  "It's true!"
-else {
-  "It's not true."
-}
-```
-
 Aiken's `when *expr* is` is an expression, meaning it returns a value and can be used
-anywhere we would use a value. For example, we can name the value of a case
+anywhere we would use a value. For example, we can name the value of a when
 expression with a `let` binding.
 
 ```aiken
@@ -49,6 +59,25 @@ let description =
 description  // => "It's true!"
 ```
 
+## If-Else
+
+Pattern matching on a `Bool` value is discouraged and `if / else`
+expressions should be use instead.
+
+```aiken
+let some_bool = True
+
+if some_bool {
+  "It's true!"
+else {
+  "It's not true."
+}
+```
+
+Note that, while it may look like an imperative instruction: if this then do
+that or else do that, it is in fact one single expression. This means, in
+particular, that the return types of both branches have to match.
+
 ## Destructuring
 
 A `when *expr* is` expression can be used to destructure values that
@@ -64,7 +93,7 @@ when xs is {
 ```
 
 It's not just the top level data structure that can be pattern matched,
-contained values can also be matched. This gives `case` the ability to
+contained values can also be matched. This gives `when` the ability to
 concisely express flow control that might be verbose without pattern matching.
 
 ```aiken
@@ -90,21 +119,21 @@ Sometimes when pattern matching we want to assign a name to a value while
 specifying its shape at the same time. We can do this using the `as` keyword.
 
 ```aiken
-case xs {
+when xs is {
   [[_, ..] as inner_list] -> inner_list
-  other -> []
+  _other -> []
 }
 ```
 
 ## Checking equality and ordering in patterns
 
-The `if` keyword can be used to add a guard expression to a case clause. Both
+The `if` keyword can be used to add a guard expression to a when clause. Both
 the patterns have to match and the guard has to evaluate to `True` for the
 clause to match. The guard expression can check for equality or ordering for
 `Int`.
 
 ```aiken
-case xs {
+when xs is {
   [a, b, c] if a == b && b != c -> "ok"
   _other -> "ko"
 }
@@ -112,13 +141,13 @@ case xs {
 
 ## Alternative clause patterns
 
-Alternative patterns can be given for a case clause using the `|` operator. If
+Alternative patterns can be given for a when clause using the `|` operator. If
 any of the patterns match then the clause matches.
 
 Here the first clause will match if the variable `number` holds 2, 4, 6 or 8.
 
 ```aiken
-case number {
+when number is {
   2 | 4 | 6 | 8 -> "This is an even number"
   1 | 3 | 5 | 7 -> "This is an odd number"
   _ -> "I'm not sure"
@@ -129,8 +158,56 @@ If the patterns declare variables then the same variables must be declared in
 all patterns, and the variables must have the same type in all the patterns.
 
 ```aiken
-case list {
+when list is {
   [1, x] | x -> x // Error! Int != List(Int)
   _ -> 0
+}
+```
+
+## Todo
+
+Aiken's `todo` keyword is used to indicate that some code is not yet finished.
+
+It can be useful when designing a module, type checking functions and types but
+leaving the implementation of the functions until later.
+
+```aiken
+fn not_sure_yet() -> Int {
+  // The type annotations says this returns an Int, but we don't need
+  // to implement it yet.
+  todo
+}
+
+fn idk() {
+  favourite_number() * 2
+}
+```
+
+When this code is built Aiken will type check and compile the code to ensure it
+is valid, and the `todo` will be replaced with code that crashes the program if
+that function is run.
+
+A message can be given as a form of documentation. The message will be traced
+when the `todo` code is run.
+
+```aiken
+fn not_sure_yet() -> Int {
+  todo("Believe in the you that believes in yourself!")
+}
+```
+
+When the compiler finds a `todo` it will print a warning, which can be useful
+to avoid accidentally forgetting to remove a `todo`.
+
+The warning also includes the expected type of the expression that needs to
+replace the `todo`. This can be a useful way of asking the compiler what type
+is needed if you are ever unsure.
+
+```aiken
+fn foo() {
+  my_complicated_function(
+    // What type does this function take again...?
+    todo
+  )
 }
 ```

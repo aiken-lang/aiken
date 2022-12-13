@@ -2,32 +2,32 @@
 
 ## Named functions
 
-Named functions in Aiken are defined using the `pub fn` keywords.
+Named functions in Aiken are defined using the `fn` keyword. Functions can have (typed) arguments, and always have a return type. Because in Aiken, pretty much everything is an expression, functions do not have an explicit _return_ keyword. Instead, they implicitly return whatever they evaluate to.
 
 ```aiken
-pub fn add(x: Int, y: Int) -> Int {
+fn add(x: Int, y: Int) -> Int {
   x + y
 }
 
-pub fn multiply(x: Int, y: Int) -> Int {
+fn multiply(x: Int, y: Int) -> Int {
   x * y
 }
 ```
 
-Functions in Aiken are first class values and so can be assigned to variables,
-passed to functions, or anything else you might do with any other data type.
+Functions are first class values and so can be assigned to variables, passed to
+other functions, or anything else you might do with any other data type.
 
 ```aiken
 /// This function takes a function as an argument
-pub fn twice(f: fn(t) -> t, x: t) -> t {
+fn twice(f: fn(t) -> t, x: t) -> t {
   f(f(x))
 }
 
-pub fn add_one(x: Int) -> Int {
+fn add_one(x: Int) -> Int {
   x + 1
 }
 
-pub fn add_two(x: Int) -> Int {
+fn add_two(x: Int) -> Int {
   twice(add_one, x)
 }
 ```
@@ -52,7 +52,7 @@ string
 |> string_builder.to_string
 ```
 
-Each line of this expression applies the function to the result of the previous line. This works easily because each of these functions take only one argument. Syntax is available to substitute specific arguments of functions that take more than one argument; for more, look below in the section "Function capturing".
+Each line of this expression applies the function to the result of the previous line. This works easily because each of these functions takes only one argument. Syntax is available to substitute specific arguments of functions that take more than one argument; for more, look below in the section "Function capturing".
 
 ## Type annotations
 
@@ -83,7 +83,7 @@ containing two of the value that was passed in. This can be expressed in Aiken
 like this:
 
 ```aiken
-fn list_of_two(my_value: a) -> List(a) {
+fn list_of_two(my_value: a) -> List<a> {
   [my_value, my_value]
 }
 ```
@@ -94,15 +94,15 @@ You can use any number of different type variables in the same function. This
 function declares type variables `a` and `b`.
 
 ```aiken
-fn multi_result(x: a, y: b, condition: Bool) -> Result(a, b) {
-  case condition {
+fn multi_result(x: a, y: b, condition: Bool) -> Result<a, b> {
+  when condition is {
     True -> Ok(x)
     False -> Error(y)
   }
 }
 ```
 
-Type variables can be named anything, but the names must be lower case and may
+Type variables can be named anything, but the names must be lowercase and may
 contain underscores. Like other type annotations, they are completely optional,
 but may aid in understanding the code.
 
@@ -117,7 +117,7 @@ arguments are given an external label in addition to their internal name.
 Take this function that replaces sections of a string:
 
 ```aiken
-pub fn replace(string: String, pattern: String, replacement: String) {
+fn replace(string: String, pattern: String, replacement: String) {
   // ...
 }
 ```
@@ -125,7 +125,7 @@ pub fn replace(string: String, pattern: String, replacement: String) {
 It can be given labels like so.
 
 ```aiken
-pub fn replace(
+fn replace(
   in string: String,
   each pattern: String,
   with replacement: String,
@@ -155,7 +155,7 @@ and clear in intent.
 Anonymous functions can be defined with a similar syntax.
 
 ```aiken
-pub fn run() {
+fn run() {
   let add = fn(x, y) { x + y }
 
   add(1, 2)
@@ -169,11 +169,11 @@ argument and call another function. The `_` is used to indicate where the
 argument should be passed.
 
 ```aiken
-pub fn add(x, y) {
+fn add(x, y) {
   x + y
 }
 
-pub fn run() {
+fn run() {
   let add_one = add(1, _)
 
   add_one(2)
@@ -184,11 +184,11 @@ The function capture syntax is often used with the pipe operator to create
 a series of transformations on some data.
 
 ```aiken
-pub fn add(x: Int , y: Int ) -> Int {
+fn add(x: Int , y: Int ) -> Int {
   x + y
 }
 
-pub fn run() {
+fn run() {
   // This is the same as add(add(add(1, 3), 6), 9)
   1
   |> add(_, 3)
@@ -200,7 +200,7 @@ pub fn run() {
 In fact, this usage is so common that there is a special shorthand for it.
 
 ```aiken
-pub fn run() {
+fn run() {
   // This is the same as the example above
   1
   |> add(3)
@@ -222,9 +222,9 @@ documentation comment `///` per line. Markdown is supported and this text
 will be included with the module's entry in generated HTML documentation.
 
 ```aiken
-/// Does nothing, returns `Nil`.
+/// Always true.
 ///
-fn returns_nil(a) -> Nil {
-  Nil
+fn always_true(_a) -> Bool {
+  True
 }
 ```
