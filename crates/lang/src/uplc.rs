@@ -1903,7 +1903,7 @@ impl<'a> CodeGenerator<'a> {
                                 argument: left.into(),
                             }
                             .into(),
-                            argument: Term::Delay(Term::Constant(UplcConstant::Bool(false)).into())
+                            argument: Term::Delay(Term::Constant(UplcConstant::Bool(true)).into())
                                 .into(),
                         }
                         .into(),
