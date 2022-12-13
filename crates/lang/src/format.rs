@@ -377,9 +377,12 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => docvec![module, ".", name],
 
-            Constant::Tuple { elements, .. } => {
-                wrap_args(elements.iter().map(|e| (self.const_expr(e), false))).group()
-            }
+            Constant::Tuple { elements, .. } => "#"
+                .to_doc()
+                .append(wrap_args(
+                    elements.iter().map(|e| (self.const_expr(e), false)),
+                ))
+                .group(),
         }
     }
 
@@ -462,9 +465,9 @@ impl<'comments> Formatter<'comments> {
                 .append(break_("", " ").append(self.annotation(retrn)).nest(INDENT)),
 
             Annotation::Var { name, .. } => name.to_doc(),
-            Annotation::Tuple { elems, .. } => {
-                wrap_args(elems.iter().map(|t| (self.annotation(t), false)))
-            }
+            Annotation::Tuple { elems, .. } => "#"
+                .to_doc()
+                .append(wrap_args(elems.iter().map(|t| (self.annotation(t), false)))),
         }
         .group()
     }
@@ -783,9 +786,10 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.record_update(constructor, spread, args),
 
-            UntypedExpr::Tuple { elems, .. } => {
-                wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))).group()
-            }
+            UntypedExpr::Tuple { elems, .. } => "#"
+                .to_doc()
+                .append(wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))))
+                .group(),
         };
         commented(document, comments)
     }
@@ -1349,9 +1353,10 @@ impl<'comments> Formatter<'comments> {
 
             Pattern::Discard { name, .. } => name.to_doc(),
 
-            Pattern::Tuple { elems, .. } => {
-                wrap_args(elems.iter().map(|e| (self.pattern(e), false))).group()
-            }
+            Pattern::Tuple { elems, .. } => "#"
+                .to_doc()
+                .append(wrap_args(elems.iter().map(|e| (self.pattern(e), false))))
+                .group(),
 
             Pattern::List { elements, tail, .. } => {
                 let elements_document =
