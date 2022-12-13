@@ -377,12 +377,9 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => docvec![module, ".", name],
 
-            Constant::Tuple { elements, .. } => "#"
-                .to_doc()
-                .append(wrap_args(
-                    elements.iter().map(|e| (self.const_expr(e), false)),
-                ))
-                .group(),
+            Constant::Tuple { elements, .. } => {
+                wrap_args(elements.iter().map(|e| (self.const_expr(e), false))).group()
+            }
         }
     }
 
@@ -424,7 +421,7 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn type_ast_constructor<'a>(
+    fn type_annotation_constructor<'a>(
         &mut self,
         module: &'a Option<String>,
         name: &'a str,
@@ -451,7 +448,7 @@ impl<'comments> Formatter<'comments> {
                 arguments: args,
                 module,
                 ..
-            } => self.type_ast_constructor(module, name, args),
+            } => self.type_annotation_constructor(module, name, args),
 
             Annotation::Fn {
                 arguments: args,
@@ -459,19 +456,21 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => "fn"
                 .to_doc()
-                .append(self.type_arguments(args))
+                .append(wrap_args(args.iter().map(|t| (self.annotation(t), false))))
                 .group()
                 .append(" ->")
                 .append(break_("", " ").append(self.annotation(retrn)).nest(INDENT)),
 
             Annotation::Var { name, .. } => name.to_doc(),
-            Annotation::Tuple { elems, .. } => "#".to_doc().append(self.type_arguments(elems)),
+            Annotation::Tuple { elems, .. } => {
+                wrap_args(elems.iter().map(|t| (self.annotation(t), false)))
+            }
         }
         .group()
     }
 
     fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
-        wrap_args(args.iter().map(|t| (self.annotation(t), false)))
+        wrap_generics(args.iter().map(|t| self.annotation(t)))
     }
 
     pub fn type_alias<'a>(
@@ -486,7 +485,7 @@ impl<'comments> Formatter<'comments> {
         let head = if args.is_empty() {
             head
         } else {
-            head.append(wrap_args(args.iter().map(|e| (e.to_doc(), false))).group())
+            head.append(wrap_generics(args.iter().map(|e| e.to_doc())).group())
         };
 
         head.append(" =")
@@ -784,10 +783,9 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.record_update(constructor, spread, args),
 
-            UntypedExpr::Tuple { elems, .. } => "#"
-                .to_doc()
-                .append(wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))))
-                .group(),
+            UntypedExpr::Tuple { elems, .. } => {
+                wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))).group()
+            }
         };
         commented(document, comments)
     }
@@ -1146,7 +1144,7 @@ impl<'comments> Formatter<'comments> {
                 name.to_doc()
             } else {
                 name.to_doc()
-                    .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
+                    .append(wrap_generics(args.iter().map(|e| e.to_doc())))
                     .group()
             })
             .append(" {")
@@ -1351,10 +1349,9 @@ impl<'comments> Formatter<'comments> {
 
             Pattern::Discard { name, .. } => name.to_doc(),
 
-            Pattern::Tuple { elems, .. } => "#"
-                .to_doc()
-                .append(wrap_args(elems.iter().map(|e| (self.pattern(e), false))))
-                .group(),
+            Pattern::Tuple { elems, .. } => {
+                wrap_args(elems.iter().map(|e| (self.pattern(e), false))).group()
+            }
 
             Pattern::List { elements, tail, .. } => {
                 let elements_document =
@@ -1534,6 +1531,17 @@ where
         .nest(INDENT)
         .append(break_(",", if curly { " " } else { "" }))
         .append(close)
+}
+
+pub fn wrap_generics<'a, I>(args: I) -> Document<'a>
+where
+    I: IntoIterator<Item = Document<'a>>,
+{
+    break_("<", "<")
+        .append(join(args, break_(",", ", ")))
+        .nest(INDENT)
+        .append(break_(",", ""))
+        .append(">")
 }
 
 pub fn wrap_fields<'a, I>(args: I) -> Document<'a>
