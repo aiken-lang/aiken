@@ -66,10 +66,8 @@ impl UntypedModule {
     }
 }
 
-pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
-pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
-
 pub type TypedFunction = Function<Arc<Type>, TypedExpr>;
+pub type UntypedFunction = Function<(), UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function<T, Expr> {
@@ -84,6 +82,9 @@ pub struct Function<T, Expr> {
     pub end_position: usize,
 }
 
+pub type TypedTypeAlias = TypeAlias<Arc<Type>>;
+pub type UntypedTypeAlias = TypeAlias<()>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAlias<T> {
     pub alias: String,
@@ -94,6 +95,9 @@ pub struct TypeAlias<T> {
     pub public: bool,
     pub tipo: T,
 }
+
+pub type TypedDataType = DataType<Arc<Type>>;
+pub type UntypedDataType = DataType<()>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataType<T> {
@@ -107,6 +111,9 @@ pub struct DataType<T> {
     pub typed_parameters: Vec<T>,
 }
 
+pub type TypedUse = Use<String>;
+pub type UntypedUse = Use<()>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Use<PackageName> {
     pub as_name: Option<String>,
@@ -115,6 +122,9 @@ pub struct Use<PackageName> {
     pub package: PackageName,
     pub unqualified: Vec<UnqualifiedImport>,
 }
+
+pub type TypedModuleConstant = ModuleConstant<Arc<Type>, String>;
+pub type UntypedModuleConstant = ModuleConstant<(), ()>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConstant<T, ConstantRecordTag> {
@@ -126,6 +136,9 @@ pub struct ModuleConstant<T, ConstantRecordTag> {
     pub value: Box<Constant<T, ConstantRecordTag>>,
     pub tipo: T,
 }
+
+pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {

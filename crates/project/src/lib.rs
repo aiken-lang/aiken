@@ -13,8 +13,11 @@ pub mod script;
 pub mod telemetry;
 
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedDefinition, TypedFunction},
-    builtins,
+    ast::{
+        Annotation, DataType, Definition, Function, ModuleKind, RecordConstructor,
+        RecordConstructorArg, Span, TypedDataType, TypedDefinition, TypedFunction,
+    },
+    builtins::{self, generic_var},
     tipo::TypeInfo,
     uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
     IdGenerator,
@@ -387,6 +390,16 @@ where
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
 
+        let option_data_type = make_option();
+
+        data_types.insert(
+            DataTypeKey {
+                module_name: "".to_string(),
+                defined_type: "Option".to_string(),
+            },
+            &option_data_type,
+        );
+
         for module in checked_modules.values() {
             for def in module.ast.definitions() {
                 match def {
@@ -462,6 +475,16 @@ where
         let mut data_types = HashMap::new();
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
+
+        let option_data_type = make_option();
+
+        data_types.insert(
+            DataTypeKey {
+                module_name: "".to_string(),
+                defined_type: "Option".to_string(),
+            },
+            &option_data_type,
+        );
 
         // let mut indices_to_remove = Vec::new();
         let mut scripts = Vec::new();
@@ -557,6 +580,8 @@ where
             if matches!(&match_name, Some(search_str) if !path.to_string().contains(search_str)) {
                 continue;
             }
+
+            println!("{}", script.program.to_pretty());
 
             match script.program.eval(initial_budget) {
                 (Ok(result), remaining_budget, _) => {
@@ -743,4 +768,41 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
+}
+
+fn make_option() -> TypedDataType {
+    DataType {
+        constructors: vec![
+            RecordConstructor {
+                location: Span::empty(),
+                name: "Some".to_string(),
+                arguments: vec![RecordConstructorArg {
+                    label: None,
+                    annotation: Annotation::Var {
+                        location: Span::empty(),
+                        name: "a".to_string(),
+                    },
+                    location: Span::empty(),
+                    tipo: generic_var(0),
+                    doc: None,
+                }],
+                documentation: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                location: Span::empty(),
+                name: "None".to_string(),
+                arguments: vec![],
+                documentation: None,
+                sugar: false,
+            },
+        ],
+        doc: None,
+        location: Span::empty(),
+        name: "Option".to_string(),
+        opaque: false,
+        parameters: vec!["a".to_string()],
+        public: true,
+        typed_parameters: vec![generic_var(0)],
+    }
 }

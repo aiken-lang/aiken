@@ -16,8 +16,8 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Clause, Constant, DataType, Function, Pattern, Span,
-        TypedArg,
+        ArgName, AssignmentKind, BinOp, Clause, Constant, Pattern, Span, TypedArg, TypedDataType,
+        TypedFunction,
     },
     expr::TypedExpr,
     tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
@@ -64,9 +64,9 @@ pub struct ClauseProperties {
 
 pub struct CodeGenerator<'a> {
     defined_functions: HashMap<FunctionAccessKey, ()>,
-    functions: &'a HashMap<FunctionAccessKey, &'a Function<Arc<tipo::Type>, TypedExpr>>,
+    functions: &'a HashMap<FunctionAccessKey, &'a TypedFunction>,
     // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
-    data_types: &'a HashMap<DataTypeKey, &'a DataType<Arc<tipo::Type>>>,
+    data_types: &'a HashMap<DataTypeKey, &'a TypedDataType>,
     // imports: &'a HashMap<(String, String), &'a Use<String>>,
     // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
     module_types: &'a HashMap<String, TypeInfo>,
@@ -76,9 +76,9 @@ pub struct CodeGenerator<'a> {
 
 impl<'a> CodeGenerator<'a> {
     pub fn new(
-        functions: &'a HashMap<FunctionAccessKey, &'a Function<Arc<tipo::Type>, TypedExpr>>,
+        functions: &'a HashMap<FunctionAccessKey, &'a TypedFunction>,
         // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
-        data_types: &'a HashMap<DataTypeKey, &'a DataType<Arc<tipo::Type>>>,
+        data_types: &'a HashMap<DataTypeKey, &'a TypedDataType>,
         // imports: &'a HashMap<(String, String), &'a Use<String>>,
         // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
         module_types: &'a HashMap<String, TypeInfo>,
@@ -176,12 +176,20 @@ impl<'a> CodeGenerator<'a> {
             }
             TypedExpr::Var {
                 constructor, name, ..
-            } => {
-                if let ValueConstructorVariant::ModuleConstant { literal, .. } =
-                    &constructor.variant
-                {
+            } => match &constructor.variant {
+                ValueConstructorVariant::ModuleConstant { literal, .. } => {
                     constants_ir(literal, ir_stack, scope);
-                } else {
+                }
+                ValueConstructorVariant::ModuleFn {
+                    builtin: Some(builtin),
+                    ..
+                } => {
+                    ir_stack.push(Air::Builtin {
+                        scope,
+                        func: *builtin,
+                    });
+                }
+                _ => {
                     ir_stack.push(Air::Var {
                         scope,
                         constructor: constructor.clone(),
@@ -189,7 +197,7 @@ impl<'a> CodeGenerator<'a> {
                         variant_name: String::new(),
                     });
                 }
-            }
+            },
             TypedExpr::Fn { args, body, .. } => {
                 let mut func_body = vec![];
                 let mut func_scope = scope.clone();
@@ -1558,9 +1566,8 @@ impl<'a> CodeGenerator<'a> {
                             let tipo = constructor.tipo;
 
                             let args_type = match tipo.as_ref() {
-                                Type::Fn { args, .. } => args,
-
-                                _ => todo!(),
+                                Type::Fn { args, .. } | Type::App { args, .. } => args,
+                                _ => unreachable!(),
                             };
 
                             if let Some(field_map) = field_map.clone() {
