@@ -95,18 +95,23 @@ impl telemetry::EventListener for Terminal {
                 for (module, infos) in &group_by_module(&tests) {
                     let first = fmt_test(infos.first().unwrap(), max_mem, max_cpu, false).len();
                     println!(
-                        "  ┌── {} {}",
+                        "{} {} {}",
+                        "  ┌──".bright_black(),
                         module.bold().blue(),
-                        pad_left("".to_string(), first - module.len() - 3, "─")
+                        pad_left("".to_string(), first - module.len() - 3, "─").bright_black()
                     );
                     for eval_info in infos {
-                        println!("  │ {}", fmt_test(eval_info, max_mem, max_cpu, true))
+                        println!(
+                            "  {} {}",
+                            "│".bright_black(),
+                            fmt_test(eval_info, max_mem, max_cpu, true)
+                        )
                     }
                     let last = fmt_test(infos.last().unwrap(), max_mem, max_cpu, false).len();
                     let summary = fmt_test_summary(infos, false).len();
                     println!(
-                        "  └{} {}\n",
-                        pad_left("".to_string(), last - summary, "─"),
+                        "{} {}\n",
+                        pad_right("  └".to_string(), last - summary + 5, "─").bright_black(),
                         fmt_test_summary(infos, true),
                     );
                 }
@@ -232,12 +237,20 @@ fn find_max_execution_units(xs: &[EvalInfo]) -> (usize, usize) {
 
 fn pad_left(mut text: String, n: usize, delimiter: &str) -> String {
     let diff = n as i32 - text.len() as i32;
-
     if diff.is_positive() {
         for _ in 0..diff {
             text.insert_str(0, delimiter);
         }
     }
+    text
+}
 
+fn pad_right(mut text: String, n: usize, delimiter: &str) -> String {
+    let diff = n as i32 - text.len() as i32;
+    if diff.is_positive() {
+        for _ in 0..diff {
+            text.push_str(delimiter);
+        }
+    }
     text
 }
