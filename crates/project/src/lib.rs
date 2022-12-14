@@ -586,7 +586,7 @@ where
             let cbor = program.to_cbor().unwrap();
 
             // Create file containing just the script cbor hex
-            let script_path = script_output_dir.join("script.txt");
+            let script_path = script_output_dir.join("script.cbor");
 
             let cbor_hex = hex::encode(&cbor);
 
@@ -620,7 +620,7 @@ where
             let hash = plutus_script.compute_hash();
 
             // mainnet
-            let mainnet_path = script_output_dir.join("mainnet.txt");
+            let mainnet_path = script_output_dir.join("mainnet.addr");
             let mut mainnet_bytes: Vec<u8> = vec![0b01110001];
 
             mainnet_bytes.extend(hash.iter());
@@ -633,7 +633,7 @@ where
             fs::write(mainnet_path, mainnet_addr)?;
 
             // testnet
-            let testnet_path = script_output_dir.join("testnet.txt");
+            let testnet_path = script_output_dir.join("testnet.addr");
             let mut testnet_bytes: Vec<u8> = vec![0b01110000];
 
             testnet_bytes.extend(hash.iter());
