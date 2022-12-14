@@ -64,6 +64,7 @@ pub enum Air {
     Builtin {
         scope: Vec<u64>,
         func: DefaultFunction,
+        tipo: Arc<Type>,
     },
 
     BinOp {

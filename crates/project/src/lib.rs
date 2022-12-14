@@ -17,9 +17,10 @@ use aiken_lang::{
         Annotation, DataType, Definition, Function, ModuleKind, RecordConstructor,
         RecordConstructorArg, Span, TypedDataType, TypedDefinition, TypedFunction,
     },
+    builder::{DataTypeKey, FunctionAccessKey},
     builtins::{self, generic_var},
     tipo::TypeInfo,
-    uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
+    uplc::CodeGenerator,
     IdGenerator,
 };
 use miette::NamedSource;

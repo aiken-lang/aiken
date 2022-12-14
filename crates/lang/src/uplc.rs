@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc, vec};
+use std::{collections::HashMap, ops::Deref, sync::Arc, vec};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -8,59 +8,25 @@ use uplc::{
         Constant as UplcConstant, Name, Program, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
-    machine::runtime::convert_constr_to_tag,
     parser::interner::Interner,
-    BigInt, Constr, KeyValuePairs, PlutusData,
 };
 
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Clause, Constant, Pattern, Span, TypedArg, TypedDataType,
+        ArgName, AssignmentKind, BinOp, Clause, Pattern, Span, TypedArg, TypedDataType,
         TypedFunction,
+    },
+    builder::{
+        check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
+        convert_type_to_data, get_common_ancestor, get_generics_and_type, get_variant_name,
+        list_access_to_uplc, match_ir_for_recursion, monomorphize, rearrange_clauses,
+        ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     expr::TypedExpr,
     tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
 };
-
-#[derive(Clone, Debug)]
-pub struct FuncComponents {
-    ir: Vec<Air>,
-    dependencies: Vec<FunctionAccessKey>,
-    args: Vec<String>,
-    recursive: bool,
-}
-
-#[derive(Clone, Eq, Debug, PartialEq, Hash)]
-pub struct ConstrFieldKey {
-    pub local_var: String,
-    pub field_name: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct DataTypeKey {
-    pub module_name: String,
-    pub defined_type: String,
-}
-
-pub type ConstrUsageKey = String;
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct FunctionAccessKey {
-    pub module_name: String,
-    pub function_name: String,
-    pub variant_name: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct ClauseProperties {
-    clause_var_name: String,
-    needs_constr_var: bool,
-    is_complex_clause: bool,
-    current_index: usize,
-    original_subject_name: String,
-}
 
 pub struct CodeGenerator<'a> {
     defined_functions: HashMap<FunctionAccessKey, ()>,
@@ -187,6 +153,7 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.push(Air::Builtin {
                         scope,
                         func: *builtin,
+                        tipo: constructor.tipo.clone(),
                     });
                 }
                 _ => {
@@ -315,7 +282,6 @@ impl<'a> CodeGenerator<'a> {
 
                 // assuming one subject at the moment
                 let subject = subjects[0].clone();
-                let mut needs_subject_var = false;
 
                 let clauses = if matches!(clauses[0].pattern[0], Pattern::List { .. }) {
                     rearrange_clauses(clauses.clone())
@@ -324,7 +290,6 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if let Some((last_clause, clauses)) = clauses.split_last() {
-                    let mut clauses_vec = vec![];
                     let mut pattern_vec = vec![];
 
                     let mut clause_properties = ClauseProperties {
@@ -335,66 +300,13 @@ impl<'a> CodeGenerator<'a> {
                         original_subject_name: subject_name.clone(),
                     };
 
-                    for (index, clause) in clauses.iter().enumerate() {
-                        // scope per clause is different
-                        let mut scope = scope.clone();
-                        scope.push(self.id_gen.next());
-
-                        // holds when clause pattern Air
-                        let mut clause_subject_vec = vec![];
-
-                        // reset complex clause setting per clause back to default
-                        clause_properties.is_complex_clause = false;
-
-                        self.build_ir(&clause.then, &mut clauses_vec, scope.clone());
-
-                        self.when_ir(
-                            &clause.pattern[0],
-                            &mut clause_subject_vec,
-                            &mut clauses_vec,
-                            &subject.tipo(),
-                            &mut clause_properties,
-                            scope.clone(),
-                        );
-
-                        if clause_properties.needs_constr_var {
-                            needs_subject_var = true;
-                        }
-
-                        let subject_name = if clause_properties.current_index == 0 {
-                            subject_name.clone()
-                        } else {
-                            format!("__tail_{}", clause_properties.current_index - 1)
-                        };
-
-                        // Clause is first in Air pattern vec
-                        if subject.tipo().is_list() {
-                            let next_tail = if index == clauses.len() - 1 {
-                                None
-                            } else {
-                                Some(format!("__tail_{}", clause_properties.current_index))
-                            };
-
-                            pattern_vec.push(Air::ListClause {
-                                scope,
-                                tipo: subject.tipo().clone(),
-                                tail_name: subject_name,
-                                complex_clause: clause_properties.is_complex_clause,
-                                next_tail_name: next_tail,
-                            });
-
-                            clause_properties.current_index += 1;
-                        } else {
-                            pattern_vec.push(Air::Clause {
-                                scope,
-                                tipo: subject.tipo().clone(),
-                                subject_name,
-                                complex_clause: clause_properties.is_complex_clause,
-                            });
-                        }
-
-                        pattern_vec.append(&mut clause_subject_vec);
-                    }
+                    self.handle_each_clause(
+                        &mut pattern_vec,
+                        &mut clause_properties,
+                        clauses,
+                        &subject.tipo(),
+                        scope.clone(),
+                    );
 
                     let last_pattern = &last_clause.pattern[0];
 
@@ -404,18 +316,24 @@ impl<'a> CodeGenerator<'a> {
                         scope: final_scope.clone(),
                     });
 
-                    self.build_ir(&last_clause.then, &mut clauses_vec, final_scope.clone());
+                    let mut final_clause_vec = vec![];
+
+                    self.build_ir(
+                        &last_clause.then,
+                        &mut final_clause_vec,
+                        final_scope.clone(),
+                    );
 
                     self.when_ir(
                         last_pattern,
                         &mut pattern_vec,
-                        &mut clauses_vec,
+                        &mut final_clause_vec,
                         &subject.tipo(),
                         &mut clause_properties,
                         final_scope,
                     );
 
-                    if needs_subject_var || clause_properties.needs_constr_var {
+                    if clause_properties.needs_constr_var {
                         ir_stack.push(Air::Lam {
                             scope: scope.clone(),
                             name: constr_var.clone(),
@@ -509,6 +427,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::ModuleSelect {
                 constructor,
                 module_name,
+                tipo,
                 ..
             } => match constructor {
                 tipo::ModuleValueConstructor::Record { .. } => todo!(),
@@ -546,6 +465,7 @@ impl<'a> CodeGenerator<'a> {
                                 ir_stack.push(Air::Builtin {
                                     func: builtin,
                                     scope,
+                                    tipo: tipo.clone(),
                                 });
                             }
                             _ => unreachable!(),
@@ -582,6 +502,72 @@ impl<'a> CodeGenerator<'a> {
 
                 ir_stack.append(&mut elems_air);
             }
+        }
+    }
+
+    fn handle_each_clause(
+        &mut self,
+        ir_stack: &mut Vec<Air>,
+        clause_properties: &mut ClauseProperties,
+        clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>, String>],
+        subject_type: &Arc<Type>,
+        scope: Vec<u64>,
+    ) {
+        for (index, clause) in clauses.iter().enumerate() {
+            // scope per clause is different
+            let mut scope = scope.clone();
+            scope.push(self.id_gen.next());
+
+            // holds when clause pattern Air
+            let mut clause_subject_vec = vec![];
+            let mut clauses_vec = vec![];
+
+            // reset complex clause setting per clause back to default
+            clause_properties.is_complex_clause = false;
+
+            self.build_ir(&clause.then, &mut clauses_vec, scope.clone());
+
+            self.when_ir(
+                &clause.pattern[0],
+                &mut clause_subject_vec,
+                &mut clauses_vec,
+                subject_type,
+                clause_properties,
+                scope.clone(),
+            );
+
+            let subject_name = if clause_properties.current_index == 0 {
+                clause_properties.original_subject_name.clone()
+            } else {
+                format!("__tail_{}", clause_properties.current_index - 1)
+            };
+
+            // Clause is last in Air pattern vec
+            if subject_type.is_list() {
+                let next_tail = if index == clauses.len() - 1 {
+                    None
+                } else {
+                    Some(format!("__tail_{}", clause_properties.current_index))
+                };
+
+                ir_stack.push(Air::ListClause {
+                    scope,
+                    tipo: subject_type.clone(),
+                    tail_name: subject_name,
+                    complex_clause: clause_properties.is_complex_clause,
+                    next_tail_name: next_tail,
+                });
+
+                clause_properties.current_index += 1;
+            } else {
+                ir_stack.push(Air::Clause {
+                    scope,
+                    tipo: subject_type.clone(),
+                    complex_clause: clause_properties.is_complex_clause,
+                    subject_name,
+                });
+            }
+            ir_stack.append(&mut clause_subject_vec);
         }
     }
 
@@ -696,14 +682,11 @@ impl<'a> CodeGenerator<'a> {
                 name: constr_name,
                 ..
             } => {
-                let mut needs_access_to_constr_var = false;
-                let mut needs_clause_guard = false;
-
                 for arg in arguments {
                     check_when_pattern_needs(
                         &arg.value,
-                        &mut needs_access_to_constr_var,
-                        &mut needs_clause_guard,
+                        &mut clause_properties.needs_constr_var,
+                        &mut clause_properties.is_complex_clause,
                     );
                 }
 
@@ -752,13 +735,7 @@ impl<'a> CodeGenerator<'a> {
                     });
                 }
 
-                if needs_clause_guard {
-                    clause_properties.is_complex_clause = true;
-                }
-
-                if needs_access_to_constr_var {
-                    clause_properties.needs_constr_var = true;
-
+                if clause_properties.needs_constr_var {
                     self.when_recursive_ir(
                         pattern,
                         pattern_vec,
@@ -1467,6 +1444,465 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
+    fn define_ir(&mut self, ir_stack: &mut Vec<Air>) {
+        let mut func_components = IndexMap::new();
+        let mut func_index_map = IndexMap::new();
+
+        let recursion_func_map = IndexMap::new();
+
+        self.define_recurse_ir(
+            ir_stack,
+            &mut func_components,
+            &mut func_index_map,
+            recursion_func_map,
+        );
+
+        let mut insert_var_vec = vec![];
+        let mut final_func_dep_ir = IndexMap::new();
+        for func in func_index_map.clone() {
+            if self.defined_functions.contains_key(&func.0) {
+                continue;
+            }
+            let mut funt_comp = func_components.get(&func.0).unwrap().clone();
+            let func_scope = func_index_map.get(&func.0).unwrap();
+
+            let mut dep_ir = vec![];
+
+            // deal with function dependencies
+            while let Some(dependency) = funt_comp.dependencies.pop() {
+                if self.defined_functions.contains_key(&dependency)
+                    || func_components.get(&dependency).is_none()
+                {
+                    continue;
+                }
+
+                let depend_comp = func_components.get(&dependency).unwrap();
+
+                let dep_scope = func_index_map.get(&dependency).unwrap();
+
+                if get_common_ancestor(dep_scope, func_scope) == func_scope.clone() {
+                    funt_comp
+                        .dependencies
+                        .extend(depend_comp.dependencies.clone());
+
+                    let mut temp_ir = vec![Air::DefineFunc {
+                        scope: func_scope.clone(),
+                        func_name: dependency.function_name.clone(),
+                        module_name: dependency.module_name.clone(),
+                        params: depend_comp.args.clone(),
+                        recursive: depend_comp.recursive,
+                        variant_name: dependency.variant_name.clone(),
+                    }];
+
+                    for (index, ir) in depend_comp.ir.iter().enumerate() {
+                        match_ir_for_recursion(
+                            ir.clone(),
+                            &mut insert_var_vec,
+                            &FunctionAccessKey {
+                                function_name: dependency.function_name.clone(),
+                                module_name: dependency.module_name.clone(),
+                                variant_name: dependency.variant_name.clone(),
+                            },
+                            index,
+                        );
+                    }
+
+                    let mut recursion_ir = depend_comp.ir.clone();
+                    for (index, ir) in insert_var_vec.clone() {
+                        recursion_ir.insert(index, ir);
+
+                        let current_call = recursion_ir[index - 1].clone();
+
+                        match current_call {
+                            Air::Call { scope, count } => {
+                                recursion_ir[index - 1] = Air::Call {
+                                    scope,
+                                    count: count + 1,
+                                }
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+
+                    temp_ir.append(&mut recursion_ir);
+
+                    temp_ir.append(&mut dep_ir);
+
+                    dep_ir = temp_ir;
+                    self.defined_functions.insert(dependency, ());
+                    insert_var_vec = vec![];
+                }
+            }
+
+            final_func_dep_ir.insert(func.0, dep_ir);
+        }
+
+        for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
+            {
+                let temp_func_index_map = func_index_map.clone();
+                let to_insert = temp_func_index_map
+                    .iter()
+                    .filter(|func| {
+                        func.1.clone() == ir.scope() && !self.defined_functions.contains_key(func.0)
+                    })
+                    .collect_vec();
+
+                for (function_access_key, scopes) in to_insert.into_iter() {
+                    func_index_map.remove(function_access_key);
+
+                    self.defined_functions
+                        .insert(function_access_key.clone(), ());
+
+                    let mut full_func_ir =
+                        final_func_dep_ir.get(function_access_key).unwrap().clone();
+
+                    let mut func_comp = func_components.get(function_access_key).unwrap().clone();
+
+                    full_func_ir.push(Air::DefineFunc {
+                        scope: scopes.clone(),
+                        func_name: function_access_key.function_name.clone(),
+                        module_name: function_access_key.module_name.clone(),
+                        params: func_comp.args.clone(),
+                        recursive: func_comp.recursive,
+                        variant_name: function_access_key.variant_name.clone(),
+                    });
+
+                    for (index, ir) in func_comp.ir.clone().iter().enumerate() {
+                        match_ir_for_recursion(
+                            ir.clone(),
+                            &mut insert_var_vec,
+                            function_access_key,
+                            index,
+                        );
+                    }
+
+                    for (index, ir) in insert_var_vec {
+                        func_comp.ir.insert(index, ir);
+
+                        let current_call = func_comp.ir[index - 1].clone();
+
+                        match current_call {
+                            Air::Call { scope, count } => {
+                                func_comp.ir[index - 1] = Air::Call {
+                                    scope,
+                                    count: count + 1,
+                                }
+                            }
+                            _ => unreachable!("{current_call:#?}"),
+                        }
+                    }
+                    insert_var_vec = vec![];
+
+                    full_func_ir.extend(func_comp.ir.clone());
+
+                    for ir in full_func_ir.into_iter().rev() {
+                        ir_stack.insert(index, ir);
+                    }
+                }
+            }
+        }
+    }
+
+    fn define_recurse_ir(
+        &mut self,
+        ir_stack: &mut [Air],
+        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
+        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+        recursion_func_map: IndexMap<FunctionAccessKey, ()>,
+    ) {
+        self.process_define_ir(ir_stack, func_components, func_index_map);
+
+        let mut recursion_func_map = recursion_func_map;
+
+        for func_index in func_index_map.clone().iter() {
+            let func = func_index.0;
+
+            let function_components = func_components.get(func).unwrap();
+            let mut function_ir = function_components.ir.clone();
+
+            for ir in function_ir.clone() {
+                if let Air::Var {
+                    constructor:
+                        ValueConstructor {
+                            variant:
+                                ValueConstructorVariant::ModuleFn {
+                                    name: func_name,
+                                    module,
+                                    ..
+                                },
+                            ..
+                        },
+                    variant_name,
+                    ..
+                } = ir
+                {
+                    if recursion_func_map.contains_key(&FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: func_name.clone(),
+                        variant_name: variant_name.clone(),
+                    }) {
+                        return;
+                    } else {
+                        recursion_func_map.insert(
+                            FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: func_name.clone(),
+                                variant_name: variant_name.clone(),
+                            },
+                            (),
+                        );
+                    }
+                }
+            }
+
+            let mut inner_func_components = IndexMap::new();
+
+            let mut inner_func_index_map = IndexMap::new();
+
+            self.define_recurse_ir(
+                &mut function_ir,
+                &mut inner_func_components,
+                &mut inner_func_index_map,
+                recursion_func_map.clone(),
+            );
+
+            //now unify
+            for item in inner_func_components {
+                if !func_components.contains_key(&item.0) {
+                    func_components.insert(item.0, item.1);
+                }
+            }
+
+            for item in inner_func_index_map {
+                if let Some(entry) = func_index_map.get_mut(&item.0) {
+                    *entry = get_common_ancestor(entry, &item.1);
+                } else {
+                    func_index_map.insert(item.0, item.1);
+                }
+            }
+        }
+    }
+
+    fn process_define_ir(
+        &mut self,
+        ir_stack: &mut [Air],
+        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
+        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+    ) {
+        let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
+        for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
+            match ir {
+                Air::Var {
+                    scope, constructor, ..
+                } => {
+                    if let ValueConstructorVariant::ModuleFn {
+                        name,
+                        module,
+                        builtin,
+                        ..
+                    } = &constructor.variant
+                    {
+                        if builtin.is_none() {
+                            let mut function_key = FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: name.clone(),
+                                variant_name: String::new(),
+                            };
+                            if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
+                                let new_scope = get_common_ancestor(scope, scope_prev);
+
+                                to_be_defined_map.insert(function_key, new_scope);
+                            } else if func_components.get(&function_key).is_some() {
+                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                            } else {
+                                let function = self.functions.get(&function_key).unwrap();
+
+                                let mut func_ir = vec![];
+
+                                self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+
+                                let (param_types, _) = constructor.tipo.function_types().unwrap();
+
+                                let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
+
+                                for (index, arg) in function.arguments.iter().enumerate() {
+                                    if arg.tipo.is_generic() {
+                                        let mut map = generics_type_map.into_iter().collect_vec();
+                                        map.append(&mut get_generics_and_type(
+                                            &arg.tipo,
+                                            &param_types[index],
+                                        ));
+
+                                        generics_type_map = map.into_iter().collect();
+                                    }
+                                }
+
+                                let (variant_name, mut func_ir) =
+                                    monomorphize(func_ir, generics_type_map, &constructor.tipo);
+
+                                function_key = FunctionAccessKey {
+                                    module_name: module.clone(),
+                                    function_name: function_key.function_name,
+                                    variant_name: variant_name.clone(),
+                                };
+
+                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                                let mut func_calls = vec![];
+
+                                for (index, ir) in func_ir.clone().into_iter().enumerate() {
+                                    if let Air::Var {
+                                        constructor:
+                                            ValueConstructor {
+                                                variant:
+                                                    ValueConstructorVariant::ModuleFn {
+                                                        name: func_name,
+                                                        module,
+                                                        field_map,
+                                                        arity,
+                                                        location,
+                                                        ..
+                                                    },
+                                                public,
+                                                tipo,
+                                            },
+                                        scope,
+                                        name,
+                                        ..
+                                    } = ir
+                                    {
+                                        let current_func = FunctionAccessKey {
+                                            module_name: module.clone(),
+                                            function_name: func_name.clone(),
+                                            variant_name: String::new(),
+                                        };
+
+                                        let current_func_as_variant = FunctionAccessKey {
+                                            module_name: module.clone(),
+                                            function_name: func_name.clone(),
+                                            variant_name: variant_name.clone(),
+                                        };
+
+                                        let function = self.functions.get(&current_func);
+                                        if function_key.clone() == current_func_as_variant {
+                                            func_ir[index] = Air::Var {
+                                                scope,
+                                                constructor: ValueConstructor {
+                                                    public,
+                                                    variant: ValueConstructorVariant::ModuleFn {
+                                                        name: func_name,
+                                                        field_map,
+                                                        module,
+                                                        arity,
+                                                        location,
+                                                        builtin: None,
+                                                    },
+                                                    tipo,
+                                                },
+                                                name,
+                                                variant_name: variant_name.clone(),
+                                            };
+                                            func_calls.push(current_func_as_variant);
+                                        } else if let (Some(function), Type::Fn { args, .. }) =
+                                            (function, &*tipo)
+                                        {
+                                            if function
+                                                .arguments
+                                                .iter()
+                                                .any(|arg| arg.tipo.is_generic())
+                                            {
+                                                let mut new_name = String::new();
+                                                for arg in args.iter() {
+                                                    get_variant_name(&mut new_name, arg);
+                                                }
+                                                func_calls.push(FunctionAccessKey {
+                                                    module_name: module,
+                                                    function_name: func_name,
+                                                    variant_name: new_name,
+                                                });
+                                            } else {
+                                                func_calls.push(current_func);
+                                            }
+                                        } else {
+                                            func_calls.push(current_func);
+                                        }
+                                    }
+                                }
+
+                                let mut args = vec![];
+
+                                for arg in function.arguments.iter() {
+                                    match &arg.arg_name {
+                                        ArgName::Named { name, .. }
+                                        | ArgName::NamedLabeled { name, .. } => {
+                                            args.push(name.clone());
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                let recursive = if let Ok(index) =
+                                    func_calls.binary_search(&function_key)
+                                {
+                                    func_calls.remove(index);
+                                    while let Ok(index) = func_calls.binary_search(&function_key) {
+                                        func_calls.remove(index);
+                                    }
+                                    true
+                                } else {
+                                    false
+                                };
+
+                                ir_stack[index] = Air::Var {
+                                    scope: scope.clone(),
+                                    constructor: constructor.clone(),
+                                    name: name.clone(),
+                                    variant_name,
+                                };
+
+                                func_components.insert(
+                                    function_key,
+                                    FuncComponents {
+                                        ir: func_ir,
+                                        dependencies: func_calls,
+                                        recursive,
+                                        args,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                }
+                a => {
+                    let scope = a.scope();
+
+                    for func in to_be_defined_map.clone().iter() {
+                        if get_common_ancestor(&scope, func.1) == scope.to_vec() {
+                            if let Some(index_scope) = func_index_map.get(func.0) {
+                                if get_common_ancestor(index_scope, func.1) == scope.to_vec() {
+                                    func_index_map.insert(func.0.clone(), scope.clone());
+                                    to_be_defined_map.shift_remove(func.0);
+                                } else {
+                                    to_be_defined_map.insert(
+                                        func.0.clone(),
+                                        get_common_ancestor(index_scope, func.1),
+                                    );
+                                }
+                            } else {
+                                func_index_map.insert(func.0.clone(), scope.clone());
+                                to_be_defined_map.shift_remove(func.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //Still to be defined
+        for func in to_be_defined_map.clone().iter() {
+            let index_scope = func_index_map.get(func.0).unwrap();
+            func_index_map.insert(func.0.clone(), get_common_ancestor(func.1, index_scope));
+        }
+    }
+
     fn uplc_code_gen(&mut self, ir_stack: &mut Vec<Air>) -> Term<Name> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
@@ -1501,7 +1937,7 @@ impl<'a> CodeGenerator<'a> {
                 variant_name,
                 ..
             } => {
-                match constructor.variant {
+                match &constructor.variant {
                     ValueConstructorVariant::LocalVariable { .. } => {
                         arg_stack.push(Term::Var(Name {
                             text: name,
@@ -1516,7 +1952,7 @@ impl<'a> CodeGenerator<'a> {
                         module,
                         ..
                     } => {
-                        let name = if func_name == name {
+                        let name = if *func_name == name {
                             format!("{module}_{func_name}{variant_name}")
                         } else {
                             format!("{func_name}{variant_name}")
@@ -1530,6 +1966,7 @@ impl<'a> CodeGenerator<'a> {
                     ValueConstructorVariant::Record {
                         name: constr_name,
                         field_map,
+                        arity,
                         ..
                     } => {
                         let data_type_key = match &*constructor.tipo {
@@ -1553,7 +1990,8 @@ impl<'a> CodeGenerator<'a> {
                                 .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
                         } else {
                             let data_type = self.data_types.get(&data_type_key).unwrap();
-                            let (constr_index, _constr) = data_type
+
+                            let (constr_index, _) = data_type
                                 .constructors
                                 .iter()
                                 .enumerate()
@@ -1578,6 +2016,7 @@ impl<'a> CodeGenerator<'a> {
                                     .zip(args_type)
                                     .rev()
                                 {
+                                    // TODO revisit
                                     fields = Term::Apply {
                                         function: Term::Apply {
                                             function: Term::Builtin(DefaultFunction::MkCons)
@@ -1589,6 +2028,26 @@ impl<'a> CodeGenerator<'a> {
                                                     unique: 0.into(),
                                                 }),
                                                 field.1,
+                                            )
+                                            .into(),
+                                        }
+                                        .into(),
+                                        argument: fields.into(),
+                                    };
+                                }
+                            } else {
+                                for (index, arg) in args_type.iter().enumerate().take(*arity) {
+                                    fields = Term::Apply {
+                                        function: Term::Apply {
+                                            function: Term::Builtin(DefaultFunction::MkCons)
+                                                .force_wrap()
+                                                .into(),
+                                            argument: convert_type_to_data(
+                                                Term::Var(Name {
+                                                    text: format!("__arg_{}", index),
+                                                    unique: 0.into(),
+                                                }),
+                                                arg,
                                             )
                                             .into(),
                                         }
@@ -1620,6 +2079,16 @@ impl<'a> CodeGenerator<'a> {
                                     term = Term::Lambda {
                                         parameter_name: Name {
                                             text: field.0.clone(),
+                                            unique: 0.into(),
+                                        },
+                                        body: term.into(),
+                                    };
+                                }
+                            } else {
+                                for (index, _) in args_type.iter().enumerate().take(*arity) {
+                                    term = Term::Lambda {
+                                        parameter_name: Name {
+                                            text: format!("__arg_{}", index),
                                             unique: 0.into(),
                                         },
                                         body: term.into(),
@@ -1919,13 +2388,50 @@ impl<'a> CodeGenerator<'a> {
                     todo!()
                 }
             }
-            Air::Builtin { func, .. } => {
-                let mut term = Term::Builtin(func);
-                for _ in 0..func.force_count() {
-                    term = Term::Force(term.into());
+            Air::Builtin { func, tipo, .. } => match func {
+                DefaultFunction::FstPair | DefaultFunction::SndPair | DefaultFunction::HeadList => {
+                    let id = self.id_gen.next();
+                    let mut term: Term<Name> = func.into();
+                    for _ in 0..func.force_count() {
+                        term = term.force_wrap();
+                    }
+
+                    term = Term::Apply {
+                        function: term.into(),
+                        argument: Term::Var(Name {
+                            text: format!("__arg_{}", id),
+                            unique: 0.into(),
+                        })
+                        .into(),
+                    };
+
+                    let inner_type = if matches!(func, DefaultFunction::SndPair) {
+                        tipo.get_inner_types()[0].get_inner_types()[1].clone()
+                    } else {
+                        tipo.get_inner_types()[0].get_inner_types()[0].clone()
+                    };
+
+                    term = convert_data_to_type(term, &inner_type);
+                    term = Term::Lambda {
+                        parameter_name: Name {
+                            text: format!("__arg_{}", id),
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    };
+
+                    arg_stack.push(term);
                 }
-                arg_stack.push(term);
-            }
+                DefaultFunction::MkCons => todo!(),
+                DefaultFunction::MkPairData => todo!(),
+                _ => {
+                    let mut term = Term::Builtin(func);
+                    for _ in 0..func.force_count() {
+                        term = term.force_wrap();
+                    }
+                    arg_stack.push(term);
+                }
+            },
             Air::BinOp { name, tipo, .. } => {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
@@ -3281,1574 +3787,5 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
         }
-    }
-
-    pub(crate) fn define_ir(&mut self, ir_stack: &mut Vec<Air>) {
-        let mut func_components = IndexMap::new();
-        let mut func_index_map = IndexMap::new();
-
-        let recursion_func_map = IndexMap::new();
-
-        self.define_recurse_ir(
-            ir_stack,
-            &mut func_components,
-            &mut func_index_map,
-            recursion_func_map,
-        );
-
-        let mut insert_var_vec = vec![];
-        let mut final_func_dep_ir = IndexMap::new();
-        for func in func_index_map.clone() {
-            if self.defined_functions.contains_key(&func.0) {
-                continue;
-            }
-            let mut funt_comp = func_components.get(&func.0).unwrap().clone();
-            let func_scope = func_index_map.get(&func.0).unwrap();
-
-            let mut dep_ir = vec![];
-            // deal with function dependencies
-            while let Some(dependency) = funt_comp.dependencies.pop() {
-                if self.defined_functions.contains_key(&dependency)
-                    || func_components.get(&dependency).is_none()
-                {
-                    continue;
-                }
-
-                let depend_comp = func_components.get(&dependency).unwrap();
-
-                let dep_scope = func_index_map.get(&dependency).unwrap();
-
-                if get_common_ancestor(dep_scope, func_scope) == func_scope.clone() {
-                    funt_comp
-                        .dependencies
-                        .extend(depend_comp.dependencies.clone());
-
-                    let mut temp_ir = vec![Air::DefineFunc {
-                        scope: func_scope.clone(),
-                        func_name: dependency.function_name.clone(),
-                        module_name: dependency.module_name.clone(),
-                        params: depend_comp.args.clone(),
-                        recursive: depend_comp.recursive,
-                        variant_name: dependency.variant_name.clone(),
-                    }];
-
-                    for (index, ir) in depend_comp.ir.iter().enumerate() {
-                        match_ir_for_recursion(
-                            ir.clone(),
-                            &mut insert_var_vec,
-                            &FunctionAccessKey {
-                                function_name: dependency.function_name.clone(),
-                                module_name: dependency.module_name.clone(),
-                                variant_name: dependency.variant_name.clone(),
-                            },
-                            index,
-                        );
-                    }
-
-                    let mut recursion_ir = depend_comp.ir.clone();
-                    for (index, ir) in insert_var_vec.clone() {
-                        recursion_ir.insert(index, ir);
-
-                        let current_call = recursion_ir[index - 1].clone();
-
-                        match current_call {
-                            Air::Call { scope, count } => {
-                                recursion_ir[index - 1] = Air::Call {
-                                    scope,
-                                    count: count + 1,
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-
-                    temp_ir.append(&mut recursion_ir);
-
-                    temp_ir.append(&mut dep_ir);
-
-                    dep_ir = temp_ir;
-                    self.defined_functions.insert(dependency, ());
-                    insert_var_vec = vec![];
-                }
-            }
-
-            final_func_dep_ir.insert(func.0, dep_ir);
-        }
-
-        for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
-            {
-                let temp_func_index_map = func_index_map.clone();
-                let to_insert = temp_func_index_map
-                    .iter()
-                    .filter(|func| {
-                        func.1.clone() == ir.scope() && !self.defined_functions.contains_key(func.0)
-                    })
-                    .collect_vec();
-
-                for (function_access_key, scopes) in to_insert.into_iter() {
-                    func_index_map.remove(function_access_key);
-
-                    self.defined_functions
-                        .insert(function_access_key.clone(), ());
-
-                    let mut full_func_ir =
-                        final_func_dep_ir.get(function_access_key).unwrap().clone();
-
-                    let mut func_comp = func_components.get(function_access_key).unwrap().clone();
-
-                    full_func_ir.push(Air::DefineFunc {
-                        scope: scopes.clone(),
-                        func_name: function_access_key.function_name.clone(),
-                        module_name: function_access_key.module_name.clone(),
-                        params: func_comp.args.clone(),
-                        recursive: func_comp.recursive,
-                        variant_name: function_access_key.variant_name.clone(),
-                    });
-
-                    for (index, ir) in func_comp.ir.clone().iter().enumerate() {
-                        match_ir_for_recursion(
-                            ir.clone(),
-                            &mut insert_var_vec,
-                            function_access_key,
-                            index,
-                        );
-                    }
-
-                    for (index, ir) in insert_var_vec {
-                        func_comp.ir.insert(index, ir);
-
-                        let current_call = func_comp.ir[index - 1].clone();
-
-                        match current_call {
-                            Air::Call { scope, count } => {
-                                func_comp.ir[index - 1] = Air::Call {
-                                    scope,
-                                    count: count + 1,
-                                }
-                            }
-                            _ => unreachable!("{current_call:#?}"),
-                        }
-                    }
-                    insert_var_vec = vec![];
-
-                    full_func_ir.extend(func_comp.ir.clone());
-
-                    for ir in full_func_ir.into_iter().rev() {
-                        ir_stack.insert(index, ir);
-                    }
-                }
-            }
-        }
-    }
-
-    fn define_recurse_ir(
-        &mut self,
-        ir_stack: &mut [Air],
-        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
-        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
-        recursion_func_map: IndexMap<FunctionAccessKey, ()>,
-    ) {
-        self.process_define_ir(ir_stack, func_components, func_index_map);
-
-        let mut recursion_func_map = recursion_func_map;
-
-        for func_index in func_index_map.clone().iter() {
-            let func = func_index.0;
-
-            let function_components = func_components.get(func).unwrap();
-            let mut function_ir = function_components.ir.clone();
-
-            for ir in function_ir.clone() {
-                if let Air::Var {
-                    constructor:
-                        ValueConstructor {
-                            variant:
-                                ValueConstructorVariant::ModuleFn {
-                                    name: func_name,
-                                    module,
-                                    ..
-                                },
-                            ..
-                        },
-                    variant_name,
-                    ..
-                } = ir
-                {
-                    if recursion_func_map.contains_key(&FunctionAccessKey {
-                        module_name: module.clone(),
-                        function_name: func_name.clone(),
-                        variant_name: variant_name.clone(),
-                    }) {
-                        return;
-                    } else {
-                        recursion_func_map.insert(
-                            FunctionAccessKey {
-                                module_name: module.clone(),
-                                function_name: func_name.clone(),
-                                variant_name: variant_name.clone(),
-                            },
-                            (),
-                        );
-                    }
-                }
-            }
-
-            let mut inner_func_components = IndexMap::new();
-
-            let mut inner_func_index_map = IndexMap::new();
-
-            self.define_recurse_ir(
-                &mut function_ir,
-                &mut inner_func_components,
-                &mut inner_func_index_map,
-                recursion_func_map.clone(),
-            );
-
-            //now unify
-            for item in inner_func_components {
-                if !func_components.contains_key(&item.0) {
-                    func_components.insert(item.0, item.1);
-                }
-            }
-
-            for item in inner_func_index_map {
-                if let Some(entry) = func_index_map.get_mut(&item.0) {
-                    *entry = get_common_ancestor(entry, &item.1);
-                } else {
-                    func_index_map.insert(item.0, item.1);
-                }
-            }
-        }
-    }
-
-    fn process_define_ir(
-        &mut self,
-        ir_stack: &mut [Air],
-        func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
-        func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
-    ) {
-        let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
-        for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
-            match ir {
-                Air::Var {
-                    scope, constructor, ..
-                } => {
-                    if let ValueConstructorVariant::ModuleFn {
-                        name,
-                        module,
-                        builtin,
-                        ..
-                    } = &constructor.variant
-                    {
-                        if builtin.is_none() {
-                            let mut function_key = FunctionAccessKey {
-                                module_name: module.clone(),
-                                function_name: name.clone(),
-                                variant_name: String::new(),
-                            };
-                            if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
-                                let new_scope = get_common_ancestor(scope, scope_prev);
-
-                                to_be_defined_map.insert(function_key, new_scope);
-                            } else if func_components.get(&function_key).is_some() {
-                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
-                            } else {
-                                let function = self.functions.get(&function_key).unwrap();
-
-                                let mut func_ir = vec![];
-
-                                self.build_ir(&function.body, &mut func_ir, scope.to_vec());
-
-                                let (param_types, _) = constructor.tipo.function_types().unwrap();
-
-                                let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
-
-                                for (index, arg) in function.arguments.iter().enumerate() {
-                                    if arg.tipo.is_generic() {
-                                        let mut map = generics_type_map.into_iter().collect_vec();
-                                        map.append(&mut get_generics_and_type(
-                                            &arg.tipo,
-                                            &param_types[index],
-                                        ));
-
-                                        generics_type_map = map.into_iter().collect();
-                                    }
-                                }
-
-                                let (variant_name, mut func_ir) = self.monomorphize(
-                                    func_ir,
-                                    generics_type_map,
-                                    &constructor.tipo,
-                                );
-
-                                function_key = FunctionAccessKey {
-                                    module_name: module.clone(),
-                                    function_name: function_key.function_name,
-                                    variant_name: variant_name.clone(),
-                                };
-
-                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
-                                let mut func_calls = vec![];
-
-                                for (index, ir) in func_ir.clone().into_iter().enumerate() {
-                                    if let Air::Var {
-                                        constructor:
-                                            ValueConstructor {
-                                                variant:
-                                                    ValueConstructorVariant::ModuleFn {
-                                                        name: func_name,
-                                                        module,
-                                                        field_map,
-                                                        arity,
-                                                        location,
-                                                        ..
-                                                    },
-                                                public,
-                                                tipo,
-                                            },
-                                        scope,
-                                        name,
-                                        ..
-                                    } = ir
-                                    {
-                                        let current_func = FunctionAccessKey {
-                                            module_name: module.clone(),
-                                            function_name: func_name.clone(),
-                                            variant_name: String::new(),
-                                        };
-
-                                        let current_func_as_variant = FunctionAccessKey {
-                                            module_name: module.clone(),
-                                            function_name: func_name.clone(),
-                                            variant_name: variant_name.clone(),
-                                        };
-
-                                        let function = self.functions.get(&current_func);
-                                        if function_key.clone() == current_func_as_variant {
-                                            func_ir[index] = Air::Var {
-                                                scope,
-                                                constructor: ValueConstructor {
-                                                    public,
-                                                    variant: ValueConstructorVariant::ModuleFn {
-                                                        name: func_name,
-                                                        field_map,
-                                                        module,
-                                                        arity,
-                                                        location,
-                                                        builtin: None,
-                                                    },
-                                                    tipo,
-                                                },
-                                                name,
-                                                variant_name: variant_name.clone(),
-                                            };
-                                            func_calls.push(current_func_as_variant);
-                                        } else if let (Some(function), Type::Fn { args, .. }) =
-                                            (function, &*tipo)
-                                        {
-                                            if function
-                                                .arguments
-                                                .iter()
-                                                .any(|arg| arg.tipo.is_generic())
-                                            {
-                                                let mut new_name = String::new();
-                                                for arg in args.iter() {
-                                                    get_variant_name(&mut new_name, arg);
-                                                }
-                                                func_calls.push(FunctionAccessKey {
-                                                    module_name: module,
-                                                    function_name: func_name,
-                                                    variant_name: new_name,
-                                                });
-                                            } else {
-                                                func_calls.push(current_func);
-                                            }
-                                        } else {
-                                            func_calls.push(current_func);
-                                        }
-                                    }
-                                }
-
-                                let mut args = vec![];
-
-                                for arg in function.arguments.iter() {
-                                    match &arg.arg_name {
-                                        ArgName::Named { name, .. }
-                                        | ArgName::NamedLabeled { name, .. } => {
-                                            args.push(name.clone());
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                let recursive = if let Ok(index) =
-                                    func_calls.binary_search(&function_key)
-                                {
-                                    func_calls.remove(index);
-                                    while let Ok(index) = func_calls.binary_search(&function_key) {
-                                        func_calls.remove(index);
-                                    }
-                                    true
-                                } else {
-                                    false
-                                };
-
-                                ir_stack[index] = Air::Var {
-                                    scope: scope.clone(),
-                                    constructor: constructor.clone(),
-                                    name: name.clone(),
-                                    variant_name,
-                                };
-
-                                func_components.insert(
-                                    function_key,
-                                    FuncComponents {
-                                        ir: func_ir,
-                                        dependencies: func_calls,
-                                        recursive,
-                                        args,
-                                    },
-                                );
-                            }
-                        }
-                    }
-                }
-                a => {
-                    let scope = a.scope();
-
-                    for func in to_be_defined_map.clone().iter() {
-                        if get_common_ancestor(&scope, func.1) == scope.to_vec() {
-                            if let Some(index_scope) = func_index_map.get(func.0) {
-                                if get_common_ancestor(index_scope, func.1) == scope.to_vec() {
-                                    func_index_map.insert(func.0.clone(), scope.clone());
-                                    to_be_defined_map.shift_remove(func.0);
-                                } else {
-                                    to_be_defined_map.insert(
-                                        func.0.clone(),
-                                        get_common_ancestor(index_scope, func.1),
-                                    );
-                                }
-                            } else {
-                                func_index_map.insert(func.0.clone(), scope.clone());
-                                to_be_defined_map.shift_remove(func.0);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        //Still to be defined
-        for func in to_be_defined_map.clone().iter() {
-            let index_scope = func_index_map.get(func.0).unwrap();
-            func_index_map.insert(func.0.clone(), get_common_ancestor(func.1, index_scope));
-        }
-    }
-
-    fn monomorphize(
-        &mut self,
-        ir: Vec<Air>,
-        generic_types: HashMap<u64, Arc<Type>>,
-        full_type: &Arc<Type>,
-    ) -> (String, Vec<Air>) {
-        let mut new_air = ir.clone();
-        let mut new_name = String::new();
-
-        for (index, ir) in ir.into_iter().enumerate() {
-            match ir {
-                Air::Var {
-                    constructor,
-                    scope,
-                    name,
-                    ..
-                } => {
-                    if constructor.tipo.is_generic() {
-                        let mut tipo = constructor.tipo.clone();
-
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        let mut variant = String::new();
-
-                        let mut constructor = constructor.clone();
-                        constructor.tipo = tipo;
-
-                        if let Type::Fn { args, .. } = &*constructor.tipo {
-                            if matches!(
-                                constructor.variant,
-                                ValueConstructorVariant::ModuleFn { .. }
-                            ) {
-                                for arg in args {
-                                    get_variant_name(&mut variant, arg);
-                                }
-                            }
-                        }
-                        new_air[index] = Air::Var {
-                            scope,
-                            constructor,
-                            name,
-                            variant_name: variant,
-                        };
-                    }
-                }
-                Air::List {
-                    tipo,
-                    scope,
-                    count,
-                    tail,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::List {
-                            scope,
-                            count,
-                            tipo,
-                            tail,
-                        };
-                    }
-                }
-                Air::ListAccessor {
-                    scope,
-                    tipo,
-                    names,
-                    tail,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::ListAccessor {
-                            scope,
-                            names,
-                            tipo,
-                            tail,
-                        };
-                    }
-                }
-                Air::ListExpose {
-                    scope,
-                    tipo,
-                    tail_head_names,
-                    tail,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::ListExpose {
-                            scope,
-                            tail_head_names,
-                            tipo,
-                            tail,
-                        };
-                    }
-                }
-
-                Air::BinOp {
-                    scope,
-                    name,
-                    count,
-                    tipo,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::BinOp {
-                            scope,
-                            name,
-                            tipo,
-                            count,
-                        };
-                    }
-                }
-                Air::Assignment { .. } => {}
-                Air::When {
-                    scope,
-                    tipo,
-                    subject_name,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::When {
-                            scope,
-                            subject_name,
-                            tipo,
-                        };
-                    }
-                }
-                Air::Clause {
-                    scope,
-                    tipo,
-                    subject_name,
-                    complex_clause,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::Clause {
-                            scope,
-                            tipo,
-                            subject_name,
-                            complex_clause,
-                        };
-                    }
-                }
-                Air::ListClause {
-                    scope,
-                    tipo,
-                    tail_name,
-                    complex_clause,
-                    next_tail_name,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::ListClause {
-                            scope,
-                            tipo,
-                            tail_name,
-                            complex_clause,
-                            next_tail_name,
-                        };
-                    }
-                }
-                Air::ClauseGuard {
-                    tipo,
-                    scope,
-                    subject_name,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::ClauseGuard {
-                            scope,
-                            subject_name,
-                            tipo,
-                        };
-                    }
-                }
-                Air::RecordAccess {
-                    scope,
-                    index: record_index,
-                    tipo,
-                } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::RecordAccess {
-                            scope,
-                            index: record_index,
-                            tipo,
-                        };
-                    }
-                }
-                Air::FieldsExpose {
-                    scope,
-                    count,
-                    indices,
-                } => {
-                    let mut new_indices = vec![];
-                    for (ind, name, tipo) in indices {
-                        if tipo.is_generic() {
-                            let mut tipo = tipo.clone();
-                            find_generics_to_replace(&mut tipo, &generic_types);
-                        }
-                        new_indices.push((ind, name, tipo));
-                    }
-                    new_air[index] = Air::FieldsExpose {
-                        scope,
-                        count,
-                        indices: new_indices,
-                    };
-                }
-                Air::Tuple { scope, tipo, count } => {
-                    if tipo.is_generic() {
-                        let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
-
-                        new_air[index] = Air::Tuple { scope, count, tipo };
-                    }
-                }
-                Air::Todo { .. } => todo!(),
-                Air::RecordUpdate { .. } => todo!(),
-                Air::TupleAccessor { .. } => todo!(),
-                _ => {}
-            }
-        }
-
-        if let Type::Fn { args, .. } = &**full_type {
-            for arg in args {
-                get_variant_name(&mut new_name, arg);
-            }
-        }
-
-        (new_name, new_air)
-    }
-}
-
-fn match_ir_for_recursion(
-    ir: Air,
-    insert_var_vec: &mut Vec<(usize, Air)>,
-    function_access_key: &FunctionAccessKey,
-    index: usize,
-) {
-    if let Air::Var {
-        scope,
-        constructor,
-        variant_name,
-        ..
-    } = ir
-    {
-        if let ValueConstructorVariant::ModuleFn {
-            name: func_name,
-            module,
-            ..
-        } = constructor.clone().variant
-        {
-            let var_func_access = FunctionAccessKey {
-                module_name: module,
-                function_name: func_name.clone(),
-                variant_name: variant_name.clone(),
-            };
-
-            if function_access_key.clone() == var_func_access {
-                insert_var_vec.push((
-                    index,
-                    Air::Var {
-                        scope,
-                        constructor,
-                        name: func_name,
-                        variant_name,
-                    },
-                ));
-            }
-        }
-    }
-}
-
-fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &HashMap<u64, Arc<Type>>) {
-    if let Some(id) = tipo.get_generic() {
-        *tipo = generic_types.get(&id).unwrap().clone();
-    } else if tipo.is_generic() {
-        match &**tipo {
-            Type::App {
-                args,
-                public,
-                module,
-                name,
-            } => {
-                let mut new_args = vec![];
-                for arg in args {
-                    let mut arg = arg.clone();
-                    find_generics_to_replace(&mut arg, generic_types);
-                    new_args.push(arg);
-                }
-                let t = Type::App {
-                    args: new_args,
-                    public: *public,
-                    module: module.clone(),
-                    name: name.clone(),
-                };
-                *tipo = t.into();
-            }
-            Type::Fn { args, ret } => {
-                let mut new_args = vec![];
-                for arg in args {
-                    let mut arg = arg.clone();
-                    find_generics_to_replace(&mut arg, generic_types);
-                    new_args.push(arg);
-                }
-
-                let mut ret = ret.clone();
-                find_generics_to_replace(&mut ret, generic_types);
-
-                let t = Type::Fn {
-                    args: new_args,
-                    ret,
-                };
-                *tipo = t.into();
-            }
-            Type::Tuple { elems } => {
-                let mut new_elems = vec![];
-                for elem in elems {
-                    let mut elem = elem.clone();
-                    find_generics_to_replace(&mut elem, generic_types);
-                    new_elems.push(elem);
-                }
-                let t = Type::Tuple { elems: new_elems };
-                *tipo = t.into();
-            }
-            Type::Var { tipo: var_tipo } => {
-                let var_type = var_tipo.as_ref().borrow().clone();
-                let var_tipo = match var_type {
-                    tipo::TypeVar::Unbound { .. } => todo!(),
-                    tipo::TypeVar::Link { tipo } => {
-                        let mut tipo = tipo;
-                        find_generics_to_replace(&mut tipo, generic_types);
-                        tipo
-                    }
-                    tipo::TypeVar::Generic { .. } => unreachable!(),
-                };
-
-                let t = Type::Var {
-                    tipo: RefCell::from(tipo::TypeVar::Link { tipo: var_tipo }).into(),
-                };
-                *tipo = t.into()
-            }
-        };
-    }
-}
-
-fn get_generics_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)> {
-    let mut generics_ids = vec![];
-
-    if let Some(id) = tipo.get_generic() {
-        generics_ids.push((id, param.clone().into()));
-    }
-
-    for (tipo, param_type) in tipo
-        .get_inner_types()
-        .iter()
-        .zip(param.get_inner_types().iter())
-    {
-        generics_ids.append(&mut get_generics_and_type(tipo, param_type));
-    }
-    generics_ids
-}
-
-fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
-    new_name.push_str(&format!(
-        "_{}",
-        if t.is_string() {
-            "string".to_string()
-        } else if t.is_int() {
-            "int".to_string()
-        } else if t.is_bool() {
-            "bool".to_string()
-        } else if t.is_map() {
-            let mut full_type = "map".to_string();
-            let pair_type = &t.get_inner_types()[0];
-            let fst_type = &pair_type.get_inner_types()[0];
-            let snd_type = &pair_type.get_inner_types()[1];
-
-            get_variant_name(&mut full_type, fst_type);
-            get_variant_name(&mut full_type, snd_type);
-            full_type
-        } else if t.is_list() {
-            let mut full_type = "list".to_string();
-            let list_type = &t.get_inner_types()[0];
-            get_variant_name(&mut full_type, list_type);
-            full_type
-        } else {
-            "data".to_string()
-        }
-    ));
-}
-
-fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConstant> {
-    let mut new_constants = vec![];
-    for constant in constants {
-        let constant = match constant {
-            UplcConstant::Integer(i) => {
-                UplcConstant::Data(PlutusData::BigInt(BigInt::Int((i).try_into().unwrap())))
-            }
-            UplcConstant::ByteString(b) => {
-                UplcConstant::Data(PlutusData::BoundedBytes(b.try_into().unwrap()))
-            }
-            UplcConstant::String(s) => UplcConstant::Data(PlutusData::BoundedBytes(
-                s.as_bytes().to_vec().try_into().unwrap(),
-            )),
-
-            UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: u64::from(b),
-                any_constructor: None,
-                fields: vec![],
-            })),
-            UplcConstant::ProtoList(_, constants) => {
-                let inner_constants = convert_constants_to_data(constants)
-                    .into_iter()
-                    .map(|constant| match constant {
-                        UplcConstant::Data(d) => d,
-                        _ => todo!(),
-                    })
-                    .collect_vec();
-
-                UplcConstant::Data(PlutusData::Array(inner_constants))
-            }
-            UplcConstant::ProtoPair(_, _, left, right) => {
-                let inner_constants = vec![*left, *right];
-                let inner_constants = convert_constants_to_data(inner_constants)
-                    .into_iter()
-                    .map(|constant| match constant {
-                        UplcConstant::Data(d) => d,
-                        _ => todo!(),
-                    })
-                    .collect_vec();
-
-                UplcConstant::Data(PlutusData::Map(KeyValuePairs::Def(vec![(
-                    inner_constants[0].clone(),
-                    inner_constants[1].clone(),
-                )])))
-            }
-            d @ UplcConstant::Data(_) => d,
-            _ => unreachable!(),
-        };
-        new_constants.push(constant);
-    }
-    new_constants
-}
-
-fn constants_ir(literal: &Constant<Arc<Type>, String>, ir_stack: &mut Vec<Air>, scope: Vec<u64>) {
-    match literal {
-        Constant::Int { value, .. } => {
-            ir_stack.push(Air::Int {
-                scope,
-                value: value.clone(),
-            });
-        }
-        Constant::String { value, .. } => {
-            ir_stack.push(Air::String {
-                scope,
-                value: value.clone(),
-            });
-        }
-        Constant::Tuple { .. } => {
-            todo!()
-        }
-        Constant::List { elements, tipo, .. } => {
-            ir_stack.push(Air::List {
-                scope: scope.clone(),
-                count: elements.len(),
-                tipo: tipo.clone(),
-                tail: false,
-            });
-
-            for element in elements {
-                constants_ir(element, ir_stack, scope.clone());
-            }
-        }
-        Constant::Record { .. } => {
-            // ir_stack.push(Air::Record { scope,  });
-            todo!()
-        }
-        Constant::ByteArray { bytes, .. } => {
-            ir_stack.push(Air::ByteArray {
-                scope,
-                bytes: bytes.clone(),
-            });
-        }
-        Constant::Var { .. } => todo!(),
-    };
-}
-
-fn check_when_pattern_needs(
-    pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
-    needs_access_to_constr_var: &mut bool,
-    needs_clause_guard: &mut bool,
-) {
-    match pattern {
-        Pattern::Var { .. } => {
-            *needs_access_to_constr_var = true;
-        }
-        Pattern::List { .. }
-        | Pattern::Constructor { .. }
-        | Pattern::Tuple { .. }
-        | Pattern::Int { .. } => {
-            *needs_access_to_constr_var = true;
-            *needs_clause_guard = true;
-        }
-        Pattern::Discard { .. } => {}
-
-        _ => todo!("{pattern:#?}"),
-    }
-}
-
-fn get_common_ancestor(scope: &[u64], scope_prev: &[u64]) -> Vec<u64> {
-    let longest_length = if scope.len() >= scope_prev.len() {
-        scope.len()
-    } else {
-        scope_prev.len()
-    };
-
-    if *scope == *scope_prev {
-        return scope.to_vec();
-    }
-
-    for index in 0..longest_length {
-        if scope.get(index).is_none() {
-            return scope.to_vec();
-        } else if scope_prev.get(index).is_none() {
-            return scope_prev.to_vec();
-        } else if scope[index] != scope_prev[index] {
-            return scope[0..index].to_vec();
-        }
-    }
-    vec![]
-}
-
-fn list_access_to_uplc(
-    names: &[String],
-    id_list: &[u64],
-    tail: bool,
-    current_index: usize,
-    term: Term<Name>,
-    tipo: &Type,
-) -> Term<Name> {
-    let (first, names) = names.split_first().unwrap();
-
-    let head_list = if tipo.is_map() {
-        Term::Apply {
-            function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
-            argument: Term::Var(Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            })
-            .into(),
-        }
-    } else {
-        convert_data_to_type(
-            Term::Apply {
-                function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
-                argument: Term::Var(Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
-                })
-                .into(),
-            },
-            &tipo.clone().get_inner_types()[0],
-        )
-    };
-
-    if names.len() == 1 && tail {
-        Term::Lambda {
-            parameter_name: Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            },
-            body: Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: first.clone(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: names[0].clone(),
-                                unique: 0.into(),
-                            },
-                            body: term.into(),
-                        }
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
-                                .into(),
-                            argument: Term::Var(Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-                argument: head_list.into(),
-            }
-            .into(),
-        }
-    } else if names.is_empty() {
-        Term::Lambda {
-            parameter_name: Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            },
-            body: Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: first.clone(),
-                        unique: 0.into(),
-                    },
-                    body: term.into(),
-                }
-                .into(),
-                argument: Term::Apply {
-                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
-                    argument: Term::Var(Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    })
-                    .into(),
-                }
-                .into(),
-            }
-            .into(),
-        }
-    } else {
-        Term::Lambda {
-            parameter_name: Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            },
-            body: Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: first.clone(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: list_access_to_uplc(
-                            names,
-                            id_list,
-                            tail,
-                            current_index + 1,
-                            term,
-                            tipo,
-                        )
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
-                                .into(),
-                            argument: Term::Var(Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-                argument: head_list.into(),
-            }
-            .into(),
-        }
-    }
-}
-
-fn rearrange_clauses(
-    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>>,
-) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>> {
-    let mut sorted_clauses = clauses;
-
-    // if we have a list sort clauses so we can plug holes for cases not covered by clauses
-    // TODO: while having 10000000 element list is impossible to destructure in plutus budget,
-    // let's sort clauses by a safer manner
-    // TODO: how shall tails be weighted? Since any clause after will not run
-    sorted_clauses.sort_by(|clause1, clause2| {
-        let clause1_len = match &clause1.pattern[0] {
-            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
-            _ => 10000000,
-        };
-        let clause2_len = match &clause2.pattern[0] {
-            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
-            _ => 10000001,
-        };
-
-        clause1_len.cmp(&clause2_len)
-    });
-
-    let mut elems_len = 0;
-    let mut final_clauses = sorted_clauses.clone();
-    let mut holes_to_fill = vec![];
-    let mut assign_plug_in_name = None;
-    let mut last_clause_index = 0;
-    let mut last_clause_set = false;
-
-    // If we have a catch all, use that. Otherwise use todo which will result in error
-    // TODO: fill in todo label with description
-    let plug_in_then = match &sorted_clauses[sorted_clauses.len() - 1].pattern[0] {
-        Pattern::Var { name, .. } => {
-            assign_plug_in_name = Some(name);
-            sorted_clauses[sorted_clauses.len() - 1].clone().then
-        }
-        Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
-        _ => TypedExpr::Todo {
-            location: Span::empty(),
-            label: None,
-            tipo: sorted_clauses[sorted_clauses.len() - 1].then.tipo(),
-        },
-    };
-
-    for (index, clause) in sorted_clauses.iter().enumerate() {
-        if let Pattern::List { elements, .. } = &clause.pattern[0] {
-            // found a hole and now we plug it
-            while elems_len < elements.len() {
-                let mut discard_elems = vec![];
-
-                for _ in 0..elems_len {
-                    discard_elems.push(Pattern::Discard {
-                        name: "_".to_string(),
-                        location: Span::empty(),
-                    });
-                }
-
-                // If we have a named catch all then in scope the name and create list of discards, otherwise list of discards
-                let clause_to_fill = if let Some(name) = assign_plug_in_name {
-                    Clause {
-                        location: Span::empty(),
-                        pattern: vec![Pattern::Assign {
-                            name: name.clone(),
-                            location: Span::empty(),
-                            pattern: Pattern::List {
-                                location: Span::empty(),
-                                elements: discard_elems,
-                                tail: None,
-                            }
-                            .into(),
-                        }],
-                        alternative_patterns: vec![],
-                        guard: None,
-                        then: plug_in_then.clone(),
-                    }
-                } else {
-                    Clause {
-                        location: Span::empty(),
-                        pattern: vec![Pattern::List {
-                            location: Span::empty(),
-                            elements: discard_elems,
-                            tail: None,
-                        }],
-                        alternative_patterns: vec![],
-                        guard: None,
-                        then: plug_in_then.clone(),
-                    }
-                };
-
-                holes_to_fill.push((index, clause_to_fill));
-                elems_len += 1;
-            }
-        }
-
-        // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
-        if let Pattern::List {
-            elements,
-            tail: Some(tail),
-            ..
-        } = &clause.pattern[0]
-        {
-            let mut elements = elements.clone();
-            elements.push(*tail.clone());
-            if elements
-                .iter()
-                .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
-                && !last_clause_set
-            {
-                last_clause_index = index;
-                last_clause_set = true;
-            }
-        }
-
-        // If the last condition doesn't have a catch all or tail then add a catch all with a todo
-        if index == sorted_clauses.len() - 1 {
-            if let Pattern::List {
-                elements,
-                tail: Some(tail),
-                ..
-            } = &clause.pattern[0]
-            {
-                let mut elements = elements.clone();
-                elements.push(*tail.clone());
-                if !elements
-                    .iter()
-                    .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
-                {
-                    final_clauses.push(Clause {
-                        location: Span::empty(),
-                        pattern: vec![Pattern::Discard {
-                            name: "_".to_string(),
-                            location: Span::empty(),
-                        }],
-                        alternative_patterns: vec![],
-                        guard: None,
-                        then: plug_in_then.clone(),
-                    });
-                }
-            }
-        }
-
-        elems_len += 1;
-    }
-
-    // Encountered a tail so stop there with that as last clause
-    final_clauses = final_clauses[0..(last_clause_index + 1)].to_vec();
-
-    // insert hole fillers into clauses
-    for (index, clause) in holes_to_fill.into_iter().rev() {
-        final_clauses.insert(index, clause);
-    }
-
-    final_clauses
-}
-
-fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
-    if field_type.is_bytearray() {
-        Term::Apply {
-            function: DefaultFunction::BData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_int() {
-        Term::Apply {
-            function: DefaultFunction::IData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_map() {
-        Term::Apply {
-            function: DefaultFunction::MapData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_list() {
-        Term::Apply {
-            function: DefaultFunction::ListData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_string() {
-        Term::Apply {
-            function: DefaultFunction::BData.into(),
-            argument: Term::Apply {
-                function: DefaultFunction::EncodeUtf8.into(),
-                argument: term.into(),
-            }
-            .into(),
-        }
-    } else if field_type.is_tuple() {
-        match field_type.get_uplc_type() {
-            UplcType::List(_) => Term::Apply {
-                function: DefaultFunction::ListData.into(),
-                argument: term.into(),
-            },
-            UplcType::Pair(_, _) => Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: "__pair".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: DefaultFunction::ListData.into(),
-                        argument: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::MkCons)
-                                    .force_wrap()
-                                    .into(),
-                                argument: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::FstPair)
-                                        .force_wrap()
-                                        .force_wrap()
-                                        .into(),
-                                    argument: Term::Var(Name {
-                                        text: "__pair".to_string(),
-                                        unique: 0.into(),
-                                    })
-                                    .into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-
-                            argument: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::MkCons)
-                                        .force_wrap()
-                                        .into(),
-                                    argument: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::SndPair)
-                                            .force_wrap()
-                                            .force_wrap()
-                                            .into(),
-                                        argument: Term::Var(Name {
-                                            text: "__pair".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
-                                .into(),
-                                argument: Term::Constant(UplcConstant::ProtoList(
-                                    UplcType::Data,
-                                    vec![],
-                                ))
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-                argument: term.into(),
-            },
-            _ => unreachable!(),
-        }
-    } else if field_type.is_bool() {
-        Term::Apply {
-            function: Term::Apply {
-                function: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::IfThenElse)
-                        .force_wrap()
-                        .into(),
-                    argument: term.into(),
-                }
-                .into(),
-                argument: Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(1),
-                    any_constructor: None,
-                    fields: vec![],
-                })))
-                .into(),
-            }
-            .into(),
-            argument: Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(0),
-                any_constructor: None,
-                fields: vec![],
-            })))
-            .into(),
-        }
-    } else {
-        term
-    }
-}
-
-fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
-    if field_type.is_int() {
-        Term::Apply {
-            function: DefaultFunction::UnIData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_bytearray() {
-        Term::Apply {
-            function: DefaultFunction::UnBData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_map() {
-        Term::Apply {
-            function: DefaultFunction::UnMapData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_list() {
-        Term::Apply {
-            function: DefaultFunction::UnListData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_string() {
-        Term::Apply {
-            function: DefaultFunction::DecodeUtf8.into(),
-            argument: Term::Apply {
-                function: DefaultFunction::UnBData.into(),
-                argument: term.into(),
-            }
-            .into(),
-        }
-    } else if field_type.is_tuple() {
-        match field_type.get_uplc_type() {
-            UplcType::List(_) => Term::Apply {
-                function: DefaultFunction::UnListData.into(),
-                argument: term.into(),
-            },
-            UplcType::Pair(_, _) => Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: "__list_data".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "__tail".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::MkPairData).into(),
-                                    argument: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::HeadList)
-                                            .force_wrap()
-                                            .into(),
-                                        argument: Term::Var(Name {
-                                            text: "__list_data".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
-                                .into(),
-                                argument: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::HeadList)
-                                        .force_wrap()
-                                        .into(),
-                                    argument: Term::Var(Name {
-                                        text: "__tail".to_string(),
-                                        unique: 0.into(),
-                                    })
-                                    .into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
-                            argument: Term::Var(Name {
-                                text: "__list_data".to_string(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-                argument: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::UnListData)
-                        .force_wrap()
-                        .into(),
-                    argument: term.into(),
-                }
-                .into(),
-            },
-            _ => unreachable!(),
-        }
-    } else if field_type.is_bool() {
-        Term::Apply {
-            function: Term::Apply {
-                function: Term::Builtin(DefaultFunction::EqualsInteger).into(),
-                argument: Term::Constant(UplcConstant::Integer(1)).into(),
-            }
-            .into(),
-            argument: Term::Apply {
-                function: Term::Builtin(DefaultFunction::FstPair)
-                    .force_wrap()
-                    .force_wrap()
-                    .into(),
-                argument: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                    argument: term.into(),
-                }
-                .into(),
-            }
-            .into(),
-        }
-    } else {
-        term
     }
 }
