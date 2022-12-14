@@ -5,7 +5,17 @@ use crate::ast::Span;
 use super::{error::ParseError, token::Token};
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
-    let int = choice((text::int(10), text::int(16))).map(|value| Token::Int { value });
+    let int = choice((
+        text::int(10),
+        text::int(16),
+        just("-")
+            .ignore_then(text::int(10))
+            .map(|value: String| format!("-{}", &value)),
+        just("-")
+            .ignore_then(text::int(16))
+            .map(|value: String| format!("-{}", &value)),
+    ))
+    .map(|value| Token::Int { value });
 
     let op = choice((
         just("==").to(Token::EqualEqual),
