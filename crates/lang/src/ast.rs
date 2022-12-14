@@ -85,6 +85,21 @@ pub struct Function<T, Expr> {
 pub type TypedTypeAlias = TypeAlias<Arc<Type>>;
 pub type UntypedTypeAlias = TypeAlias<()>;
 
+impl TypedFunction {
+    pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
+        match &self.body {
+            TypedExpr::BinOp {
+                name,
+                tipo,
+                left,
+                right,
+                ..
+            } if tipo == &bool() => Some((name.clone(), left.clone(), right.clone())),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAlias<T> {
     pub alias: String,

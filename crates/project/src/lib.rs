@@ -25,9 +25,14 @@ use pallas::{
     ledger::{addresses::Address, primitives::babbage},
 };
 use pallas_traverse::ComputeHash;
-use script::Script;
+use script::{EvalHint, EvalInfo, Script};
 use serde_json::json;
-use telemetry::{EvalInfo, EventListener};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
+use telemetry::EventListener;
 use uplc::{
     ast::{Constant, DeBruijn, Program, Term},
     machine::cost_model::ExBudget,
@@ -159,6 +164,7 @@ where
                             Some(Error::TestFailure {
                                 name: e.script.name.clone(),
                                 path: e.script.input_path.clone(),
+                                evaluation_hint: e.script.evaluation_hint.clone(),
                             })
                         }
                     })
@@ -472,7 +478,13 @@ where
 
             let program = generator.generate(body, arguments, true);
 
-            let script = Script::new(input_path, module_name, name, program.try_into().unwrap());
+            let script = Script::new(
+                input_path,
+                module_name,
+                name,
+                program.try_into().unwrap(),
+                None,
+            );
 
             programs.push(script);
         }
@@ -571,6 +583,25 @@ where
                 &self.module_types,
             );
 
+            let evaluation_hint = if let Some((bin_op, left_src, right_src)) = func_def.test_hint()
+            {
+                let left = CodeGenerator::new(&functions, &data_types, &self.module_types)
+                    .generate(*left_src, vec![], false)
+                    .try_into()
+                    .unwrap();
+                let right = CodeGenerator::new(&functions, &data_types, &self.module_types)
+                    .generate(*right_src, vec![], false)
+                    .try_into()
+                    .unwrap();
+                Some(EvalHint {
+                    bin_op,
+                    left,
+                    right,
+                })
+            } else {
+                None
+            };
+
             let program = generator.generate(body.clone(), arguments.clone(), false);
 
             let script = Script::new(
@@ -578,6 +609,7 @@ where
                 module_name,
                 name.to_string(),
                 program.try_into().unwrap(),
+                evaluation_hint,
             );
 
             programs.push(script);

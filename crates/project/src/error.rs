@@ -1,13 +1,18 @@
+use crate::{pretty, script::EvalHint};
+use aiken_lang::{
+    ast::{BinOp, Span},
+    parser::error::ParseError,
+    tipo,
+};
+use miette::{
+    Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
+};
 use std::{
     fmt::{Debug, Display},
     io,
     path::{Path, PathBuf},
 };
-
-use aiken_lang::{ast::Span, parser::error::ParseError, tipo};
-use miette::{
-    Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
-};
+use uplc::machine::cost_model::ExBudget;
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -75,7 +80,11 @@ pub enum Error {
     },
 
     #[error("{} failed", name)]
-    TestFailure { name: String, path: PathBuf },
+    TestFailure {
+        name: String,
+        path: PathBuf,
+        evaluation_hint: Option<EvalHint>,
+    },
 }
 
 impl Error {
@@ -231,7 +240,34 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
             Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
-            Error::TestFailure { .. }  => None,
+            Error::TestFailure { evaluation_hint, .. }  =>{
+                match evaluation_hint {
+                    None => None,
+                    Some(hint) => {
+                        let budget = ExBudget { mem: i64::MAX, cpu: i64::MAX, };
+                        let left = pretty::boxed("left", match hint.left.eval(budget) {
+                            (Ok(term), _, _) => format!("{term}"),
+                            (Err(err), _, _) => format!("{err}"),
+                        });
+                        let right = pretty::boxed("right", match hint.right.eval(budget) {
+                            (Ok(term), _, _) => format!("{term}"),
+                            (Err(err), _, _) => format!("{err}"),
+                        });
+                        let msg = match hint.bin_op {
+                            BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
+                            BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
+                            BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
+                            BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
+                            BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
+                            BinOp::LtEqInt => Some(format!("{left}\n\nshould be lower than or equal to\n\n{right}")),
+                            BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
+                            BinOp::GtInt => Some(format!("{left}\n\nshould be greater than or equal to\n\n{right}")),
+                            _ => None
+                        }?;
+                        Some(Box::new(msg))
+                    }
+                }
+            },
         }
     }
 
