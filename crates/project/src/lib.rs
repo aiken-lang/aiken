@@ -1,14 +1,9 @@
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
-
 pub mod config;
 pub mod error;
 pub mod format;
 pub mod module;
 pub mod options;
+pub mod pretty;
 pub mod script;
 pub mod telemetry;
 

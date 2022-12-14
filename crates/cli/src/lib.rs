@@ -1,11 +1,7 @@
 use std::collections::BTreeMap;
 use std::{env, path::PathBuf, process};
 
-use aiken_project::{
-    config::Config,
-    telemetry::{self, EvalInfo},
-    Project,
-};
+use aiken_project::{config::Config, pretty, script::EvalInfo, telemetry, Project};
 use miette::IntoDiagnostic;
 use owo_colors::OwoColorize;
 use uplc::machine::cost_model::ExBudget;
@@ -107,7 +103,8 @@ impl telemetry::EventListener for Terminal {
                         "{} {} {}",
                         "  ┌──".bright_black(),
                         module.bold().blue(),
-                        pad_left("".to_string(), first - module.len() - 3, "─").bright_black()
+                        pretty::pad_left("".to_string(), first - module.len() - 3, "─")
+                            .bright_black()
                     );
                     for eval_info in infos {
                         println!(
@@ -120,7 +117,8 @@ impl telemetry::EventListener for Terminal {
                     let summary = fmt_test_summary(infos, false).len();
                     println!(
                         "{} {}\n",
-                        pad_right("  └".to_string(), last - summary + 5, "─").bright_black(),
+                        pretty::pad_right("  └".to_string(), last - summary + 5, "─")
+                            .bright_black(),
                         fmt_test_summary(infos, true),
                     );
                 }
@@ -138,19 +136,19 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
     } = eval_info;
 
     let ExBudget { mem, cpu } = spent_budget;
-    let mem_pad = pad_left(mem.to_string(), max_mem, " ");
-    let cpu_pad = pad_left(cpu.to_string(), max_cpu, " ");
+    let mem_pad = pretty::pad_left(mem.to_string(), max_mem, " ");
+    let cpu_pad = pretty::pad_left(cpu.to_string(), max_cpu, " ");
 
     format!(
         "{} [mem: {}, cpu: {}] {}",
         if *success {
-            style_if(styled, "PASS".to_string(), |s| s.bold().green().to_string())
+            pretty::style_if(styled, "PASS".to_string(), |s| s.bold().green().to_string())
         } else {
-            style_if(styled, "FAIL".to_string(), |s| s.bold().red().to_string())
+            pretty::style_if(styled, "FAIL".to_string(), |s| s.bold().red().to_string())
         },
-        style_if(styled, mem_pad, |s| s.bright_white().to_string()),
-        style_if(styled, cpu_pad, |s| s.bright_white().to_string()),
-        style_if(styled, script.name.clone(), |s| s.bright_blue().to_string()),
+        pretty::style_if(styled, mem_pad, |s| s.bright_white().to_string()),
+        pretty::style_if(styled, cpu_pad, |s| s.bright_white().to_string()),
+        pretty::style_if(styled, script.name.clone(), |s| s.bright_blue().to_string()),
     )
 }
 
@@ -168,27 +166,19 @@ fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {
         "{}",
         format!(
             "{} | {} | {}",
-            style_if(styled, format!("{} tests", tests.len()), |s| s
+            pretty::style_if(styled, format!("{} tests", tests.len()), |s| s
                 .bold()
                 .to_string()),
-            style_if(styled, format!("{} passed", n_passed), |s| s
+            pretty::style_if(styled, format!("{} passed", n_passed), |s| s
                 .bright_green()
                 .bold()
                 .to_string()),
-            style_if(styled, format!("{} failed", n_failed), |s| s
+            pretty::style_if(styled, format!("{} failed", n_failed), |s| s
                 .bright_red()
                 .bold()
                 .to_string()),
         )
     )
-}
-
-fn style_if(styled: bool, s: String, apply_style: fn(String) -> String) -> String {
-    if styled {
-        apply_style(s)
-    } else {
-        s
-    }
 }
 
 fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
@@ -205,8 +195,8 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
         "    {}::{} [mem: {}, cpu: {}]\n    │\n    ╰─▶ {}",
         script.module.blue(),
         script.name.bright_blue(),
-        pad_left(mem.to_string(), max_mem, " "),
-        pad_left(cpu.to_string(), max_cpu, " "),
+        pretty::pad_left(mem.to_string(), max_mem, " "),
+        pretty::pad_left(cpu.to_string(), max_cpu, " "),
         output
             .as_ref()
             .map(|x| format!("{}", x))
@@ -242,24 +232,4 @@ fn find_max_execution_units(xs: &[EvalInfo]) -> (usize, usize) {
     );
 
     (max_mem.to_string().len(), max_cpu.to_string().len())
-}
-
-fn pad_left(mut text: String, n: usize, delimiter: &str) -> String {
-    let diff = n as i32 - text.len() as i32;
-    if diff.is_positive() {
-        for _ in 0..diff {
-            text.insert_str(0, delimiter);
-        }
-    }
-    text
-}
-
-fn pad_right(mut text: String, n: usize, delimiter: &str) -> String {
-    let diff = n as i32 - text.len() as i32;
-    if diff.is_positive() {
-        for _ in 0..diff {
-            text.push_str(delimiter);
-        }
-    }
-    text
 }
