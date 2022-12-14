@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::{env, path::PathBuf};
 
 use aiken_project::{
@@ -82,7 +83,7 @@ impl telemetry::EventListener for Terminal {
                 let (max_mem, max_cpu) = find_max_execution_units(&results);
 
                 for eval_info in &results {
-                    println!("{}", fmt_eval(eval_info, max_mem, max_cpu))
+                    println!("    {}", fmt_eval(eval_info, max_mem, max_cpu))
                 }
             }
             telemetry::Event::RunningTests => {
@@ -91,37 +92,30 @@ impl telemetry::EventListener for Terminal {
             telemetry::Event::FinishedTests { tests } => {
                 let (max_mem, max_cpu) = find_max_execution_units(&tests);
 
-                for eval_info in &tests {
-                    println!("{}", fmt_test(eval_info, max_mem, max_cpu))
+                for (module, infos) in &group_by_module(&tests) {
+                    let first = fmt_test(infos.first().unwrap(), max_mem, max_cpu, false).len();
+                    println!(
+                        "  ┌── {} {}",
+                        module.bold().blue(),
+                        pad_left("".to_string(), first - module.len() - 3, "─")
+                    );
+                    for eval_info in infos {
+                        println!("  │ {}", fmt_test(eval_info, max_mem, max_cpu, true))
+                    }
+                    let last = fmt_test(infos.last().unwrap(), max_mem, max_cpu, false).len();
+                    let summary = fmt_test_summary(infos, false).len();
+                    println!(
+                        "  └{} {}\n",
+                        pad_left("".to_string(), last - summary, "─"),
+                        fmt_test_summary(infos, true),
+                    );
                 }
-
-                let (n_passed, n_failed) =
-                    tests
-                        .iter()
-                        .fold((0, 0), |(n_passed, n_failed), test_info| {
-                            if test_info.success {
-                                (n_passed + 1, n_failed)
-                            } else {
-                                (n_passed, n_failed + 1)
-                            }
-                        });
-
-                println!(
-                    "{}",
-                    format!(
-                        "\n    Summary: {} test(s), {}; {}.",
-                        tests.len(),
-                        format!("{} passed", n_passed).bright_green(),
-                        format!("{} failed", n_failed).bright_red()
-                    )
-                    .bold()
-                )
             }
         }
     }
 }
 
-fn fmt_test(eval_info: &EvalInfo, max_mem: i32, max_cpu: i32) -> String {
+fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) -> String {
     let EvalInfo {
         success,
         script,
@@ -130,22 +124,60 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: i32, max_cpu: i32) -> String {
     } = eval_info;
 
     let ExBudget { mem, cpu } = spent_budget;
+    let mem_pad = pad_left(mem.to_string(), max_mem, " ");
+    let cpu_pad = pad_left(cpu.to_string(), max_cpu, " ");
 
     format!(
-        "    [{}] [mem: {}, cpu: {}] {}::{}",
+        "{} [mem: {}, cpu: {}] {}",
         if *success {
-            "PASS".bold().green().to_string()
+            style_if(styled, "PASS".to_string(), |s| s.bold().green().to_string())
         } else {
-            "FAIL".bold().red().to_string()
+            style_if(styled, "FAIL".to_string(), |s| s.bold().red().to_string())
         },
-        pad_left(mem.to_string(), max_mem, " "),
-        pad_left(cpu.to_string(), max_cpu, " "),
-        script.module.blue(),
-        script.name.bright_blue()
+        style_if(styled, mem_pad, |s| s.bright_white().to_string()),
+        style_if(styled, cpu_pad, |s| s.bright_white().to_string()),
+        style_if(styled, script.name.clone(), |s| s.bright_blue().to_string()),
     )
 }
 
-fn fmt_eval(eval_info: &EvalInfo, max_mem: i32, max_cpu: i32) -> String {
+fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {
+    let (n_passed, n_failed) = tests
+        .iter()
+        .fold((0, 0), |(n_passed, n_failed), test_info| {
+            if test_info.success {
+                (n_passed + 1, n_failed)
+            } else {
+                (n_passed, n_failed + 1)
+            }
+        });
+    format!(
+        "{}",
+        format!(
+            "{} | {} | {}",
+            style_if(styled, format!("{} tests", tests.len()), |s| s
+                .bold()
+                .to_string()),
+            style_if(styled, format!("{} passed", n_passed), |s| s
+                .bright_green()
+                .bold()
+                .to_string()),
+            style_if(styled, format!("{} failed", n_failed), |s| s
+                .bright_red()
+                .bold()
+                .to_string()),
+        )
+    )
+}
+
+fn style_if(styled: bool, s: String, apply_style: fn(String) -> String) -> String {
+    if styled {
+        apply_style(s)
+    } else {
+        s
+    }
+}
+
+fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
     let EvalInfo {
         output,
         script,
@@ -168,7 +200,18 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: i32, max_cpu: i32) -> String {
     )
 }
 
-fn find_max_execution_units(xs: &[EvalInfo]) -> (i32, i32) {
+fn group_by_module(infos: &Vec<EvalInfo>) -> BTreeMap<String, Vec<&EvalInfo>> {
+    let mut modules = BTreeMap::new();
+    for eval_info in infos {
+        let xs = modules
+            .entry(eval_info.script.module.clone())
+            .or_insert(vec![]);
+        xs.push(eval_info);
+    }
+    modules
+}
+
+fn find_max_execution_units(xs: &[EvalInfo]) -> (usize, usize) {
     let (max_mem, max_cpu) = xs.iter().fold(
         (0, 0),
         |(max_mem, max_cpu), EvalInfo { spent_budget, .. }| {
@@ -184,14 +227,11 @@ fn find_max_execution_units(xs: &[EvalInfo]) -> (i32, i32) {
         },
     );
 
-    (
-        max_mem.to_string().len() as i32,
-        max_cpu.to_string().len() as i32,
-    )
+    (max_mem.to_string().len(), max_cpu.to_string().len())
 }
 
-fn pad_left(mut text: String, n: i32, delimiter: &str) -> String {
-    let diff = n - text.len() as i32;
+fn pad_left(mut text: String, n: usize, delimiter: &str) -> String {
+    let diff = n as i32 - text.len() as i32;
 
     if diff.is_positive() {
         for _ in 0..diff {
