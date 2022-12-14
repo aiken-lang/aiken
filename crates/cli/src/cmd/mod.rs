@@ -1,7 +1,6 @@
 pub mod build;
 pub mod check;
 pub mod error;
-pub mod eval;
 pub mod fmt;
 pub mod lsp;
 pub mod new;

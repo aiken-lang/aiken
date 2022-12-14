@@ -178,14 +178,6 @@ where
                     Ok(())
                 }
             }
-            CodeGenMode::Eval(func_name) => {
-                let scripts = self
-                    .collect_scripts(&checked_modules, |def| matches!(def, Definition::Fn(..)))?;
-                let results = self.eval_scripts(scripts, Some(func_name));
-                self.event_listener
-                    .handle_event(Event::EvaluatingFunction { results });
-                Ok(())
-            }
             CodeGenMode::NoOp => Ok(()),
         }
     }

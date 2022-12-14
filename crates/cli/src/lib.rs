@@ -34,16 +34,15 @@ where
         err.report();
         println!("{}", "Summary".purple().bold());
         println!(
-            "    {}, {}",
-            format!("{} error(s)", err.len()),
+            "    {} error(s), {}",
+            err.len(),
             format!("{warning_count} warning(s)").yellow(),
         );
         process::exit(1);
     } else {
         println!("{}", "Summary".purple().bold());
         println!(
-            "    {}, {}",
-            "0 error",
+            "    0 error, {}",
             format!("{warning_count} warning(s)").yellow(),
         );
     }
@@ -163,21 +162,18 @@ fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {
             }
         });
     format!(
-        "{}",
-        format!(
-            "{} | {} | {}",
-            pretty::style_if(styled, format!("{} tests", tests.len()), |s| s
-                .bold()
-                .to_string()),
-            pretty::style_if(styled, format!("{} passed", n_passed), |s| s
-                .bright_green()
-                .bold()
-                .to_string()),
-            pretty::style_if(styled, format!("{} failed", n_failed), |s| s
-                .bright_red()
-                .bold()
-                .to_string()),
-        )
+        "{} | {} | {}",
+        pretty::style_if(styled, format!("{} tests", tests.len()), |s| s
+            .bold()
+            .to_string()),
+        pretty::style_if(styled, format!("{} passed", n_passed), |s| s
+            .bright_green()
+            .bold()
+            .to_string()),
+        pretty::style_if(styled, format!("{} failed", n_failed), |s| s
+            .bright_red()
+            .bold()
+            .to_string()),
     )
 }
 
@@ -207,9 +203,7 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
 fn group_by_module(infos: &Vec<EvalInfo>) -> BTreeMap<String, Vec<&EvalInfo>> {
     let mut modules = BTreeMap::new();
     for eval_info in infos {
-        let xs = modules
-            .entry(eval_info.script.module.clone())
-            .or_insert(vec![]);
+        let xs: &mut Vec<&EvalInfo> = modules.entry(eval_info.script.module.clone()).or_default();
         xs.push(eval_info);
     }
     modules

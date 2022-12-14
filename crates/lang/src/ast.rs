@@ -94,7 +94,7 @@ impl TypedFunction {
                 left,
                 right,
                 ..
-            } if tipo == &bool() => Some((name.clone(), left.clone(), right.clone())),
+            } if tipo == &bool() => Some((*name, left.clone(), right.clone())),
             _ => None,
         }
     }

@@ -4,7 +4,6 @@ pub struct Options {
 
 pub enum CodeGenMode {
     Test(Option<String>),
-    Eval(String),
     Build(bool),
     NoOp,
 }
