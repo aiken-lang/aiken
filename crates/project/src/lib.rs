@@ -144,32 +144,49 @@ where
                 self.event_listener.handle_event(Event::GeneratingUPLC {
                     output_path: self.output_path(),
                 });
-
                 let programs = self.code_gen(validators, &checked_modules)?;
-
                 self.write_build_outputs(programs, uplc_dump)?;
+                Ok(())
             }
             CodeGenMode::Test(match_tests) => {
-                let tests =
-                    self.scripts_gen(&checked_modules, |def| matches!(def, Definition::Test(..)))?;
+                let tests = self
+                    .collect_scripts(&checked_modules, |def| matches!(def, Definition::Test(..)))?;
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
                 }
                 let results = self.eval_scripts(tests, match_tests);
+                let errors: Vec<Error> = results
+                    .iter()
+                    .filter_map(|e| {
+                        if e.success {
+                            None
+                        } else {
+                            Some(Error::TestFailure {
+                                name: e.script.name.clone(),
+                                path: e.script.input_path.clone(),
+                            })
+                        }
+                    })
+                    .collect();
+
                 self.event_listener
                     .handle_event(Event::FinishedTests { tests: results });
+                if !errors.is_empty() {
+                    Err(Error::List(errors))
+                } else {
+                    Ok(())
+                }
             }
             CodeGenMode::Eval(func_name) => {
-                let scripts =
-                    self.scripts_gen(&checked_modules, |def| matches!(def, Definition::Fn(..)))?;
+                let scripts = self
+                    .collect_scripts(&checked_modules, |def| matches!(def, Definition::Fn(..)))?;
                 let results = self.eval_scripts(scripts, Some(func_name));
                 self.event_listener
                     .handle_event(Event::EvaluatingFunction { results });
+                Ok(())
             }
-            CodeGenMode::NoOp => (),
+            CodeGenMode::NoOp => Ok(()),
         }
-
-        Ok(())
     }
 
     fn read_source_files(&mut self) -> Result<(), Error> {
@@ -307,7 +324,7 @@ where
     fn validate_validators(
         &self,
         checked_modules: &mut CheckedModules,
-    ) -> Result<Vec<(String, TypedFunction)>, Error> {
+    ) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
         let mut validators = Vec::new();
         let mut indices_to_remove = Vec::new();
@@ -361,7 +378,11 @@ where
                             })
                         }
 
-                        validators.push((module.name.clone(), func_def.clone()));
+                        validators.push((
+                            module.input_path.clone(),
+                            module.name.clone(),
+                            func_def.clone(),
+                        ));
                         indices_to_remove.push(index);
                     }
                 }
@@ -381,7 +402,7 @@ where
 
     fn code_gen(
         &mut self,
-        validators: Vec<(String, TypedFunction)>,
+        validators: Vec<(PathBuf, String, TypedFunction)>,
         checked_modules: &CheckedModules,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
@@ -437,7 +458,7 @@ where
             }
         }
 
-        for (module_name, func_def) in validators {
+        for (input_path, module_name, func_def) in validators {
             let Function {
                 arguments,
                 name,
@@ -456,7 +477,7 @@ where
 
             let program = generator.generate(body, arguments, true);
 
-            let script = Script::new(module_name, name, program.try_into().unwrap());
+            let script = Script::new(input_path, module_name, name, program.try_into().unwrap());
 
             programs.push(script);
         }
@@ -465,7 +486,7 @@ where
     }
 
     // TODO: revisit ownership and lifetimes of data in this function
-    fn scripts_gen(
+    fn collect_scripts(
         &mut self,
         checked_modules: &CheckedModules,
         should_collect: fn(&TypedDefinition) -> bool,
@@ -503,12 +524,12 @@ where
                             func,
                         );
                         if should_collect(def) {
-                            scripts.push((module.name.clone(), func));
+                            scripts.push((module.input_path.clone(), module.name.clone(), func));
                         }
                     }
                     Definition::Test(func) => {
                         if should_collect(def) {
-                            scripts.push((module.name.clone(), func));
+                            scripts.push((module.input_path.clone(), module.name.clone(), func));
                         }
                         // indices_to_remove.push(index);
                     }
@@ -538,7 +559,7 @@ where
             // }
         }
 
-        for (module_name, func_def) in scripts {
+        for (input_path, module_name, func_def) in scripts {
             let Function {
                 arguments,
                 name,
@@ -557,7 +578,12 @@ where
 
             let program = generator.generate(body.clone(), arguments.clone(), false);
 
-            let script = Script::new(module_name, name.to_string(), program.try_into().unwrap());
+            let script = Script::new(
+                input_path,
+                module_name,
+                name.to_string(),
+                program.try_into().unwrap(),
+            );
 
             programs.push(script);
         }

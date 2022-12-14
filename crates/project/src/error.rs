@@ -28,7 +28,7 @@ pub enum Error {
     #[error(transparent)]
     StandardIo(#[from] io::Error),
 
-    #[error("Syclical module imports")]
+    #[error("Cyclical module imports")]
     ImportCycle { modules: Vec<String> },
 
     /// Useful for returning many [`Error::Parse`] at once
@@ -73,6 +73,9 @@ pub enum Error {
         src: String,
         named: NamedSource,
     },
+
+    #[error("{} failed", name)]
+    TestFailure { name: String, path: PathBuf },
 }
 
 impl Error {
@@ -148,6 +151,7 @@ impl Error {
             Error::Type { path, .. } => Some(path.to_path_buf()),
             Error::ValidatorMustReturnBool { path, .. } => Some(path.to_path_buf()),
             Error::WrongValidatorArity { path, .. } => Some(path.to_path_buf()),
+            Error::TestFailure { path, .. } => Some(path.to_path_buf()),
         }
     }
 
@@ -163,6 +167,7 @@ impl Error {
             Error::Type { src, .. } => Some(src.to_string()),
             Error::ValidatorMustReturnBool { src, .. } => Some(src.to_string()),
             Error::WrongValidatorArity { src, .. } => Some(src.to_string()),
+            Error::TestFailure { .. } => None,
         }
     }
 }
@@ -203,6 +208,7 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
             Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
+            Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
         }
     }
 
@@ -225,6 +231,7 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
             Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
+            Error::TestFailure { .. }  => None,
         }
     }
 
@@ -244,6 +251,7 @@ impl Diagnostic for Error {
             Error::WrongValidatorArity { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
+            Error::TestFailure { .. } => None,
         }
     }
 
@@ -259,6 +267,7 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { named, .. } => Some(named),
             Error::WrongValidatorArity { named, .. } => Some(named),
+            Error::TestFailure { .. } => None,
         }
     }
 }

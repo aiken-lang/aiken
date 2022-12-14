@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, process};
 
 use aiken_project::{
     config::Config,
@@ -36,12 +36,21 @@ where
 
     if let Err(err) = build_result {
         err.report();
-
-        miette::bail!("Failed: {} error(s), {warning_count} warning(s)", err.len(),);
-    };
-
-    println!("\nFinished with {warning_count} warning(s)\n");
-
+        println!("{}", "Summary".purple().bold());
+        println!(
+            "    {}, {}",
+            format!("{} error(s)", err.len()),
+            format!("{warning_count} warning(s)").yellow(),
+        );
+        process::exit(1);
+    } else {
+        println!("{}", "Summary".purple().bold());
+        println!(
+            "    {}, {}",
+            "0 error",
+            format!("{warning_count} warning(s)").yellow(),
+        );
+    }
     Ok(())
 }
 
