@@ -79,10 +79,12 @@ pub enum Error {
         named: NamedSource,
     },
 
-    #[error("{} failed", name)]
+    #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
     TestFailure {
         name: String,
         path: PathBuf,
+        verbose: bool,
+        src: String,
         evaluation_hint: Option<EvalHint>,
     },
 }

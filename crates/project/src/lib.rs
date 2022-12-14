@@ -105,12 +105,20 @@ where
         self.compile(options)
     }
 
-    pub fn check(&mut self, skip_tests: bool, match_tests: Option<String>) -> Result<(), Error> {
+    pub fn check(
+        &mut self,
+        skip_tests: bool,
+        match_tests: Option<String>,
+        verbose: bool,
+    ) -> Result<(), Error> {
         let options = Options {
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
-                CodeGenMode::Test(match_tests)
+                CodeGenMode::Test {
+                    match_tests,
+                    verbose,
+                }
             },
         };
 
@@ -148,7 +156,10 @@ where
                 self.write_build_outputs(programs, uplc_dump)?;
                 Ok(())
             }
-            CodeGenMode::Test(match_tests) => {
+            CodeGenMode::Test {
+                match_tests,
+                verbose,
+            } => {
                 let tests = self
                     .collect_scripts(&checked_modules, |def| matches!(def, Definition::Test(..)))?;
                 if !tests.is_empty() {
@@ -165,6 +176,8 @@ where
                                 name: e.script.name.clone(),
                                 path: e.script.input_path.clone(),
                                 evaluation_hint: e.script.evaluation_hint.clone(),
+                                src: e.script.program.to_pretty(),
+                                verbose,
                             })
                         }
                     })
@@ -626,8 +639,6 @@ where
             if matches!(&match_name, Some(search_str) if !path.to_string().contains(search_str)) {
                 continue;
             }
-
-            println!("{}", script.program.to_pretty());
 
             match script.program.eval(initial_budget) {
                 (Ok(result), remaining_budget, _) => {

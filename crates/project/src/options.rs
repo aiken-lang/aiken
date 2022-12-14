@@ -3,7 +3,10 @@ pub struct Options {
 }
 
 pub enum CodeGenMode {
-    Test(Option<String>),
+    Test {
+        match_tests: Option<String>,
+        verbose: bool,
+    },
     Build(bool),
     NoOp,
 }

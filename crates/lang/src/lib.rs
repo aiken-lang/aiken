@@ -5,6 +5,7 @@ use std::sync::{
 
 pub mod air;
 pub mod ast;
+pub mod builder;
 pub mod builtins;
 pub mod expr;
 pub mod format;
@@ -12,7 +13,6 @@ pub mod parser;
 pub mod pretty;
 pub mod tipo;
 pub mod uplc;
-pub mod builder;
 
 #[derive(Debug, Default, Clone)]
 pub struct IdGenerator {
