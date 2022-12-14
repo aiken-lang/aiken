@@ -1540,7 +1540,7 @@ impl<'a> CodeGenerator<'a> {
                             Type::Tuple { .. } => todo!(),
                         };
 
-                        if data_type_key.defined_type == "Bool" {
+                        if constructor.tipo.is_bool() {
                             arg_stack
                                 .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
                         } else {

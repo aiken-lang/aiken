@@ -146,10 +146,8 @@ where
                 self.write_build_outputs(programs, uplc_dump)?;
             }
             CodeGenMode::Test(match_tests) => {
-                let tests = self.scripts_gen(&checked_modules, |def| match def {
-                    Definition::Test(..) => true,
-                    _ => false,
-                })?;
+                let tests =
+                    self.scripts_gen(&checked_modules, |def| matches!(def, Definition::Test(..)))?;
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
                 }
@@ -158,10 +156,8 @@ where
                     .handle_event(Event::FinishedTests { tests: results });
             }
             CodeGenMode::Eval(func_name) => {
-                let scripts = self.scripts_gen(&checked_modules, |def| match def {
-                    Definition::Fn(..) => true,
-                    _ => false,
-                })?;
+                let scripts =
+                    self.scripts_gen(&checked_modules, |def| matches!(def, Definition::Fn(..)))?;
                 let results = self.eval_scripts(scripts, Some(func_name));
                 self.event_listener
                     .handle_event(Event::EvaluatingFunction { results });

@@ -164,11 +164,11 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: i32, max_cpu: i32) -> String {
         output
             .as_ref()
             .map(|x| format!("{}", x))
-            .unwrap_or("Error.".to_string()),
+            .unwrap_or_else(|| "Error.".to_string()),
     )
 }
 
-fn find_max_execution_units(xs: &Vec<EvalInfo>) -> (i32, i32) {
+fn find_max_execution_units(xs: &[EvalInfo]) -> (i32, i32) {
     let (max_mem, max_cpu) = xs.iter().fold(
         (0, 0),
         |(max_mem, max_cpu), EvalInfo { spent_budget, .. }| {
