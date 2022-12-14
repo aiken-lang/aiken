@@ -54,7 +54,7 @@ impl Creator {
         write(
             self.validators.join("always_true.ak"),
             indoc! {"
-                pub fn spend() -> Bool {
+                pub fn spend(_datum, _redeemer, _context) -> Bool {
                     True
                 }
             "},
@@ -76,7 +76,7 @@ impl Creator {
         write(
             self.project_lib.join("context.ak"),
             indoc! {"
-                pub type ScriptContext(purpose) {
+                pub type ScriptContext<purpose> {
                     tx_info: TxInfo,
                     script_purpose: purpose,
                 }
