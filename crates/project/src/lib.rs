@@ -8,10 +8,7 @@ pub mod script;
 pub mod telemetry;
 
 use aiken_lang::{
-    ast::{
-        Annotation, DataType, Definition, Function, ModuleKind, RecordConstructor,
-        RecordConstructorArg, Span, TypedDataType, TypedDefinition, TypedFunction,
-    },
+    ast::{Definition, Function, ModuleKind, TypedDataType, TypedDefinition, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
     builtins::{self, generic_var},
     tipo::TypeInfo,
@@ -418,7 +415,7 @@ where
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
 
-        let option_data_type = make_option();
+        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
 
         data_types.insert(
             DataTypeKey {
@@ -510,7 +507,7 @@ where
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
 
-        let option_data_type = make_option();
+        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
 
         data_types.insert(
             DataTypeKey {
@@ -825,41 +822,4 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
-}
-
-fn make_option() -> TypedDataType {
-    DataType {
-        constructors: vec![
-            RecordConstructor {
-                location: Span::empty(),
-                name: "Some".to_string(),
-                arguments: vec![RecordConstructorArg {
-                    label: None,
-                    annotation: Annotation::Var {
-                        location: Span::empty(),
-                        name: "a".to_string(),
-                    },
-                    location: Span::empty(),
-                    tipo: generic_var(0),
-                    doc: None,
-                }],
-                documentation: None,
-                sugar: false,
-            },
-            RecordConstructor {
-                location: Span::empty(),
-                name: "None".to_string(),
-                arguments: vec![],
-                documentation: None,
-                sugar: false,
-            },
-        ],
-        doc: None,
-        location: Span::empty(),
-        name: "Option".to_string(),
-        opaque: false,
-        parameters: vec!["a".to_string()],
-        public: true,
-        typed_parameters: vec![generic_var(0)],
-    }
 }

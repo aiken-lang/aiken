@@ -112,6 +112,46 @@ pub struct TypeAlias<T> {
 }
 
 pub type TypedDataType = DataType<Arc<Type>>;
+
+impl TypedDataType {
+    pub fn option(tipo: Arc<Type>) -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Some".to_string(),
+                    arguments: vec![RecordConstructorArg {
+                        label: None,
+                        annotation: Annotation::Var {
+                            location: Span::empty(),
+                            name: "a".to_string(),
+                        },
+                        location: Span::empty(),
+                        tipo: tipo.clone(),
+                        doc: None,
+                    }],
+                    documentation: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "None".to_string(),
+                    arguments: vec![],
+                    documentation: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "Option".to_string(),
+            opaque: false,
+            parameters: vec!["a".to_string()],
+            public: true,
+            typed_parameters: vec![tipo],
+        }
+    }
+}
+
 pub type UntypedDataType = DataType<()>;
 
 #[derive(Debug, Clone, PartialEq)]
