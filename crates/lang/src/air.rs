@@ -28,16 +28,13 @@ pub enum Air {
         scope: Vec<u64>,
         constructor: ValueConstructor,
         name: String,
+        variant_name: String,
     },
 
-    // Fn {
-    //  scope: Vec<u64>,
-    //     tipo: Arc<Type>,
-    //     is_capture: bool,
-    //     args: Vec<Arg<Arc<Type>>>,
-    //     body: Box<Self>,
-    //     return_annotation: Option<Annotation>,
-    // },
+    Fn {
+        scope: Vec<u64>,
+        params: Vec<String>,
+    },
     List {
         scope: Vec<u64>,
         count: usize,
@@ -67,6 +64,7 @@ pub enum Air {
     Builtin {
         scope: Vec<u64>,
         func: DefaultFunction,
+        tipo: Arc<Type>,
     },
 
     BinOp {
@@ -88,6 +86,7 @@ pub enum Air {
         module_name: String,
         params: Vec<String>,
         recursive: bool,
+        variant_name: String,
     },
 
     DefineConst {
@@ -237,6 +236,7 @@ impl Air {
             | Air::List { scope, .. }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
+            | Air::Fn { scope, .. }
             | Air::Call { scope, .. }
             | Air::Builtin { scope, .. }
             | Air::BinOp { scope, .. }

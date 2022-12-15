@@ -1,22 +1,21 @@
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
-
 pub mod config;
 pub mod error;
 pub mod format;
 pub mod module;
 pub mod options;
+pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedFunction},
-    builtins,
+    ast::{
+        Annotation, DataType, Definition, Function, ModuleKind, RecordConstructor,
+        RecordConstructorArg, Span, TypedDataType, TypedDefinition, TypedFunction,
+    },
+    builder::{DataTypeKey, FunctionAccessKey},
+    builtins::{self, generic_var},
     tipo::TypeInfo,
-    uplc::{CodeGenerator, DataTypeKey, FunctionAccessKey},
+    uplc::CodeGenerator,
     IdGenerator,
 };
 use miette::NamedSource;
@@ -26,11 +25,16 @@ use pallas::{
     ledger::{addresses::Address, primitives::babbage},
 };
 use pallas_traverse::ComputeHash;
-use script::Script;
+use script::{EvalHint, EvalInfo, Script};
 use serde_json::json;
-use telemetry::{EventListener, TestInfo};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
+use telemetry::EventListener;
 use uplc::{
-    ast::{DeBruijn, Program},
+    ast::{Constant, DeBruijn, Program, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -101,12 +105,20 @@ where
         self.compile(options)
     }
 
-    pub fn check(&mut self, skip_tests: bool, match_tests: Option<String>) -> Result<(), Error> {
+    pub fn check(
+        &mut self,
+        skip_tests: bool,
+        match_tests: Option<String>,
+        verbose: bool,
+    ) -> Result<(), Error> {
         let options = Options {
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
-                CodeGenMode::Test(match_tests)
+                CodeGenMode::Test {
+                    match_tests,
+                    verbose,
+                }
             },
         };
 
@@ -140,19 +152,47 @@ where
                 self.event_listener.handle_event(Event::GeneratingUPLC {
                     output_path: self.output_path(),
                 });
-
                 let programs = self.code_gen(validators, &checked_modules)?;
-
                 self.write_build_outputs(programs, uplc_dump)?;
+                Ok(())
             }
-            CodeGenMode::Test(match_tests) => {
-                let tests = self.test_gen(&checked_modules)?;
-                self.run_tests(tests, match_tests);
-            }
-            CodeGenMode::NoOp => (),
-        }
+            CodeGenMode::Test {
+                match_tests,
+                verbose,
+            } => {
+                let tests = self
+                    .collect_scripts(&checked_modules, |def| matches!(def, Definition::Test(..)))?;
+                if !tests.is_empty() {
+                    self.event_listener.handle_event(Event::RunningTests);
+                }
+                let results = self.eval_scripts(tests, match_tests);
+                let errors: Vec<Error> = results
+                    .iter()
+                    .filter_map(|e| {
+                        if e.success {
+                            None
+                        } else {
+                            Some(Error::TestFailure {
+                                name: e.script.name.clone(),
+                                path: e.script.input_path.clone(),
+                                evaluation_hint: e.script.evaluation_hint.clone(),
+                                src: e.script.program.to_pretty(),
+                                verbose,
+                            })
+                        }
+                    })
+                    .collect();
 
-        Ok(())
+                self.event_listener
+                    .handle_event(Event::FinishedTests { tests: results });
+                if !errors.is_empty() {
+                    Err(Error::List(errors))
+                } else {
+                    Ok(())
+                }
+            }
+            CodeGenMode::NoOp => Ok(()),
+        }
     }
 
     fn read_source_files(&mut self) -> Result<(), Error> {
@@ -290,7 +330,7 @@ where
     fn validate_validators(
         &self,
         checked_modules: &mut CheckedModules,
-    ) -> Result<Vec<(String, TypedFunction)>, Error> {
+    ) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
         let mut validators = Vec::new();
         let mut indices_to_remove = Vec::new();
@@ -344,7 +384,11 @@ where
                             })
                         }
 
-                        validators.push((module.name.clone(), func_def.clone()));
+                        validators.push((
+                            module.input_path.clone(),
+                            module.name.clone(),
+                            func_def.clone(),
+                        ));
                         indices_to_remove.push(index);
                     }
                 }
@@ -364,7 +408,7 @@ where
 
     fn code_gen(
         &mut self,
-        validators: Vec<(String, TypedFunction)>,
+        validators: Vec<(PathBuf, String, TypedFunction)>,
         checked_modules: &CheckedModules,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
@@ -374,6 +418,16 @@ where
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
 
+        let option_data_type = make_option();
+
+        data_types.insert(
+            DataTypeKey {
+                module_name: "".to_string(),
+                defined_type: "Option".to_string(),
+            },
+            &option_data_type,
+        );
+
         for module in checked_modules.values() {
             for def in module.ast.definitions() {
                 match def {
@@ -382,6 +436,7 @@ where
                             FunctionAccessKey {
                                 module_name: module.name.clone(),
                                 function_name: func.name.clone(),
+                                variant_name: String::new(),
                             },
                             func,
                         );
@@ -409,7 +464,7 @@ where
             }
         }
 
-        for (module_name, func_def) in validators {
+        for (input_path, module_name, func_def) in validators {
             let Function {
                 arguments,
                 name,
@@ -426,9 +481,15 @@ where
                 &self.module_types,
             );
 
-            let program = generator.generate(body, arguments);
+            let program = generator.generate(body, arguments, true);
 
-            let script = Script::new(module_name, name, program.try_into().unwrap());
+            let script = Script::new(
+                input_path,
+                module_name,
+                name,
+                program.try_into().unwrap(),
+                None,
+            );
 
             programs.push(script);
         }
@@ -437,7 +498,11 @@ where
     }
 
     // TODO: revisit ownership and lifetimes of data in this function
-    fn test_gen(&mut self, checked_modules: &CheckedModules) -> Result<Vec<Script>, Error> {
+    fn collect_scripts(
+        &mut self,
+        checked_modules: &CheckedModules,
+        should_collect: fn(&TypedDefinition) -> bool,
+    ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
         let mut functions = HashMap::new();
         let mut type_aliases = HashMap::new();
@@ -445,8 +510,18 @@ where
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
 
+        let option_data_type = make_option();
+
+        data_types.insert(
+            DataTypeKey {
+                module_name: "".to_string(),
+                defined_type: "Option".to_string(),
+            },
+            &option_data_type,
+        );
+
         // let mut indices_to_remove = Vec::new();
-        let mut tests = Vec::new();
+        let mut scripts = Vec::new();
 
         for module in checked_modules.values() {
             for (_index, def) in module.ast.definitions().enumerate() {
@@ -456,12 +531,18 @@ where
                             FunctionAccessKey {
                                 module_name: module.name.clone(),
                                 function_name: func.name.clone(),
+                                variant_name: String::new(),
                             },
                             func,
                         );
+                        if should_collect(def) {
+                            scripts.push((module.input_path.clone(), module.name.clone(), func));
+                        }
                     }
                     Definition::Test(func) => {
-                        tests.push((module.name.clone(), func));
+                        if should_collect(def) {
+                            scripts.push((module.input_path.clone(), module.name.clone(), func));
+                        }
                         // indices_to_remove.push(index);
                     }
                     Definition::TypeAlias(ta) => {
@@ -490,7 +571,7 @@ where
             // }
         }
 
-        for (module_name, func_def) in tests {
+        for (input_path, module_name, func_def) in scripts {
             let Function {
                 arguments,
                 name,
@@ -507,9 +588,34 @@ where
                 &self.module_types,
             );
 
-            let program = generator.generate(body.clone(), arguments.clone());
+            let evaluation_hint = if let Some((bin_op, left_src, right_src)) = func_def.test_hint()
+            {
+                let left = CodeGenerator::new(&functions, &data_types, &self.module_types)
+                    .generate(*left_src, vec![], false)
+                    .try_into()
+                    .unwrap();
+                let right = CodeGenerator::new(&functions, &data_types, &self.module_types)
+                    .generate(*right_src, vec![], false)
+                    .try_into()
+                    .unwrap();
+                Some(EvalHint {
+                    bin_op,
+                    left,
+                    right,
+                })
+            } else {
+                None
+            };
 
-            let script = Script::new(module_name, name.to_string(), program.try_into().unwrap());
+            let program = generator.generate(body.clone(), arguments.clone(), false);
+
+            let script = Script::new(
+                input_path,
+                module_name,
+                name.to_string(),
+                program.try_into().unwrap(),
+                evaluation_hint,
+            );
 
             programs.push(script);
         }
@@ -517,7 +623,7 @@ where
         Ok(programs)
     }
 
-    fn run_tests(&self, tests: Vec<Script>, match_tests: Option<String>) {
+    fn eval_scripts(&self, scripts: Vec<Script>, match_name: Option<String>) -> Vec<EvalInfo> {
         // TODO: in the future we probably just want to be able to
         // tell the machine to not explode on budget consumption.
         let initial_budget = ExBudget {
@@ -525,43 +631,41 @@ where
             cpu: i64::MAX,
         };
 
-        if !tests.is_empty() {
-            self.event_listener.handle_event(Event::RunningTests);
-        }
-
         let mut results = Vec::new();
 
-        for test in tests {
-            let path = format!("{}{}", test.module, test.name);
+        for script in scripts {
+            let path = format!("{}{}", script.module, script.name);
 
-            if matches!(&match_tests, Some(search_str) if !path.to_string().contains(search_str)) {
+            if matches!(&match_name, Some(search_str) if !path.to_string().contains(search_str)) {
                 continue;
             }
 
-            match test.program.eval(initial_budget) {
-                (Ok(..), remaining_budget, _) => {
-                    let test_info = TestInfo {
-                        is_passing: true,
-                        test,
+            match script.program.eval(initial_budget) {
+                (Ok(result), remaining_budget, _) => {
+                    let eval_info = EvalInfo {
+                        success: result != Term::Error
+                            && result != Term::Constant(Constant::Bool(false)),
+                        script,
                         spent_budget: initial_budget - remaining_budget,
+                        output: Some(result),
                     };
 
-                    results.push(test_info);
+                    results.push(eval_info);
                 }
-                (Err(_), remaining_budget, _) => {
-                    let test_info = TestInfo {
-                        is_passing: false,
-                        test,
+                (Err(..), remaining_budget, _) => {
+                    let eval_info = EvalInfo {
+                        success: false,
+                        script,
                         spent_budget: initial_budget - remaining_budget,
+                        output: None,
                     };
 
-                    results.push(test_info);
+                    results.push(eval_info);
                 }
             }
         }
 
-        self.event_listener
-            .handle_event(Event::FinishedTests { tests: results });
+        results
     }
 
     fn output_path(&self) -> PathBuf {
@@ -721,4 +825,41 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
             .to_str()
             .expect("is_aiken_path(): to_str"),
     )
+}
+
+fn make_option() -> TypedDataType {
+    DataType {
+        constructors: vec![
+            RecordConstructor {
+                location: Span::empty(),
+                name: "Some".to_string(),
+                arguments: vec![RecordConstructorArg {
+                    label: None,
+                    annotation: Annotation::Var {
+                        location: Span::empty(),
+                        name: "a".to_string(),
+                    },
+                    location: Span::empty(),
+                    tipo: generic_var(0),
+                    doc: None,
+                }],
+                documentation: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                location: Span::empty(),
+                name: "None".to_string(),
+                arguments: vec![],
+                documentation: None,
+                sugar: false,
+            },
+        ],
+        doc: None,
+        location: Span::empty(),
+        name: "Option".to_string(),
+        opaque: false,
+        parameters: vec!["a".to_string()],
+        public: true,
+        typed_parameters: vec![generic_var(0)],
+    }
 }

@@ -1,13 +1,18 @@
+use crate::{pretty, script::EvalHint};
+use aiken_lang::{
+    ast::{BinOp, Span},
+    parser::error::ParseError,
+    tipo,
+};
+use miette::{
+    Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
+};
 use std::{
     fmt::{Debug, Display},
     io,
     path::{Path, PathBuf},
 };
-
-use aiken_lang::{ast::Span, parser::error::ParseError, tipo};
-use miette::{
-    Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
-};
+use uplc::machine::cost_model::ExBudget;
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -28,7 +33,7 @@ pub enum Error {
     #[error(transparent)]
     StandardIo(#[from] io::Error),
 
-    #[error("Syclical module imports")]
+    #[error("Cyclical module imports")]
     ImportCycle { modules: Vec<String> },
 
     /// Useful for returning many [`Error::Parse`] at once
@@ -72,6 +77,15 @@ pub enum Error {
         path: PathBuf,
         src: String,
         named: NamedSource,
+    },
+
+    #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
+    TestFailure {
+        name: String,
+        path: PathBuf,
+        verbose: bool,
+        src: String,
+        evaluation_hint: Option<EvalHint>,
     },
 }
 
@@ -148,6 +162,7 @@ impl Error {
             Error::Type { path, .. } => Some(path.to_path_buf()),
             Error::ValidatorMustReturnBool { path, .. } => Some(path.to_path_buf()),
             Error::WrongValidatorArity { path, .. } => Some(path.to_path_buf()),
+            Error::TestFailure { path, .. } => Some(path.to_path_buf()),
         }
     }
 
@@ -163,6 +178,7 @@ impl Error {
             Error::Type { src, .. } => Some(src.to_string()),
             Error::ValidatorMustReturnBool { src, .. } => Some(src.to_string()),
             Error::WrongValidatorArity { src, .. } => Some(src.to_string()),
+            Error::TestFailure { .. } => None,
         }
     }
 }
@@ -203,6 +219,7 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
             Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
+            Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
         }
     }
 
@@ -225,6 +242,34 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
             Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
+            Error::TestFailure { evaluation_hint, .. }  =>{
+                match evaluation_hint {
+                    None => None,
+                    Some(hint) => {
+                        let budget = ExBudget { mem: i64::MAX, cpu: i64::MAX, };
+                        let left = pretty::boxed("left", match hint.left.eval(budget) {
+                            (Ok(term), _, _) => format!("{term}"),
+                            (Err(err), _, _) => format!("{err}"),
+                        });
+                        let right = pretty::boxed("right", match hint.right.eval(budget) {
+                            (Ok(term), _, _) => format!("{term}"),
+                            (Err(err), _, _) => format!("{err}"),
+                        });
+                        let msg = match hint.bin_op {
+                            BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
+                            BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
+                            BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
+                            BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
+                            BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
+                            BinOp::LtEqInt => Some(format!("{left}\n\nshould be lower than or equal to\n\n{right}")),
+                            BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
+                            BinOp::GtInt => Some(format!("{left}\n\nshould be greater than or equal to\n\n{right}")),
+                            _ => None
+                        }?;
+                        Some(Box::new(msg))
+                    }
+                }
+            },
         }
     }
 
@@ -244,6 +289,7 @@ impl Diagnostic for Error {
             Error::WrongValidatorArity { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
+            Error::TestFailure { .. } => None,
         }
     }
 
@@ -259,6 +305,7 @@ impl Diagnostic for Error {
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { named, .. } => Some(named),
             Error::WrongValidatorArity { named, .. } => Some(named),
+            Error::TestFailure { .. } => None,
         }
     }
 }

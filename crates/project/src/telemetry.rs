@@ -1,6 +1,5 @@
-use crate::script::Script;
+use crate::script::EvalInfo;
 use std::path::PathBuf;
-use uplc::machine::cost_model::ExBudget;
 
 pub trait EventListener: std::fmt::Debug {
     fn handle_event(&self, event: Event);
@@ -17,14 +16,11 @@ pub enum Event {
     GeneratingUPLC {
         output_path: PathBuf,
     },
+    EvaluatingFunction {
+        results: Vec<EvalInfo>,
+    },
     RunningTests,
     FinishedTests {
-        tests: Vec<TestInfo>,
+        tests: Vec<EvalInfo>,
     },
-}
-
-pub struct TestInfo {
-    pub is_passing: bool,
-    pub test: Script,
-    pub spent_budget: ExBudget,
 }

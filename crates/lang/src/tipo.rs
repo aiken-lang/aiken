@@ -135,6 +135,14 @@ impl Type {
         }
     }
 
+    pub fn is_option(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } if "Option" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_option(),
+            _ => false,
+        }
+    }
+
     pub fn is_map(&self) -> bool {
         match self {
             Self::App {
@@ -143,7 +151,7 @@ impl Type {
                 if let Type::Tuple { elems } = &*args[0] {
                     elems.len() == 2
                 } else if let Type::Var { tipo } = &*args[0] {
-                    matches!(tipo.borrow().get_uplc_type(), UplcType::Pair(_, _))
+                    matches!(tipo.borrow().get_uplc_type(), Some(UplcType::Pair(_, _)))
                 } else {
                     false
                 }
@@ -157,7 +165,42 @@ impl Type {
         matches!(self, Self::Tuple { .. })
     }
 
-    pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
+    pub fn is_generic(&self) -> bool {
+        match self {
+            Type::App { args, .. } => {
+                let mut is_a_generic = false;
+                for arg in args {
+                    is_a_generic = is_a_generic || arg.is_generic();
+                }
+                is_a_generic
+            }
+
+            Type::Var { tipo } => tipo.borrow().is_generic(),
+            Type::Tuple { elems } => {
+                let mut is_a_generic = false;
+                for elem in elems {
+                    is_a_generic = is_a_generic || elem.is_generic();
+                }
+                is_a_generic
+            }
+            Type::Fn { args, .. } => {
+                let mut is_a_generic = false;
+                for arg in args {
+                    is_a_generic = is_a_generic || arg.is_generic();
+                }
+                is_a_generic
+            }
+        }
+    }
+
+    pub fn get_generic(&self) -> Option<u64> {
+        match self {
+            Type::Var { tipo } => tipo.borrow().get_generic(),
+            _ => None,
+        }
+    }
+
+    pub fn get_inner_types(&self) -> Vec<Arc<Type>> {
         if self.is_list() {
             match self {
                 Self::App { args, .. } => args.clone(),
@@ -168,6 +211,13 @@ impl Type {
             match self {
                 Self::Tuple { elems } => elems.to_vec(),
                 _ => vec![],
+            }
+        } else if matches!(self.get_uplc_type(), UplcType::Data) {
+            match self {
+                Type::App { args, .. } => args.clone(),
+                Type::Fn { args, .. } => args.clone(),
+                Type::Var { tipo } => tipo.borrow().get_inner_type(),
+                _ => unreachable!(),
             }
         } else {
             vec![]
@@ -374,6 +424,13 @@ impl TypeVar {
         }
     }
 
+    pub fn is_option(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_option(),
+            _ => false,
+        }
+    }
+
     pub fn is_map(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_map(),
@@ -381,17 +438,33 @@ impl TypeVar {
         }
     }
 
+    pub fn is_generic(&self) -> bool {
+        match self {
+            TypeVar::Generic { .. } => true,
+            TypeVar::Link { tipo } => tipo.is_generic(),
+            _ => false,
+        }
+    }
+
+    pub fn get_generic(&self) -> Option<u64> {
+        match self {
+            TypeVar::Generic { id } => Some(*id),
+            TypeVar::Link { tipo } => tipo.get_generic(),
+            _ => None,
+        }
+    }
+
     pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
         match self {
-            Self::Link { tipo } => tipo.get_inner_type(),
+            Self::Link { tipo } => tipo.get_inner_types(),
             _ => vec![],
         }
     }
 
-    pub fn get_uplc_type(&self) -> UplcType {
+    pub fn get_uplc_type(&self) -> Option<UplcType> {
         match self {
-            Self::Link { tipo } => tipo.get_uplc_type(),
-            _ => unreachable!(),
+            Self::Link { tipo } => Some(tipo.get_uplc_type()),
+            _ => None,
         }
     }
 }
