@@ -82,7 +82,7 @@ type Option<a> {
 Then, functions which fail may safely return an optional value.
 
 ```
-fn get_head(a: List<a>) -> Option<a {
+fn get_head(a: List<a>) -> Option<a> {
     when a is {
         [a, .._] -> Some(a)
         [] -> None
