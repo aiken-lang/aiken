@@ -42,6 +42,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just("&&").to(Token::AmperAmper),
         just('#').to(Token::Hash),
         just("\n\n").to(Token::EmptyLine),
+        just("\n").to(Token::NewLine),
     ));
 
     let grouping = choice((
@@ -127,17 +128,10 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             .map_with_span(|token, span| (token, span)),
     );
 
-    let comments_with_trailing_newline = just("//").ignore_then(
-        take_until(text::newline())
-            .then_ignore(text::newline().rewind())
-            .to(Token::Comment)
-            .map_with_span(|token, span| (token, span)),
-    );
-
     choice((
         module_comments,
         doc_comments,
-        choice((comments_with_trailing_newline, comments)),
+        comments,
         choice((keyword, int, op, grouping, string))
             .or(any().map(Token::Error).validate(|t, span, emit| {
                 emit(ParseError::expected_input_found(
@@ -149,9 +143,9 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             }))
             .map_with_span(|token, span| (token, span)),
     ))
-    .padded()
+    .padded_by(one_of(" \t").ignored().repeated())
     .recover_with(skip_then_retry_until([]))
     .repeated()
-    .padded()
+    .padded_by(one_of(" \t").ignored().repeated())
     .then_ignore(end())
 }
