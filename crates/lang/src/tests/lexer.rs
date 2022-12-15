@@ -21,6 +21,7 @@ fn tokens() {
             Token::Type,
             Token::Pipe,
             Token::GreaterEqual,
+            Token::NewLine,
             Token::LeftBrace,
             Token::UpName {
                 name: "Thing".to_string()
