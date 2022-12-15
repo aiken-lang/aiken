@@ -69,7 +69,7 @@ let some_bool = True
 
 if some_bool {
   "It's true!"
-else {
+} else {
   "It's not true."
 }
 ```
