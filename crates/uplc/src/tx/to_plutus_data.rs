@@ -296,7 +296,7 @@ impl ToPlutusData for TxOut {
                         post_alonzo_output.value.to_plutus_data(),
                         match post_alonzo_output.datum_option {
                             Some(DatumOption::Hash(hash)) => Some(hash).to_plutus_data(),
-                            _ => None::<DatumOption>.to_plutus_data(),
+                            _ => None::<Option<Hash<32>>>.to_plutus_data(),
                         },
                     ],
                 ),

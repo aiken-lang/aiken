@@ -21,6 +21,7 @@
 ### Changed
 
 - **aiken**: `check` now also runs and reports on any `test` found in the project
+- **aiken**: fix Plutus V1 `to_plutus_data()` for post-alonzo txout with no datum hash
 
 ### Removed
 
