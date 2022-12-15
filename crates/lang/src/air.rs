@@ -216,7 +216,6 @@ pub enum Air {
 
     Negate {
         scope: Vec<u64>,
-        value: Box<Self>,
     },
 
     TupleAccessor {

@@ -747,7 +747,8 @@ pub fn match_ir_for_recursion(
 
 pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &HashMap<u64, Arc<Type>>) {
     if let Some(id) = tipo.get_generic() {
-        *tipo = generic_types.get(&id).unwrap().clone();
+        //If generic does not have a type we know of like a None in option then just use same type
+        *tipo = generic_types.get(&id).unwrap_or(tipo).clone();
     } else if tipo.is_generic() {
         match &**tipo {
             Type::App {
