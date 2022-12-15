@@ -4,7 +4,10 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{self, constr_index_exposer, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD},
+        builder::{
+            self, constr_index_exposer, delayed_if_else, if_else, CONSTR_FIELDS_EXPOSER,
+            CONSTR_GET_FIELD,
+        },
         Constant as UplcConstant, Name, Program, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -2453,80 +2456,24 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 let term = match name {
-                    BinOp::And => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::IfThenElse)
-                                    .force_wrap()
-                                    .into(),
-                                argument: left.into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(right.into()).into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(Term::Constant(UplcConstant::Bool(false)).into())
-                            .into(),
+                    BinOp::And => {
+                        delayed_if_else(left, right, Term::Constant(UplcConstant::Bool(false)))
                     }
-                    .force_wrap(),
-                    BinOp::Or => Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::IfThenElse)
-                                    .force_wrap()
-                                    .into(),
-                                argument: left.into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(Term::Constant(UplcConstant::Bool(true)).into())
-                                .into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(right.into()).into(),
+                    BinOp::Or => {
+                        delayed_if_else(left, Term::Constant(UplcConstant::Bool(true)), right)
                     }
-                    .force_wrap(),
+
                     BinOp::Eq => {
                         if tipo.is_bool() {
-                            let term = Term::Force(
-                                Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Force(
-                                                Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                            )
-                                            .into(),
-                                            argument: left.into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Delay(right.clone().into()).into(),
-                                    }
-                                    .into(),
-                                    argument: Term::Delay(
-                                        Term::Apply {
-                                            function: Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Force(
-                                                        Term::Builtin(DefaultFunction::IfThenElse)
-                                                            .into(),
-                                                    )
-                                                    .into(),
-                                                    argument: right.into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Constant(UplcConstant::Bool(false))
-                                                    .into(),
-                                            }
-                                            .into(),
-                                            argument: Term::Constant(UplcConstant::Bool(true))
-                                                .into(),
-                                        }
-                                        .into(),
-                                    )
-                                    .into(),
-                                }
-                                .into(),
+                            let term = delayed_if_else(
+                                left,
+                                right.clone(),
+                                if_else(
+                                    right,
+                                    Term::Constant(UplcConstant::Bool(false)),
+                                    Term::Constant(UplcConstant::Bool(true)),
+                                ),
                             );
-
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_map() {
@@ -2636,50 +2583,15 @@ impl<'a> CodeGenerator<'a> {
                     }
                     BinOp::NotEq => {
                         if tipo.is_bool() {
-                            let term = Term::Force(
-                                Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Apply {
-                                            function: Term::Force(
-                                                Term::Builtin(DefaultFunction::IfThenElse).into(),
-                                            )
-                                            .into(),
-                                            argument: left.into(),
-                                        }
-                                        .into(),
-                                        argument: Term::Delay(
-                                            Term::Apply {
-                                                function: Term::Apply {
-                                                    function: Term::Apply {
-                                                        function: Term::Force(
-                                                            Term::Builtin(
-                                                                DefaultFunction::IfThenElse,
-                                                            )
-                                                            .into(),
-                                                        )
-                                                        .into(),
-                                                        argument: right.clone().into(),
-                                                    }
-                                                    .into(),
-                                                    argument: Term::Constant(UplcConstant::Bool(
-                                                        false,
-                                                    ))
-                                                    .into(),
-                                                }
-                                                .into(),
-                                                argument: Term::Constant(UplcConstant::Bool(true))
-                                                    .into(),
-                                            }
-                                            .into(),
-                                        )
-                                        .into(),
-                                    }
-                                    .into(),
-                                    argument: Term::Delay(right.into()).into(),
-                                }
-                                .into(),
+                            let term = delayed_if_else(
+                                left,
+                                if_else(
+                                    right.clone(),
+                                    Term::Constant(UplcConstant::Bool(false)),
+                                    Term::Constant(UplcConstant::Bool(true)),
+                                ),
+                                right,
                             );
-
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_map() {
@@ -3156,28 +3068,18 @@ impl<'a> CodeGenerator<'a> {
                                 text: "__other_clauses_delayed".to_string(),
                                 unique: 0.into(),
                             },
-                            body: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::IfThenElse)
-                                            .force_wrap()
-                                            .into(),
-                                        argument: Term::Apply {
-                                            function: checker.into(),
-                                            argument: clause.into(),
-                                        }
-                                        .into(),
-                                    }
-                                    .into(),
-                                    argument: Term::Delay(body.into()).into(),
-                                }
-                                .into(),
-                                argument: Term::Var(Name {
+                            body: if_else(
+                                Term::Apply {
+                                    function: checker.into(),
+                                    argument: clause.into(),
+                                },
+                                Term::Delay(body.into()),
+                                Term::Var(Name {
                                     text: "__other_clauses_delayed".to_string(),
                                     unique: 0.into(),
-                                })
-                                .into(),
-                            }
+                                }),
+                            )
+                            .force_wrap()
                             .into(),
                         }
                         .into(),
@@ -3185,23 +3087,14 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .force_wrap()
                 } else {
-                    term = Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Force(DefaultFunction::IfThenElse.into()).into(),
-                                argument: Term::Apply {
-                                    function: checker.into(),
-                                    argument: clause.into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(body.into()).into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(term.into()).into(),
-                    }
-                    .force_wrap();
+                    term = delayed_if_else(
+                        Term::Apply {
+                            function: checker.into(),
+                            argument: clause.into(),
+                        },
+                        body,
+                        term,
+                    );
                 }
 
                 arg_stack.push(term);
@@ -3316,28 +3209,17 @@ impl<'a> CodeGenerator<'a> {
                     }
                 };
 
-                let term = Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::IfThenElse)
-                                .force_wrap()
-                                .into(),
-                            argument: Term::Apply {
-                                function: checker.into(),
-                                argument: condition.into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(then.into()).into(),
-                    }
-                    .into(),
-                    argument: Term::Var(Name {
+                let term = if_else(
+                    Term::Apply {
+                        function: checker.into(),
+                        argument: condition.into(),
+                    },
+                    Term::Delay(then.into()),
+                    Term::Var(Name {
                         text: "__other_clauses_delayed".to_string(),
                         unique: 0.into(),
-                    })
-                    .into(),
-                }
+                    }),
+                )
                 .force_wrap();
 
                 arg_stack.push(term);
@@ -3350,23 +3232,7 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                term = Term::Force(
-                    Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::IfThenElse)
-                                    .force_wrap()
-                                    .into(),
-                                argument: condition.into(),
-                            }
-                            .into(),
-                            argument: Term::Delay(then.into()).into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(term.into()).into(),
-                    }
-                    .into(),
-                );
+                term = delayed_if_else(condition, then, term);
 
                 arg_stack.push(term);
             }
@@ -3647,20 +3513,11 @@ impl<'a> CodeGenerator<'a> {
             Air::Negate { .. } => {
                 let value = arg_stack.pop().unwrap();
 
-                let term = Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::IfThenElse)
-                                .force_wrap()
-                                .into(),
-                            argument: value.into(),
-                        }
-                        .into(),
-                        argument: Term::Constant(UplcConstant::Bool(false)).into(),
-                    }
-                    .into(),
-                    argument: Term::Constant(UplcConstant::Bool(true)).into(),
-                };
+                let term = if_else(
+                    value,
+                    Term::Constant(UplcConstant::Bool(false)),
+                    Term::Constant(UplcConstant::Bool(true)),
+                );
                 arg_stack.push(term);
             }
             Air::TupleAccessor { tipo, names, .. } => {
