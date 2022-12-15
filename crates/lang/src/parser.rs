@@ -51,6 +51,7 @@ pub fn module(
 
             false
         }
+        Token::NewLine => false,
         _ => true,
     });
 
