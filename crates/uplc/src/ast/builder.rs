@@ -266,3 +266,42 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
         .into(),
     }
 }
+
+pub fn delayed_if_else(
+    condition: Term<Name>,
+    then_term: Term<Name>,
+    else_term: Term<Name>,
+) -> Term<Name> {
+    Term::Apply {
+        function: Term::Apply {
+            function: Term::Apply {
+                function: Term::Builtin(DefaultFunction::IfThenElse)
+                    .force_wrap()
+                    .into(),
+                argument: condition.into(),
+            }
+            .into(),
+            argument: Term::Delay(then_term.into()).into(),
+        }
+        .into(),
+        argument: Term::Delay(else_term.into()).into(),
+    }
+    .force_wrap()
+}
+
+pub fn if_else(condition: Term<Name>, then_term: Term<Name>, else_term: Term<Name>) -> Term<Name> {
+    Term::Apply {
+        function: Term::Apply {
+            function: Term::Apply {
+                function: Term::Builtin(DefaultFunction::IfThenElse)
+                    .force_wrap()
+                    .into(),
+                argument: condition.into(),
+            }
+            .into(),
+            argument: then_term.into(),
+        }
+        .into(),
+        argument: else_term.into(),
+    }
+}
