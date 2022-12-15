@@ -484,7 +484,13 @@ impl<'a> CodeGenerator<'a> {
                 });
             }
             TypedExpr::RecordUpdate { .. } => todo!(),
-            TypedExpr::Negate { .. } => todo!(),
+            TypedExpr::Negate { value, .. } => {
+                ir_stack.push(Air::Negate {
+                    scope: scope.clone(),
+                });
+
+                self.build_ir(value, ir_stack, scope);
+            }
             TypedExpr::Tuple { elems, tipo, .. } => {
                 ir_stack.push(Air::Tuple {
                     scope: scope.clone(),
@@ -3638,7 +3644,25 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::Record { .. } => todo!(),
             Air::RecordUpdate { .. } => todo!(),
-            Air::Negate { .. } => todo!(),
+            Air::Negate { .. } => {
+                let value = arg_stack.pop().unwrap();
+
+                let term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::IfThenElse)
+                                .force_wrap()
+                                .into(),
+                            argument: value.into(),
+                        }
+                        .into(),
+                        argument: Term::Constant(UplcConstant::Bool(false)).into(),
+                    }
+                    .into(),
+                    argument: Term::Constant(UplcConstant::Bool(true)).into(),
+                };
+                arg_stack.push(term);
+            }
             Air::TupleAccessor { tipo, names, .. } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
