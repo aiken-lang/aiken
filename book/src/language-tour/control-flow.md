@@ -56,7 +56,7 @@ let description =
     No -> "It's not yes."
   }
 
-description  // => "It's true!"
+description  // => "It's yes!"
 ```
 
 ## If-Else
