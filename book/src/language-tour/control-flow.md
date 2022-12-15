@@ -172,7 +172,7 @@ It can be useful when designing a module, type checking functions and types but
 leaving the implementation of the functions until later.
 
 ```aiken
-fn not_sure_yet() -> Int {
+fn favourite_number() -> Int {
   // The type annotations says this returns an Int, but we don't need
   // to implement it yet.
   todo
