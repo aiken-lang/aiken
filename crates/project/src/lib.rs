@@ -7,6 +7,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
+use crate::module::{CERT, MINT, SPEND, VALIDATOR_NAMES, WITHDRAW};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedDefinition, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -49,12 +50,6 @@ pub struct Source {
     pub code: String,
     pub kind: ModuleKind,
 }
-
-pub const SPEND: &str = "spend";
-pub const CERT: &str = "cert";
-pub const MINT: &str = "mint";
-pub const WITHDRAWL: &str = "withdrawl";
-pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAWL];
 
 pub struct Project<T>
 where
@@ -351,7 +346,7 @@ where
 
                         // depending on name, validate the minimum number of arguments
                         // if too low, push a new error on to errors
-                        if [MINT, CERT, WITHDRAWL].contains(&func_def.name.as_str())
+                        if [MINT, CERT, WITHDRAW].contains(&func_def.name.as_str())
                             && func_def.arguments.len() < 2
                         {
                             errors.push(Error::WrongValidatorArity {

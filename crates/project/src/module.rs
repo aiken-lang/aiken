@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use aiken_lang::ast::{ModuleKind, TypedModule, UntypedModule};
+use aiken_lang::ast::{Definition, ModuleKind, TypedModule, UntypedModule};
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 
 use crate::error::Error;
@@ -155,6 +155,12 @@ fn find_cycle(
     false
 }
 
+pub const SPEND: &str = "spend";
+pub const CERT: &str = "cert";
+pub const MINT: &str = "mint";
+pub const WITHDRAW: &str = "withdraw";
+pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAW];
+
 #[derive(Debug, Clone)]
 pub struct CheckedModule {
     pub name: String,
@@ -163,6 +169,15 @@ pub struct CheckedModule {
     pub kind: ModuleKind,
     pub ast: TypedModule,
     // pub extra: ModuleExtra,
+}
+
+impl CheckedModule {
+    pub fn is_library(&self) -> bool {
+        self.ast.definitions().any(|def| match def {
+            Definition::Fn(func_def) => VALIDATOR_NAMES.contains(&func_def.name.as_str()),
+            _ => false,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
