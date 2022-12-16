@@ -61,9 +61,9 @@ impl Printer {
                 if args.is_empty() {
                     doc
                 } else {
-                    doc.append("(")
+                    doc.append("<")
                         .append(self.args_to_aiken_doc(args))
-                        .append(")")
+                        .append(">")
                 }
             }
 
@@ -298,7 +298,7 @@ mod test {
                     }),
                 ],
             },
-            "Pair(Int, Bool)",
+            "Pair<Int, Bool>",
         );
         assert_string!(
             Type::Fn {

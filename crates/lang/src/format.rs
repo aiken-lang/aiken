@@ -1222,7 +1222,7 @@ impl<'comments> Formatter<'comments> {
             name.to_doc()
         } else {
             name.to_doc()
-                .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
+                .append(wrap_generics(args.iter().map(|e| e.to_doc())).group())
         }
     }
 
