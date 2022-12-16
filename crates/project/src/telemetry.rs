@@ -11,6 +11,11 @@ pub enum Event {
         version: String,
         root: PathBuf,
     },
+    GeneratingDocumentation {
+        name: String,
+        version: String,
+        root: PathBuf,
+    },
     ParsingProjectFiles,
     TypeChecking,
     GeneratingUPLC {

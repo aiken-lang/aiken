@@ -1,4 +1,5 @@
 pub mod config;
+pub mod docs;
 pub mod error;
 pub mod format;
 pub mod module;
@@ -97,6 +98,27 @@ where
         self.compile(options)
     }
 
+    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Error> {
+        self.event_listener
+            .handle_event(Event::GeneratingDocumentation {
+                root: self.root.clone(),
+                name: self.config.name.clone(),
+                version: self.config.version.clone(),
+            });
+
+        let destination = destination.unwrap_or(self.root.join("doc"));
+        let checked_modules = self.parse()?;
+        let doc_files =
+            docs::generate_all(&self.root, &self.config, checked_modules.values().collect());
+        for file in doc_files {
+            let path = destination.join(file.path);
+            fs::create_dir_all(&path.parent().unwrap())?;
+            fs::write(&path, file.content)?;
+        }
+
+        Ok(())
+    }
+
     pub fn check(
         &mut self,
         skip_tests: bool,
@@ -117,6 +139,15 @@ where
         self.compile(options)
     }
 
+    pub fn parse(&mut self) -> Result<CheckedModules, Error> {
+        self.event_listener.handle_event(Event::ParsingProjectFiles);
+        self.read_source_files()?;
+        let parsed_modules = self.parse_sources()?;
+        let processing_sequence = parsed_modules.sequence()?;
+        self.event_listener.handle_event(Event::TypeChecking);
+        self.type_check(parsed_modules, processing_sequence)
+    }
+
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
         self.event_listener
             .handle_event(Event::StartingCompilation {
@@ -125,17 +156,7 @@ where
                 version: self.config.version.clone(),
             });
 
-        self.event_listener.handle_event(Event::ParsingProjectFiles);
-
-        self.read_source_files()?;
-
-        let parsed_modules = self.parse_sources()?;
-
-        let processing_sequence = parsed_modules.sequence()?;
-
-        self.event_listener.handle_event(Event::TypeChecking);
-
-        let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
+        let mut checked_modules = self.parse()?;
 
         let validators = self.validate_validators(&mut checked_modules)?;
 
