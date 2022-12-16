@@ -925,7 +925,7 @@ pub fn monomorphize(
 ) -> (String, Vec<Air>) {
     let mut new_air = ir.clone();
     let mut new_name = String::new();
-
+    let mut needs_variant = false;
     for (index, ir) in ir.into_iter().enumerate() {
         match ir {
             Air::Var {
@@ -960,6 +960,7 @@ pub fn monomorphize(
                         name,
                         variant_name: variant,
                     };
+                    needs_variant = true;
                 }
             }
             Air::List {
@@ -978,6 +979,7 @@ pub fn monomorphize(
                         tipo,
                         tail,
                     };
+                    needs_variant = false;
                 }
             }
             Air::ListAccessor {
@@ -996,6 +998,7 @@ pub fn monomorphize(
                         tipo,
                         tail,
                     };
+                    needs_variant = false;
                 }
             }
             Air::ListExpose {
@@ -1014,6 +1017,7 @@ pub fn monomorphize(
                         tipo,
                         tail,
                     };
+                    needs_variant = false;
                 }
             }
 
@@ -1033,6 +1037,7 @@ pub fn monomorphize(
                         tipo,
                         count,
                     };
+                    needs_variant = false;
                 }
             }
             Air::Builtin { scope, func, tipo } => {
@@ -1041,6 +1046,7 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Builtin { scope, func, tipo };
+                    needs_variant = false;
                 }
             }
             // TODO check on assignment if type is needed
@@ -1059,6 +1065,7 @@ pub fn monomorphize(
                         subject_name,
                         tipo,
                     };
+                    needs_variant = false;
                 }
             }
             Air::Clause {
@@ -1077,6 +1084,7 @@ pub fn monomorphize(
                         subject_name,
                         complex_clause,
                     };
+                    needs_variant = false;
                 }
             }
             Air::ListClause {
@@ -1097,6 +1105,7 @@ pub fn monomorphize(
                         complex_clause,
                         next_tail_name,
                     };
+                    needs_variant = false;
                 }
             }
             Air::ClauseGuard {
@@ -1113,6 +1122,7 @@ pub fn monomorphize(
                         subject_name,
                         tipo,
                     };
+                    needs_variant = false;
                 }
             }
             Air::RecordAccess {
@@ -1129,6 +1139,7 @@ pub fn monomorphize(
                         index: record_index,
                         tipo,
                     };
+                    needs_variant = false;
                 }
             }
             Air::FieldsExpose {
@@ -1141,6 +1152,7 @@ pub fn monomorphize(
                     if tipo.is_generic() {
                         let mut tipo = tipo.clone();
                         find_generics_to_replace(&mut tipo, &generic_types);
+                        needs_variant = false;
                     }
                     new_indices.push((ind, name, tipo));
                 }
@@ -1156,6 +1168,7 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Tuple { scope, count, tipo };
+                    needs_variant = false;
                 }
             }
             Air::Todo { scope, label, tipo } => {
@@ -1164,6 +1177,7 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Todo { scope, label, tipo };
+                    needs_variant = false;
                 }
             }
             Air::RecordUpdate { .. } => todo!(),
@@ -1173,7 +1187,7 @@ pub fn monomorphize(
     }
 
     if let Type::Fn { args, .. } = &**full_type {
-        if full_type.is_generic() {
+        if needs_variant {
             for arg in args {
                 get_variant_name(&mut new_name, arg);
             }
