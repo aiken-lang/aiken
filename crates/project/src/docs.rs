@@ -62,14 +62,6 @@ struct DocLink {
     path: String,
 }
 
-#[derive(Serialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct SearchIndex {
-    doc: String,
-    title: String,
-    content: String,
-    url: String,
-}
-
 /// Generate documentation files for a given project.
 ///
 /// The documentation is built using template files located at the root of this crate.
@@ -110,14 +102,9 @@ fn generate_module(
         .sorted()
         .collect();
 
-    functions.iter().for_each(|function| {
-        search_indexes.push(SearchIndex {
-            doc: module.name.to_string(),
-            title: function.name.to_string(),
-            content: format!("{}\n{}", function.signature, function.documentation),
-            url: format!("{}.html#{}", module.name, function.name),
-        })
-    });
+    functions
+        .iter()
+        .for_each(|function| search_indexes.push(SearchIndex::from_function(module, function)));
 
     // Types
     let types: Vec<DocType> = module
@@ -127,43 +114,25 @@ fn generate_module(
         .flat_map(DocType::from_definition)
         .sorted()
         .collect();
-    types.iter().for_each(|type_info| {
-        let constructors = type_info
-            .constructors
-            .iter()
-            .map(|constructor| {
-                let arguments = constructor
-                    .arguments
-                    .iter()
-                    .map(|argument| format!("{}\n{}", argument.label, argument.documentation))
-                    .join("\n");
-                format!(
-                    "{}\n{}\n{}",
-                    constructor.definition, constructor.documentation, arguments
-                )
-            })
-            .join("\n");
-        search_indexes.push(SearchIndex {
-            doc: module.name.to_string(),
-            title: type_info.name.to_string(),
-            content: format!(
-                "{}\n{}\n{}",
-                type_info.definition, type_info.documentation, constructors,
-            ),
-            url: format!("{}.html#{}", module.name, type_info.name),
-        })
-    });
+
+    types
+        .iter()
+        .for_each(|type_info| search_indexes.push(SearchIndex::from_type(module, type_info)));
 
     // Constants
-    // TODO
+    let constants: Vec<DocConstant> = module
+        .ast
+        .definitions
+        .iter()
+        .flat_map(DocConstant::from_definition)
+        .sorted()
+        .collect();
+    constants
+        .iter()
+        .for_each(|constant| search_indexes.push(SearchIndex::from_constant(module, constant)));
 
     // Module
-    search_indexes.push(SearchIndex {
-        doc: module.name.to_string(),
-        title: module.name.to_string(),
-        content: String::new(),
-        url: format!("{}.html", module.name),
-    });
+    search_indexes.push(SearchIndex::from_module(module));
 
     let template = ModuleTemplate {
         aiken_version: VERSION,
@@ -177,7 +146,7 @@ fn generate_module(
         project_version: &config.version.to_string(),
         functions,
         types,
-        constants: vec![],
+        constants,
         timestamp: timestamp.as_secs().to_string(),
     };
 
@@ -283,6 +252,71 @@ fn generate_modules_links(modules: &Vec<&CheckedModule>) -> Vec<DocLink> {
     modules_links
 }
 
+#[derive(Serialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
+struct SearchIndex {
+    doc: String,
+    title: String,
+    content: String,
+    url: String,
+}
+
+impl SearchIndex {
+    fn from_function(module: &CheckedModule, function: &DocFunction) -> Self {
+        SearchIndex {
+            doc: module.name.to_string(),
+            title: function.name.to_string(),
+            content: format!("{}\n{}", function.signature, function.documentation),
+            url: format!("{}.html#{}", module.name, function.name),
+        }
+    }
+
+    fn from_type(module: &CheckedModule, type_info: &DocType) -> Self {
+        let constructors = type_info
+            .constructors
+            .iter()
+            .map(|constructor| {
+                let arguments = constructor
+                    .arguments
+                    .iter()
+                    .map(|argument| format!("{}\n{}", argument.label, argument.documentation))
+                    .join("\n");
+                format!(
+                    "{}\n{}\n{}",
+                    constructor.definition, constructor.documentation, arguments
+                )
+            })
+            .join("\n");
+
+        SearchIndex {
+            doc: module.name.to_string(),
+            title: type_info.name.to_string(),
+            content: format!(
+                "{}\n{}\n{}",
+                type_info.definition, type_info.documentation, constructors,
+            ),
+            url: format!("{}.html#{}", module.name, type_info.name),
+        }
+    }
+
+    fn from_constant(module: &CheckedModule, constant: &DocConstant) -> Self {
+        SearchIndex {
+            doc: module.name.to_string(),
+            title: constant.name.to_string(),
+            content: format!("{}\n{}", constant.definition, constant.documentation),
+            url: format!("{}.html#{}", module.name, constant.name),
+        }
+    }
+
+    fn from_module(module: &CheckedModule) -> Self {
+        SearchIndex {
+            doc: module.name.to_string(),
+            title: module.name.to_string(),
+            content: module.ast.docs.iter().join("\n"),
+            url: format!("{}.html", module.name),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct DocFunction {
     name: String,
@@ -321,6 +355,26 @@ struct DocConstant {
     definition: String,
     documentation: String,
     source_url: String,
+}
+
+impl DocConstant {
+    fn from_definition(def: &TypedDefinition) -> Option<Self> {
+        match def {
+            Definition::ModuleConstant(const_def) if const_def.public => Some(DocConstant {
+                name: const_def.name.clone(),
+                documentation: const_def
+                    .doc
+                    .as_deref()
+                    .map(render_markdown)
+                    .unwrap_or_default(),
+                definition: format::Formatter::new()
+                    .docs_const_expr(&const_def.name, &const_def.value)
+                    .to_pretty_string(MAX_COLUMNS),
+                source_url: "#todo".to_string(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]

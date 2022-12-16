@@ -386,17 +386,9 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    pub fn docs_const_expr<'a>(
-        &mut self,
-        public: bool,
-        name: &'a str,
-        value: &'a TypedConstant,
-    ) -> Document<'a> {
+    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedConstant) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
-
-        pub_(public)
-            .append("const ")
-            .append(name)
+        name.to_doc()
             .append(": ")
             .append(printer.print(&value.tipo()))
             .append(" = ")
