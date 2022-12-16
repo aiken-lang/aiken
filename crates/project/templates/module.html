@@ -50,9 +50,11 @@
         </a>
       </h2>
       {% if !type_info.source_url.is_empty() %}
+      <!-- TODO: support source linking
       <a class="member-source" alt="View Source" title="View Source" href="{{ type_info.source_url|safe }}">
         &lt;/&gt;
       </a>
+      -->
       {% endif %}
     </div>
     <div class="custom-type-constructors">
@@ -119,9 +121,11 @@
         </a>
       </h2>
       {% if !constant.source_url.is_empty() %}
+      <!-- TODO: support source linking
       <a class="member-source" alt="View Source" title="View Source" href="{{ constant.source_url|safe }}">
         &lt;/&gt;
       </a>
+      -->
       {% endif %}
     </div>
     <pre><code class="hljs aiken">{{ constant.definition }}</code></pre>
@@ -145,9 +149,11 @@
         </a>
       </h2>
       {% if !function.source_url.is_empty() %}
+      <!-- TODO: support source linking
       <a class="member-source" alt="View Source" title="View Source" href="{{ function.source_url|safe }}">
         &lt;/&gt;
       </a>
+      -->
       {% endif %}
     </div>
     <pre><code class="hljs aiken">{{ function.signature }}</code></pre>
