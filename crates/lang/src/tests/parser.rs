@@ -74,7 +74,7 @@ fn unqualified_imports() {
 #[test]
 fn import_alias() {
     let code = indoc! {r#"
-        use std/tx as t  
+        use std/tx as t
     "#};
 
     assert_definition(
@@ -130,14 +130,14 @@ fn custom_type() {
                             doc: None,
                         },
                     ],
-                    documentation: None,
+                    doc: None,
                     sugar: false,
                 },
                 ast::RecordConstructor {
                     location: Span::new((), 34..38),
                     name: "None".to_string(),
                     arguments: vec![],
-                    documentation: None,
+                    doc: None,
                     sugar: false,
                 },
                 ast::RecordConstructor {
@@ -169,7 +169,7 @@ fn custom_type() {
                             doc: None,
                         },
                     ],
-                    documentation: None,
+                    doc: None,
                     sugar: false,
                 },
             ],
@@ -208,7 +208,7 @@ fn opaque_type() {
                     tipo: (),
                     doc: None,
                 }],
-                documentation: None,
+                doc: None,
                 sugar: true,
             }],
             doc: None,
@@ -285,7 +285,7 @@ fn pub_type_alias() {
 #[test]
 fn empty_function() {
     let code = indoc! {r#"
-        pub fn run() {}        
+        pub fn run() {}
     "#};
 
     assert_definition(

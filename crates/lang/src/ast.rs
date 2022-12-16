@@ -130,14 +130,14 @@ impl TypedDataType {
                         tipo: tipo.clone(),
                         doc: None,
                     }],
-                    documentation: None,
+                    doc: None,
                     sugar: false,
                 },
                 RecordConstructor {
                     location: Span::empty(),
                     name: "None".to_string(),
                     arguments: vec![],
-                    documentation: None,
+                    doc: None,
                     sugar: false,
                 },
             ],
@@ -352,7 +352,7 @@ pub struct RecordConstructor<T> {
     pub location: Span,
     pub name: String,
     pub arguments: Vec<RecordConstructorArg<T>>,
-    pub documentation: Option<String>,
+    pub doc: Option<String>,
     pub sugar: bool,
 }
 

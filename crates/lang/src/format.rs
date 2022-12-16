@@ -1172,37 +1172,93 @@ impl<'comments> Formatter<'comments> {
             .append("}")
     }
 
-    pub fn docs_opaque_custom_type<'a>(
+    pub fn docs_data_type<'a, A>(
         &mut self,
-        public: bool,
+        name: &'a str,
+        args: &'a [String],
+        constructors: &'a [RecordConstructor<A>],
+        location: &'a Span,
+    ) -> Document<'a> {
+        self.pop_empty_lines(location.start);
+
+        let mut is_sugar = false;
+
+        (if args.is_empty() {
+            name.to_doc()
+        } else {
+            name.to_doc()
+                .append(wrap_generics(args.iter().map(|e| e.to_doc())))
+                .group()
+        })
+        .append(" {")
+        .append(if constructors.len() == 1 && constructors[0].sugar {
+            is_sugar = true;
+
+            self.record_constructor(&constructors[0])
+        } else {
+            concat(constructors.iter().map(|c| {
+                if self.pop_empty_lines(c.location.start) {
+                    lines(2)
+                } else {
+                    line()
+                }
+                .append(self.record_constructor(c))
+                .nest(INDENT)
+                .group()
+            }))
+        })
+        .append(if is_sugar { nil() } else { line() })
+        .append("}")
+    }
+
+    pub fn docs_opaque_data_type<'a>(
+        &mut self,
         name: &'a str,
         args: &'a [String],
         location: &'a Span,
     ) -> Document<'a> {
         self.pop_empty_lines(location.start);
-        pub_(public)
-            .to_doc()
-            .append("opaque type ")
-            .append(if args.is_empty() {
-                name.to_doc()
-            } else {
-                name.to_doc()
-                    .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
-            })
+        if args.is_empty() {
+            name.to_doc()
+        } else {
+            name.to_doc()
+                .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
+        }
+    }
+
+    pub fn docs_type_alias<'a>(
+        &mut self,
+        name: &'a str,
+        args: &'a [String],
+        typ: &'a Annotation,
+    ) -> Document<'a> {
+        let head = name.to_doc();
+
+        let head = if args.is_empty() {
+            head
+        } else {
+            head.append(wrap_generics(args.iter().map(|e| e.to_doc())).group())
+        };
+
+        head.append(" = ")
+            .append(self.annotation(typ).group().nest(INDENT))
+    }
+
+    pub fn docs_record_constructor<'a, A>(
+        &mut self,
+        constructor: &'a RecordConstructor<A>,
+    ) -> Document<'a> {
+        constructor.name.to_doc()
     }
 
     pub fn docs_fn_signature<'a>(
         &mut self,
-        public: bool,
         name: &'a str,
         args: &'a [TypedArg],
         return_type: Arc<Type>,
     ) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
-
-        pub_(public)
-            .append("fn ")
-            .append(name)
+        name.to_doc()
             .append(self.docs_fn_args(args, &mut printer))
             .append(" -> ".to_doc())
             .append(printer.print(&return_type))

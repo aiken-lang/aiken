@@ -157,7 +157,7 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
             location: span,
             arguments: arguments.unwrap_or_default(),
             name,
-            documentation: None,
+            doc: None,
             sugar: false,
         })
         .repeated()
@@ -167,7 +167,7 @@ pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
         vec![ast::RecordConstructor {
             location: span,
             arguments,
-            documentation: None,
+            doc: None,
             name: String::from("_replace"),
             sugar: true,
         }]

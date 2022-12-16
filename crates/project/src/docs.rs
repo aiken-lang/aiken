@@ -1,7 +1,8 @@
 use crate::{config::Config, module::CheckedModule};
 use aiken_lang::{
-    ast::{Definition, TypedDefinition},
+    ast::{Definition, RecordConstructor, RecordConstructorArg, TypedDefinition},
     format,
+    tipo::Type,
 };
 use askama::Template;
 use itertools::Itertools;
@@ -10,6 +11,7 @@ use serde::Serialize;
 use serde_json as json;
 use std::{
     path::PathBuf,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -75,24 +77,26 @@ struct SearchIndex {
 /// across multiple modules.
 pub fn generate_all(root: &PathBuf, config: &Config, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
     let timestamp = new_timestamp();
+    let modules_links = generate_modules_links(&modules);
 
     let mut output_files: Vec<DocFile> = vec![];
     let mut search_indexes: Vec<SearchIndex> = vec![];
 
     for module in &modules {
-        let (indexes, file) = generate_module(config, module, &timestamp);
+        let (indexes, file) = generate_module(config, module, &modules_links, &timestamp);
         search_indexes.extend(indexes);
         output_files.push(file);
     }
 
     output_files.extend(generate_static_assets(search_indexes));
-    output_files.push(generate_readme(root, config, modules, &timestamp));
+    output_files.push(generate_readme(root, config, &modules_links, &timestamp));
     output_files
 }
 
 fn generate_module(
     config: &Config,
     module: &CheckedModule,
+    modules: &Vec<DocLink>,
     timestamp: &Duration,
 ) -> (Vec<SearchIndex>, DocFile) {
     let mut search_indexes = vec![];
@@ -116,11 +120,44 @@ fn generate_module(
     });
 
     // Types
+    let types: Vec<DocType> = module
+        .ast
+        .definitions
+        .iter()
+        .flat_map(DocType::from_definition)
+        .sorted()
+        .collect();
+    types.iter().for_each(|type_info| {
+        let constructors = type_info
+            .constructors
+            .iter()
+            .map(|constructor| {
+                let arguments = constructor
+                    .arguments
+                    .iter()
+                    .map(|argument| format!("{}\n{}", argument.label, argument.documentation))
+                    .join("\n");
+                format!(
+                    "{}\n{}\n{}",
+                    constructor.definition, constructor.documentation, arguments
+                )
+            })
+            .join("\n");
+        search_indexes.push(SearchIndex {
+            doc: module.name.to_string(),
+            title: type_info.name.to_string(),
+            content: format!(
+                "{}\n{}\n{}",
+                type_info.definition, type_info.documentation, constructors,
+            ),
+            url: format!("{}.html#{}", module.name, type_info.name),
+        })
+    });
 
     // Constants
+    // TODO
 
-    // Template
-
+    // Module
     search_indexes.push(SearchIndex {
         doc: module.name.to_string(),
         title: module.name.to_string(),
@@ -133,13 +170,13 @@ fn generate_module(
         breadcrumbs: to_breadcrumbs(&module.name),
         links: &vec![],
         documentation: render_markdown(&module.ast.docs.iter().join("\n")),
-        modules: &vec![],
+        modules,
         project_name: &config.name,
         page_title: &format!("{} - {}", module.name, config.name),
         module_name: module.name.clone(),
         project_version: &config.version.to_string(),
         functions,
-        types: vec![],
+        types,
         constants: vec![],
         timestamp: timestamp.as_secs().to_string(),
     };
@@ -208,28 +245,18 @@ fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
 fn generate_readme(
     root: &PathBuf,
     config: &Config,
-    modules: Vec<&CheckedModule>,
+    modules: &Vec<DocLink>,
     timestamp: &Duration,
 ) -> DocFile {
     let path = PathBuf::from("index.html");
 
     let content = std::fs::read_to_string(root.join("README.md")).unwrap_or_default();
 
-    let mut modules_links = vec![];
-    for module in modules {
-        let module_path = [&module.name.clone(), ".html"].concat();
-        modules_links.push(DocLink {
-            path: module_path,
-            name: module.name.to_string().clone(),
-        });
-    }
-    modules_links.sort();
-
     let template = PageTemplate {
         aiken_version: VERSION,
         breadcrumbs: ".",
         links: &vec![],
-        modules: &modules_links,
+        modules,
         project_name: &config.name,
         page_title: &config.name,
         project_version: &config.version.to_string(),
@@ -241,6 +268,19 @@ fn generate_readme(
         path,
         content: template.render().expect("Page template rendering"),
     }
+}
+
+fn generate_modules_links(modules: &Vec<&CheckedModule>) -> Vec<DocLink> {
+    let mut modules_links = vec![];
+    for module in modules {
+        let module_path = [&module.name.clone(), ".html"].concat();
+        modules_links.push(DocLink {
+            path: module_path,
+            name: module.name.to_string().clone(),
+        });
+    }
+    modules_links.sort();
+    modules_links
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -263,13 +303,12 @@ impl DocFunction {
                     .unwrap_or_default(),
                 signature: format::Formatter::new()
                     .docs_fn_signature(
-                        true,
                         &func_def.name,
                         &func_def.arguments,
                         func_def.return_type.clone(),
                     )
                     .to_pretty_string(MAX_COLUMNS),
-                source_url: "TODO: source_url".to_string(),
+                source_url: "#todo".to_string(),
             }),
             _ => None,
         }
@@ -281,7 +320,6 @@ struct DocConstant {
     name: String,
     definition: String,
     documentation: String,
-    text_documentation: String,
     source_url: String,
 }
 
@@ -291,22 +329,99 @@ struct DocType {
     definition: String,
     documentation: String,
     constructors: Vec<DocTypeConstructor>,
-    text_documentation: String,
     source_url: String,
+}
+
+impl DocType {
+    fn from_definition(def: &TypedDefinition) -> Option<Self> {
+        match def {
+            Definition::TypeAlias(info) if info.public => Some(DocType {
+                name: info.alias.clone(),
+                definition: format::Formatter::new()
+                    .docs_type_alias(&info.alias, &info.parameters, &info.annotation)
+                    .to_pretty_string(MAX_COLUMNS),
+                documentation: info.doc.as_deref().map(render_markdown).unwrap_or_default(),
+                constructors: vec![],
+                source_url: "#todo".to_string(),
+            }),
+
+            Definition::DataType(info) if info.public && !info.opaque => Some(DocType {
+                name: info.name.clone(),
+                definition: format::Formatter::new()
+                    .docs_data_type(
+                        &info.name,
+                        &info.parameters,
+                        &info.constructors,
+                        &info.location,
+                    )
+                    .to_pretty_string(MAX_COLUMNS),
+                documentation: info.doc.as_deref().map(render_markdown).unwrap_or_default(),
+                constructors: info
+                    .constructors
+                    .iter()
+                    .map(DocTypeConstructor::from_record_constructor)
+                    .collect(),
+                source_url: "#todo".to_string(),
+            }),
+
+            Definition::DataType(info) if info.public && info.opaque => Some(DocType {
+                name: info.name.clone(),
+                definition: format::Formatter::new()
+                    .docs_opaque_data_type(&info.name, &info.parameters, &info.location)
+                    .to_pretty_string(MAX_COLUMNS),
+                documentation: info.doc.as_deref().map(render_markdown).unwrap_or_default(),
+                constructors: vec![],
+                source_url: "#todo".to_string(),
+            }),
+
+            _ => None,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct DocTypeConstructor {
     definition: String,
     documentation: String,
-    text_documentation: String,
     arguments: Vec<DocTypeConstructorArg>,
+}
+
+impl DocTypeConstructor {
+    fn from_record_constructor(constructor: &RecordConstructor<Arc<Type>>) -> Self {
+        DocTypeConstructor {
+            definition: format::Formatter::new()
+                .docs_record_constructor(constructor)
+                .to_pretty_string(MAX_COLUMNS),
+            documentation: constructor
+                .doc
+                .as_deref()
+                .map(render_markdown)
+                .unwrap_or_default(),
+            arguments: constructor
+                .arguments
+                .iter()
+                .filter_map(DocTypeConstructorArg::from_record_constructor_arg)
+                .collect(),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct DocTypeConstructorArg {
-    name: String,
-    doc: String,
+    label: String,
+    documentation: String,
+}
+
+impl DocTypeConstructorArg {
+    fn from_record_constructor_arg(arg: &RecordConstructorArg<Arc<Type>>) -> Option<Self> {
+        match &arg.label {
+            None => None,
+            Some(label) => Some(DocTypeConstructorArg {
+                label: label.clone(),
+                documentation: arg.doc.as_deref().map(render_markdown).unwrap_or_default(),
+            }),
+        }
+    }
 }
 
 // ------ Extra Helpers
