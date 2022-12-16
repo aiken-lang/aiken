@@ -1,9 +1,11 @@
 pub mod config;
+pub mod deps;
 pub mod docs;
 pub mod error;
 pub mod format;
 pub mod module;
 pub mod options;
+pub mod paths;
 pub mod pretty;
 pub mod script;
 pub mod telemetry;
@@ -17,6 +19,7 @@ use aiken_lang::{
     uplc::CodeGenerator,
     IdGenerator,
 };
+use deps::UseManifest;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use pallas::{
@@ -148,6 +151,8 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
+        let manifest = deps::download(&self.event_listener, None, UseManifest::Yes, &self.root)?;
+
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
@@ -718,7 +723,7 @@ where
 
             let cbor_hex = hex::encode(&cbor);
 
-            fs::write(script_path, &cbor_hex)?;
+            fs::write(script_path, cbor_hex)?;
 
             // Create the payment script JSON file
             let payment_script_path = script_output_dir.join("payment_script.json");
