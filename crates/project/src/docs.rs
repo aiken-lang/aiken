@@ -34,6 +34,7 @@ struct ModuleTemplate<'a> {
     project_name: &'a str,
     project_version: &'a str,
     links: &'a Vec<DocLink>,
+    modules_prefix: String,
     modules: &'a Vec<DocLink>,
     functions: Vec<DocFunction>,
     types: Vec<DocType>,
@@ -51,6 +52,7 @@ struct PageTemplate<'a> {
     project_name: &'a str,
     project_version: &'a str,
     links: &'a Vec<DocLink>,
+    modules_prefix: String,
     modules: &'a Vec<DocLink>,
     content: String,
     timestamp: &'a str,
@@ -69,26 +71,37 @@ struct DocLink {
 /// across multiple modules.
 pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
     let timestamp = new_timestamp();
-    let modules_links = generate_modules_links(&modules);
+    let (modules_prefix, modules_links) = generate_modules_links(&modules);
 
     let mut output_files: Vec<DocFile> = vec![];
     let mut search_indexes: Vec<SearchIndex> = vec![];
 
     for module in &modules {
-        let (indexes, file) = generate_module(config, module, &modules_links, &timestamp);
+        let (indexes, file) = generate_module(
+            config,
+            module,
+            (&modules_prefix, &modules_links),
+            &timestamp,
+        );
         search_indexes.extend(indexes);
         output_files.push(file);
     }
 
     output_files.extend(generate_static_assets(search_indexes));
-    output_files.push(generate_readme(root, config, &modules_links, &timestamp));
+    output_files.push(generate_readme(
+        root,
+        config,
+        (&modules_prefix, &modules_links),
+        &timestamp,
+    ));
+
     output_files
 }
 
 fn generate_module(
     config: &Config,
     module: &CheckedModule,
-    modules: &Vec<DocLink>,
+    (modules_prefix, modules): (&str, &Vec<DocLink>),
     timestamp: &Duration,
 ) -> (Vec<SearchIndex>, DocFile) {
     let mut search_indexes = vec![];
@@ -101,7 +114,6 @@ fn generate_module(
         .flat_map(DocFunction::from_definition)
         .sorted()
         .collect();
-
     functions
         .iter()
         .for_each(|function| search_indexes.push(SearchIndex::from_function(module, function)));
@@ -114,7 +126,6 @@ fn generate_module(
         .flat_map(DocType::from_definition)
         .sorted()
         .collect();
-
     types
         .iter()
         .for_each(|type_info| search_indexes.push(SearchIndex::from_type(module, type_info)));
@@ -133,12 +144,12 @@ fn generate_module(
 
     // Module
     search_indexes.push(SearchIndex::from_module(module));
-
-    let template = ModuleTemplate {
+    let module = ModuleTemplate {
         aiken_version: VERSION,
         breadcrumbs: to_breadcrumbs(&module.name),
         links: &vec![],
         documentation: render_markdown(&module.ast.docs.iter().join("\n")),
+        modules_prefix: modules_prefix.to_string(),
         modules,
         project_name: &config.name,
         page_title: &format!("{} - {}", module.name, config.name),
@@ -153,8 +164,8 @@ fn generate_module(
     (
         search_indexes,
         DocFile {
-            path: PathBuf::from(format!("{}.html", module.name)),
-            content: template
+            path: PathBuf::from(format!("{}.html", module.module_name)),
+            content: module
                 .render()
                 .expect("Module documentation template rendering"),
         },
@@ -214,7 +225,7 @@ fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
 fn generate_readme(
     root: &Path,
     config: &Config,
-    modules: &Vec<DocLink>,
+    (modules_prefix, modules): (&str, &Vec<DocLink>),
     timestamp: &Duration,
 ) -> DocFile {
     let path = PathBuf::from("index.html");
@@ -225,6 +236,7 @@ fn generate_readme(
         aiken_version: VERSION,
         breadcrumbs: ".",
         links: &vec![],
+        modules_prefix: modules_prefix.to_string(),
         modules,
         project_name: &config.name,
         page_title: &config.name,
@@ -239,7 +251,7 @@ fn generate_readme(
     }
 }
 
-fn generate_modules_links(modules: &Vec<&CheckedModule>) -> Vec<DocLink> {
+fn generate_modules_links(modules: &Vec<&CheckedModule>) -> (String, Vec<DocLink>) {
     let mut modules_links = vec![];
     for module in modules {
         let module_path = [&module.name.clone(), ".html"].concat();
@@ -249,7 +261,18 @@ fn generate_modules_links(modules: &Vec<&CheckedModule>) -> Vec<DocLink> {
         });
     }
     modules_links.sort();
-    modules_links
+
+    let prefix = find_modules_prefix(&modules_links);
+
+    for module in &mut modules_links {
+        let name = module.name.strip_prefix(&prefix).unwrap_or_default();
+        module.name = name.strip_prefix('/').unwrap_or(name).to_string();
+        if module.name == String::new() {
+            module.name = "/".to_string()
+        }
+    }
+
+    (prefix, modules_links)
 }
 
 #[derive(Serialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -510,18 +533,86 @@ fn new_timestamp() -> Duration {
         .expect("get current timestamp")
 }
 
+fn find_modules_prefix(modules: &[DocLink]) -> String {
+    modules
+        .iter()
+        .fold(None, |previous_prefix, module| {
+            let prefix = module
+                .name
+                .split('/')
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            match previous_prefix {
+                None if prefix != module.name => Some(prefix),
+                Some(..) if Some(prefix) == previous_prefix => previous_prefix,
+                _ => Some(String::new()),
+            }
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn find_modules_prefix_test() {
+    assert_eq!(find_modules_prefix(&vec![]), "".to_string());
+
+    assert_eq!(
+        find_modules_prefix(&vec![DocLink {
+            name: "aiken/list".to_string(),
+            path: String::new()
+        }]),
+        "aiken".to_string()
+    );
+
+    assert_eq!(
+        find_modules_prefix(&vec![DocLink {
+            name: "my_module".to_string(),
+            path: String::new()
+        }]),
+        "".to_string()
+    );
+
+    assert_eq!(
+        find_modules_prefix(&vec![
+            DocLink {
+                name: "aiken/list".to_string(),
+                path: String::new()
+            },
+            DocLink {
+                name: "aiken/byte_array".to_string(),
+                path: String::new(),
+            }
+        ]),
+        "aiken".to_string()
+    );
+
+    assert_eq!(
+        find_modules_prefix(&vec![
+            DocLink {
+                name: "aiken/list".to_string(),
+                path: String::new()
+            },
+            DocLink {
+                name: "foo/byte_array".to_string(),
+                path: String::new(),
+            }
+        ]),
+        "".to_string()
+    );
+}
+
 fn to_breadcrumbs(path: &str) -> String {
-    let unnest = path
+    let breadcrumbs = path
         .strip_prefix('/')
         .unwrap_or(path)
         .split('/')
         .skip(1)
         .map(|_| "..")
         .join("/");
-    if unnest.is_empty() {
+    if breadcrumbs.is_empty() {
         ".".to_string()
     } else {
-        unnest
+        breadcrumbs
     }
 }
 

@@ -305,10 +305,19 @@ p code {
   margin: 0;
 }
 
+.sidebar h3.modules-prefix {
+  color: var(--pink);
+  margin-bottom: 0;
+}
+
 .sidebar ul {
   list-style: none;
   margin: var(--small-gap) 0;
   padding: 0;
+}
+
+.sidebar h3.modules-prefix + ul {
+  margin-left: var(--tiny-gap);
 }
 
 .sidebar li {

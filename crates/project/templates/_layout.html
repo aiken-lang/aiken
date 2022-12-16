@@ -185,6 +185,9 @@
         {% endif %}
 
         <h2>Modules</h2>
+	{% if !modules_prefix.is_empty() %}
+	<h3 class="modules-prefix">{{ modules_prefix }}/</h3>
+	{% endif %}
         <ul>
         {% for module in modules %}
           <li><a href="{{ breadcrumbs }}/{{ module.path }}">{{ module.name }}</a></li>
