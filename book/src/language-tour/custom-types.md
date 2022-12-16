@@ -139,7 +139,7 @@ let Dog { name: name, cuteness: _, age: _ } = dog
 builtin.decode_utf8(name) // "Cashew"
 
 // Other fields ignored by spreading.
-// Field prunning is supported. Hence `age` is a shorthand for `age: age`.
+// Field punning is supported. Hence `age` is a shorthand for `age: age`.
 let Dog { age, .. } = dog
 age // 3
 ```
