@@ -100,14 +100,19 @@ where
 
     pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Error> {
         self.event_listener
-            .handle_event(Event::GeneratingDocumentation {
+            .handle_event(Event::BuildingDocumentation {
                 root: self.root.clone(),
                 name: self.config.name.clone(),
                 version: self.config.version.clone(),
             });
+        self.read_source_files()?;
 
         let destination = destination.unwrap_or(self.root.join("doc"));
-        let checked_modules = self.parse()?;
+        let parsed_modules = self.parse_sources()?;
+        let checked_modules = self.type_check(parsed_modules)?;
+        self.event_listener.handle_event(Event::GeneratingDocFiles {
+            output_path: destination.clone(),
+        });
         let doc_files =
             docs::generate_all(&self.root, &self.config, checked_modules.values().collect());
         for file in doc_files {
@@ -139,15 +144,6 @@ where
         self.compile(options)
     }
 
-    pub fn parse(&mut self) -> Result<CheckedModules, Error> {
-        self.event_listener.handle_event(Event::ParsingProjectFiles);
-        self.read_source_files()?;
-        let parsed_modules = self.parse_sources()?;
-        let processing_sequence = parsed_modules.sequence()?;
-        self.event_listener.handle_event(Event::TypeChecking);
-        self.type_check(parsed_modules, processing_sequence)
-    }
-
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
         self.event_listener
             .handle_event(Event::StartingCompilation {
@@ -156,8 +152,9 @@ where
                 version: self.config.version.clone(),
             });
 
-        let mut checked_modules = self.parse()?;
-
+        self.read_source_files()?;
+        let parsed_modules = self.parse_sources()?;
+        let mut checked_modules = self.type_check(parsed_modules)?;
         let validators = self.validate_validators(&mut checked_modules)?;
 
         match options.code_gen_mode {
@@ -219,6 +216,8 @@ where
     }
 
     fn parse_sources(&mut self) -> Result<ParsedModules, Error> {
+        self.event_listener.handle_event(Event::ParsingProjectFiles);
+
         let mut errors = Vec::new();
         let mut parsed_modules = HashMap::with_capacity(self.sources.len());
 
@@ -276,11 +275,9 @@ where
         }
     }
 
-    fn type_check(
-        &mut self,
-        mut parsed_modules: ParsedModules,
-        processing_sequence: Vec<String>,
-    ) -> Result<CheckedModules, Error> {
+    fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<CheckedModules, Error> {
+        self.event_listener.handle_event(Event::TypeChecking);
+        let processing_sequence = parsed_modules.sequence()?;
         let mut modules = HashMap::with_capacity(parsed_modules.len() + 1);
 
         for name in processing_sequence {

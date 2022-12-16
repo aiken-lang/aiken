@@ -68,7 +68,7 @@ impl telemetry::EventListener for Terminal {
                     root.to_str().unwrap_or("").bright_blue()
                 );
             }
-            telemetry::Event::GeneratingDocumentation {
+            telemetry::Event::BuildingDocumentation {
                 name,
                 version,
                 root,
@@ -91,6 +91,13 @@ impl telemetry::EventListener for Terminal {
                 println!(
                     "{} in {}",
                     "...Generating Untyped Plutus Core".bold().purple(),
+                    output_path.to_str().unwrap_or("").bright_blue()
+                );
+            }
+            telemetry::Event::GeneratingDocFiles { output_path } => {
+                println!(
+                    "{} in {}",
+                    "...Generating documentation files".bold().purple(),
                     output_path.to_str().unwrap_or("").bright_blue()
                 );
             }
