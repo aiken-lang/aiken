@@ -356,6 +356,12 @@ pub struct RecordConstructor<T> {
     pub sugar: bool,
 }
 
+impl<A> RecordConstructor<A> {
+    pub fn put_doc(&mut self, new_doc: String) {
+        self.doc = Some(new_doc);
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecordConstructorArg<T> {
     pub label: Option<String>,
@@ -364,6 +370,12 @@ pub struct RecordConstructorArg<T> {
     pub location: Span,
     pub tipo: T,
     pub doc: Option<String>,
+}
+
+impl<T: PartialEq> RecordConstructorArg<T> {
+    pub fn put_doc(&mut self, new_doc: String) {
+        self.doc = Some(new_doc);
+    }
 }
 
 pub type TypedArg = Arg<Arc<Type>>;

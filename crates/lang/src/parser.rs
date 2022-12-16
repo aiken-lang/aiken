@@ -33,22 +33,18 @@ pub fn module(
     let tokens = tokens.into_iter().filter(|(token, span)| match token {
         Token::ModuleComment => {
             extra.module_comments.push(*span);
-
             false
         }
         Token::DocComment => {
             extra.doc_comments.push(*span);
-
             false
         }
         Token::Comment => {
             extra.comments.push(*span);
-
             false
         }
         Token::EmptyLine => {
             extra.empty_lines.push(span.start);
-
             false
         }
         Token::NewLine => false,

@@ -4,7 +4,10 @@ use std::{
     path::PathBuf,
 };
 
-use aiken_lang::ast::{Definition, ModuleKind, TypedModule, UntypedModule};
+use aiken_lang::{
+    ast::{DataType, Definition, ModuleKind, TypedModule, UntypedModule},
+    parser::extra::{comments_before, Comment, ModuleExtra},
+};
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 
 use crate::error::Error;
@@ -17,7 +20,7 @@ pub struct ParsedModule {
     pub kind: ModuleKind,
     pub package: String,
     pub ast: UntypedModule,
-    // extra: ModuleExtra,
+    pub extra: ModuleExtra,
 }
 
 impl ParsedModule {
@@ -32,6 +35,55 @@ impl ParsedModule {
             .collect();
 
         (name, deps)
+    }
+
+    pub fn attach_doc_and_module_comments(&mut self) {
+        // Module Comments
+        self.ast.docs = self
+            .extra
+            .module_comments
+            .iter()
+            .map(|span| {
+                Comment::from((span, self.code.as_str()))
+                    .content
+                    .to_string()
+            })
+            .collect();
+
+        // Order definitions to avoid dissociating doc comments from them
+        let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
+        definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
+
+        // Doc Comments
+        let mut doc_comments = self.extra.doc_comments.iter().peekable();
+        for def in &mut definitions {
+            let docs: Vec<&str> =
+                comments_before(&mut doc_comments, def.location().start, &self.code);
+            if !docs.is_empty() {
+                let doc = docs.join("\n");
+                def.put_doc(doc);
+            }
+
+            if let Definition::DataType(DataType { constructors, .. }) = def {
+                for constructor in constructors {
+                    let docs: Vec<&str> =
+                        comments_before(&mut doc_comments, constructor.location.start, &self.code);
+                    if !docs.is_empty() {
+                        let doc = docs.join("\n");
+                        constructor.put_doc(doc);
+                    }
+
+                    for argument in constructor.arguments.iter_mut() {
+                        let docs: Vec<&str> =
+                            comments_before(&mut doc_comments, argument.location.start, &self.code);
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            argument.put_doc(doc);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -168,7 +220,7 @@ pub struct CheckedModule {
     pub input_path: PathBuf,
     pub kind: ModuleKind,
     pub ast: TypedModule,
-    // pub extra: ModuleExtra,
+    pub extra: ModuleExtra,
 }
 
 impl CheckedModule {

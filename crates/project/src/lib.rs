@@ -108,7 +108,10 @@ where
         self.read_source_files()?;
 
         let destination = destination.unwrap_or(self.root.join("doc"));
-        let parsed_modules = self.parse_sources()?;
+        let mut parsed_modules = self.parse_sources()?;
+        for (_, module) in parsed_modules.iter_mut() {
+            module.attach_doc_and_module_comments();
+        }
         let checked_modules = self.type_check(parsed_modules)?;
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -229,7 +232,7 @@ where
         } in self.sources.drain(0..)
         {
             match aiken_lang::parser::module(&code, kind) {
-                Ok((mut ast, _)) => {
+                Ok((mut ast, extra)) => {
                     // Store the name
                     ast.name = name.clone();
 
@@ -239,6 +242,7 @@ where
                         code,
                         name,
                         path,
+                        extra,
                         package: self.config.name.clone(),
                     };
 
@@ -286,6 +290,7 @@ where
                 path,
                 code,
                 kind,
+                extra,
                 // TODO: come back and figure out where to use this
                 package: _package,
                 ast,
@@ -324,7 +329,7 @@ where
                     name.clone(),
                     CheckedModule {
                         kind,
-                        // extra,
+                        extra,
                         name,
                         code,
                         ast,

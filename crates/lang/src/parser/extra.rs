@@ -1,4 +1,5 @@
 use crate::ast::Span;
+use std::iter::Peekable;
 
 #[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub struct ModuleExtra {
@@ -32,4 +33,23 @@ impl<'a> From<(&Span, &'a str)> for Comment<'a> {
                 .expect("From span to comment"),
         }
     }
+}
+
+pub fn comments_before<'a>(
+    comment_spans: &mut Peekable<impl Iterator<Item = &'a Span>>,
+    byte: usize,
+    src: &'a str,
+) -> Vec<&'a str> {
+    let mut comments = vec![];
+    while let Some(Span { start, .. }) = comment_spans.peek() {
+        if start <= &byte {
+            let comment = comment_spans
+                .next()
+                .expect("Comment before accessing next span");
+            comments.push(Comment::from((comment, src)).content)
+        } else {
+            break;
+        }
+    }
+    comments
 }
