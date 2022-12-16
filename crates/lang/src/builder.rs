@@ -1173,8 +1173,10 @@ pub fn monomorphize(
     }
 
     if let Type::Fn { args, .. } = &**full_type {
-        for arg in args {
-            get_variant_name(&mut new_name, arg);
+        if full_type.is_generic() {
+            for arg in args {
+                get_variant_name(&mut new_name, arg);
+            }
         }
     }
 

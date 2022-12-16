@@ -1576,7 +1576,7 @@ impl<'a> CodeGenerator<'a> {
                         variant_name: function_access_key.variant_name.clone(),
                     });
 
-                    for (index, ir) in func_comp.ir.clone().iter().enumerate() {
+                    for (index, ir) in func_comp.ir.clone().iter().enumerate().rev() {
                         match_ir_for_recursion(
                             ir.clone(),
                             &mut insert_var_vec,
@@ -2182,7 +2182,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]))
                     };
 
-                    for arg in args {
+                    for arg in args.into_iter().rev() {
                         let list_item = if tipo.is_map() {
                             arg
                         } else {
