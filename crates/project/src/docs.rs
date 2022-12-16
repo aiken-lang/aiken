@@ -185,8 +185,8 @@ fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
     });
 
     assets.push(DocFile {
-        path: PathBuf::from("js/highlightjs-gleam.js"),
-        content: std::include_str!("../templates/js/highlightjs-gleam.js").to_string(),
+        path: PathBuf::from("js/highlightjs-aiken.js"),
+        content: std::include_str!("../templates/js/highlightjs-aiken.js").to_string(),
     });
 
     assets.push(DocFile {

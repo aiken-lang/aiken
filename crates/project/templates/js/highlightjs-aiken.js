@@ -1,7 +1,6 @@
-hljs.registerLanguage("gleam", function (hljs) {
+hljs.registerLanguage("aiken", function (hljs) {
   const KEYWORDS =
-    "as assert case const external fn if import let " +
-    "use opaque pub todo try tuple type";
+    "as assert when is const fn if let use opaque pub assert check todo type";
   const STRING = {
     className: "string",
     variants: [{ begin: /"/, end: /"/ }],
@@ -42,8 +41,8 @@ hljs.registerLanguage("gleam", function (hljs) {
   };
 
   return {
-    name: "Gleam",
-    aliases: ["gleam"],
+    name: "Aiken",
+    aliases: ["aiken"],
     contains: [
       hljs.C_LINE_COMMENT_MODE,
       STRING,
@@ -76,6 +75,19 @@ hljs.registerLanguage("gleam", function (hljs) {
           {
             className: "title",
             begin: "[a-z][a-z0-9_]*\\w*",
+            relevance: 0,
+          },
+        ],
+      },
+      {
+        className: "keyword",
+        beginKeywords: "use",
+        end: "\n",
+        excludeEnd: true,
+        contains: [
+          {
+            className: "title",
+            begin: "[a-z][a-z0-9_/]*\\w*",
             relevance: 0,
           },
         ],

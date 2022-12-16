@@ -57,7 +57,7 @@
     </div>
     <div class="custom-type-constructors">
       <div class="rendered-markdown">{{ type_info.documentation|safe }}</div>
-      <pre><code class="hljs gleam">{{ type_info.definition }}</code></pre>
+      <pre><code class="hljs aiken">{{ type_info.definition }}</code></pre>
       {% if !type_info.constructors.is_empty() %}
       <h3>
         Constructors
@@ -67,7 +67,7 @@
         <li class="constructor-item">
           <div class="constructor-row">
             <svg class="icon icon-star"><use xlink:href="#icon-star"></use></svg>
-            <pre class="constructor-name"><code class="hljs gleam">{{ constructor.definition }}</code></pre>
+            <pre class="constructor-name"><code class="hljs aiken">{{ constructor.definition }}</code></pre>
           </div>
 
           <div class="constructor-item-docs">
@@ -124,7 +124,7 @@
       </a>
       {% endif %}
     </div>
-    <pre><code class="hljs gleam">{{ constant.definition }}</code></pre>
+    <pre><code class="hljs aiken">{{ constant.definition }}</code></pre>
     <div class="rendered-markdown">{{ constant.documentation|safe }}</div>
   </div>
   {% endfor %}
@@ -150,7 +150,7 @@
       </a>
       {% endif %}
     </div>
-    <pre><code class="hljs gleam">{{ function.signature }}</code></pre>
+    <pre><code class="hljs aiken">{{ function.signature }}</code></pre>
     <div class="rendered-markdown">{{ function.documentation|safe }}</div>
   </div>
   {% endfor %}

@@ -252,11 +252,11 @@
     </svg>
 
     <script src="{{ breadcrumbs }}/js/highlight.min.js?v={{ aiken_version }}"></script>
-    <script src="{{ breadcrumbs }}/js/highlightjs-gleam.js?v={{ aiken_version }}"></script>
+    <script src="{{ breadcrumbs }}/js/highlightjs-aiken.js?v={{ aiken_version }}"></script>
     <script>
       document.querySelectorAll("pre code").forEach((elem) => {
         if (elem.className === "") {
-          elem.classList.add("gleam");
+          elem.classList.add("aiken");
         }
       });
       hljs.highlightAll();
