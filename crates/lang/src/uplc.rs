@@ -187,6 +187,7 @@ impl<'a> CodeGenerator<'a> {
                     scope,
                     params: arg_names,
                 });
+
                 ir_stack.append(&mut func_body);
             }
             TypedExpr::List {
@@ -1552,7 +1553,8 @@ impl<'a> CodeGenerator<'a> {
                 let to_insert = temp_func_index_map
                     .iter()
                     .filter(|func| {
-                        func.1.clone() == ir.scope() && !self.defined_functions.contains_key(func.0)
+                        get_common_ancestor(func.1, &ir.scope()) == ir.scope()
+                            && !self.defined_functions.contains_key(func.0)
                     })
                     .collect_vec();
 
@@ -1712,11 +1714,43 @@ impl<'a> CodeGenerator<'a> {
                     } = &constructor.variant
                     {
                         if builtin.is_none() {
-                            let mut function_key = FunctionAccessKey {
+                            let non_variant_function_key = FunctionAccessKey {
                                 module_name: module.clone(),
                                 function_name: name.clone(),
                                 variant_name: String::new(),
                             };
+
+                            let function = self.functions.get(&non_variant_function_key).unwrap();
+
+                            let mut func_ir = vec![];
+
+                            self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+
+                            let param_types = constructor.tipo.arg_types().unwrap();
+
+                            let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
+
+                            for (index, arg) in function.arguments.iter().enumerate() {
+                                if arg.tipo.is_generic() {
+                                    let mut map = generics_type_map.into_iter().collect_vec();
+                                    map.append(&mut get_generics_and_type(
+                                        &arg.tipo,
+                                        &param_types[index],
+                                    ));
+
+                                    generics_type_map = map.into_iter().collect();
+                                }
+                            }
+
+                            let (variant_name, mut func_ir) =
+                                monomorphize(func_ir, generics_type_map, &constructor.tipo);
+
+                            let function_key = FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: non_variant_function_key.function_name,
+                                variant_name: variant_name.clone(),
+                            };
+
                             if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
                                 let new_scope = get_common_ancestor(scope, scope_prev);
 
@@ -1724,37 +1758,6 @@ impl<'a> CodeGenerator<'a> {
                             } else if func_components.get(&function_key).is_some() {
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
                             } else {
-                                let function = self.functions.get(&function_key).unwrap();
-
-                                let mut func_ir = vec![];
-
-                                self.build_ir(&function.body, &mut func_ir, scope.to_vec());
-
-                                let (param_types, _) = constructor.tipo.function_types().unwrap();
-
-                                let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
-
-                                for (index, arg) in function.arguments.iter().enumerate() {
-                                    if arg.tipo.is_generic() {
-                                        let mut map = generics_type_map.into_iter().collect_vec();
-                                        map.append(&mut get_generics_and_type(
-                                            &arg.tipo,
-                                            &param_types[index],
-                                        ));
-
-                                        generics_type_map = map.into_iter().collect();
-                                    }
-                                }
-
-                                let (variant_name, mut func_ir) =
-                                    monomorphize(func_ir, generics_type_map, &constructor.tipo);
-
-                                function_key = FunctionAccessKey {
-                                    module_name: module.clone(),
-                                    function_name: function_key.function_name,
-                                    variant_name: variant_name.clone(),
-                                };
-
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
                                 let mut func_calls = vec![];
 

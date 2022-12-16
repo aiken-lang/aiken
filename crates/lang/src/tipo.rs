@@ -193,6 +193,14 @@ impl Type {
         }
     }
 
+    pub fn arg_types(&self) -> Option<Vec<Arc<Self>>> {
+        match self {
+            Self::Fn { args, .. } => Some(args.clone()),
+            Self::App { args, .. } => Some(args.clone()),
+            _ => None,
+        }
+    }
+
     pub fn get_generic(&self) -> Option<u64> {
         match self {
             Type::Var { tipo } => tipo.borrow().get_generic(),
@@ -457,6 +465,13 @@ impl TypeVar {
     pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
         match self {
             Self::Link { tipo } => tipo.get_inner_types(),
+            var @ Self::Generic { .. } => {
+                let tipos = vec![Type::Var {
+                    tipo: RefCell::new(var.clone()).into(),
+                }
+                .into()];
+                tipos
+            }
             _ => vec![],
         }
     }
