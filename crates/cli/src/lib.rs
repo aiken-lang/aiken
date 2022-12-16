@@ -68,6 +68,19 @@ impl telemetry::EventListener for Terminal {
                     root.to_str().unwrap_or("").bright_blue()
                 );
             }
+            telemetry::Event::GeneratingDocumentation {
+                name,
+                version,
+                root,
+            } => {
+                println!(
+                    "{} {} {} ({})",
+                    "Generating documentation".bold().purple(),
+                    name.bold(),
+                    version,
+                    root.to_str().unwrap_or("").bright_blue()
+                );
+            }
             telemetry::Event::ParsingProjectFiles => {
                 println!("{}", "...Parsing project files".bold().purple());
             }
