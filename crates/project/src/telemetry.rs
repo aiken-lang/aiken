@@ -35,4 +35,5 @@ pub enum Event {
     FinishedTests {
         tests: Vec<EvalInfo>,
     },
+    WaitingForBuildDirLock,
 }
