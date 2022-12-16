@@ -509,7 +509,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .push(Warning::NoFieldsRecordUpdate { location });
         }
 
-        if arguments.len() == field_map.arity as usize {
+        if arguments.len() == field_map.arity {
             self.environment
                 .warnings
                 .push(Warning::AllFieldsRecordUpdate { location });

@@ -61,7 +61,7 @@ pub fn exec(
                 format!("{}.flat", input.file_stem().unwrap().to_str().unwrap())
             };
 
-            fs::write(&out_name, &bytes).into_diagnostic()?;
+            fs::write(out_name, &bytes).into_diagnostic()?;
         }
     } else {
         let cbor = program.to_hex().into_diagnostic()?;
@@ -75,7 +75,7 @@ pub fn exec(
                 format!("{}.cbor", input.file_stem().unwrap().to_str().unwrap())
             };
 
-            fs::write(&out_name, &cbor).into_diagnostic()?;
+            fs::write(out_name, &cbor).into_diagnostic()?;
         }
     }
 

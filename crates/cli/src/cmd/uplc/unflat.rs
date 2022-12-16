@@ -55,7 +55,7 @@ pub fn exec(
             format!("{}.uplc", input.file_stem().unwrap().to_str().unwrap())
         };
 
-        fs::write(&out_name, pretty).into_diagnostic()?;
+        fs::write(out_name, pretty).into_diagnostic()?;
     }
     Ok(())
 }

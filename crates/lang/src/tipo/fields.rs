@@ -44,11 +44,11 @@ impl FieldMap {
         let mut seen_labels = std::collections::HashSet::new();
         let mut unknown_labels = Vec::new();
 
-        if self.arity as usize != args.len() {
+        if self.arity != args.len() {
             return Err(Error::IncorrectArity {
                 labels: self.incorrect_arity_labels(args),
                 location,
-                expected: self.arity as usize,
+                expected: self.arity,
                 given: args.len(),
             });
         }
@@ -103,7 +103,7 @@ impl FieldMap {
             };
 
             // If the argument is already in the right place
-            if position as usize == i {
+            if position == i {
                 seen_labels.insert(label.clone());
 
                 i += 1;
@@ -117,7 +117,7 @@ impl FieldMap {
 
                 seen_labels.insert(label.clone());
 
-                args.swap(position as usize, i);
+                args.swap(position, i);
             }
         }
 

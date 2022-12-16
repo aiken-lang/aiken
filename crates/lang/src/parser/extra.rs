@@ -24,13 +24,10 @@ pub struct Comment<'a> {
 impl<'a> From<(&Span, &'a str)> for Comment<'a> {
     fn from(src: (&Span, &'a str)) -> Comment<'a> {
         let start = src.0.start;
-        let end = src.0.end as usize;
+        let end = src.0.end;
         Comment {
             start,
-            content: src
-                .1
-                .get(start as usize..end)
-                .expect("From span to comment"),
+            content: src.1.get(start..end).expect("From span to comment"),
         }
     }
 }

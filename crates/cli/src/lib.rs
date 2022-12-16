@@ -84,6 +84,9 @@ impl telemetry::EventListener for Terminal {
             telemetry::Event::ParsingProjectFiles => {
                 println!("{}", "...Parsing project files".bold().purple());
             }
+            telemetry::Event::WaitingForBuildDirLock => {
+                println!("{}", "...Waiting for build directory lock".bold().purple());
+            }
             telemetry::Event::TypeChecking => {
                 println!("{}", "...Type-checking project".bold().purple());
             }
