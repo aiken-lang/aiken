@@ -82,7 +82,7 @@ where
     pub fn to_hex(&self) -> Result<String, en::Error> {
         let bytes = self.to_cbor()?;
 
-        let hex = hex::encode(&bytes);
+        let hex = hex::encode(bytes);
 
         Ok(hex)
     }

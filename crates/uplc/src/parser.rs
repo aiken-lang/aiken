@@ -124,7 +124,7 @@ peg::parser! {
           = "(" _* "error" _* ")" { Term::Error }
 
         rule constant_integer() -> Constant
-          = "integer" _+ i:big_number() { Constant::Integer(i as i128) }
+          = "integer" _+ i:big_number() { Constant::Integer(i) }
 
         rule constant_bytestring() -> Constant
           = "bytestring" _+ bs:bytestring() { Constant::ByteString(bs) }

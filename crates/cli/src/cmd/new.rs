@@ -135,7 +135,7 @@ Find more on the [Aiken's user manual](https://aiken-lang.org).
 }
 
 fn write(path: PathBuf, contents: &str) -> miette::Result<()> {
-    let mut f = fs::File::create(&path).into_diagnostic()?;
+    let mut f = fs::File::create(path).into_diagnostic()?;
 
     f.write_all(contents.as_bytes()).into_diagnostic()?;
     Ok(())
