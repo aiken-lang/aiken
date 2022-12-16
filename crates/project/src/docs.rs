@@ -10,7 +10,7 @@ use pulldown_cmark as markdown;
 use serde::Serialize;
 use serde_json as json;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -75,7 +75,7 @@ struct SearchIndex {
 /// The documentation is built using template files located at the root of this crate.
 /// With the documentation, we also build a client-side search index to ease navigation
 /// across multiple modules.
-pub fn generate_all(root: &PathBuf, config: &Config, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
+pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
     let timestamp = new_timestamp();
     let modules_links = generate_modules_links(&modules);
 
@@ -243,7 +243,7 @@ fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
 }
 
 fn generate_readme(
-    root: &PathBuf,
+    root: &Path,
     config: &Config,
     modules: &Vec<DocLink>,
     timestamp: &Duration,
@@ -414,13 +414,10 @@ struct DocTypeConstructorArg {
 
 impl DocTypeConstructorArg {
     fn from_record_constructor_arg(arg: &RecordConstructorArg<Arc<Type>>) -> Option<Self> {
-        match &arg.label {
-            None => None,
-            Some(label) => Some(DocTypeConstructorArg {
-                label: label.clone(),
-                documentation: arg.doc.as_deref().map(render_markdown).unwrap_or_default(),
-            }),
-        }
+        arg.label.as_ref().map(|label| DocTypeConstructorArg {
+            label: label.clone(),
+            documentation: arg.doc.as_deref().map(render_markdown).unwrap_or_default(),
+        })
     }
 }
 

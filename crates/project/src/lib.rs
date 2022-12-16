@@ -107,7 +107,7 @@ where
             });
         self.read_source_files()?;
 
-        let destination = destination.unwrap_or(self.root.join("doc"));
+        let destination = destination.unwrap_or_else(|| self.root.join("doc"));
         let mut parsed_modules = self.parse_sources()?;
         for (_, module) in parsed_modules.iter_mut() {
             module.attach_doc_and_module_comments();
@@ -120,7 +120,7 @@ where
             docs::generate_all(&self.root, &self.config, checked_modules.values().collect());
         for file in doc_files {
             let path = destination.join(file.path);
-            fs::create_dir_all(&path.parent().unwrap())?;
+            fs::create_dir_all(path.parent().unwrap())?;
             fs::write(&path, file.content)?;
         }
 
