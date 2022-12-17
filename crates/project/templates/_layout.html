@@ -174,12 +174,10 @@
           <svg class="label icon icon-x-circle" alt="Close Menu" title="Close Menu"><use xlink:href="#icon-x-circle"></use></svg>
         </button>
 
-        {% if !links.is_empty() %}
-        <h2>Links</h2>
+        {% if !source.is_empty() %}
+        <h2>Source code</h2>
         <ul>
-        {% for link in links %}
-          <li><a href="{{ link.path }}">{{ link.name }}</a></li>
-        {% endfor %}
+          <li><a href="{{ source.path }}">{{ source.name }}</a></li>
         </ul>
         {% endif %}
 
