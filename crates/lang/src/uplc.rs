@@ -826,6 +826,9 @@ impl<'a> CodeGenerator<'a> {
                             // });
                             // self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
                         }
+                        Pattern::Tuple { .. } => {
+                            todo!("Nested Tuple Patterns Not Yet Done");
+                        }
                         _ => todo!(),
                     }
                 }
