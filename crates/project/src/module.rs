@@ -223,15 +223,6 @@ pub struct CheckedModule {
     pub extra: ModuleExtra,
 }
 
-impl CheckedModule {
-    pub fn is_library(&self) -> bool {
-        self.ast.definitions().any(|def| match def {
-            Definition::Fn(func_def) => VALIDATOR_NAMES.contains(&func_def.name.as_str()),
-            _ => false,
-        })
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CheckedModules(HashMap<String, CheckedModule>);
 
