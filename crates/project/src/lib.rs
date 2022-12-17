@@ -173,8 +173,9 @@ where
                 match_tests,
                 verbose,
             } => {
-                let tests = self
-                    .collect_scripts(&checked_modules, |def| matches!(def, Definition::Test(..)))?;
+                let tests = self.collect_scripts(&checked_modules, verbose, |def| {
+                    matches!(def, Definition::Test(..))
+                })?;
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
                 }
@@ -516,6 +517,7 @@ where
     fn collect_scripts(
         &mut self,
         checked_modules: &CheckedModules,
+        verbose: bool,
         should_collect: fn(&TypedDefinition) -> bool,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
@@ -593,6 +595,13 @@ where
                 body,
                 ..
             } = func_def;
+
+            if verbose {
+                self.event_listener.handle_event(Event::GeneratingUPLCFor {
+                    name: name.clone(),
+                    path: input_path.clone(),
+                })
+            }
 
             let mut generator = CodeGenerator::new(
                 &functions,

@@ -101,6 +101,14 @@ impl telemetry::EventListener for Terminal {
                     output_path.to_str().unwrap_or("").bright_blue()
                 );
             }
+            telemetry::Event::GeneratingUPLCFor { name, path } => {
+                println!(
+                    "{} {}.{{{}}}",
+                    "...Generating Untyped Plutus Core for".bold().purple(),
+                    path.to_str().unwrap_or("").blue(),
+                    name.bright_blue(),
+                );
+            }
             telemetry::Event::EvaluatingFunction { results } => {
                 println!("{}\n", "...Evaluating function".bold().purple());
 
