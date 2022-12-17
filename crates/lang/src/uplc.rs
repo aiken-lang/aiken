@@ -2000,6 +2000,8 @@ impl<'a> CodeGenerator<'a> {
                         if constructor.tipo.is_bool() {
                             arg_stack
                                 .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
+                        } else if constructor.tipo.is_nil() {
+                            arg_stack.push(Term::Constant(UplcConstant::Unit));
                         } else {
                             let data_type = self.data_types.get(&data_type_key).unwrap();
 
