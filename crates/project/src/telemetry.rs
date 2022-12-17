@@ -24,6 +24,10 @@ pub enum Event {
     GeneratingUPLC {
         output_path: PathBuf,
     },
+    GeneratingUPLCFor {
+        name: String,
+        path: PathBuf,
+    },
     EvaluatingFunction {
         results: Vec<EvalInfo>,
     },
