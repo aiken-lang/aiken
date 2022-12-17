@@ -922,9 +922,9 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
 
-                    for arg in &constructor_type.arguments {
-                        let label = arg.label.clone().unwrap();
-                        let field_type = arg.tipo.clone();
+                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                        let label = constructor_type.arguments[index].label.clone().unwrap();
+                        let field_type = arg.clone();
 
                         type_map.insert(label, field_type);
                     }
@@ -1014,8 +1014,8 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
 
-                    for (index, arg) in constructor_type.arguments.iter().enumerate() {
-                        let field_type = arg.tipo.clone();
+                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                        let field_type = arg.clone();
 
                         type_map.insert(index, field_type);
                     }
@@ -1265,9 +1265,9 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
 
-                    for arg in &constructor_type.arguments {
-                        let label = arg.label.clone().unwrap();
-                        let field_type = arg.tipo.clone();
+                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                        let label = constructor_type.arguments[index].label.clone().unwrap();
+                        let field_type = arg.clone();
 
                         type_map.insert(label, field_type);
                     }
@@ -1333,8 +1333,8 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
 
-                    for (index, arg) in constructor_type.arguments.iter().enumerate() {
-                        let field_type = arg.tipo.clone();
+                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                        let field_type = arg.clone();
 
                         type_map.insert(index, field_type);
                     }
