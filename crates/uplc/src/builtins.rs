@@ -354,7 +354,7 @@ impl DefaultFunction {
             Sha2_256 => "sha2_256",
             Sha3_256 => "sha3_256",
             Blake2b_256 => "blake2b_256",
-            VerifyEd25519Signature => "verify_signature",
+            VerifyEd25519Signature => "verify_ed25519_signature",
             VerifyEcdsaSecp256k1Signature => "verify_ecdsa_secp256k1_signature",
             VerifySchnorrSecp256k1Signature => "verify_schnorr_secp256k1_signature",
             AppendString => "append_string",
