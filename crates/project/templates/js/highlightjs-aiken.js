@@ -1,24 +1,13 @@
 hljs.registerLanguage("aiken", function (hljs) {
   const KEYWORDS =
     "as assert when is const fn if let use opaque pub assert check todo type";
-  const STRING = {
-    className: "string",
-    variants: [{ begin: /"/, end: /"/ }],
-    contains: [hljs.BACKSLASH_ESCAPE],
-    relevance: 0,
-  };
-  const NAME = {
-    className: "variable",
-    begin: "\\b[a-z][a-z0-9_]*\\b",
-    relevance: 0,
-  };
-  const DISCARD_NAME = {
-    className: "comment",
-    begin: "\\b_[a-z][a-z0-9_]*\\b",
+  const COMMAS = {
+    scope: "ponctuation",
+    begin: "[, ]+",
     relevance: 0,
   };
   const NUMBER = {
-    className: "number",
+    scope: "number",
     variants: [
       {
         // binary
@@ -39,6 +28,49 @@ hljs.registerLanguage("aiken", function (hljs) {
     ],
     relevance: 0,
   };
+  const STRING = {
+    scope: "string",
+    variants: [{ begin: /"/, end: /"/ }],
+    contains: [hljs.BACKSLASH_ESCAPE],
+    relevance: 0,
+  };
+  const BYTE_STRING = {
+    scope: "string",
+    variants: [{ begin: /#\[/, end: /\]/ }],
+    contains: [
+      { ...NUMBER, scope: "string" },
+      COMMAS,
+    ],
+    relevance: 0,
+  };
+  const IMPORTS = {
+    scope: "title",
+    variants: [{ begin: "/\.{/", end: "}" }],
+    contains: [
+      {
+        scope: "title",
+        begin: "[A-Za-z][A-Za-z0-9_]*\\w*",
+        relevance: 0,
+      },
+      COMMAS,
+    ],
+    relevance: 0,
+  };
+  const NAME = {
+    scope: "variable",
+    begin: "\\b[a-z][a-z0-9_]*\\b",
+    relevance: 0,
+  };
+  const LABEL = {
+    begin: [/\b[a-z][a-z0-9_]*/, ":"],
+    beginScope: { 1: "symbol", 2: "operator" },
+    relevance: 1,
+  };
+  const DISCARD_NAME = {
+    scope: "comment",
+    begin: "\\b_[a-z][a-z0-9_]*\\b",
+    relevance: 0,
+  };
 
   return {
     name: "Aiken",
@@ -46,68 +78,47 @@ hljs.registerLanguage("aiken", function (hljs) {
     contains: [
       hljs.C_LINE_COMMENT_MODE,
       STRING,
+      BYTE_STRING,
       {
-        // bit string
-        begin: "<<",
-        end: ">>",
-        contains: [
-          {
-            className: "keyword",
-            beginKeywords:
-              "binary bytes int float bit_string bits utf8 utf16 utf32 " +
-              "utf8_codepoint utf16_codepoint utf32_codepoint signed unsigned " +
-              "big little native unit size",
-          },
-          KEYWORDS,
-          STRING,
-          NAME,
-          DISCARD_NAME,
-          NUMBER,
-        ],
-        relevance: 10,
-      },
-      {
-        className: "function",
+        scope: "function",
         beginKeywords: "fn",
         end: "\\(",
         excludeEnd: true,
         contains: [
           {
-            className: "title",
+            scope: "title.function",
             begin: "[a-z][a-z0-9_]*\\w*",
             relevance: 0,
           },
         ],
       },
       {
-        className: "keyword",
-        beginKeywords: "use",
-        end: "\n",
-        excludeEnd: true,
-        contains: [
-          {
-            className: "title",
-            begin: "[a-z][a-z0-9_/]*\\w*",
-            relevance: 0,
-          },
-        ],
+	begin: [/[a-z][a-z0-9_]*/, /[ ]*\(/],
+	beginScope: { 1: "title.function.invoke", 2: "ponctuation" },
       },
       {
-        className: "keyword",
+        scope: "keyword",
+        beginKeywords: "use",
+        end: " ",
+        excludeEnd: true,
+        contains: [],
+      },
+      {
+        scope: "keyword",
         beginKeywords: KEYWORDS,
       },
       {
-        // Type names and constructors
-        className: "title",
+        scope: "title",
         begin: "\\b[A-Z][A-Za-z0-9]*\\b",
         relevance: 0,
       },
       {
-        className: "operator",
+        scope: "operator",
         begin: "[+\\-*/%!=<>&|.]+",
         relevance: 0,
       },
-      NAME,
+      IMPORTS,
+      LABEL,
       DISCARD_NAME,
       NUMBER,
     ],
