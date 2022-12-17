@@ -15,7 +15,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const MAX_COLUMNS: isize = 80;
+const MAX_COLUMNS: isize = 999;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -174,6 +174,11 @@ fn generate_module(
 
 fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
     let mut assets: Vec<DocFile> = vec![];
+
+    assets.push(DocFile {
+        path: PathBuf::from("favicon.svg"),
+        content: std::include_str!("../templates/favicon.svg").to_string(),
+    });
 
     assets.push(DocFile {
         path: PathBuf::from("css/atom-one-light.min.css"),

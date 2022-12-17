@@ -4,11 +4,10 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>{{ page_title }}</title>
-    <meta name="theme-color" content="#ffaff3" media="(prefers-color-scheme: light)"/>
-    <meta name="theme-color" content="#33384d" media="(prefers-color-scheme: dark)"/>
+    <meta name="theme-color" content="#eff1f5" media="(prefers-color-scheme: light)"/>
+    <meta name="theme-color" content="#1e1e2e" media="(prefers-color-scheme: dark)"/>
+    <link rel="icon" type="image/svg+xml" sizes="any" href="{{ breadcrumbs }}/favicon.svg"/>
     <link rel="stylesheet" href="{{ breadcrumbs }}/css/index.css?v={{ aiken_version }}" type="text/css"/>
-    <!-- The docs_config.js file is provided by HexDocs and shared between multiple versions of the same package. -->
-    <script src="{{ breadcrumbs }}/docs_config.js"></script>
     <link id="syntax-theme" rel="stylesheet" href="{{ breadcrumbs }}/css/atom-one-light.min.css?v={{ aiken_version }}"/>
   </head>
   <body class="prewrap-off theme-light drawer-closed">
@@ -121,7 +120,7 @@
       <h2>
         <a href="{{ breadcrumbs }}/">{{ project_name }}</a>
         <span id="project-version">
-          <span> - v{{ project_version }} </span>
+          <span>v{{ project_version }} </span>
         </span>
         <script>
           "use strict";
@@ -202,19 +201,6 @@
       </main>
       <div class="search-overlay"></div>
     </div>
-
-    <script>
-      "use strict";
-      const pride = () => document.body.classList.toggle("show-pride");
-    </script>
-    <a class="pride-button" onclick="pride()">✨</a>
-    <footer class="pride" onclick="pride()">
-      <div class="blue">Lucy</div>
-      <div class="pink">says</div>
-      <div class="white">trans</div>
-      <div class="pink">rights</div>
-      <div class="blue">now</div>
-    </footer>
 
     <svg class="svg-lib" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
       <defs>
