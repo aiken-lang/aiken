@@ -3,8 +3,8 @@ name = "aiken-lsp"
 version = "0.0.26"
 edition = "2021"
 description = "Cardano smart contract language and toolchain"
-repository = "https://github.com/txpipe/aiken"
-homepage = "https://github.com/txpipe/aiken"
+repository = "https://github.com/aiken-lang/aiken"
+homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>"]
 

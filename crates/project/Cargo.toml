@@ -3,8 +3,8 @@ name = "aiken-project"
 description = "Aiken project utilities"
 version = "0.0.26"
 edition = "2021"
-repository = "https://github.com/txpipe/aiken/crates/project"
-homepage = "https://github.com/txpipe/aiken"
+repository = "https://github.com/aiken-lang/aiken/crates/project"
+homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
