@@ -1020,7 +1020,6 @@ pub fn monomorphize(
                     needs_variant = false;
                 }
             }
-
             Air::BinOp {
                 scope,
                 name,
@@ -1153,8 +1152,8 @@ pub fn monomorphize(
                         let mut tipo = tipo.clone();
                         find_generics_to_replace(&mut tipo, &generic_types);
                         needs_variant = false;
+                        new_indices.push((ind, name, tipo));
                     }
-                    new_indices.push((ind, name, tipo));
                 }
                 new_air[index] = Air::FieldsExpose {
                     scope,
