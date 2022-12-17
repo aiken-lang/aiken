@@ -18,6 +18,7 @@ use crate::{
 };
 
 const INDENT: isize = 2;
+const DOCS_MAX_COLUMNS: isize = 80;
 
 pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, src: &str) {
     let intermediate = Intermediate {
@@ -347,6 +348,7 @@ impl<'comments> Formatter<'comments> {
             } => name
                 .to_doc()
                 .append(wrap_args(
+                    false,
                     args.iter()
                         .map(|a| (self.constant_call_arg(a), a.label.is_some())),
                 ))
@@ -362,6 +364,7 @@ impl<'comments> Formatter<'comments> {
                 .append(".")
                 .append(name.as_str())
                 .append(wrap_args(
+                    false,
                     args.iter()
                         .map(|a| (self.constant_call_arg(a), a.label.is_some())),
                 ))
@@ -380,23 +383,16 @@ impl<'comments> Formatter<'comments> {
             Constant::Tuple { elements, .. } => "#"
                 .to_doc()
                 .append(wrap_args(
+                    false,
                     elements.iter().map(|e| (self.const_expr(e), false)),
                 ))
                 .group(),
         }
     }
 
-    pub fn docs_const_expr<'a>(
-        &mut self,
-        public: bool,
-        name: &'a str,
-        value: &'a TypedConstant,
-    ) -> Document<'a> {
+    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedConstant) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
-
-        pub_(public)
-            .append("const ")
-            .append(name)
+        name.to_doc()
             .append(": ")
             .append(printer.print(&value.tipo()))
             .append(" = ")
@@ -459,15 +455,19 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => "fn"
                 .to_doc()
-                .append(wrap_args(args.iter().map(|t| (self.annotation(t), false))))
+                .append(wrap_args(
+                    false,
+                    args.iter().map(|t| (self.annotation(t), false)),
+                ))
                 .group()
                 .append(" ->")
                 .append(break_("", " ").append(self.annotation(retrn)).nest(INDENT)),
 
             Annotation::Var { name, .. } => name.to_doc(),
-            Annotation::Tuple { elems, .. } => "#"
-                .to_doc()
-                .append(wrap_args(elems.iter().map(|t| (self.annotation(t), false)))),
+            Annotation::Tuple { elems, .. } => "#".to_doc().append(wrap_args(
+                false,
+                elems.iter().map(|t| (self.annotation(t), false)),
+            )),
         }
         .group()
     }
@@ -527,7 +527,10 @@ impl<'comments> Formatter<'comments> {
             .append(keyword)
             .append(" ")
             .append(name)
-            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
+            .append(wrap_args(
+                false,
+                args.iter().map(|e| (self.fn_arg(e), false)),
+            ));
 
         // Add return annotation
         let head = match return_annotation {
@@ -558,7 +561,7 @@ impl<'comments> Formatter<'comments> {
         return_annotation: Option<&'a Annotation>,
         body: &'a UntypedExpr,
     ) -> Document<'a> {
-        let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
+        let args = wrap_args(false, args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
             UntypedExpr::When { .. } => self.expr(body).force_break(),
             _ => self.expr(body),
@@ -788,7 +791,10 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Tuple { elems, .. } => "#"
                 .to_doc()
-                .append(wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))))
+                .append(wrap_args(
+                    false,
+                    elems.iter().map(|e| (self.wrap_expr(e), false)),
+                ))
                 .group(),
         };
         commented(document, comments)
@@ -852,6 +858,7 @@ impl<'comments> Formatter<'comments> {
 
                 _ => name
                     .append(wrap_args(
+                        false,
                         args.iter().map(|a| (self.pattern_call_arg(a), is_record)),
                     ))
                     .group(),
@@ -893,6 +900,7 @@ impl<'comments> Formatter<'comments> {
             _ => self
                 .expr(fun)
                 .append(wrap_args(
+                    false,
                     args.iter()
                         .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
                 ))
@@ -940,7 +948,9 @@ impl<'comments> Formatter<'comments> {
         let spread_doc = "..".to_doc().append(self.expr(&spread.base));
         let arg_docs = args.iter().map(|a| (self.record_update_arg(a), true));
         let all_arg_docs = once((spread_doc, true)).chain(arg_docs);
-        constructor_doc.append(wrap_args(all_arg_docs)).group()
+        constructor_doc
+            .append(wrap_args(false, all_arg_docs))
+            .group()
     }
 
     pub fn bin_op<'a>(
@@ -1026,6 +1036,7 @@ impl<'comments> Formatter<'comments> {
             // x |> fun(_, 2, 3)
             self.expr(fun).append(
                 wrap_args(
+                    false,
                     args.iter()
                         .skip(1)
                         .map(|a| (self.call_arg(a, false), false)),
@@ -1034,8 +1045,9 @@ impl<'comments> Formatter<'comments> {
             )
         } else {
             // x |> fun(1, _, 3)
-            self.expr(fun)
-                .append(wrap_args(args.iter().map(|a| (self.call_arg(a, false), false))).group())
+            self.expr(fun).append(
+                wrap_args(false, args.iter().map(|a| (self.call_arg(a, false), false))).group(),
+            )
         }
     }
 
@@ -1055,7 +1067,7 @@ impl<'comments> Formatter<'comments> {
                 }
 
                 _ => self.expr(fun).append(
-                    wrap_args(args.iter().map(|a| (self.call_arg(a, false), false))).group(),
+                    wrap_args(false, args.iter().map(|a| (self.call_arg(a, false), false))).group(),
                 ),
             },
 
@@ -1099,29 +1111,34 @@ impl<'comments> Formatter<'comments> {
             constructor
                 .name
                 .to_doc()
-                .append(wrap_args(constructor.arguments.iter().map(
-                    |RecordConstructorArg {
-                         label,
-                         annotation,
-                         location,
-                         ..
-                     }| {
-                        let arg_comments = self.pop_comments(location.start);
+                .append(wrap_args(
+                    false,
+                    constructor.arguments.iter().map(
+                        |RecordConstructorArg {
+                             label,
+                             annotation,
+                             location,
+                             ..
+                         }| {
+                            let arg_comments = self.pop_comments(location.start);
 
-                        let arg = match label {
-                            Some(l) => l.to_doc().append(": ").append(self.annotation(annotation)),
-                            None => self.annotation(annotation),
-                        };
+                            let arg = match label {
+                                Some(l) => {
+                                    l.to_doc().append(": ").append(self.annotation(annotation))
+                                }
+                                None => self.annotation(annotation),
+                            };
 
-                        (
-                            commented(
-                                self.doc_comments(location.start).append(arg).group(),
-                                arg_comments,
-                            ),
-                            label.is_some(),
-                        )
-                    },
-                )))
+                            (
+                                commented(
+                                    self.doc_comments(location.start).append(arg).group(),
+                                    arg_comments,
+                                ),
+                                label.is_some(),
+                            )
+                        },
+                    ),
+                ))
                 .group()
         };
 
@@ -1172,57 +1189,155 @@ impl<'comments> Formatter<'comments> {
             .append("}")
     }
 
-    pub fn docs_opaque_custom_type<'a>(
+    pub fn docs_data_type<'a, A>(
         &mut self,
-        public: bool,
+        name: &'a str,
+        args: &'a [String],
+        constructors: &'a [RecordConstructor<A>],
+        location: &'a Span,
+    ) -> Document<'a> {
+        self.pop_empty_lines(location.start);
+
+        let mut is_sugar = false;
+
+        (if args.is_empty() {
+            name.to_doc()
+        } else {
+            name.to_doc()
+                .append(wrap_generics(args.iter().map(|e| e.to_doc())))
+                .group()
+        })
+        .append(" {")
+        .append(if constructors.len() == 1 && constructors[0].sugar {
+            is_sugar = true;
+
+            self.record_constructor(&constructors[0])
+        } else {
+            concat(constructors.iter().map(|c| {
+                if self.pop_empty_lines(c.location.start) {
+                    lines(2)
+                } else {
+                    line()
+                }
+                .append(self.record_constructor(c))
+                .nest(INDENT)
+                .group()
+            }))
+        })
+        .append(if is_sugar { nil() } else { line() })
+        .append("}")
+    }
+
+    pub fn docs_opaque_data_type<'a>(
+        &mut self,
         name: &'a str,
         args: &'a [String],
         location: &'a Span,
     ) -> Document<'a> {
         self.pop_empty_lines(location.start);
-        pub_(public)
-            .to_doc()
-            .append("opaque type ")
-            .append(if args.is_empty() {
-                name.to_doc()
-            } else {
-                name.to_doc()
-                    .append(wrap_args(args.iter().map(|e| (e.to_doc(), false))))
-            })
+        if args.is_empty() {
+            name.to_doc()
+        } else {
+            name.to_doc()
+                .append(wrap_generics(args.iter().map(|e| e.to_doc())).group())
+        }
+    }
+
+    pub fn docs_type_alias<'a>(
+        &mut self,
+        name: &'a str,
+        args: &'a [String],
+        typ: &'a Annotation,
+    ) -> Document<'a> {
+        let head = name.to_doc();
+
+        let head = if args.is_empty() {
+            head
+        } else {
+            head.append(wrap_generics(args.iter().map(|e| e.to_doc())).group())
+        };
+
+        head.append(" = ")
+            .append(self.annotation(typ).group().nest(INDENT))
+    }
+
+    pub fn docs_record_constructor<'a, A>(
+        &mut self,
+        constructor: &'a RecordConstructor<A>,
+    ) -> Document<'a> {
+        constructor.name.to_doc()
     }
 
     pub fn docs_fn_signature<'a>(
         &mut self,
-        public: bool,
         name: &'a str,
         args: &'a [TypedArg],
+        return_annotation: &'a Option<Annotation>,
         return_type: Arc<Type>,
     ) -> Document<'a> {
-        let mut printer = tipo::pretty::Printer::new();
+        let head = name
+            .to_doc()
+            .append(self.docs_fn_args(false, args))
+            .append(" -> ");
 
-        pub_(public)
-            .append("fn ")
-            .append(name)
-            .append(self.docs_fn_args(args, &mut printer))
-            .append(" -> ".to_doc())
-            .append(printer.print(&return_type))
+        let tail = self.type_or_annotation(return_annotation, &return_type);
+
+        let doc = head.append(tail.clone()).group();
+
+        // Wrap arguments on multi-lines if they are lengthy.
+        if doc
+            .clone()
+            .to_pretty_string(DOCS_MAX_COLUMNS)
+            .contains('\n')
+        {
+            let head = name
+                .to_doc()
+                .append(self.docs_fn_args(true, args))
+                .append(" -> ");
+            head.append(tail).group()
+        } else {
+            doc
+        }
     }
 
     // Will always print the types, even if they were implicit in the original source
-    pub fn docs_fn_args<'a>(
+    pub fn docs_fn_args<'a>(&mut self, multiline: bool, args: &'a [TypedArg]) -> Document<'a> {
+        if multiline {
+            line().nest(INDENT).append(wrap_args(
+                true,
+                args.iter()
+                    .map(|e| (self.docs_fn_arg(e).append(line()), false)),
+            ))
+        } else {
+            wrap_args(false, args.iter().map(|e| (self.docs_fn_arg(e), false)))
+        }
+    }
+
+    fn docs_fn_arg<'a>(&mut self, arg: &'a Arg<Arc<Type>>) -> Document<'a> {
+        self.docs_fn_arg_name(&arg.arg_name)
+            .append(self.type_or_annotation(&arg.annotation, &arg.tipo))
+            .group()
+    }
+
+    fn docs_fn_arg_name<'a>(&mut self, arg_name: &'a ArgName) -> Document<'a> {
+        match arg_name {
+            ArgName::Named { .. } | ArgName::Discard { .. } => "".to_doc(),
+            ArgName::LabeledDiscard { label, .. } | ArgName::NamedLabeled { label, .. } => {
+                label.to_doc().append(": ")
+            }
+        }
+    }
+
+    // Display type-annotation when available, or fallback to inferred type.
+    fn type_or_annotation<'a>(
         &mut self,
-        args: &'a [TypedArg],
-        printer: &mut tipo::pretty::Printer,
+        annotation: &'a Option<Annotation>,
+        type_info: &Arc<Type>,
     ) -> Document<'a> {
-        wrap_args(args.iter().map(|arg| {
-            (
-                arg.arg_name
-                    .to_doc()
-                    .append(": ".to_doc().append(printer.print(&arg.tipo)))
-                    .group(),
-                false,
-            )
-        }))
+        match annotation {
+            Some(a) => self.annotation(a),
+            None => tipo::pretty::Printer::new().print(type_info),
+        }
     }
 
     fn wrap_expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
@@ -1355,7 +1470,10 @@ impl<'comments> Formatter<'comments> {
 
             Pattern::Tuple { elems, .. } => "#"
                 .to_doc()
-                .append(wrap_args(elems.iter().map(|e| (self.pattern(e), false))))
+                .append(wrap_args(
+                    false,
+                    elems.iter().map(|e| (self.pattern(e), false)),
+                ))
                 .group(),
 
             Pattern::List { elements, tail, .. } => {
@@ -1511,7 +1629,7 @@ impl<'a> Documentable<'a> for &'a BinOp {
     }
 }
 
-pub fn wrap_args<'a, I>(args: I) -> Document<'a>
+pub fn wrap_args<'a, I>(multiline: bool, args: I) -> Document<'a>
 where
     I: IntoIterator<Item = (Document<'a>, bool)>,
 {
@@ -1527,6 +1645,8 @@ where
 
     let (open_broken, open_unbroken, close) = if curly {
         (" {", " { ", "}")
+    } else if multiline {
+        ("( ", "( ", ")")
     } else {
         ("(", "(", ")")
     };

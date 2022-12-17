@@ -288,7 +288,7 @@ fn infer_definition(
                          location,
                          name,
                          arguments: args,
-                         documentation,
+                         doc,
                          sugar,
                      }| {
                         let preregistered_fn = environment
@@ -330,7 +330,7 @@ fn infer_definition(
                             location,
                             name,
                             arguments: args,
-                            documentation,
+                            doc,
                             sugar,
                         }
                     },

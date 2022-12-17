@@ -1,4 +1,5 @@
 pub mod config;
+pub mod docs;
 pub mod error;
 pub mod format;
 pub mod module;
@@ -7,6 +8,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
+use crate::module::{CERT, MINT, SPEND, VALIDATOR_NAMES, WITHDRAW};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedDefinition, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -49,12 +51,6 @@ pub struct Source {
     pub code: String,
     pub kind: ModuleKind,
 }
-
-pub const SPEND: &str = "spend";
-pub const CERT: &str = "cert";
-pub const MINT: &str = "mint";
-pub const WITHDRAWL: &str = "withdrawl";
-pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAWL];
 
 pub struct Project<T>
 where
@@ -102,6 +98,35 @@ where
         self.compile(options)
     }
 
+    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Error> {
+        self.event_listener
+            .handle_event(Event::BuildingDocumentation {
+                root: self.root.clone(),
+                name: self.config.name.clone(),
+                version: self.config.version.clone(),
+            });
+        self.read_source_files()?;
+
+        let destination = destination.unwrap_or_else(|| self.root.join("doc"));
+        let mut parsed_modules = self.parse_sources()?;
+        for (_, module) in parsed_modules.iter_mut() {
+            module.attach_doc_and_module_comments();
+        }
+        let checked_modules = self.type_check(parsed_modules)?;
+        self.event_listener.handle_event(Event::GeneratingDocFiles {
+            output_path: destination.clone(),
+        });
+        let doc_files =
+            docs::generate_all(&self.root, &self.config, checked_modules.values().collect());
+        for file in doc_files {
+            let path = destination.join(file.path);
+            fs::create_dir_all(path.parent().unwrap())?;
+            fs::write(&path, file.content)?;
+        }
+
+        Ok(())
+    }
+
     pub fn check(
         &mut self,
         skip_tests: bool,
@@ -130,18 +155,9 @@ where
                 version: self.config.version.clone(),
             });
 
-        self.event_listener.handle_event(Event::ParsingProjectFiles);
-
         self.read_source_files()?;
-
         let parsed_modules = self.parse_sources()?;
-
-        let processing_sequence = parsed_modules.sequence()?;
-
-        self.event_listener.handle_event(Event::TypeChecking);
-
-        let mut checked_modules = self.type_check(parsed_modules, processing_sequence)?;
-
+        let mut checked_modules = self.type_check(parsed_modules)?;
         let validators = self.validate_validators(&mut checked_modules)?;
 
         match options.code_gen_mode {
@@ -203,6 +219,8 @@ where
     }
 
     fn parse_sources(&mut self) -> Result<ParsedModules, Error> {
+        self.event_listener.handle_event(Event::ParsingProjectFiles);
+
         let mut errors = Vec::new();
         let mut parsed_modules = HashMap::with_capacity(self.sources.len());
 
@@ -214,7 +232,7 @@ where
         } in self.sources.drain(0..)
         {
             match aiken_lang::parser::module(&code, kind) {
-                Ok((mut ast, _)) => {
+                Ok((mut ast, extra)) => {
                     // Store the name
                     ast.name = name.clone();
 
@@ -224,6 +242,7 @@ where
                         code,
                         name,
                         path,
+                        extra,
                         package: self.config.name.clone(),
                     };
 
@@ -260,11 +279,9 @@ where
         }
     }
 
-    fn type_check(
-        &mut self,
-        mut parsed_modules: ParsedModules,
-        processing_sequence: Vec<String>,
-    ) -> Result<CheckedModules, Error> {
+    fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<CheckedModules, Error> {
+        self.event_listener.handle_event(Event::TypeChecking);
+        let processing_sequence = parsed_modules.sequence()?;
         let mut modules = HashMap::with_capacity(parsed_modules.len() + 1);
 
         for name in processing_sequence {
@@ -273,6 +290,7 @@ where
                 path,
                 code,
                 kind,
+                extra,
                 // TODO: come back and figure out where to use this
                 package: _package,
                 ast,
@@ -311,7 +329,7 @@ where
                     name.clone(),
                     CheckedModule {
                         kind,
-                        // extra,
+                        extra,
                         name,
                         code,
                         ast,
@@ -351,7 +369,7 @@ where
 
                         // depending on name, validate the minimum number of arguments
                         // if too low, push a new error on to errors
-                        if [MINT, CERT, WITHDRAWL].contains(&func_def.name.as_str())
+                        if [MINT, CERT, WITHDRAW].contains(&func_def.name.as_str())
                             && func_def.arguments.len() < 2
                         {
                             errors.push(Error::WrongValidatorArity {
