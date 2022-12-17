@@ -3,8 +3,8 @@ name = "flat-rs"
 description = "Flat codec"
 version = "0.0.21"
 edition = "2021"
-repository = "https://github.com/txpipe/aiken/crates/flat"
-homepage = "https://github.com/txpipe/aiken"
+repository = "https://github.com/aiken-lang/aiken/crates/flat"
+homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 

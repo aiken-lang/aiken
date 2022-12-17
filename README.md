@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" max-height="240" />
-  <img src="https://raw.githubusercontent.com/txpipe/aiken/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" max-height="240" />
+  <img src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" max-height="240" />
+  <img src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" max-height="240" />
   <hr />
     <h2 align="center" style="border-bottom: none">Cardano smart contract language and toolchain</h2>
 
-[![Licence](https://img.shields.io/github/license/txpipe/aiken)](https://github.com/txpipe/aiken/blob/main/LICENSE)
+[![Licence](https://img.shields.io/github/license/aiken-lang/aiken)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
-[![Rust Build](https://github.com/txpipe/aiken/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/txpipe/aiken/actions/workflows/rust.yml)
+[![Rust Build](https://github.com/aiken-lang/aiken/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/aiken-lang/aiken/actions/workflows/rust.yml)
 
   <hr/>
 </div>
@@ -39,17 +39,12 @@ For more information please see the [user manual](https://aiken-lang.org).
 
 ## Roadmap
 
-Aiken defines its roadmap [using _Github Milestones_](https://txpipe.github.io/aiken/introduction.html#roadmap).
+Aiken defines its roadmap [using _Github Milestones_](https://aiken-lang.org/#roadmap).
 The roadmap isn't set in stone, but gives a high-level overview of where the project is headed for.
 
 ## Contributing
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
-
-## Acknowledgment
-
-We'd like to give a special thanks to [@nkz](https://twitter.com/nkzthecreator)
-for creating the logo and giving us the idea to name the project Aiken.
 
 ---
 

@@ -84,7 +84,7 @@ N/A
 
 ### Changed
 
-- **aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/txpipe/aiken/tree/main/examples/sample) for more
+- **aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/aiken-lang/aiken/tree/main/examples/sample) for more
 
 ## [v0.0.21] - 2022-10-23
 

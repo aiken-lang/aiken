@@ -11,14 +11,14 @@
 2. **Documentation**
 
    Any updates, typo fixes, or expansion of the documention is more than welcome. At the moment,
-   we are using [mdBook](https://github.com/rust-lang/mdBook) to run https://txpipe.github.io/aiken.
+   we are using [nextra](https://nextra.site) to run https://github.com/aiken-lang/site.
    That can be considered user level documentation but that is not strict. There is also doc comments in the Rust code, which can be considered strictly developer level documentation.
 
 3. **Code**
 
    **Getting started**
 
-   - `git clone git@github.com:txpipe/aiken.git`
+   - `git clone git@github.com:aiken-lang/aiken.git`
    - `cd aiken`
    - `cargo test`
    - `cargo run -- help`
@@ -81,11 +81,11 @@
 
 ### :bug: How To Report A Bug
 
-Open a [Bug Issue](https://github.com/txpipe/aiken/issues/new?template=bug.md).
+Open a [Bug Issue](https://github.com/aiken-lang/aiken/issues/new?template=bug.md).
 
 ### :bulb: How To Propose An Idea
 
-Feel free to bring any idea as a [discussion [category: idea]](https://github.com/txpipe/aiken/discussions/new?category=ideas). Make sure to highlight your use case so we can understand the design space and agree on a solution.
+Feel free to bring any idea as a [discussion [category: idea]](https://github.com/aiken-lang/aiken/discussions/new?category=ideas). Make sure to highlight your use case so we can understand the design space and agree on a solution.
 
 > **Note** Ideally, follow this simple template:
 >
@@ -95,7 +95,7 @@ Feel free to bring any idea as a [discussion [category: idea]](https://github.co
 
 ### :question: How To Ask a Question
 
-Open a [Q&A Discussion](https://github.com/txpipe/aiken/discussions/new?category=q-a).
+Open a [Q&A Discussion](https://github.com/aiken-lang/aiken/discussions/new?category=q-a).
 
 > Make sure to mark your question as _Answered_ once resolved!
 
