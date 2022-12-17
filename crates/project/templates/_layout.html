@@ -187,7 +187,13 @@
 	{% endif %}
         <ul>
         {% for module in modules %}
-          <li><a href="{{ breadcrumbs }}/{{ module.path }}">{{ module.name }}</a></li>
+	  <li><a href="{{ breadcrumbs }}/{{ module.path }}">
+	  {% if self.is_current_module(module) %}
+	  <strong>{{ module.name }}</strong>
+	  {% else %}
+	  {{ module.name }}
+	  {% endif %}
+	  </a></li>
         {% endfor %}
         </ul>
 

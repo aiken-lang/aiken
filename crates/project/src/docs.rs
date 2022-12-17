@@ -46,6 +46,15 @@ struct ModuleTemplate<'a> {
     timestamp: String,
 }
 
+impl<'a> ModuleTemplate<'a> {
+    pub fn is_current_module(&self, module: &DocLink) -> bool {
+        match module.path.split(".html").next() {
+            None => false,
+            Some(name) => self.module_name == name,
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "page.html")]
 struct PageTemplate<'a> {
@@ -59,6 +68,12 @@ struct PageTemplate<'a> {
     content: String,
     source: &'a DocLink,
     timestamp: &'a str,
+}
+
+impl<'a> PageTemplate<'a> {
+    pub fn is_current_module(&self, _module: &DocLink) -> bool {
+        false
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]

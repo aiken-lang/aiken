@@ -324,6 +324,17 @@ p code {
   margin-bottom: 4px;
 }
 
+.sidebar ul li a > strong {
+  font-weight: 900;
+  color: var(--color-link);
+}
+
+.sidebar ul li a > strong::before {
+  font-size: 0.75em;
+  content: 'ᐅ ';
+  padding-right: 0.1rem;
+}
+
 .sidebar .sidebar-toggle {
   color: var(--color-link);
   font-size: calc(0.8 * var(--sidebar-toggle-size));
