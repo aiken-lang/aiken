@@ -410,6 +410,7 @@ impl DocFunction {
                     .docs_fn_signature(
                         &func_def.name,
                         &func_def.arguments,
+                        &func_def.return_annotation,
                         func_def.return_type.clone(),
                     )
                     .to_pretty_string(MAX_COLUMNS),
