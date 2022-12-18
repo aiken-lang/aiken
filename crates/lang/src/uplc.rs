@@ -8,9 +8,10 @@ use uplc::{
             self, constr_index_exposer, delayed_if_else, if_else, CONSTR_FIELDS_EXPOSER,
             CONSTR_GET_FIELD,
         },
-        Constant as UplcConstant, Name, Program, Term, Type as UplcType,
+        Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
+    machine::cost_model::ExBudget,
     parser::interner::Interner,
 };
 
@@ -23,8 +24,8 @@ use crate::{
     builder::{
         check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
         convert_type_to_data, get_common_ancestor, get_generics_and_type, get_variant_name,
-        list_access_to_uplc, match_ir_for_recursion, monomorphize, rearrange_clauses,
-        ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
+        handle_func_deps_ir, list_access_to_uplc, match_ir_for_recursion, monomorphize,
+        rearrange_clauses, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     expr::TypedExpr,
     tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
@@ -41,6 +42,7 @@ pub struct CodeGenerator<'a> {
     module_types: &'a HashMap<String, TypeInfo>,
     id_gen: IdGenerator,
     needs_field_access: bool,
+    zero_arg_functions: HashMap<FunctionAccessKey, Vec<Air>>,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -62,6 +64,7 @@ impl<'a> CodeGenerator<'a> {
             module_types,
             id_gen: IdGenerator::new(),
             needs_field_access: false,
+            zero_arg_functions: HashMap::new(),
         }
     }
 
@@ -1470,147 +1473,104 @@ impl<'a> CodeGenerator<'a> {
             recursion_func_map,
         );
 
-        let mut insert_var_vec = vec![];
         let mut final_func_dep_ir = IndexMap::new();
         for func in func_index_map.clone() {
             if self.defined_functions.contains_key(&func.0) {
                 continue;
             }
-            let mut funt_comp = func_components.get(&func.0).unwrap().clone();
+            let funt_comp = func_components.get(&func.0).unwrap();
             let func_scope = func_index_map.get(&func.0).unwrap();
 
             let mut dep_ir = vec![];
 
             // deal with function dependencies
-            while let Some(dependency) = funt_comp.dependencies.pop() {
-                if self.defined_functions.contains_key(&dependency)
-                    || func_components.get(&dependency).is_none()
-                {
-                    continue;
-                }
+            handle_func_deps_ir(
+                &mut dep_ir,
+                funt_comp,
+                &func_components,
+                &mut self.defined_functions,
+                &func_index_map,
+                func_scope,
+            );
 
-                let depend_comp = func_components.get(&dependency).unwrap();
-
-                let dep_scope = func_index_map.get(&dependency).unwrap();
-
-                if get_common_ancestor(dep_scope, func_scope) == func_scope.clone() {
-                    funt_comp
-                        .dependencies
-                        .extend(depend_comp.dependencies.clone());
-
-                    let mut temp_ir = vec![Air::DefineFunc {
-                        scope: func_scope.clone(),
-                        func_name: dependency.function_name.clone(),
-                        module_name: dependency.module_name.clone(),
-                        params: depend_comp.args.clone(),
-                        recursive: depend_comp.recursive,
-                        variant_name: dependency.variant_name.clone(),
-                    }];
-
-                    for (index, ir) in depend_comp.ir.iter().enumerate() {
-                        match_ir_for_recursion(
-                            ir.clone(),
-                            &mut insert_var_vec,
-                            &FunctionAccessKey {
-                                function_name: dependency.function_name.clone(),
-                                module_name: dependency.module_name.clone(),
-                                variant_name: dependency.variant_name.clone(),
-                            },
-                            index,
-                        );
-                    }
-
-                    let mut recursion_ir = depend_comp.ir.clone();
-                    for (index, ir) in insert_var_vec.clone() {
-                        recursion_ir.insert(index, ir);
-
-                        let current_call = recursion_ir[index - 1].clone();
-
-                        match current_call {
-                            Air::Call { scope, count } => {
-                                recursion_ir[index - 1] = Air::Call {
-                                    scope,
-                                    count: count + 1,
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-
-                    temp_ir.append(&mut recursion_ir);
-
-                    temp_ir.append(&mut dep_ir);
-
-                    dep_ir = temp_ir;
-                    self.defined_functions.insert(dependency, ());
-                    insert_var_vec = vec![];
-                }
+            if !funt_comp.args.is_empty() {
+                final_func_dep_ir.insert(func.0, dep_ir);
+            } else {
+                let mut final_zero_arg_ir = dep_ir;
+                final_zero_arg_ir.extend(funt_comp.ir.clone());
+                self.zero_arg_functions.insert(func.0, final_zero_arg_ir);
             }
-
-            final_func_dep_ir.insert(func.0, dep_ir);
         }
 
         for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
             {
                 let temp_func_index_map = func_index_map.clone();
                 let to_insert = temp_func_index_map
-                    .iter()
+                    .into_iter()
                     .filter(|func| {
-                        get_common_ancestor(func.1, &ir.scope()) == ir.scope()
-                            && !self.defined_functions.contains_key(func.0)
+                        get_common_ancestor(&func.1, &ir.scope()) == ir.scope()
+                            && !self.defined_functions.contains_key(&func.0)
+                            && !self.zero_arg_functions.contains_key(&func.0)
                     })
                     .collect_vec();
 
                 for (function_access_key, scopes) in to_insert.into_iter() {
-                    func_index_map.remove(function_access_key);
+                    let mut insert_var_vec = vec![];
+                    func_index_map.remove(&function_access_key);
 
                     self.defined_functions
                         .insert(function_access_key.clone(), ());
 
                     let mut full_func_ir =
-                        final_func_dep_ir.get(function_access_key).unwrap().clone();
+                        final_func_dep_ir.get(&function_access_key).unwrap().clone();
 
-                    let mut func_comp = func_components.get(function_access_key).unwrap().clone();
-
-                    full_func_ir.push(Air::DefineFunc {
-                        scope: scopes.clone(),
-                        func_name: function_access_key.function_name.clone(),
-                        module_name: function_access_key.module_name.clone(),
-                        params: func_comp.args.clone(),
-                        recursive: func_comp.recursive,
-                        variant_name: function_access_key.variant_name.clone(),
-                    });
-
-                    for (index, ir) in func_comp.ir.clone().iter().enumerate().rev() {
-                        match_ir_for_recursion(
-                            ir.clone(),
-                            &mut insert_var_vec,
-                            function_access_key,
-                            index,
-                        );
-                    }
-
-                    for (index, ir) in insert_var_vec {
-                        func_comp.ir.insert(index, ir);
-
-                        let current_call = func_comp.ir[index - 1].clone();
-
-                        match current_call {
-                            Air::Call { scope, count } => {
-                                func_comp.ir[index - 1] = Air::Call {
-                                    scope,
-                                    count: count + 1,
-                                }
-                            }
-                            _ => unreachable!("{current_call:#?}"),
+                    let mut func_comp = func_components.get(&function_access_key).unwrap().clone();
+                    // zero arg functions are not recursive
+                    if !func_comp.args.is_empty() {
+                        for (index, ir) in func_comp.ir.clone().iter().enumerate().rev() {
+                            match_ir_for_recursion(
+                                ir.clone(),
+                                &mut insert_var_vec,
+                                &function_access_key,
+                                index,
+                            );
                         }
-                    }
-                    insert_var_vec = vec![];
 
-                    full_func_ir.extend(func_comp.ir.clone());
+                        for (index, ir) in insert_var_vec {
+                            func_comp.ir.insert(index, ir.clone());
 
-                    for ir in full_func_ir.into_iter().rev() {
-                        ir_stack.insert(index, ir);
+                            let current_call = func_comp.ir[index - 1].clone();
+
+                            match current_call {
+                                Air::Call { scope, count } => {
+                                    func_comp.ir[index - 1] = Air::Call {
+                                        scope,
+                                        count: count + 1,
+                                    }
+                                }
+                                _ => unreachable!("{current_call:#?}"),
+                            }
+                        }
+
+                        full_func_ir.push(Air::DefineFunc {
+                            scope: scopes.clone(),
+                            func_name: function_access_key.function_name.clone(),
+                            module_name: function_access_key.module_name.clone(),
+                            params: func_comp.args.clone(),
+                            recursive: func_comp.recursive,
+                            variant_name: function_access_key.variant_name.clone(),
+                        });
+
+                        full_func_ir.extend(func_comp.ir.clone());
+
+                        for ir in full_func_ir.into_iter().rev() {
+                            ir_stack.insert(index, ir);
+                        }
+                    } else {
+                        full_func_ir.extend(func_comp.ir.clone());
+
+                        self.zero_arg_functions
+                            .insert(function_access_key, full_func_ir);
                     }
                 }
             }
@@ -2402,7 +2362,43 @@ impl<'a> CodeGenerator<'a> {
                     }
                     arg_stack.push(term);
                 } else {
-                    todo!()
+                    let term = arg_stack.pop().unwrap();
+
+                    let zero_arg_functions = self.zero_arg_functions.clone();
+
+                    if let Term::Var(Name { text, .. }) = term {
+                        for (
+                            FunctionAccessKey {
+                                module_name,
+                                function_name,
+                                variant_name,
+                            },
+                            ir,
+                        ) in zero_arg_functions.into_iter()
+                        {
+                            let name_module =
+                                format!("{module_name}_{function_name}{variant_name}");
+                            let name = format!("{function_name}{variant_name}");
+                            if text == name || text == name_module {
+                                let mut program: Program<Name> = Program {
+                                    version: (1, 0, 0),
+                                    term: self.uplc_code_gen(&mut ir.clone()),
+                                };
+
+                                let mut interner = Interner::new();
+
+                                interner.program(&mut program);
+
+                                let eval_program: Program<NamedDeBruijn> =
+                                    program.try_into().unwrap();
+
+                                let evaluated_term: Term<NamedDeBruijn> =
+                                    eval_program.eval(ExBudget::default()).0.unwrap();
+
+                                arg_stack.push(evaluated_term.try_into().unwrap());
+                            }
+                        }
+                    }
                 }
             }
             Air::Builtin { func, tipo, .. } => match func {
