@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
+use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::{
     ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
@@ -1194,4 +1195,83 @@ pub fn monomorphize(
     }
 
     (new_name, new_air)
+}
+
+pub fn handle_func_deps_ir(
+    dep_ir: &mut Vec<Air>,
+    funt_comp: &FuncComponents,
+    func_components: &IndexMap<FunctionAccessKey, FuncComponents>,
+    defined_functions: &mut HashMap<FunctionAccessKey, ()>,
+    func_index_map: &IndexMap<FunctionAccessKey, Vec<u64>>,
+    func_scope: &[u64],
+) {
+    let mut funt_comp = funt_comp.clone();
+    // deal with function dependencies
+    while let Some(dependency) = funt_comp.dependencies.pop() {
+        let mut insert_var_vec = vec![];
+        if defined_functions.contains_key(&dependency) || func_components.get(&dependency).is_none()
+        {
+            continue;
+        }
+
+        let depend_comp = func_components.get(&dependency).unwrap();
+
+        let dep_scope = func_index_map.get(&dependency).unwrap();
+
+        if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
+            if !depend_comp.args.is_empty() {
+                funt_comp
+                    .dependencies
+                    .extend(depend_comp.dependencies.clone());
+            }
+
+            for (index, ir) in depend_comp.ir.iter().enumerate() {
+                match_ir_for_recursion(
+                    ir.clone(),
+                    &mut insert_var_vec,
+                    &FunctionAccessKey {
+                        function_name: dependency.function_name.clone(),
+                        module_name: dependency.module_name.clone(),
+                        variant_name: dependency.variant_name.clone(),
+                    },
+                    index,
+                );
+            }
+            // we handle zero arg functions and their dependencies in a unique way
+            if !depend_comp.args.is_empty() {
+                let mut recursion_ir = depend_comp.ir.clone();
+                for (index, ir) in insert_var_vec.clone() {
+                    recursion_ir.insert(index, ir);
+
+                    let current_call = recursion_ir[index - 1].clone();
+
+                    match current_call {
+                        Air::Call { scope, count } => {
+                            recursion_ir[index - 1] = Air::Call {
+                                scope,
+                                count: count + 1,
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                let mut temp_ir = vec![Air::DefineFunc {
+                    scope: func_scope.to_vec(),
+                    func_name: dependency.function_name.clone(),
+                    module_name: dependency.module_name.clone(),
+                    params: depend_comp.args.clone(),
+                    recursive: depend_comp.recursive,
+                    variant_name: dependency.variant_name.clone(),
+                }];
+
+                temp_ir.append(&mut recursion_ir);
+
+                temp_ir.append(dep_ir);
+
+                *dep_ir = temp_ir;
+                defined_functions.insert(dependency, ());
+            }
+        }
+    }
 }
