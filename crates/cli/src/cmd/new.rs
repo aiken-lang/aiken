@@ -1,4 +1,4 @@
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use miette::IntoDiagnostic;
 use std::fs;
 use std::io::Write;
@@ -41,50 +41,78 @@ impl Creator {
         fs::create_dir_all(&self.lib).into_diagnostic()?;
         fs::create_dir_all(&self.project_lib).into_diagnostic()?;
         fs::create_dir_all(&self.validators).into_diagnostic()?;
-
         self.aiken_toml()?;
-        self.context()?;
-        self.project()?;
-        self.always_true_script()?;
-
+        self.readme()?;
         Ok(())
     }
 
-    fn always_true_script(&self) -> miette::Result<()> {
+    fn readme(&self) -> miette::Result<()> {
         write(
-            self.validators.join("always_true.ak"),
-            indoc! {"
-                pub fn spend(_datum, _redeemer, _context) -> Bool {
-                    True
-                }
-            "},
-        )
-    }
+            self.root.join("README.md"),
+            &format! {
+            r#"# {name}
 
-    fn project(&self) -> miette::Result<()> {
-        write(
-            self.lib.join(format!("{}.ak", self.project_name)),
-            indoc! {"
-                pub type Datum {
-                    something: String,
-                }          
-            "},
-        )
-    }
+Write validators in the `validators` folder, and supporting functions in the `lib` folder using `.ak` as a file extension.
 
-    fn context(&self) -> miette::Result<()> {
-        write(
-            self.project_lib.join("context.ak"),
-            indoc! {"
-                pub type ScriptContext<purpose> {
-                    tx_info: TxInfo,
-                    script_purpose: purpose,
-                }
-                
-                pub type TxInfo {
-                    idk: Int,
-                }       
-            "},
+For example, as `validators/always_true.ak`
+
+```gleam
+pub fn spend(_datum: Data, _redeemer: Data, _context: Data) -> Bool {{
+    True
+}}
+```
+
+Validators are named after their purpose, so one of:
+
+- `script`
+- `mint`
+- `withdraw`
+- `certify`
+
+## Building
+
+```console
+aiken build
+```
+
+## Testing
+
+You can write tests in any module using the `test` keyword. For example:
+
+```gleam
+test foo() {{
+  1 + 1 == 2
+}}
+```
+
+To run all tests, simply do:
+
+```console
+aiken check
+```
+
+To run only tests matching the string `foo`, do:
+
+```console
+aiken check -m foo
+```
+
+## Documentation
+
+If you're writing a library, you might want to generate an HTML documentation for it.
+
+Use:
+
+```
+aiken docs
+```
+
+## Resources
+
+Find more on the [Aiken's user manual](https://aiken-lang.org).
+"#,
+            name = self.project_name
+            },
         )
     }
 
@@ -93,9 +121,9 @@ impl Creator {
             self.root.join("aiken.toml"),
             &formatdoc! {
                 r#"name = "{name}"
-                version = "0.1.0"
+                version = "0.0.0"
                 licences = ["Apache-2.0"]
-                description = "Aiken contracts"
+                description = "Aiken contracts for project '{name}'"
 
                 [dependencies]
 
