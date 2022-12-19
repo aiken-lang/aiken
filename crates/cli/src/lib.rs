@@ -153,6 +153,27 @@ impl telemetry::EventListener for Terminal {
                     );
                 }
             }
+            telemetry::Event::DownloadingPackage { name: String } => {
+                println!(
+                    "{} {}",
+                    "...Downloading {}".bold().purple(),
+                    name.bright_blue()
+                )
+            }
+            telemetry::Event::PackagesDownloaded { start, count } => {
+                let elapsed = format!("{:.2}s", start.elapsed().as_millis() as f32 / 1000.);
+
+                let msg = match count {
+                    1 => format!("1 package in {}", elapsed),
+                    _ => format!("{} packages in {}", count, elapsed),
+                };
+
+                println!(
+                    "{} {}",
+                    "...Downloaded {}".bold().purple(),
+                    msg.bright_blue()
+                )
+            }
         }
     }
 }

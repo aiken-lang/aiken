@@ -33,6 +33,17 @@ pub enum Error {
     #[error(transparent)]
     StandardIo(#[from] io::Error),
 
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
+
+    #[error("Loading toml")]
+    TomlLoading {
+        path: PathBuf,
+        src: String,
+        named: NamedSource,
+        location: Option<Span>,
+    },
+
     #[error("Cyclical module imports")]
     ImportCycle { modules: Vec<String> },
 
@@ -156,6 +167,7 @@ impl Error {
             Error::FileIo { .. } => None,
             Error::Format { .. } => None,
             Error::StandardIo(_) => None,
+            Error::TomlLoading { path, .. } => Some(path.to_path_buf()),
             Error::ImportCycle { .. } => None,
             Error::List(_) => None,
             Error::Parse { path, .. } => Some(path.to_path_buf()),
@@ -163,6 +175,7 @@ impl Error {
             Error::ValidatorMustReturnBool { path, .. } => Some(path.to_path_buf()),
             Error::WrongValidatorArity { path, .. } => Some(path.to_path_buf()),
             Error::TestFailure { path, .. } => Some(path.to_path_buf()),
+            Error::Http(_) => None,
         }
     }
 
@@ -172,6 +185,7 @@ impl Error {
             Error::FileIo { .. } => None,
             Error::Format { .. } => None,
             Error::StandardIo(_) => None,
+            Error::TomlLoading { src, .. } => Some(src.to_string()),
             Error::ImportCycle { .. } => None,
             Error::List(_) => None,
             Error::Parse { src, .. } => Some(src.to_string()),
@@ -179,6 +193,7 @@ impl Error {
             Error::ValidatorMustReturnBool { src, .. } => Some(src.to_string()),
             Error::WrongValidatorArity { src, .. } => Some(src.to_string()),
             Error::TestFailure { .. } => None,
+            Error::Http(_) => None,
         }
     }
 }
@@ -216,10 +231,12 @@ impl Diagnostic for Error {
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::Type { .. } => Some(Box::new("aiken::check")),
             Error::StandardIo(_) => None,
+            Error::TomlLoading { .. } => Some(Box::new("aiken::loading::toml")),
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
             Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
             Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
+            Error::Http(_) => Some(Box::new("aiken::deps")),
         }
     }
 
@@ -239,6 +256,7 @@ impl Diagnostic for Error {
             Error::Parse { error, .. } => error.kind.help(),
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
+            Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
             Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
@@ -270,6 +288,7 @@ impl Diagnostic for Error {
                     }
                 }
             },
+            Error::Http(_) => None,
         }
     }
 
@@ -282,6 +301,15 @@ impl Diagnostic for Error {
             Error::Parse { error, .. } => error.labels(),
             Error::Type { error, .. } => error.labels(),
             Error::StandardIo(_) => None,
+            Error::TomlLoading { location, .. } => {
+                if let Some(location) = location {
+                    Some(Box::new(
+                        vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+                    ))
+                } else {
+                    None
+                }
+            }
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
@@ -290,6 +318,7 @@ impl Diagnostic for Error {
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
             Error::TestFailure { .. } => None,
+            Error::Http(_) => None,
         }
     }
 
@@ -302,10 +331,12 @@ impl Diagnostic for Error {
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
+            Error::TomlLoading { named, .. } => Some(named),
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { named, .. } => Some(named),
             Error::WrongValidatorArity { named, .. } => Some(named),
             Error::TestFailure { .. } => None,
+            Error::Http(_) => None,
         }
     }
 }
