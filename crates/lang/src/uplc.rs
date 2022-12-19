@@ -28,7 +28,10 @@ use crate::{
         rearrange_clauses, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     expr::TypedExpr,
-    tipo::{self, PatternConstructor, Type, TypeInfo, ValueConstructor, ValueConstructorVariant},
+    tipo::{
+        self, ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
+        ValueConstructorVariant,
+    },
     IdGenerator,
 };
 
@@ -437,8 +440,8 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => match constructor {
-                tipo::ModuleValueConstructor::Record { .. } => todo!(),
-                tipo::ModuleValueConstructor::Fn { name, module, .. } => {
+                ModuleValueConstructor::Record { .. } => todo!(),
+                ModuleValueConstructor::Fn { name, module, .. } => {
                     let func = self.functions.get(&FunctionAccessKey {
                         module_name: module_name.clone(),
                         function_name: name.clone(),
@@ -449,7 +452,7 @@ impl<'a> CodeGenerator<'a> {
                         ir_stack.push(Air::Var {
                             scope,
                             constructor: ValueConstructor::public(
-                                func.return_type.clone(),
+                                tipo.clone(),
                                 ValueConstructorVariant::ModuleFn {
                                     name: name.clone(),
                                     field_map: None,
@@ -479,7 +482,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 }
-                tipo::ModuleValueConstructor::Constant { literal, .. } => {
+                ModuleValueConstructor::Constant { literal, .. } => {
                     constants_ir(literal, ir_stack, scope);
                 }
             },
@@ -2332,7 +2335,6 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-
             Air::Fn { params, .. } => {
                 let mut term = arg_stack.pop().unwrap();
 
@@ -2890,59 +2892,36 @@ impl<'a> CodeGenerator<'a> {
                         body: func_body.into(),
                     };
 
-                    let mut boostrap_recurse = Term::Apply {
-                        function: Term::Var(Name {
-                            text: "__recurse".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                        argument: Term::Var(Name {
-                            text: "__recurse".to_string(),
-                            unique: 0.into(),
-                        })
-                        .into(),
-                    };
-
-                    for param in params.iter() {
-                        boostrap_recurse = Term::Apply {
-                            function: boostrap_recurse.into(),
-                            argument: Term::Var(Name {
-                                text: param.clone(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        };
-                    }
-
-                    func_body = Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "__recurse".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: boostrap_recurse.into(),
-                        }
-                        .into(),
-                        argument: func_body.into(),
-                    };
-
-                    for param in params.iter().rev() {
-                        func_body = Term::Lambda {
-                            parameter_name: Name {
-                                text: param.clone(),
-                                unique: 0.into(),
-                            },
-                            body: func_body.into(),
-                        };
-                    }
-
                     term = Term::Apply {
                         function: Term::Lambda {
                             parameter_name: Name {
-                                text: func_name,
+                                text: func_name.clone(),
                                 unique: 0.into(),
                             },
-                            body: term.into(),
+                            body: Term::Apply {
+                                function: Term::Lambda {
+                                    parameter_name: Name {
+                                        text: func_name.clone(),
+                                        unique: 0.into(),
+                                    },
+                                    body: term.into(),
+                                }
+                                .into(),
+                                argument: Term::Apply {
+                                    function: Term::Var(Name {
+                                        text: func_name.clone(),
+                                        unique: 0.into(),
+                                    })
+                                    .into(),
+                                    argument: Term::Var(Name {
+                                        text: func_name,
+                                        unique: 0.into(),
+                                    })
+                                    .into(),
+                                }
+                                .into(),
+                            }
+                            .into(),
                         }
                         .into(),
                         argument: func_body.into(),
