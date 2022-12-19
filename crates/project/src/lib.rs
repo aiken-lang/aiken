@@ -105,7 +105,7 @@ where
         self.event_listener
             .handle_event(Event::BuildingDocumentation {
                 root: self.root.clone(),
-                name: self.config.name.clone(),
+                name: self.config.name.to_string(),
                 version: self.config.version.clone(),
             });
         self.read_source_files()?;
@@ -151,12 +151,18 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
-        let manifest = deps::download(&self.event_listener, None, UseManifest::Yes, &self.root)?;
+        let manifest = deps::download(
+            &self.event_listener,
+            None,
+            UseManifest::Yes,
+            &self.root,
+            &self.config,
+        )?;
 
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
-                name: self.config.name.clone(),
+                name: self.config.name.to_string(),
                 version: self.config.version.clone(),
             });
 
@@ -249,7 +255,7 @@ where
                         name,
                         path,
                         extra,
-                        package: self.config.name.clone(),
+                        package: self.config.name.to_string(),
                     };
 
                     if let Some(first) = self
@@ -308,7 +314,7 @@ where
                     .infer(
                         &self.id_gen,
                         kind,
-                        &self.config.name,
+                        &self.config.name.to_string(),
                         &self.module_types,
                         &mut type_warnings,
                     )

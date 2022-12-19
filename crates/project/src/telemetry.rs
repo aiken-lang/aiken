@@ -36,4 +36,11 @@ pub enum Event {
         tests: Vec<EvalInfo>,
     },
     WaitingForBuildDirLock,
+    DownloadingPackage {
+        name: String,
+    },
+    PackagesDownloaded {
+        start: tokio::time::Instant,
+        count: usize,
+    },
 }
