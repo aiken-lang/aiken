@@ -846,6 +846,8 @@ pub fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
             "int".to_string()
         } else if t.is_bool() {
             "bool".to_string()
+        } else if t.is_bytearray() {
+            "bytearray".to_string()
         } else if t.is_map() {
             let mut full_type = "map".to_string();
             let pair_type = &t.get_inner_types()[0];

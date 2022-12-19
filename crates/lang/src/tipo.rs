@@ -223,7 +223,11 @@ impl Type {
         } else if matches!(self.get_uplc_type(), UplcType::Data) {
             match self {
                 Type::App { args, .. } => args.clone(),
-                Type::Fn { args, .. } => args.clone(),
+                Type::Fn { args, ret } => {
+                    let mut args = args.clone();
+                    args.push(ret.clone());
+                    args
+                }
                 Type::Var { tipo } => tipo.borrow().get_inner_type(),
                 _ => unreachable!(),
             }
