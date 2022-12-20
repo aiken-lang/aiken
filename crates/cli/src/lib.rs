@@ -171,6 +171,7 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
         success,
         script,
         spent_budget,
+        logs,
         ..
     } = eval_info;
 
@@ -178,17 +179,38 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
     let mem_pad = pretty::pad_left(mem.to_string(), max_mem, " ");
     let cpu_pad = pretty::pad_left(cpu.to_string(), max_cpu, " ");
 
-    format!(
-        "{} [mem: {}, cpu: {}] {}",
-        if *success {
+    let test = format!(
+        "{status} [mem: {mem_unit}, cpu: {cpu_unit}] {module}",
+        status = if *success {
             pretty::style_if(styled, "PASS".to_string(), |s| s.bold().green().to_string())
         } else {
             pretty::style_if(styled, "FAIL".to_string(), |s| s.bold().red().to_string())
         },
-        pretty::style_if(styled, mem_pad, |s| s.bright_white().to_string()),
-        pretty::style_if(styled, cpu_pad, |s| s.bright_white().to_string()),
-        pretty::style_if(styled, script.name.clone(), |s| s.bright_blue().to_string()),
-    )
+        mem_unit = pretty::style_if(styled, mem_pad, |s| s.bright_white().to_string()),
+        cpu_unit = pretty::style_if(styled, cpu_pad, |s| s.bright_white().to_string()),
+        module = pretty::style_if(styled, script.name.clone(), |s| s.bright_blue().to_string()),
+    );
+
+    let logs = if logs.is_empty() {
+        String::new()
+    } else {
+        logs.iter()
+            .map(|line| {
+                format!(
+                    "{arrow} {styled_line}",
+                    arrow = "↳".bright_yellow(),
+                    styled_line = line.bright_black()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    if logs.is_empty() {
+        test
+    } else {
+        [test, logs].join("\n")
+    }
 }
 
 fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {

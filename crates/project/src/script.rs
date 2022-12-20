@@ -43,4 +43,5 @@ pub struct EvalInfo {
     pub script: Script,
     pub spent_budget: ExBudget,
     pub output: Option<Term<NamedDeBruijn>>,
+    pub logs: Vec<String>,
 }
