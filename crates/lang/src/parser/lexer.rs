@@ -87,7 +87,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "pub" => Token::Pub,
         "use" => Token::Use,
         "todo" => Token::Todo,
-        "trace" => Token::Trace,
         "type" => Token::Type,
         "when" => Token::When,
         _ => {

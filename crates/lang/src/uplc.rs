@@ -283,7 +283,6 @@ impl<'a> CodeGenerator<'a> {
                 ir_stack.append(&mut define_vec);
                 ir_stack.append(&mut pattern_vec);
             }
-            TypedExpr::Trace { .. } => todo!(),
             TypedExpr::When {
                 subjects, clauses, ..
             } => {
