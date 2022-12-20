@@ -162,7 +162,11 @@ impl Type {
     }
 
     pub fn is_tuple(&self) -> bool {
-        matches!(self, Self::Tuple { .. })
+        match self {
+            Type::Var { tipo } => tipo.borrow().is_tuple(),
+            Type::Tuple { .. } => true,
+            _ => false,
+        }
     }
 
     pub fn is_generic(&self) -> bool {
@@ -218,6 +222,7 @@ impl Type {
         } else if self.is_tuple() {
             match self {
                 Self::Tuple { elems } => elems.to_vec(),
+                Self::Var { tipo } => tipo.borrow().get_inner_type(),
                 _ => vec![],
             }
         } else if matches!(self.get_uplc_type(), UplcType::Data) {
@@ -258,6 +263,7 @@ impl Type {
                         UplcType::List(UplcType::Data.into())
                     }
                 }
+                Self::Var { tipo } => tipo.borrow().get_uplc_type().unwrap(),
                 _ => todo!(),
             }
         } else {
@@ -446,6 +452,13 @@ impl TypeVar {
     pub fn is_map(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_map(),
+            _ => false,
+        }
+    }
+
+    pub fn is_tuple(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_tuple(),
             _ => false,
         }
     }

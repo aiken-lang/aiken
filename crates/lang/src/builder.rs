@@ -825,6 +825,7 @@ pub fn get_generics_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)>
 
     if let Some(id) = tipo.get_generic() {
         generics_ids.push((id, param.clone().into()));
+        return generics_ids;
     }
 
     for (tipo, param_type) in tipo
