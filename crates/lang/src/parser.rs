@@ -553,23 +553,9 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
 
 pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     recursive(|r| {
-        choice((
-            just(Token::Trace)
-                .ignore_then(
-                    select! {Token::String {value} => value}
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                        .or_not(),
-                )
-                .then(r.clone())
-                .map_with_span(|(text, then_), span| expr::UntypedExpr::Trace {
-                    location: span,
-                    then: Box::new(then_),
-                    text,
-                }),
-            expr_parser(r.clone())
-                .then(r.repeated())
-                .foldl(|current, next| current.append_in_sequence(next)),
-        ))
+        expr_parser(r.clone())
+            .then(r.repeated())
+            .foldl(|current, next| current.append_in_sequence(next))
     })
 }
 

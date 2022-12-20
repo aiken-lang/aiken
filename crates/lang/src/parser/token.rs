@@ -71,7 +71,6 @@ pub enum Token {
     Use,
     Test,
     Todo,
-    Trace,
     Type,
     When,
 }
@@ -81,7 +80,6 @@ impl fmt::Display for Token {
         let s = match self {
             Token::Error(c) => {
                 write!(f, "\"{}\"", c)?;
-
                 return Ok(());
             }
             Token::Name { name } => name,
@@ -146,7 +144,6 @@ impl fmt::Display for Token {
             Token::Opaque => "opaque",
             Token::Pub => "pub",
             Token::Todo => "todo",
-            Token::Trace => "try",
             Token::Type => "type",
             Token::Test => "test",
         };

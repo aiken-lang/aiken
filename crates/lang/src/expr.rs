@@ -91,12 +91,6 @@ pub enum TypedExpr {
         kind: AssignmentKind,
     },
 
-    Trace {
-        location: Span,
-        tipo: Arc<Type>,
-        then: Box<Self>,
-    },
-
     When {
         location: Span,
         tipo: Arc<Type>,
@@ -164,7 +158,6 @@ impl TypedExpr {
         match self {
             Self::Negate { .. } => bool(),
             Self::Var { constructor, .. } => constructor.tipo.clone(),
-            Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
             | Self::Int { tipo, .. }
             | Self::Todo { tipo, .. }
@@ -207,7 +200,6 @@ impl TypedExpr {
         match self {
             TypedExpr::Fn { .. }
             | TypedExpr::Int { .. }
-            | TypedExpr::Trace { .. }
             | TypedExpr::List { .. }
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
@@ -247,7 +239,6 @@ impl TypedExpr {
         match self {
             Self::Fn { location, .. }
             | Self::Int { location, .. }
-            | Self::Trace { location, .. }
             | Self::Var { location, .. }
             | Self::Todo { location, .. }
             | Self::When { location, .. }
@@ -284,7 +275,6 @@ impl TypedExpr {
     pub fn location(&self) -> Span {
         match self {
             Self::Fn { location, .. }
-            | Self::Trace { location, .. }
             | Self::Int { location, .. }
             | Self::Var { location, .. }
             | Self::Todo { location, .. }
@@ -372,12 +362,6 @@ pub enum UntypedExpr {
         pattern: Pattern<(), ()>,
         kind: AssignmentKind,
         annotation: Option<Annotation>,
-    },
-
-    Trace {
-        location: Span,
-        then: Box<Self>,
-        text: Option<String>,
     },
 
     When {
@@ -477,7 +461,6 @@ impl UntypedExpr {
 
     pub fn location(&self) -> Span {
         match self {
-            Self::Trace { then, .. } => then.location(),
             Self::PipeLine { expressions, .. } => expressions.last().location(),
             Self::Fn { location, .. }
             | Self::Var { location, .. }
@@ -515,7 +498,7 @@ impl UntypedExpr {
                 .map(|e| e.start_byte_index())
                 .unwrap_or(location.start),
             Self::PipeLine { expressions, .. } => expressions.first().start_byte_index(),
-            Self::Trace { location, .. } | Self::Assignment { location, .. } => location.start,
+            Self::Assignment { location, .. } => location.start,
             _ => self.location().start,
         }
     }

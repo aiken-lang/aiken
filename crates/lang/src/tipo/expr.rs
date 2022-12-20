@@ -279,8 +279,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } => self.infer_assignment(pattern, *value, kind, &annotation, location),
 
-            UntypedExpr::Trace { location, then, .. } => self.infer_trace(*then, location),
-
             UntypedExpr::When {
                 location,
                 subjects,
@@ -1711,19 +1709,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             label,
             tipo,
         }
-    }
-
-    fn infer_trace(&mut self, then: UntypedExpr, location: Span) -> Result<TypedExpr, Error> {
-        // Check the type of the following code
-        let then = self.infer(then)?;
-
-        let tipo = then.tipo();
-
-        Ok(TypedExpr::Trace {
-            location,
-            tipo,
-            then: Box::new(then),
-        })
     }
 
     fn infer_value_constructor(
