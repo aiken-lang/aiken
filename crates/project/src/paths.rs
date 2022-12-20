@@ -29,7 +29,7 @@ pub fn package_cache_zipball(package_name: &PackageName, version: &str) -> PathB
     ))
 }
 
-fn packages_cache() -> PathBuf {
+pub fn packages_cache() -> PathBuf {
     default_aiken_cache().join("packages")
 }
 

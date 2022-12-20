@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{io::Cursor, path::Path};
 
 use futures::future;
 use reqwest::Client;
@@ -41,13 +41,19 @@ impl<'a> Downloader<'a> {
         &self,
         package: &Package,
     ) -> Result<bool, Error> {
-        self.ensure_package_downloaded(package).await
-        // self.extract_package_from_cache(&package.name, &package.version)
+        self.ensure_package_downloaded(package).await?;
+        self.extract_package_from_cache(&package.name, &package.version)
+            .await
     }
 
     pub async fn ensure_package_downloaded(&self, package: &Package) -> Result<bool, Error> {
+        let packages_cache_path = paths::packages_cache();
         let zipball_path =
             paths::package_cache_zipball(&package.name, &package.version.to_string());
+
+        if !packages_cache_path.exists() {
+            tokio::fs::create_dir_all(packages_cache_path).await?;
+        }
 
         if zipball_path.is_file() {
             return Ok(false);
@@ -58,13 +64,56 @@ impl<'a> Downloader<'a> {
             package.name.owner, package.name.repo, package.version
         );
 
-        let response = self.http.get(url).send().await?;
-
-        dbg!(response);
+        let response = self
+            .http
+            .get(url)
+            .header("User-Agent", "aiken-lang")
+            .send()
+            .await?
+            .bytes()
+            .await?;
 
         // let PackageSource::Github { url } = &package.source;
 
-        // tokio::fs::write(&zipball_path, zipball).await?;
+        tokio::fs::write(&zipball_path, response).await?;
+
+        Ok(true)
+    }
+
+    pub async fn extract_package_from_cache(
+        &self,
+        name: &PackageName,
+        version: &str,
+    ) -> Result<bool, Error> {
+        let destination = self.root_path.join(paths::build_deps_package(name));
+
+        // If the directory already exists then there's nothing for us to do
+        if destination.is_dir() {
+            return Ok(false);
+        }
+
+        tokio::fs::create_dir_all(&destination).await?;
+
+        let zipball_path = self
+            .root_path
+            .join(paths::package_cache_zipball(name, version));
+
+        let zipball = tokio::fs::read(zipball_path).await?;
+
+        let result = {
+            let d = destination.clone();
+
+            tokio::task::spawn_blocking(move || {
+                zip_extract::extract(Cursor::new(zipball), &d, true)
+            })
+            .await?
+        };
+
+        if result.is_err() {
+            tokio::fs::remove_dir_all(destination).await?;
+        }
+
+        result?;
 
         Ok(true)
     }
