@@ -20,7 +20,7 @@ use aiken_lang::{
     IdGenerator,
 };
 use config::PackageName;
-use deps::{manifest::Package, UseManifest};
+use deps::UseManifest;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use pallas::{
@@ -166,14 +166,14 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
+        self.compile_deps()?;
+
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
                 name: self.config.name.to_string(),
                 version: self.config.version.clone(),
             });
-
-        self.compile_deps()?;
 
         self.read_source_files()?;
 
@@ -185,10 +185,6 @@ where
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
-                self.event_listener.handle_event(Event::GeneratingUPLC {
-                    output_path: self.output_path(),
-                });
-
                 let programs = self.code_gen(validators)?;
 
                 self.write_build_outputs(programs, uplc_dump)?;
@@ -248,7 +244,16 @@ where
         )?;
 
         for package in manifest.packages {
-            self.read_package_source_files(&package)?;
+            let lib = self.root.join(paths::build_deps_package(&package.name));
+
+            self.event_listener
+                .handle_event(Event::StartingCompilation {
+                    root: lib.clone(),
+                    name: package.name.to_string(),
+                    version: package.version.clone(),
+                });
+
+            self.read_package_source_files(&lib.join("lib"))?;
 
             let parsed_modules = self.parse_sources(package.name)?;
 
@@ -268,20 +273,13 @@ where
         Ok(())
     }
 
-    fn read_package_source_files(&mut self, package: &Package) -> Result<(), Error> {
-        let lib = self
-            .root
-            .join(paths::build_deps_package(&package.name))
-            .join("lib");
-
-        self.aiken_files(&lib, ModuleKind::Lib)?;
+    fn read_package_source_files(&mut self, lib: &Path) -> Result<(), Error> {
+        self.aiken_files(lib, ModuleKind::Lib)?;
 
         Ok(())
     }
 
     fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Error> {
-        self.event_listener.handle_event(Event::ParsingProjectFiles);
-
         let mut errors = Vec::new();
         let mut parsed_modules = HashMap::with_capacity(self.sources.len());
 
@@ -341,7 +339,6 @@ where
     }
 
     fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<(), Error> {
-        self.event_listener.handle_event(Event::TypeChecking);
         let processing_sequence = parsed_modules.sequence()?;
 
         for name in processing_sequence {
@@ -545,6 +542,11 @@ where
                 // &constants,
                 &self.module_types,
             );
+
+            self.event_listener.handle_event(Event::GeneratingUPLC {
+                output_path: self.output_path().join(&module_name).join(&name),
+                name: format!("{}.{}", module_name, name),
+            });
 
             let program = generator.generate(body, arguments, true);
 
