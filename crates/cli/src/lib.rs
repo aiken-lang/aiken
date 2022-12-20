@@ -36,7 +36,7 @@ where
 
     if let Err(err) = build_result {
         err.report();
-        println!("{}", "Summary".purple().bold());
+        println!("\n{}", "Summary".purple().bold());
         println!(
             "    {} error(s), {}",
             err.len(),
@@ -44,7 +44,7 @@ where
         );
         process::exit(1);
     } else {
-        println!("{}", "Summary".purple().bold());
+        println!("\n{}", "Summary".purple().bold());
         println!(
             "    0 error, {}",
             format!("{warning_count} warning(s)").yellow(),
@@ -66,10 +66,10 @@ impl telemetry::EventListener for Terminal {
             } => {
                 println!(
                     "{} {} {} ({})",
-                    "Compiling".bold().purple(),
+                    "    Compiling".bold().purple(),
                     name.bold(),
                     version,
-                    root.to_str().unwrap_or("").bright_blue()
+                    root.display().bright_blue()
                 );
             }
             telemetry::Event::BuildingDocumentation {
@@ -79,45 +79,40 @@ impl telemetry::EventListener for Terminal {
             } => {
                 println!(
                     "{} {} {} ({})",
-                    "Generating documentation".bold().purple(),
+                    "   Generating documentation".bold().purple(),
                     name.bold(),
                     version,
                     root.to_str().unwrap_or("").bright_blue()
                 );
             }
-            telemetry::Event::ParsingProjectFiles => {
-                println!("{}", "...Parsing project files".bold().purple());
-            }
             telemetry::Event::WaitingForBuildDirLock => {
-                println!("{}", "...Waiting for build directory lock".bold().purple());
+                println!("{}", "Waiting for build directory lock ...".bold().purple());
             }
-            telemetry::Event::TypeChecking => {
-                println!("{}", "...Type-checking project".bold().purple());
-            }
-            telemetry::Event::GeneratingUPLC { output_path } => {
+            telemetry::Event::GeneratingUPLC { output_path, name } => {
                 println!(
-                    "{} in {}",
-                    "...Generating Untyped Plutus Core".bold().purple(),
-                    output_path.to_str().unwrap_or("").bright_blue()
+                    "{} {} in {}",
+                    "   Generating".bold().purple(),
+                    name.bold(),
+                    output_path.display().bright_blue()
                 );
             }
             telemetry::Event::GeneratingDocFiles { output_path } => {
                 println!(
                     "{} in {}",
-                    "...Generating documentation files".bold().purple(),
+                    "   Generating documentation files".bold().purple(),
                     output_path.to_str().unwrap_or("").bright_blue()
                 );
             }
             telemetry::Event::GeneratingUPLCFor { name, path } => {
                 println!(
                     "{} {}.{{{}}}",
-                    "...Generating Untyped Plutus Core for".bold().purple(),
+                    "   Generating Untyped Plutus Core for".bold().purple(),
                     path.to_str().unwrap_or("").blue(),
                     name.bright_blue(),
                 );
             }
             telemetry::Event::EvaluatingFunction { results } => {
-                println!("{}\n", "...Evaluating function".bold().purple());
+                println!("{}\n", "  Evaluating function ...".bold().purple());
 
                 let (max_mem, max_cpu) = find_max_execution_units(&results);
 
@@ -126,7 +121,7 @@ impl telemetry::EventListener for Terminal {
                 }
             }
             telemetry::Event::RunningTests => {
-                println!("{}\n", "...Running tests".bold().purple());
+                println!("{} {}\n", "      Testing".bold().purple(), "...".bold());
             }
             telemetry::Event::FinishedTests { tests } => {
                 let (max_mem, max_cpu) = find_max_execution_units(&tests);
@@ -158,11 +153,7 @@ impl telemetry::EventListener for Terminal {
                 }
             }
             telemetry::Event::DownloadingPackage { name } => {
-                println!(
-                    "{} {}",
-                    "...Downloading".bold().purple(),
-                    name.bright_blue()
-                )
+                println!("{} {}", "  Downloading".bold().purple(), name.bold())
             }
             telemetry::Event::PackagesDownloaded { start, count } => {
                 let elapsed = format!("{:.2}s", start.elapsed().as_millis() as f32 / 1000.);
@@ -172,10 +163,10 @@ impl telemetry::EventListener for Terminal {
                     _ => format!("{} packages in {}", count, elapsed),
                 };
 
-                println!("{} {}", "...Downloaded".bold().purple(), msg.bright_blue())
+                println!("{} {}", "   Downloaded".bold().purple(), msg.bold())
             }
             telemetry::Event::ResolvingVersions => {
-                println!("{}", "...Resolving versions".bold().purple(),)
+                println!("{}", "    Resolving versions".bold().purple(),)
             }
         }
     }
