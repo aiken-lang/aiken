@@ -19,7 +19,8 @@ use aiken_lang::{
     uplc::CodeGenerator,
     IdGenerator,
 };
-use deps::UseManifest;
+use config::PackageName;
+use deps::{manifest::Package, UseManifest};
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use pallas::{
@@ -61,6 +62,7 @@ where
 {
     config: Config,
     defined_modules: HashMap<String, PathBuf>,
+    checked_modules: CheckedModules,
     id_gen: IdGenerator,
     module_types: HashMap<String, TypeInfo>,
     root: PathBuf,
@@ -85,6 +87,7 @@ where
 
         Ok(Project {
             config,
+            checked_modules: CheckedModules::default(),
             defined_modules: HashMap::new(),
             id_gen,
             module_types,
@@ -110,19 +113,29 @@ where
                 name: self.config.name.to_string(),
                 version: self.config.version.clone(),
             });
+
         self.read_source_files()?;
 
         let destination = destination.unwrap_or_else(|| self.root.join("doc"));
-        let mut parsed_modules = self.parse_sources()?;
+
+        let mut parsed_modules = self.parse_sources(self.config.name.clone())?;
+
         for (_, module) in parsed_modules.iter_mut() {
             module.attach_doc_and_module_comments();
         }
-        let checked_modules = self.type_check(parsed_modules)?;
+
+        self.type_check(parsed_modules)?;
+
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
         });
-        let doc_files =
-            docs::generate_all(&self.root, &self.config, checked_modules.values().collect());
+
+        let doc_files = docs::generate_all(
+            &self.root,
+            &self.config,
+            self.checked_modules.values().collect(),
+        );
+
         for file in doc_files {
             let path = destination.join(file.path);
             fs::create_dir_all(path.parent().unwrap())?;
@@ -153,14 +166,6 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
-        let manifest = deps::download(
-            &self.event_listener,
-            None,
-            UseManifest::Yes,
-            &self.root,
-            &self.config,
-        )?;
-
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
@@ -168,31 +173,41 @@ where
                 version: self.config.version.clone(),
             });
 
+        self.compile_deps()?;
+
         self.read_source_files()?;
-        let parsed_modules = self.parse_sources()?;
-        let mut checked_modules = self.type_check(parsed_modules)?;
-        let validators = self.validate_validators(&mut checked_modules)?;
+
+        let parsed_modules = self.parse_sources(self.config.name.clone())?;
+
+        self.type_check(parsed_modules)?;
+
+        let validators = self.validate_validators()?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
                 self.event_listener.handle_event(Event::GeneratingUPLC {
                     output_path: self.output_path(),
                 });
-                let programs = self.code_gen(validators, &checked_modules)?;
+
+                let programs = self.code_gen(validators)?;
+
                 self.write_build_outputs(programs, uplc_dump)?;
+
                 Ok(())
             }
             CodeGenMode::Test {
                 match_tests,
                 verbose,
             } => {
-                let tests = self.collect_scripts(&checked_modules, verbose, |def| {
-                    matches!(def, Definition::Test(..))
-                })?;
+                let tests =
+                    self.collect_scripts(verbose, |def| matches!(def, Definition::Test(..)))?;
+
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
                 }
+
                 let results = self.eval_scripts(tests, match_tests);
+
                 let errors: Vec<Error> = results
                     .iter()
                     .filter_map(|e| {
@@ -212,6 +227,7 @@ where
 
                 self.event_listener
                     .handle_event(Event::FinishedTests { tests: results });
+
                 if !errors.is_empty() {
                     Err(Error::List(errors))
                 } else {
@@ -220,6 +236,26 @@ where
             }
             CodeGenMode::NoOp => Ok(()),
         }
+    }
+
+    fn compile_deps(&mut self) -> Result<(), Error> {
+        let manifest = deps::download(
+            &self.event_listener,
+            None,
+            UseManifest::Yes,
+            &self.root,
+            &self.config,
+        )?;
+
+        for package in manifest.packages {
+            self.read_package_source_files(&package)?;
+
+            let parsed_modules = self.parse_sources(package.name)?;
+
+            self.type_check(parsed_modules)?;
+        }
+
+        Ok(())
     }
 
     fn read_source_files(&mut self) -> Result<(), Error> {
@@ -232,7 +268,18 @@ where
         Ok(())
     }
 
-    fn parse_sources(&mut self) -> Result<ParsedModules, Error> {
+    fn read_package_source_files(&mut self, package: &Package) -> Result<(), Error> {
+        let lib = self
+            .root
+            .join(paths::build_deps_package(&package.name))
+            .join("lib");
+
+        self.aiken_files(&lib, ModuleKind::Lib)?;
+
+        Ok(())
+    }
+
+    fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Error> {
         self.event_listener.handle_event(Event::ParsingProjectFiles);
 
         let mut errors = Vec::new();
@@ -257,7 +304,7 @@ where
                         name,
                         path,
                         extra,
-                        package: self.config.name.to_string(),
+                        package: package_name.to_string(),
                     };
 
                     if let Some(first) = self
@@ -293,10 +340,9 @@ where
         }
     }
 
-    fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<CheckedModules, Error> {
+    fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<(), Error> {
         self.event_listener.handle_event(Event::TypeChecking);
         let processing_sequence = parsed_modules.sequence()?;
-        let mut modules = HashMap::with_capacity(parsed_modules.len() + 1);
 
         for name in processing_sequence {
             if let Some(ParsedModule {
@@ -305,8 +351,7 @@ where
                 code,
                 kind,
                 extra,
-                // TODO: come back and figure out where to use this
-                package: _package,
+                package,
                 ast,
             }) = parsed_modules.remove(&name)
             {
@@ -339,7 +384,7 @@ where
                 self.module_types
                     .insert(name.clone(), ast.type_info.clone());
 
-                modules.insert(
+                self.checked_modules.insert(
                     name.clone(),
                     CheckedModule {
                         kind,
@@ -347,25 +392,22 @@ where
                         name,
                         code,
                         ast,
+                        package,
                         input_path: path,
                     },
                 );
             }
         }
 
-        Ok(modules.into())
+        Ok(())
     }
 
-    fn validate_validators(
-        &self,
-        checked_modules: &mut CheckedModules,
-    ) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
+    fn validate_validators(&self) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
         let mut validators = Vec::new();
-        let mut indices_to_remove = Vec::new();
 
-        for module in checked_modules.validators() {
-            for (index, def) in module.ast.definitions().enumerate() {
+        for module in self.checked_modules.validators() {
+            for def in module.ast.definitions() {
                 if let Definition::Fn(func_def) = def {
                     if VALIDATOR_NAMES.contains(&func_def.name.as_str()) {
                         // validators must return a Bool
@@ -418,13 +460,8 @@ where
                             module.name.clone(),
                             func_def.clone(),
                         ));
-                        indices_to_remove.push(index);
                     }
                 }
-            }
-
-            for index in indices_to_remove.drain(0..) {
-                module.ast.definitions.remove(index);
             }
         }
 
@@ -438,7 +475,6 @@ where
     fn code_gen(
         &mut self,
         validators: Vec<(PathBuf, String, TypedFunction)>,
-        checked_modules: &CheckedModules,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
         let mut functions = HashMap::new();
@@ -457,7 +493,7 @@ where
             &option_data_type,
         );
 
-        for module in checked_modules.values() {
+        for module in self.checked_modules.values() {
             for def in module.ast.definitions() {
                 match def {
                     Definition::Fn(func) => {
@@ -529,7 +565,6 @@ where
     // TODO: revisit ownership and lifetimes of data in this function
     fn collect_scripts(
         &mut self,
-        checked_modules: &CheckedModules,
         verbose: bool,
         should_collect: fn(&TypedDefinition) -> bool,
     ) -> Result<Vec<Script>, Error> {
@@ -550,10 +585,13 @@ where
             &option_data_type,
         );
 
-        // let mut indices_to_remove = Vec::new();
         let mut scripts = Vec::new();
 
-        for module in checked_modules.values() {
+        for module in self
+            .checked_modules
+            .values()
+            .filter(|checked| checked.package == self.config.name.to_string())
+        {
             for (_index, def) in module.ast.definitions().enumerate() {
                 match def {
                     Definition::Fn(func) => {
@@ -595,10 +633,6 @@ where
                     }
                 }
             }
-
-            // for index in indices_to_remove.drain(0..) {
-            //     module.ast.definitions.remove(index);
-            // }
         }
 
         for (input_path, module_name, func_def) in scripts {
