@@ -31,3 +31,4 @@ tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.9"
 uplc = { path = '../uplc', version = "0.0.25" }
 walkdir = "2.3.2"
+zip-extract = "0.1.1"

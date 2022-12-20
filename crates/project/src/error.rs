@@ -13,6 +13,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use uplc::machine::cost_model::ExBudget;
+use zip_extract::ZipExtractError;
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -35,6 +36,12 @@ pub enum Error {
 
     #[error(transparent)]
     Http(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    ZipExtract(#[from] ZipExtractError),
+
+    #[error(transparent)]
+    JoinError(#[from] tokio::task::JoinError),
 
     #[error("{help}")]
     TomlLoading {
@@ -177,6 +184,8 @@ impl Error {
             Error::WrongValidatorArity { path, .. } => Some(path.to_path_buf()),
             Error::TestFailure { path, .. } => Some(path.to_path_buf()),
             Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
         }
     }
 
@@ -195,6 +204,8 @@ impl Error {
             Error::WrongValidatorArity { src, .. } => Some(src.to_string()),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
         }
     }
 }
@@ -238,6 +249,8 @@ impl Diagnostic for Error {
             Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
             Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
             Error::Http(_) => Some(Box::new("aiken::deps")),
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
         }
     }
 
@@ -290,6 +303,8 @@ impl Diagnostic for Error {
                 }
             },
             Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
         }
     }
 
@@ -320,6 +335,8 @@ impl Diagnostic for Error {
             )),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
         }
     }
 
@@ -338,6 +355,8 @@ impl Diagnostic for Error {
             Error::WrongValidatorArity { named, .. } => Some(named),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
         }
     }
 }
