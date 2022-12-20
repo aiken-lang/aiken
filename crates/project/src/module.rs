@@ -219,11 +219,12 @@ pub struct CheckedModule {
     pub code: String,
     pub input_path: PathBuf,
     pub kind: ModuleKind,
+    pub package: String,
     pub ast: TypedModule,
     pub extra: ModuleExtra,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct CheckedModules(HashMap<String, CheckedModule>);
 
 impl From<HashMap<String, CheckedModule>> for CheckedModules {
@@ -239,10 +240,8 @@ impl From<CheckedModules> for HashMap<String, CheckedModule> {
 }
 
 impl CheckedModules {
-    pub fn validators(&mut self) -> impl Iterator<Item = &mut CheckedModule> {
-        self.0
-            .values_mut()
-            .filter(|module| module.kind.is_validator())
+    pub fn validators(&self) -> impl Iterator<Item = &CheckedModule> {
+        self.0.values().filter(|module| module.kind.is_validator())
     }
 
     pub fn into_validators(self) -> impl Iterator<Item = CheckedModule> {
