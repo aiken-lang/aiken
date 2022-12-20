@@ -23,7 +23,7 @@ pub struct Creator {
 
 impl Creator {
     fn new(args: Args, project_name: String) -> Self {
-        let root = args.name;
+        let root = PathBuf::from(args.name.file_name().unwrap());
         let lib = root.join("lib");
         let validators = root.join("validators");
         let project_name = project_name;
@@ -124,9 +124,7 @@ Find more on the [Aiken's user manual](https://aiken-lang.org).
                 version = "0.0.0"
                 licences = ["Apache-2.0"]
                 description = "Aiken contracts for project '{name}'"
-
-                [dependencies]
-
+                dependencies = []
                 "#,
                 name = self.project_name,
             },
@@ -136,7 +134,6 @@ Find more on the [Aiken's user manual](https://aiken-lang.org).
 
 fn write(path: PathBuf, contents: &str) -> miette::Result<()> {
     let mut f = fs::File::create(path).into_diagnostic()?;
-
     f.write_all(contents.as_bytes()).into_diagnostic()?;
     Ok(())
 }
@@ -152,8 +149,8 @@ fn validate_name(name: &str) -> Result<(), Error> {
             name: name.to_string(),
             reason: InvalidProjectNameReason::AikenReservedModule,
         })
-    } else if !regex::Regex::new("^[a-z][a-z0-9_]*$")
-        .expect("new name regex could not be compiled")
+    } else if !regex::Regex::new("^[a-z0-9_-]+/[a-z0-9_-]+$")
+        .expect("regex could not be compiled")
         .is_match(name)
     {
         Err(Error::InvalidProjectName {

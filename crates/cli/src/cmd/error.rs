@@ -4,7 +4,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("{} is not a valid project name. {}", name, reason.to_string())]
+    #[error("'{}' is not a valid project name: {}", name, reason.to_string())]
     InvalidProjectName {
         name: String,
         reason: InvalidProjectNameReason,
@@ -21,15 +21,16 @@ pub enum InvalidProjectNameReason {
 impl fmt::Display for InvalidProjectNameReason {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            InvalidProjectNameReason::AikenPrefix => write!(f, "It is a reserved word in Aiken."),
+            InvalidProjectNameReason::AikenPrefix => write!(f, "it's a reserved word in Aiken."),
             InvalidProjectNameReason::AikenReservedModule => {
-                write!(f, "It is a reserved module name in Aiken.")
+                write!(f, "it's a reserved module name in Aiken.")
             }
             InvalidProjectNameReason::Format => write!(
                 f,
-                "It does not have the correct format. Project names \
-                must start with a lowercase letter and may only contain lowercase letters, \
-                numbers and underscores."
+                "it is malformed.\n\nProjects must be named as:\n\n\t\
+                {{repository}}/{{project}}\n\nEach part must start with a lowercase letter \
+                and may only contain lowercase letters, numbers, hyphens or underscores.\
+                \nFor example,\n\n\taiken-lang/stdlib"
             ),
         }
     }
