@@ -28,7 +28,7 @@ rustup install stable
 ```
 
 ```console
-$ cargo install aiken
+$ cargo install --git https://github.com/aiken-lang/aiken.git
 
 $ aiken --help
 ```
