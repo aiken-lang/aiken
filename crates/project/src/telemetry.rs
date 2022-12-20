@@ -43,4 +43,5 @@ pub enum Event {
         start: tokio::time::Instant,
         count: usize,
     },
+    ResolvingVersions,
 }

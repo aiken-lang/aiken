@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::{env, path::PathBuf, process};
 
-use aiken_project::{config::Config, pretty, script::EvalInfo, telemetry, Project};
+use aiken_project::{pretty, script::EvalInfo, telemetry, Project};
 use miette::IntoDiagnostic;
 use owo_colors::OwoColorize;
 use uplc::machine::cost_model::ExBudget;
@@ -18,9 +18,13 @@ where
         env::current_dir().into_diagnostic()?
     };
 
-    let config = Config::load(project_path.clone()).into_diagnostic()?;
-
-    let mut project = Project::new(config, project_path, Terminal::default());
+    let mut project = match Project::new(project_path, Terminal::default()) {
+        Ok(p) => p,
+        Err(e) => {
+            e.report();
+            process::exit(1);
+        }
+    };
 
     let build_result = action(&mut project);
 
@@ -153,10 +157,10 @@ impl telemetry::EventListener for Terminal {
                     );
                 }
             }
-            telemetry::Event::DownloadingPackage { name: String } => {
+            telemetry::Event::DownloadingPackage { name } => {
                 println!(
                     "{} {}",
-                    "...Downloading {}".bold().purple(),
+                    "...Downloading".bold().purple(),
                     name.bright_blue()
                 )
             }
@@ -168,11 +172,10 @@ impl telemetry::EventListener for Terminal {
                     _ => format!("{} packages in {}", count, elapsed),
                 };
 
-                println!(
-                    "{} {}",
-                    "...Downloaded {}".bold().purple(),
-                    msg.bright_blue()
-                )
+                println!("{} {}", "...Downloaded".bold().purple(), msg.bright_blue())
+            }
+            telemetry::Event::ResolvingVersions => {
+                println!("{}", "...Resolving versions".bold().purple(),)
             }
         }
     }
