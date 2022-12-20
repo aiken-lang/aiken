@@ -1837,7 +1837,9 @@ impl<'a> CodeGenerator<'a> {
                                         | ArgName::NamedLabeled { name, .. } => {
                                             args.push(name.clone());
                                         }
-                                        _ => {}
+                                        _ => {
+                                            args.push("_".to_string());
+                                        }
                                     }
                                 }
                                 let recursive = if let Ok(index) =
@@ -2596,6 +2598,9 @@ impl<'a> CodeGenerator<'a> {
                             };
                             arg_stack.push(term);
                             return;
+                        } else if tipo.is_nil() {
+                            arg_stack.push(Term::Constant(UplcConstant::Bool(true)));
+                            return;
                         }
 
                         Term::Apply {
@@ -2705,9 +2710,7 @@ impl<'a> CodeGenerator<'a> {
                             // arg_stack.push(term);
                             // return;
                             todo!()
-                        } else if tipo.is_list()
-                            || matches!(tipo.get_uplc_type(), UplcType::List(_))
-                        {
+                        } else if tipo.is_list() {
                             let term = Term::Apply {
                                 function: Term::Apply {
                                     function: Term::Apply {
@@ -2744,6 +2747,9 @@ impl<'a> CodeGenerator<'a> {
                             };
 
                             arg_stack.push(term);
+                            return;
+                        } else if tipo.is_nil() {
+                            arg_stack.push(Term::Constant(UplcConstant::Bool(false)));
                             return;
                         }
 
