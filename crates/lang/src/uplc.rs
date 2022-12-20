@@ -1598,17 +1598,18 @@ impl<'a> CodeGenerator<'a> {
         ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
-        recursion_func_map: IndexMap<FunctionAccessKey, ()>,
+        mut recursion_func_map: IndexMap<FunctionAccessKey, ()>,
     ) {
         self.process_define_ir(ir_stack, func_components, func_index_map);
 
-        let mut recursion_func_map = recursion_func_map;
+        let mut recursion_func_map_to_add = recursion_func_map.clone();
 
         for func_index in func_index_map.clone().iter() {
             let func = func_index.0;
 
             let function_components = func_components.get(func).unwrap();
             let mut function_ir = function_components.ir.clone();
+            let mut skip = false;
 
             for ir in function_ir.clone() {
                 if let Air::Var {
@@ -1630,10 +1631,16 @@ impl<'a> CodeGenerator<'a> {
                         module_name: module.clone(),
                         function_name: func_name.clone(),
                         variant_name: variant_name.clone(),
-                    }) {
-                        return;
+                    }) && func.clone()
+                        == (FunctionAccessKey {
+                            module_name: module.clone(),
+                            function_name: func_name.clone(),
+                            variant_name: variant_name.clone(),
+                        })
+                    {
+                        skip = true;
                     } else {
-                        recursion_func_map.insert(
+                        recursion_func_map_to_add.insert(
                             FunctionAccessKey {
                                 module_name: module.clone(),
                                 function_name: func_name.clone(),
@@ -1645,29 +1652,32 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
 
-            let mut inner_func_components = IndexMap::new();
+            recursion_func_map = recursion_func_map_to_add.clone();
+            if !skip {
+                let mut inner_func_components = IndexMap::new();
 
-            let mut inner_func_index_map = IndexMap::new();
+                let mut inner_func_index_map = IndexMap::new();
 
-            self.define_recurse_ir(
-                &mut function_ir,
-                &mut inner_func_components,
-                &mut inner_func_index_map,
-                recursion_func_map.clone(),
-            );
+                self.define_recurse_ir(
+                    &mut function_ir,
+                    &mut inner_func_components,
+                    &mut inner_func_index_map,
+                    recursion_func_map.clone(),
+                );
 
-            //now unify
-            for item in inner_func_components {
-                if !func_components.contains_key(&item.0) {
-                    func_components.insert(item.0, item.1);
+                //now unify
+                for item in inner_func_components {
+                    if !func_components.contains_key(&item.0) {
+                        func_components.insert(item.0, item.1);
+                    }
                 }
-            }
 
-            for item in inner_func_index_map {
-                if let Some(entry) = func_index_map.get_mut(&item.0) {
-                    *entry = get_common_ancestor(entry, &item.1);
-                } else {
-                    func_index_map.insert(item.0, item.1);
+                for item in inner_func_index_map {
+                    if let Some(entry) = func_index_map.get_mut(&item.0) {
+                        *entry = get_common_ancestor(entry, &item.1);
+                    } else {
+                        func_index_map.insert(item.0, item.1);
+                    }
                 }
             }
         }
@@ -1996,17 +2006,14 @@ impl<'a> CodeGenerator<'a> {
 
                             let tipo = constructor.tipo;
 
-                            let args_type = match tipo.as_ref() {
-                                Type::Fn { args, .. } | Type::App { args, .. } => args,
-                                _ => unreachable!(),
-                            };
+                            let args_type = tipo.arg_types().unwrap();
 
                             if let Some(field_map) = field_map.clone() {
                                 for field in field_map
                                     .fields
                                     .iter()
                                     .sorted_by(|item1, item2| item1.1.cmp(item2.1))
-                                    .zip(args_type)
+                                    .zip(&args_type)
                                     .rev()
                                 {
                                     // TODO revisit
