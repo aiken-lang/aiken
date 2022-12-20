@@ -1,6 +1,10 @@
-use std::{fmt::Display, fs, io, path::PathBuf};
+use std::{fmt::Display, fs, path::PathBuf};
 
+use aiken_lang::ast::Span;
+use miette::NamedSource;
 use serde::{de::Visitor, Deserialize, Serialize};
+
+use crate::error::Error;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -19,7 +23,7 @@ pub struct Repository {
     pub platform: Platform,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
     Github,
@@ -27,7 +31,7 @@ pub enum Platform {
     Bitbucket,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct Dependency {
     pub name: PackageName,
     pub version: String,
@@ -106,11 +110,22 @@ impl Display for Platform {
 }
 
 impl Config {
-    pub fn load(dir: PathBuf) -> io::Result<Config> {
-        let raw_config = fs::read_to_string(dir.join("aiken.toml"))?;
+    pub fn load(dir: PathBuf) -> Result<Config, Error> {
+        let config_path = dir.join("aiken.toml");
+        let raw_config = fs::read_to_string(&config_path)?;
 
-        let config = toml::from_str(&raw_config).unwrap();
+        let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
+            path: config_path.clone(),
+            src: raw_config.clone(),
+            named: NamedSource::new(config_path.display().to_string(), raw_config),
+            // this isn't actually a legit way to get the span
+            location: e.line_col().map(|(line, col)| Span {
+                start: line,
+                end: col,
+            }),
+            help: e.to_string(),
+        })?;
 
-        Ok(config)
+        Ok(result)
     }
 }

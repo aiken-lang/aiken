@@ -73,7 +73,7 @@ impl<T> Project<T>
 where
     T: EventListener,
 {
-    pub fn new(config: Config, root: PathBuf, event_listener: T) -> Project<T> {
+    pub fn new(root: PathBuf, event_listener: T) -> Result<Project<T>, Error> {
         let id_gen = IdGenerator::new();
 
         let mut module_types = HashMap::new();
@@ -81,7 +81,9 @@ where
         module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
         module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-        Project {
+        let config = Config::load(root.clone())?;
+
+        Ok(Project {
             config,
             defined_modules: HashMap::new(),
             id_gen,
@@ -90,7 +92,7 @@ where
             sources: vec![],
             warnings: vec![],
             event_listener,
-        }
+        })
     }
 
     pub fn build(&mut self, uplc: bool) -> Result<(), Error> {

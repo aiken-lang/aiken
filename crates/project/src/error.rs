@@ -36,12 +36,13 @@ pub enum Error {
     #[error(transparent)]
     Http(#[from] reqwest::Error),
 
-    #[error("Loading toml")]
+    #[error("{help}")]
     TomlLoading {
         path: PathBuf,
         src: String,
         named: NamedSource,
         location: Option<Span>,
+        help: String,
     },
 
     #[error("Cyclical module imports")]

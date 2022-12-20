@@ -51,17 +51,23 @@ impl LocalPackages {
                 start: line,
                 end: col,
             }),
+            help: e.to_string(),
         })?;
 
         Ok(result)
     }
 
     pub fn save(&self, root_path: &Path) -> Result<(), Error> {
+        let packages_path = root_path.join(paths::packages());
         let path = root_path.join(paths::packages_toml());
+
+        if !packages_path.exists() {
+            fs::create_dir_all(&packages_path)?;
+        }
 
         let toml = toml::to_string(&self).expect("packages.toml serialization");
 
-        fs::write(&path, &toml)?;
+        fs::write(path, toml)?;
 
         Ok(())
     }
@@ -119,7 +125,7 @@ impl From<&Manifest> for LocalPackages {
                 .map(|p| Dependency {
                     name: p.name.clone(),
                     version: p.version.clone(),
-                    source: p.source.into(),
+                    source: p.source,
                 })
                 .collect(),
         }
@@ -138,7 +144,12 @@ where
 {
     let build_path = root_path.join(paths::build());
 
-    let mut build_lock = fslock::LockFile::open(&build_path).expect("Build Lock Creation");
+    if !build_path.is_dir() {
+        fs::create_dir_all(&build_path)?;
+    }
+
+    let mut build_lock = fslock::LockFile::open(&build_path.join("aiken-compile.lock"))
+        .expect("Build Lock Creation");
 
     if !build_lock
         .try_lock_with_pid()
@@ -163,7 +174,13 @@ where
 
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio");
 
-    let (manifest, changed) = Manifest::load(event_listener)?;
+    let (manifest, changed) = Manifest::load(
+        runtime.handle().clone(),
+        event_listener,
+        config,
+        use_manifest,
+        root_path,
+    )?;
 
     let local = LocalPackages::load(root_path)?;
 
@@ -178,7 +195,7 @@ where
     ))?;
 
     if changed {
-        manifest.save()?;
+        manifest.save(root_path)?;
     }
 
     LocalPackages::from(&manifest).save(root_path)?;

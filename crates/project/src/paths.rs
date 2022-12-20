@@ -2,6 +2,10 @@ use std::path::PathBuf;
 
 use crate::config::PackageName;
 
+pub fn manifest() -> PathBuf {
+    PathBuf::from("aiken.lock")
+}
+
 pub fn build() -> PathBuf {
     PathBuf::from("build")
 }
