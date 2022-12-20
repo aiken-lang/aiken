@@ -824,6 +824,73 @@ impl<'a> Environment<'a> {
     /// Iterate over a module, registering any new types created by the module into the typer
     pub fn register_types(
         &mut self,
+        definitions: Vec<&'a UntypedDefinition>,
+        module: &String,
+        hydrators: &mut HashMap<String, Hydrator>,
+        names: &mut HashMap<&'a str, &'a Span>,
+    ) -> Result<(), Error> {
+        let known_types_before = names.keys().copied().collect::<Vec<_>>();
+
+        let mut error = None;
+        let mut remaining_definitions = vec![];
+
+        // in case we failed at registering a type-definition, we backtrack and
+        // try again until either of:
+        //
+        // (a) we do not make any more progress;
+        // (b) there's no more errors.
+        //
+        // This is because some definition, especially when combining type-aliases may depend on
+        // types that we haven't yet seen (because declared later in the module). In which case, it
+        // would suffice to register type in a different order. Thus instead of failing on the
+        // first error, we try to register as many types as we can, recursively until we've
+        // exhausted all the definitions or, until we no longer make any progress (which may signal
+        // a cycle).
+        for def in definitions {
+            if let Err(e) = self.register_type(def, module, hydrators, names) {
+                error = Some(e);
+                remaining_definitions.push(def);
+                if let Definition::TypeAlias(TypeAlias { alias, .. }) = def {
+                    names.remove(alias.as_str());
+                }
+            };
+        }
+
+        match error {
+            None => Ok(()),
+            Some(e) => {
+                let known_types_after = names.keys().copied().collect::<Vec<_>>();
+                if known_types_before == known_types_after {
+                    let cycle = remaining_definitions
+                        .into_iter()
+                        .filter_map(|def| match def {
+                            Definition::TypeAlias(TypeAlias {
+                                alias, location, ..
+                            }) => Some((alias.to_owned(), location.to_owned())),
+                            _ => None,
+                        })
+                        .collect::<Vec<(String, Span)>>();
+                    match cycle.first() {
+                        None => Err(e),
+                        Some((alias, location)) => {
+                            let mut types =
+                                cycle.iter().map(|def| def.0.clone()).collect::<Vec<_>>();
+                            types.push(alias.clone());
+                            Err(Error::CyclicTypeDefinitions {
+                                location: *location,
+                                types,
+                            })
+                        }
+                    }
+                } else {
+                    self.register_types(remaining_definitions, module, hydrators, names)
+                }
+            }
+        }
+    }
+
+    pub fn register_type(
+        &mut self,
         def: &'a UntypedDefinition,
         module: &String,
         hydrators: &mut HashMap<String, Hydrator>,
@@ -885,11 +952,11 @@ impl<'a> Environment<'a> {
             }) => {
                 assert_unique_type_name(names, name, location)?;
 
-                // Register the paramerterised types
+                // Register the parameterised types
                 let mut hydrator = Hydrator::new();
                 let parameters = self.make_type_vars(args, location, &mut hydrator)?;
 
-                // Disallow creation of new types outside the paramerterised types
+                // Disallow creation of new types outside the parameterised types
                 hydrator.disallow_new_type_variables();
 
                 // Create the type that the alias resolves to

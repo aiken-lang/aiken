@@ -48,9 +48,12 @@ impl UntypedModule {
 
         // Register types so they can be used in constructors and functions
         // earlier in the module.
-        for def in self.definitions() {
-            environment.register_types(def, &name, &mut hydrators, &mut type_names)?;
-        }
+        environment.register_types(
+            self.definitions.iter().collect(),
+            &name,
+            &mut hydrators,
+            &mut type_names,
+        )?;
 
         // Register values so they can be used in functions earlier in the module.
         for def in self.definitions() {
