@@ -125,28 +125,24 @@ impl telemetry::EventListener for Terminal {
                 let (max_mem, max_cpu) = find_max_execution_units(&tests);
 
                 for (module, infos) in &group_by_module(&tests) {
-                    let first = fmt_test(infos.first().unwrap(), max_mem, max_cpu, false).len();
+                    let title = module.bold().blue().to_string();
+
+                    let tests = infos
+                        .iter()
+                        .map(|eval_info| fmt_test(eval_info, max_mem, max_cpu, true))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+
+                    let summary = fmt_test_summary(infos, true);
+
                     println!(
-                        "{} {} {}",
-                        "  ┌──".bright_black(),
-                        module.bold().blue(),
-                        pretty::pad_left("".to_string(), first - module.len() - 3, "─")
-                            .bright_black()
-                    );
-                    for eval_info in infos {
-                        println!(
-                            "  {} {}",
-                            "│".bright_black(),
-                            fmt_test(eval_info, max_mem, max_cpu, true)
+                        "{}\n",
+                        pretty::indent(
+                            &pretty::open_box(&title, &tests, &summary, |border| border
+                                .bright_black()
+                                .to_string()),
+                            4
                         )
-                    }
-                    let last = fmt_test(infos.last().unwrap(), max_mem, max_cpu, false).len();
-                    let summary = fmt_test_summary(infos, false).len();
-                    println!(
-                        "{} {}\n",
-                        pretty::pad_right("  └".to_string(), last - summary + 5, "─")
-                            .bright_black(),
-                        fmt_test_summary(infos, true),
                     );
                 }
             }
