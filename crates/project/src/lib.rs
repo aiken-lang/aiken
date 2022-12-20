@@ -714,23 +714,25 @@ where
             }
 
             match script.program.eval(initial_budget) {
-                (Ok(result), remaining_budget, _) => {
+                (Ok(result), remaining_budget, logs) => {
                     let eval_info = EvalInfo {
                         success: result != Term::Error
                             && result != Term::Constant(Constant::Bool(false)),
                         script,
                         spent_budget: initial_budget - remaining_budget,
                         output: Some(result),
+                        logs,
                     };
 
                     results.push(eval_info);
                 }
-                (Err(..), remaining_budget, _) => {
+                (Err(..), remaining_budget, logs) => {
                     let eval_info = EvalInfo {
                         success: false,
                         script,
                         spent_budget: initial_budget - remaining_budget,
                         output: None,
+                        logs,
                     };
 
                     results.push(eval_info);
