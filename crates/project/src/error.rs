@@ -286,11 +286,11 @@ impl Diagnostic for Error {
                     None => None,
                     Some(hint) => {
                         let budget = ExBudget { mem: i64::MAX, cpu: i64::MAX, };
-                        let left = pretty::boxed("left", match hint.left.eval(budget) {
+                        let left = pretty::boxed("left", &match hint.left.eval(budget) {
                             (Ok(term), _, _) => format!("{term}"),
                             (Err(err), _, _) => format!("{err}"),
                         });
-                        let right = pretty::boxed("right", match hint.right.eval(budget) {
+                        let right = pretty::boxed("right", &match hint.right.eval(budget) {
                             (Ok(term), _, _) => format!("{term}"),
                             (Err(err), _, _) => format!("{err}"),
                         });

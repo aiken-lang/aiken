@@ -26,6 +26,7 @@ regex = "1.6.0"
 reqwest = "0.11.13"
 serde = { version = "1.0.144", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
+strip-ansi-escapes = "0.1.1"
 thiserror = "1.0.37"
 tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.9"
