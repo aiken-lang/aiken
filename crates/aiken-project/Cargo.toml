@@ -9,7 +9,7 @@ license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
 [dependencies]
-aiken-lang = { path = "../lang", version = "0.0.26" }
+aiken-lang = { path = "../aiken-lang", version = "0.0.26" }
 askama = "0.10.5"
 dirs = "4.0.0"
 fslock = "0.2.1"

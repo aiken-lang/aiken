@@ -10,8 +10,8 @@ authors = ["Lucas Rosa <x@rvcas.dev>"]
 
 
 [dependencies]
-aiken-lang = { path = '../lang', version = "0.0.26" }
-aiken-project = { path = '../project', version = "0.0.26" }
+aiken-lang = { path = '../aiken-lang', version = "0.0.26" }
+aiken-project = { path = '../aiken-project', version = "0.0.26" }
 crossbeam-channel = "0.5.6"
 lsp-server = "0.6.0"
 lsp-types = "0.93.2"
