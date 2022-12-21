@@ -73,6 +73,7 @@ pub enum Token {
     Todo,
     Type,
     When,
+    Trace,
 }
 
 impl fmt::Display for Token {
@@ -144,6 +145,7 @@ impl fmt::Display for Token {
             Token::Opaque => "opaque",
             Token::Pub => "pub",
             Token::Todo => "todo",
+            Token::Trace => "trace",
             Token::Type => "type",
             Token::Test => "test",
         };

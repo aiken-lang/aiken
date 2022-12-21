@@ -1,13 +1,14 @@
-use aiken/builtin
-
-fn is_negative(i : Int) -> Bool {
+fn is_negative(i: Int) -> Bool {
   if i < 0 {
-    builtin.trace("is negative", True)
+    trace("is negative")
+
+  True
   } else {
-    builtin.trace("is non-negative", False)
+    trace("is non-negative")
+
+  False
   }
 }
-
 
 test trace_1() {
   is_negative(-14) && !is_negative(42)

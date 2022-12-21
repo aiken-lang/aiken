@@ -203,6 +203,12 @@ pub enum Air {
         tipo: Arc<Type>,
     },
 
+    Trace {
+        scope: Vec<u64>,
+        text: Option<String>,
+        tipo: Arc<Type>,
+    },
+
     Record {
         scope: Vec<u64>,
     },
@@ -261,6 +267,7 @@ impl Air {
             | Air::Record { scope, .. }
             | Air::RecordUpdate { scope, .. }
             | Air::Negate { scope, .. }
+            | Air::Trace { scope, .. }
             | Air::TupleAccessor { scope, .. } => scope.to_vec(),
         }
     }

@@ -517,6 +517,21 @@ impl<'a> CodeGenerator<'a> {
 
                 ir_stack.append(&mut elems_air);
             }
+            TypedExpr::Trace {
+                tipo, then, text, ..
+            } => {
+                let mut scope = scope;
+
+                ir_stack.push(Air::Trace {
+                    text: text.clone(),
+                    tipo: tipo.clone(),
+                    scope: scope.clone(),
+                });
+
+                scope.push(self.id_gen.next());
+
+                self.build_ir(then, ir_stack, scope);
+            }
         }
     }
 
@@ -3517,8 +3532,20 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(term);
                 }
             }
-            Air::Todo { .. } => {
-                arg_stack.push(Term::Error);
+            Air::Todo { label, .. } => {
+                let term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Builtin(DefaultFunction::Trace).force_wrap().into(),
+                        argument: Term::Constant(uplc::ast::Constant::String(
+                            label.unwrap_or_else(|| "aiken::todo".to_string()),
+                        ))
+                        .into(),
+                    }
+                    .into(),
+                    argument: Term::Error.into(),
+                };
+
+                arg_stack.push(term);
             }
             Air::Record { .. } => todo!(),
             Air::RecordUpdate { .. } => todo!(),
@@ -3676,6 +3703,23 @@ impl<'a> CodeGenerator<'a> {
                         argument: value.into(),
                     };
                 }
+
+                arg_stack.push(term);
+            }
+            Air::Trace { text, .. } => {
+                let term = arg_stack.pop().unwrap();
+
+                let term = Term::Apply {
+                    function: Term::Apply {
+                        function: Term::Builtin(DefaultFunction::Trace).force_wrap().into(),
+                        argument: Term::Constant(uplc::ast::Constant::String(
+                            text.unwrap_or_else(|| "aike::trace".to_string()),
+                        ))
+                        .into(),
+                    }
+                    .into(),
+                    argument: term.into(),
+                };
 
                 arg_stack.push(term);
             }

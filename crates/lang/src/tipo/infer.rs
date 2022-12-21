@@ -475,6 +475,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "pub" => Some(Token::Pub),
         "todo" => Some(Token::Todo),
         "type" => Some(Token::Type),
+        "trace" => Some(Token::Trace),
         _ => None,
     }
 }

@@ -751,6 +751,29 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.assignment(pattern, value, None, Some(*kind), annotation),
 
+            UntypedExpr::Trace {
+                text: None, then, ..
+            } => "trace"
+                .to_doc()
+                .append(if self.pop_empty_lines(then.start_byte_index()) {
+                    lines(2)
+                } else {
+                    line()
+                })
+                .append(self.expr(then)),
+
+            UntypedExpr::Trace {
+                text: Some(l),
+                then,
+                ..
+            } => docvec!["trace(\"", l, "\")"]
+                .append(if self.pop_empty_lines(then.start_byte_index()) {
+                    lines(2)
+                } else {
+                    line()
+                })
+                .append(self.expr(then)),
+
             UntypedExpr::When {
                 subjects, clauses, ..
             } => self.when(subjects, clauses),
@@ -1319,7 +1342,9 @@ impl<'comments> Formatter<'comments> {
 
     fn wrap_expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Sequence { .. } | UntypedExpr::Assignment { .. } => "{"
+            UntypedExpr::Trace { .. }
+            | UntypedExpr::Sequence { .. }
+            | UntypedExpr::Assignment { .. } => "{"
                 .to_doc()
                 .append(line().append(self.expr(expr)).nest(INDENT))
                 .append(line())
@@ -1356,7 +1381,9 @@ impl<'comments> Formatter<'comments> {
 
     fn case_clause_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Sequence { .. } | UntypedExpr::Assignment { .. } => " {"
+            UntypedExpr::Trace { .. }
+            | UntypedExpr::Sequence { .. }
+            | UntypedExpr::Assignment { .. } => " {"
                 .to_doc()
                 .append(line().append(self.expr(expr)).nest(INDENT).group())
                 .append(line())

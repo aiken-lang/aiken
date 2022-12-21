@@ -344,13 +344,7 @@ pub fn from_default_function(
             Some((tipo, 3))
         }
         DefaultFunction::ChooseUnit => None,
-        DefaultFunction::Trace => {
-            let ret = generic_var(id_gen.next());
-
-            let tipo = function(vec![string(), ret.clone()], ret);
-
-            Some((tipo, 2))
-        }
+        DefaultFunction::Trace => None,
         DefaultFunction::FstPair => None,
         DefaultFunction::SndPair => None,
         DefaultFunction::ChooseList => None,
