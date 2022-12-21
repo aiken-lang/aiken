@@ -271,6 +271,13 @@ pub enum Error {
         name: String,
     },
 
+    #[error("Cyclic type definition detected: {}\n", types.join(" -> "))]
+    CyclicTypeDefinitions {
+        #[label]
+        location: Span,
+        types: Vec<String>,
+    },
+
     #[error("Recursive type detected\n")]
     RecursiveType {
         #[label]
