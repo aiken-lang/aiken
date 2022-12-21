@@ -191,11 +191,10 @@ pub enum Air {
     },
 
     // TupleIndex {
-    //  scope: Vec<u64>,
-    //
-    // tipo: Arc<Type>,
-    // index: u64,
-    // tuple: Box<Self>,
+    //   scope: Vec<u64>,
+    //   tipo: Arc<Type>,
+    //   index: u64,
+    //   tuple: Box<Self>,
     // },
     Todo {
         scope: Vec<u64>,

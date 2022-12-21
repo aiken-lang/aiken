@@ -4,6 +4,7 @@ use std::fmt;
 pub enum Token {
     Error(char),
     Name { name: String },
+    Ordinal { index: u32 },
     UpName { name: String },
     DiscardName { name: String },
     Int { value: String },
@@ -78,12 +79,17 @@ pub enum Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let index_str;
         let s = match self {
             Token::Error(c) => {
                 write!(f, "\"{}\"", c)?;
                 return Ok(());
             }
             Token::Name { name } => name,
+            Token::Ordinal { index } => {
+                index_str = index.to_string();
+                &index_str[..]
+            }
             Token::UpName { name } => name,
             Token::DiscardName { name } => name,
             Token::Int { value } => value,

@@ -135,12 +135,13 @@ pub enum TypedExpr {
         elems: Vec<Self>,
     },
 
-    // TupleIndex {
-    //     location: Span,
-    //     tipo: Arc<Type>,
-    //     index: u64,
-    //     tuple: Box<Self>,
-    // },
+    TupleIndex {
+        location: Span,
+        tipo: Arc<Type>,
+        index: usize,
+        tuple: Box<Self>,
+    },
+
     Todo {
         location: Span,
         label: Option<String>,
@@ -165,7 +166,7 @@ impl TypedExpr {
         match self {
             Self::Negate { .. } => bool(),
             Self::Var { constructor, .. } => constructor.tipo.clone(),
-            Self::Trace {then, ..} => then.tipo(),
+            Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
             | Self::Int { tipo, .. }
             | Self::Todo { tipo, .. }
@@ -177,7 +178,7 @@ impl TypedExpr {
             | Self::Tuple { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
-            // | Self::TupleIndex { tipo, .. }
+            | Self::TupleIndex { tipo, .. }
             | Self::Assignment { tipo, .. }
             | Self::ModuleSelect { tipo, .. }
             | Self::RecordAccess { tipo, .. }
@@ -221,9 +222,9 @@ impl TypedExpr {
             | TypedExpr::Pipeline { .. }
             | TypedExpr::ByteArray { .. }
             | TypedExpr::Assignment { .. }
-            // | TypedExpr::TupleIndex { .. }
+            | TypedExpr::TupleIndex { .. }
             | TypedExpr::RecordAccess { .. } => None,
-            | TypedExpr::If { .. } => None,
+            TypedExpr::If { .. } => None,
 
             // TODO: test
             // TODO: definition
@@ -261,15 +262,12 @@ impl TypedExpr {
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
             | Self::Assignment { location, .. }
-            // | Self::TupleIndex { location, .. }
+            | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
             | Self::RecordUpdate { location, .. } => *location,
 
-            Self::If {
-                branches,
-                ..
-            } => branches.first().body.type_defining_location(),
+            Self::If { branches, .. } => branches.first().body.type_defining_location(),
 
             Self::Sequence {
                 expressions,
@@ -301,7 +299,7 @@ impl TypedExpr {
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
             | Self::Assignment { location, .. }
-            // | Self::TupleIndex { location, .. }
+            | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
             | Self::RecordUpdate { location, .. } => *location,
@@ -401,11 +399,13 @@ pub enum UntypedExpr {
         location: Span,
         elems: Vec<Self>,
     },
-    // TupleIndex {
-    //     location: Span,
-    //     index: u64,
-    //     tuple: Box<Self>,
-    // },
+
+    TupleIndex {
+        location: Span,
+        index: usize,
+        tuple: Box<Self>,
+    },
+
     Todo {
         kind: TodoKind,
         location: Span,
@@ -490,7 +490,7 @@ impl UntypedExpr {
             | Self::Tuple { location, .. }
             | Self::String { location, .. }
             | Self::Assignment { location, .. }
-            // | Self::TupleIndex { location, .. }
+            | Self::TupleIndex { location, .. }
             | Self::FieldAccess { location, .. }
             | Self::RecordUpdate { location, .. }
             | Self::Negate { location, .. }

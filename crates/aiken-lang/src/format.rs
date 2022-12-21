@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use ordinal::Ordinal;
 use std::sync::Arc;
 use vec1::Vec1;
 
@@ -796,6 +797,14 @@ impl<'comments> Formatter<'comments> {
                     elems.iter().map(|e| (self.wrap_expr(e), false)),
                 ))
                 .group(),
+
+            UntypedExpr::TupleIndex { index, tuple, .. } => {
+                let suffix = Ordinal(*index + 1).suffix().to_doc();
+                self.expr(tuple)
+                    .append(".".to_doc())
+                    .append((index + 1).to_doc())
+                    .append(suffix)
+            }
         };
         commented(document, comments)
     }

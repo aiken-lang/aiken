@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+use ordinal::Ordinal;
+
 use miette::Diagnostic;
 
 use crate::ast::{BinOp, Span, TodoKind};
@@ -282,6 +284,20 @@ pub enum Error {
     RecursiveType {
         #[label]
         location: Span,
+    },
+
+    #[error("Trying to access tuple elements on something else than a tuple\n")]
+    NotATuple {
+        #[label]
+        location: Span,
+    },
+
+    #[error("Trying to access the {} element of a {}-tuple\n", Ordinal(*index + 1).to_string(), size)]
+    TupleIndexOutOfBound {
+        #[label]
+        location: Span,
+        index: usize,
+        size: usize,
     },
 }
 

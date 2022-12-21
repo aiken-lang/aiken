@@ -2,6 +2,8 @@ use chumsky::prelude::*;
 
 use crate::ast::Span;
 
+use ordinal::Ordinal;
+
 use super::{error::ParseError, token::Token};
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
@@ -16,6 +18,25 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             .map(|value: String| format!("-{}", &value)),
     ))
     .map(|value| Token::Int { value });
+
+    let ordinal = text::int(10)
+        .from_str()
+        .unwrapped()
+        .then_with(|index: u32| {
+            choice((just("st"), just("nd"), just("rd"), just("th")))
+                .map(move |suffix| (index, suffix))
+        })
+        .validate(|(index, suffix), span, emit| {
+            let expected_suffix = Ordinal(index).suffix();
+            if expected_suffix != suffix {
+                emit(ParseError::invalid_tuple_index(
+                    span,
+                    index,
+                    Some(expected_suffix.to_string()),
+                ))
+            }
+            Token::Ordinal { index }
+        });
 
     let op = choice((
         just("==").to(Token::EqualEqual),
@@ -132,7 +153,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         module_comments,
         doc_comments,
         comments,
-        choice((keyword, int, op, grouping, string))
+        choice((ordinal, keyword, int, op, grouping, string))
             .or(any().map(Token::Error).validate(|t, span, emit| {
                 emit(ParseError::expected_input_found(
                     span,

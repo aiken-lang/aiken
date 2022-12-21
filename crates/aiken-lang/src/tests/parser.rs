@@ -1436,3 +1436,106 @@ fn record_create_unlabeled() {
         }),
     )
 }
+
+#[test]
+fn parse_tuple() {
+    let code = indoc! {r#"
+            fn foo() {
+              let tuple = #(1, 2, 3, 4)
+              tuple.1st + tuple.2nd + tuple.3rd + tuple.4th
+            }
+        "#};
+
+    assert_definition(
+        code,
+        ast::UntypedDefinition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 13..86),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 13..38),
+                        value: Box::new(expr::UntypedExpr::Tuple {
+                            location: Span::new((), 25..38),
+                            elems: vec![
+                                expr::UntypedExpr::Int {
+                                    location: Span::new((), 27..28),
+                                    value: "1".to_string(),
+                                },
+                                expr::UntypedExpr::Int {
+                                    location: Span::new((), 30..31),
+                                    value: "2".to_string(),
+                                },
+                                expr::UntypedExpr::Int {
+                                    location: Span::new((), 33..34),
+                                    value: "3".to_string(),
+                                },
+                                expr::UntypedExpr::Int {
+                                    location: Span::new((), 36..37),
+                                    value: "4".to_string(),
+                                },
+                            ],
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..22),
+                            name: "tuple".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::BinOp {
+                        location: Span::new((), 41..86),
+                        name: ast::BinOp::AddInt,
+                        left: Box::new(expr::UntypedExpr::BinOp {
+                            location: Span::new((), 41..74),
+                            name: ast::BinOp::AddInt,
+                            left: Box::new(expr::UntypedExpr::BinOp {
+                                location: Span::new((), 41..62),
+                                name: ast::BinOp::AddInt,
+                                left: Box::new(expr::UntypedExpr::TupleIndex {
+                                    location: Span::new((), 41..50),
+                                    index: 0,
+                                    tuple: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new((), 41..46),
+                                        name: "tuple".to_string(),
+                                    }),
+                                }),
+                                right: Box::new(expr::UntypedExpr::TupleIndex {
+                                    location: Span::new((), 53..62),
+                                    index: 1,
+                                    tuple: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new((), 53..58),
+                                        name: "tuple".to_string(),
+                                    }),
+                                }),
+                            }),
+                            right: Box::new(expr::UntypedExpr::TupleIndex {
+                                location: Span::new((), 65..74),
+                                index: 2,
+                                tuple: Box::new(expr::UntypedExpr::Var {
+                                    location: Span::new((), 65..70),
+                                    name: "tuple".to_string(),
+                                }),
+                            }),
+                        }),
+                        right: Box::new(expr::UntypedExpr::TupleIndex {
+                            location: Span::new((), 77..86),
+                            index: 3,
+                            tuple: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new((), 77..82),
+                                name: "tuple".to_string(),
+                            }),
+                        }),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 87,
+        }),
+    )
+}

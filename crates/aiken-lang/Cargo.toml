@@ -15,6 +15,7 @@ chumsky = "0.8.0"
 indexmap = "1.9.1"
 itertools = "0.10.5"
 miette = "5.2.0"
+ordinal = "0.3.2"
 strum = "0.24.1"
 thiserror = "1.0.37"
 uplc = { path = '../uplc', version = "0.0.25" }
