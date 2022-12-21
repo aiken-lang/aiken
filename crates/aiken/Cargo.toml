@@ -24,7 +24,7 @@ pallas-traverse = "0.14.0"
 regex = "1.5.4"
 thiserror = "1.0.31"
 
-aiken-lang = { path = "../lang", version = "0.0.26" }
-aiken-lsp = { path = "../lsp", version = "0.0.26" }
-aiken-project = { path = '../project', version = "0.0.26" }
+aiken-lang = { path = "../aiken-lang", version = "0.0.26" }
+aiken-lsp = { path = "../aiken-lsp", version = "0.0.26" }
+aiken-project = { path = '../aiken-project', version = "0.0.26" }
 uplc = { path = '../uplc', version = "0.0.25" }
