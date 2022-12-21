@@ -18,7 +18,7 @@ pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
-pub const NIL: &str = "Nil";
+pub const UNIT: &str = "Unit";
 pub const RESULT: &str = "Result";
 pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
@@ -144,14 +144,14 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         },
     );
 
-    // Nil
+    // Unit
     prelude.values.insert(
-        NIL.to_string(),
+        UNIT.to_string(),
         ValueConstructor::public(
-            nil(),
+            unit(),
             ValueConstructorVariant::Record {
                 module: "".into(),
-                name: NIL.to_string(),
+                name: UNIT.to_string(),
                 arity: 0,
                 field_map: None::<FieldMap>,
                 location: Span::empty(),
@@ -161,11 +161,11 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     );
 
     prelude.types.insert(
-        NIL.to_string(),
+        UNIT.to_string(),
         TypeConstructor {
             location: Span::empty(),
             parameters: vec![],
-            tipo: nil(),
+            tipo: unit(),
             module: "".to_string(),
             public: true,
         },
@@ -477,11 +477,11 @@ pub fn string() -> Arc<Type> {
     })
 }
 
-pub fn nil() -> Arc<Type> {
+pub fn unit() -> Arc<Type> {
     Arc::new(Type::App {
         args: vec![],
         public: true,
-        name: NIL.to_string(),
+        name: UNIT.to_string(),
         module: "".to_string(),
     })
 }
