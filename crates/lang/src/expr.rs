@@ -7,7 +7,7 @@ use crate::{
         Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
         Pattern, RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
     },
-    builtins::{bool, nil},
+    builtins::{bool, unit},
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
@@ -183,7 +183,7 @@ impl TypedExpr {
             | Self::RecordAccess { tipo, .. }
             | Self::RecordUpdate { tipo, .. } => tipo.clone(),
             Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
-                expressions.last().map(TypedExpr::tipo).unwrap_or_else(nil)
+                expressions.last().map(TypedExpr::tipo).unwrap_or_else(unit)
             }
         }
     }

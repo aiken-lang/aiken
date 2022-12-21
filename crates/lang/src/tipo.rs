@@ -87,10 +87,10 @@ impl Type {
         }
     }
 
-    pub fn is_nil(&self) -> bool {
+    pub fn is_unit(&self) -> bool {
         match self {
-            Self::App { module, name, .. } if "Nil" == name && module.is_empty() => true,
-            Self::Var { tipo } => tipo.borrow().is_nil(),
+            Self::App { module, name, .. } if "Unit" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_unit(),
             _ => false,
         }
     }
@@ -400,9 +400,9 @@ impl TypeVar {
         matches!(self, Self::Unbound { .. })
     }
 
-    pub fn is_nil(&self) -> bool {
+    pub fn is_unit(&self) -> bool {
         match self {
-            Self::Link { tipo } => tipo.is_nil(),
+            Self::Link { tipo } => tipo.is_unit(),
             _ => false,
         }
     }
@@ -708,10 +708,10 @@ pub enum ModuleValueConstructor {
         /// point to some other module and function when this is an `external fn`.
         ///
         /// This function has module "themodule" and name "wibble"
-        ///     pub fn wibble() { Nil }
+        ///     pub fn wibble() { Unit }
         ///
         /// This function has module "other" and name "whoop"
-        ///     pub external fn wibble() -> Nil =
+        ///     pub external fn wibble() -> Unit =
         ///       "other" "whoop"
         ///
         module: String,

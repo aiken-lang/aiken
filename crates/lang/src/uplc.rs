@@ -2005,7 +2005,7 @@ impl<'a> CodeGenerator<'a> {
                         if constructor.tipo.is_bool() {
                             arg_stack
                                 .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
-                        } else if constructor.tipo.is_nil() {
+                        } else if constructor.tipo.is_unit() {
                             arg_stack.push(Term::Constant(UplcConstant::Unit));
                         } else {
                             let data_type = self.data_types.get(&data_type_key).unwrap();
@@ -2612,7 +2612,7 @@ impl<'a> CodeGenerator<'a> {
                             };
                             arg_stack.push(term);
                             return;
-                        } else if tipo.is_nil() {
+                        } else if tipo.is_unit() {
                             arg_stack.push(Term::Constant(UplcConstant::Bool(true)));
                             return;
                         }
@@ -2762,7 +2762,7 @@ impl<'a> CodeGenerator<'a> {
 
                             arg_stack.push(term);
                             return;
-                        } else if tipo.is_nil() {
+                        } else if tipo.is_unit() {
                             arg_stack.push(Term::Constant(UplcConstant::Bool(false)));
                             return;
                         }
@@ -3712,7 +3712,7 @@ impl<'a> CodeGenerator<'a> {
                 let term = Term::Apply {
                     function: Term::Apply {
                         function: Term::Builtin(DefaultFunction::Trace).force_wrap().into(),
-                        argument: Term::Constant(uplc::ast::Constant::String(
+                        argument: Term::Constant(UplcConstant::String(
                             text.unwrap_or_else(|| "aike::trace".to_string()),
                         ))
                         .into(),

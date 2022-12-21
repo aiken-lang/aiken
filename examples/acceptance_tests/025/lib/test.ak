@@ -2,5 +2,5 @@
 // Should != be false or true?
 
 test nil_1() {
-  Nil == Nil
+  Unit == Unit
 }
