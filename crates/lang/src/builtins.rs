@@ -374,8 +374,16 @@ pub fn from_default_function(
         DefaultFunction::ConstrData => None,
         DefaultFunction::MapData => None,
         DefaultFunction::ListData => None,
-        DefaultFunction::IData => None,
-        DefaultFunction::BData => None,
+        DefaultFunction::IData => {
+            let tipo = function(vec![int()], data());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::BData => {
+            let tipo = function(vec![byte_array()], data());
+
+            Some((tipo, 1))
+        }
         DefaultFunction::UnConstrData => None,
         DefaultFunction::UnMapData => None,
         DefaultFunction::UnListData => None,
@@ -384,7 +392,7 @@ pub fn from_default_function(
         DefaultFunction::EqualsData => {
             let tipo = function(vec![data(), data()], bool());
 
-            Some((tipo, 1))
+            Some((tipo, 2))
         }
         DefaultFunction::SerialiseData => {
             let tipo = function(vec![data()], byte_array());
