@@ -11,6 +11,7 @@ pub struct Config {
     #[serde(default)]
     pub description: String,
     pub repository: Option<Repository>,
+    #[serde(default)]
     pub dependencies: Vec<Dependency>,
 }
 
