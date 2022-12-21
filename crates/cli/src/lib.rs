@@ -1,9 +1,7 @@
-use std::collections::BTreeMap;
-use std::{env, path::PathBuf, process};
-
 use aiken_project::{pretty, script::EvalInfo, telemetry, Project};
 use miette::IntoDiagnostic;
 use owo_colors::OwoColorize;
+use std::{collections::BTreeMap, env, path::PathBuf, process};
 use uplc::machine::cost_model::ExBudget;
 
 pub mod cmd;

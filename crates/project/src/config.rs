@@ -1,10 +1,8 @@
-use std::{fmt::Display, fs, path::PathBuf};
-
+use crate::error::Error;
 use aiken_lang::ast::Span;
 use miette::NamedSource;
 use serde::{de::Visitor, Deserialize, Serialize};
-
-use crate::error::Error;
+use std::{fmt::Display, fs, path::PathBuf};
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -112,7 +110,8 @@ impl Display for Platform {
 impl Config {
     pub fn load(dir: PathBuf) -> Result<Config, Error> {
         let config_path = dir.join("aiken.toml");
-        let raw_config = fs::read_to_string(&config_path)?;
+        let raw_config = fs::read_to_string(&config_path)
+            .map_err(|_| Error::MissingManifest { path: dir.clone() })?;
 
         let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
             path: config_path.clone(),
