@@ -111,7 +111,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Some(field_map) => field_map.reorder(&mut args, location)?,
 
             // The fun has no field map and so we error if arguments have been labelled
-            None => assert_no_labeled_arguments(&args)?,
+            None => assert_no_labeled_arguments(&args)
+                .map(|(location, label)| Err(Error::unexpected_labeled_arg(location, label)))
+                .unwrap_or(Ok(()))?,
         }
 
         // Extract the type of the fun, ensuring it actually is a function
@@ -1350,7 +1352,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Some(field_map) => field_map.reorder(&mut args, location)?,
 
                     // The fun has no field map and so we error if arguments have been labelled
-                    None => assert_no_labeled_arguments(&args)?,
+                    None => assert_no_labeled_arguments(&args)
+                        .map(|(location, label)| {
+                            Err(Error::unexpected_labeled_arg(location, label))
+                        })
+                        .unwrap_or(Ok(()))?,
                 }
 
                 let (mut args_types, return_type) = self.environment.match_fun_type(

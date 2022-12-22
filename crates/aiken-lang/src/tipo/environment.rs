@@ -10,10 +10,9 @@ use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, Pattern,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
-        UnqualifiedImport, UntypedDefinition, UntypedPattern, Use, PIPE_VARIABLE,
+        UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
     },
     builtins::{self, function, generic_var, tuple, unbound_var},
-    format::Formatter,
     tipo::fields::FieldMap,
     IdGenerator,
 };
@@ -1584,57 +1583,13 @@ fn assert_unique_const_name<'a>(
     }
 }
 
-pub(super) fn assert_no_labeled_arguments_in_pattern<'a>(
-    name: &str,
-    args: &[CallArg<UntypedPattern>],
-    module: &'a Option<String>,
-    with_spread: bool,
-) -> Result<(), Error> {
+pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Span, String)> {
     for arg in args {
         if let Some(label) = &arg.label {
-            let fixed_args = args
-                .iter()
-                .map(|arg| CallArg {
-                    label: None,
-                    location: arg.location,
-                    value: arg.value.clone(),
-                })
-                .collect::<Vec<_>>();
-
-            let suggestion = Formatter::new()
-                .pattern_constructor(name, &fixed_args, module, with_spread, false)
-                .to_pretty_string(70);
-
-            let hint = format!(
-                r#"The constructor '{name}' does not have any labeled field. Its fields
-must therefore be matched only by position.
-
-Perhaps, try the following:
-
-╰─▶  {suggestion}"#
-            );
-
-            return Err(Error::UnexpectedLabeledArg {
-                location: arg.location,
-                label: label.to_string(),
-                hint: Some(hint),
-            });
+            return Some((arg.location, label.to_string()));
         }
     }
-    Ok(())
-}
-
-pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Result<(), Error> {
-    for arg in args {
-        if let Some(label) = &arg.label {
-            return Err(Error::UnexpectedLabeledArg {
-                location: arg.location,
-                label: label.to_string(),
-                hint: None,
-            });
-        }
-    }
-    Ok(())
+    None
 }
 
 pub(super) fn collapse_links(t: Arc<Type>) -> Arc<Type> {

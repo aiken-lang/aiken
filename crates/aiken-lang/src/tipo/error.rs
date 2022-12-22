@@ -5,7 +5,8 @@ use ordinal::Ordinal;
 use miette::Diagnostic;
 
 use crate::{
-    ast::{BinOp, Span, TodoKind},
+    ast::{BinOp, CallArg, Span, TodoKind, UntypedPattern},
+    format::Formatter,
     levenshtein,
 };
 
@@ -487,6 +488,51 @@ with the module's name.
                 location,
                 hint,
             }
+        }
+    }
+
+    pub fn unexpected_labeled_arg<'a>(location: Span, label: String) -> Self {
+        Self::UnexpectedLabeledArg {
+            location,
+            label,
+            hint: None,
+        }
+    }
+
+    pub fn unexpected_labeled_arg_in_pattern(
+        location: Span,
+        label: String,
+        name: &str,
+        args: &[CallArg<UntypedPattern>],
+        module: &Option<String>,
+        with_spread: bool,
+    ) -> Self {
+        let fixed_args = args
+            .iter()
+            .map(|arg| CallArg {
+                label: None,
+                location: arg.location,
+                value: arg.value.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        let suggestion = Formatter::new()
+            .pattern_constructor(name, &fixed_args, module, with_spread, false)
+            .to_pretty_string(70);
+
+        let hint = format!(
+            r#"The constructor '{name}' does not have any labeled field. Its fields
+must therefore be matched only by position.
+
+Perhaps, try the following:
+
+╰─▶  {suggestion}"#
+        );
+
+        Self::UnexpectedLabeledArg {
+            location,
+            label: label.to_string(),
+            hint: Some(hint),
         }
     }
 }
