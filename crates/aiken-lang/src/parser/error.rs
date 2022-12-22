@@ -26,7 +26,7 @@ impl ParseError {
     }
 
     pub fn invalid_tuple_index(span: Span, index: u32, suffix: Option<String>) -> Self {
-        let hint = suffix.map(|suffix| format!("{index}{suffix}"));
+        let hint = suffix.map(|suffix| format!("Did you mean '{index}{suffix}'?"));
         Self {
             kind: ErrorKind::InvalidTupleIndex { hint },
             span,
@@ -94,8 +94,12 @@ pub enum ErrorKind {
     },
     #[error("No end branch")]
     NoEndBranch,
-    #[error("Invalid tuple index{}", hint.as_ref().map(|s| format!("; did you mean '{s}' ?")).unwrap_or_default())]
-    InvalidTupleIndex { hint: Option<String> },
+    #[error("Invalid tuple index")]
+    #[diagnostic()]
+    InvalidTupleIndex {
+        #[help]
+        hint: Option<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
