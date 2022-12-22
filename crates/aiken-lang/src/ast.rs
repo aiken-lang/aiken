@@ -408,15 +408,7 @@ impl<A> Arg<A> {
 pub enum ArgName {
     Discard {
         name: String,
-        location: Span,
-    },
-    LabeledDiscard {
         label: String,
-        name: String,
-        location: Span,
-    },
-    Named {
-        name: String,
         location: Span,
     },
     NamedLabeled {
@@ -429,8 +421,15 @@ pub enum ArgName {
 impl ArgName {
     pub fn get_variable_name(&self) -> Option<&str> {
         match self {
-            ArgName::Discard { .. } | ArgName::LabeledDiscard { .. } => None,
-            ArgName::NamedLabeled { name, .. } | ArgName::Named { name, .. } => Some(name),
+            ArgName::Discard { .. } => None,
+            ArgName::NamedLabeled { name, .. } => Some(name),
+        }
+    }
+
+    pub fn get_label(&self) -> String {
+        match self {
+            ArgName::Discard { label, .. } => label.to_string(),
+            ArgName::NamedLabeled { label, .. } => label.to_string(),
         }
     }
 }

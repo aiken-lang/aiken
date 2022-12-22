@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use crate::{
     ast::{
-        Annotation, ArgName, CallArg, DataType, Definition, Function, ModuleConstant, Pattern,
+        Annotation, CallArg, DataType, Definition, Function, ModuleConstant, Pattern,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
         UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
     },
@@ -1012,11 +1012,7 @@ impl<'a> Environment<'a> {
                 let mut field_map = FieldMap::new(args.len());
 
                 for (i, arg) in args.iter().enumerate() {
-                    if let ArgName::NamedLabeled { label, .. }
-                    | ArgName::LabeledDiscard { label, .. } = &arg.arg_name
-                    {
-                        field_map.insert(label.clone(), i, location)?;
-                    }
+                    field_map.insert(arg.arg_name.get_label().clone(), i, location)?;
                 }
                 let field_map = field_map.into_option();
 

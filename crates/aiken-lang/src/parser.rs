@@ -496,13 +496,14 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
     choice((
         select! {Token::Name {name} => name}
             .then(select! {Token::DiscardName {name} => name})
-            .map_with_span(|(label, name), span| ast::ArgName::LabeledDiscard {
+            .map_with_span(|(label, name), span| ast::ArgName::Discard {
                 label,
                 name,
                 location: span,
             }),
         select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
             ast::ArgName::Discard {
+                label: name.clone(),
                 name,
                 location: span,
             }
@@ -536,13 +537,17 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
     choice((
         select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
             ast::ArgName::Discard {
+                label: name.clone(),
                 name,
                 location: span,
             }
         }),
-        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
-            name,
-            location: span,
+        select! {Token::Name {name} => name}.map_with_span(|name, span| {
+            ast::ArgName::NamedLabeled {
+                label: name.clone(),
+                name,
+                location: span,
+            }
         }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
@@ -1151,11 +1156,13 @@ pub fn expr_parser(
                         .map(|(index, a)| match a {
                             ParserArg::Arg(arg) => *arg,
                             ParserArg::Hole { location, label } => {
+                                let name = format!("{}__{}", CAPTURE_VARIABLE, index);
                                 holes.push(ast::Arg {
                                     location: Span::empty(),
                                     annotation: None,
-                                    arg_name: ast::ArgName::Named {
-                                        name: format!("{}__{}", CAPTURE_VARIABLE, index),
+                                    arg_name: ast::ArgName::NamedLabeled {
+                                        label: name.clone(),
+                                        name,
                                         location: Span::empty(),
                                     },
                                     tipo: (),

@@ -905,7 +905,8 @@ fn anonymous_function() {
                             location: Span::new((), 39..67),
                             is_capture: false,
                             arguments: vec![ast::Arg {
-                                arg_name: ast::ArgName::Named {
+                                arg_name: ast::ArgName::NamedLabeled {
+                                    label: "a".to_string(),
                                     name: "a".to_string(),
                                     location: Span::new((), 43..44),
                                 },
@@ -1068,7 +1069,8 @@ fn call() {
                             location: Span::new((), 61..82),
                             is_capture: true,
                             arguments: vec![ast::Arg {
-                                arg_name: ast::ArgName::Named {
+                                arg_name: ast::ArgName::NamedLabeled {
+                                    label: "_capture__0".to_string(),
                                     name: "_capture__0".to_string(),
                                     location: Span::new((), 0..0),
                                 },
@@ -1093,7 +1095,8 @@ fn call() {
                                             location: Span::new((), 65..81),
                                             is_capture: false,
                                             arguments: vec![ast::Arg {
-                                                arg_name: ast::ArgName::Named {
+                                                arg_name: ast::ArgName::NamedLabeled {
+                                                    label: "y".to_string(),
                                                     name: "y".to_string(),
                                                     location: Span::new((), 69..70),
                                                 },
