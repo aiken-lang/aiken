@@ -87,10 +87,10 @@ impl Type {
         }
     }
 
-    pub fn is_unit(&self) -> bool {
+    pub fn is_void(&self) -> bool {
         match self {
-            Self::App { module, name, .. } if "Unit" == name && module.is_empty() => true,
-            Self::Var { tipo } => tipo.borrow().is_unit(),
+            Self::App { module, name, .. } if "Void" == name && module.is_empty() => true,
+            Self::Var { tipo } => tipo.borrow().is_void(),
             _ => false,
         }
     }
@@ -400,9 +400,9 @@ impl TypeVar {
         matches!(self, Self::Unbound { .. })
     }
 
-    pub fn is_unit(&self) -> bool {
+    pub fn is_void(&self) -> bool {
         match self {
-            Self::Link { tipo } => tipo.is_unit(),
+            Self::Link { tipo } => tipo.is_void(),
             _ => false,
         }
     }
@@ -708,10 +708,10 @@ pub enum ModuleValueConstructor {
         /// point to some other module and function when this is an `external fn`.
         ///
         /// This function has module "themodule" and name "wibble"
-        ///     pub fn wibble() { Unit }
+        ///     pub fn wibble() { Void }
         ///
         /// This function has module "other" and name "whoop"
-        ///     pub external fn wibble() -> Unit =
+        ///     pub external fn wibble() -> Void =
         ///       "other" "whoop"
         ///
         module: String,

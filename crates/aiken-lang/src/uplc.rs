@@ -2008,7 +2008,7 @@ impl<'a> CodeGenerator<'a> {
                         if constructor.tipo.is_bool() {
                             arg_stack
                                 .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
-                        } else if constructor.tipo.is_unit() {
+                        } else if constructor.tipo.is_void() {
                             arg_stack.push(Term::Constant(UplcConstant::Unit));
                         } else {
                             let data_type = self.data_types.get(&data_type_key).unwrap();
@@ -2615,7 +2615,7 @@ impl<'a> CodeGenerator<'a> {
                             };
                             arg_stack.push(term);
                             return;
-                        } else if tipo.is_unit() {
+                        } else if tipo.is_void() {
                             arg_stack.push(Term::Constant(UplcConstant::Bool(true)));
                             return;
                         }
@@ -2760,7 +2760,7 @@ impl<'a> CodeGenerator<'a> {
 
                             arg_stack.push(term);
                             return;
-                        } else if tipo.is_unit() {
+                        } else if tipo.is_void() {
                             arg_stack.push(Term::Constant(UplcConstant::Bool(false)));
                             return;
                         }

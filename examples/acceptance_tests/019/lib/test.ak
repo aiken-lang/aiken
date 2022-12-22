@@ -10,5 +10,5 @@ test map_1() {
 }
 
 test map_2() {
-  map(None, fn(_) { Unit }) == None
+  map(None, fn(_) { Void }) == None
 }
