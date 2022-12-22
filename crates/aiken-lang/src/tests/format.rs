@@ -5,14 +5,15 @@ use pretty_assertions::assert_eq;
 fn assert_fmt(src: &str, expected: &str) {
     let (module, extra) = parser::module(src, ModuleKind::Lib).unwrap();
     let mut out = String::new();
-    format::pretty(&mut out, module.clone(), extra.clone(), src);
+    format::pretty(&mut out, module, extra, src);
 
     // Output is what we expect
     assert_eq!(out, expected);
 
     // Formatting is idempotent
+    let (module2, extra2) = parser::module(&out, ModuleKind::Lib).unwrap();
     let mut out2 = String::new();
-    format::pretty(&mut out2, module, extra, &out);
+    format::pretty(&mut out2, module2, extra2, &out);
     assert_eq!(out, out2);
 }
 
@@ -167,6 +168,31 @@ fn test_format_nested_when() {
               }
           }
         }
+    "#};
+
+    assert_fmt(src, expected)
+}
+
+#[test]
+fn test_format_imports() {
+    let src = indoc! {r#"
+        use aiken/list
+        // foo
+        use aiken/bytearray
+        use aiken/transaction/certificate
+        // bar
+        use aiken/transaction
+        use aiken/transaction/value
+    "#};
+
+    let expected = indoc! {r#"
+        // foo
+        use aiken/bytearray
+        use aiken/list
+        // bar
+        use aiken/transaction
+        use aiken/transaction/certificate
+        use aiken/transaction/value
     "#};
 
     assert_fmt(src, expected)

@@ -133,14 +133,14 @@ impl<'comments> Formatter<'comments> {
             let start = def.location().start;
 
             match def {
-                Definition::Use { .. } => {
+                Definition::Use(import) => {
                     has_imports = true;
 
                     let comments = self.pop_comments(start);
 
                     let def = self.definition(def);
 
-                    imports.push(commented(def, comments))
+                    imports.push((import, commented(def, comments)))
                 }
 
                 _other => {
@@ -155,7 +155,15 @@ impl<'comments> Formatter<'comments> {
             }
         }
 
-        let imports = join(imports.into_iter(), line());
+        let imports = join(
+            imports
+                .into_iter()
+                .sorted_by(|(import_a, _), (import_b, _)| {
+                    Ord::cmp(&import_a.module, &import_b.module)
+                })
+                .map(|(_, doc)| doc),
+            line(),
+        );
 
         let declarations = join(declarations.into_iter(), lines(2));
 
@@ -253,36 +261,7 @@ impl<'comments> Formatter<'comments> {
                 ..
             }) => self.data_type(*public, *opaque, name, parameters, constructors, location),
 
-            Definition::Use(Use {
-                module,
-                as_name,
-                unqualified,
-                ..
-            }) => "use "
-                .to_doc()
-                .append(Document::String(module.join("/")))
-                .append(if unqualified.is_empty() {
-                    nil()
-                } else {
-                    let unqualified = Itertools::intersperse(
-                        unqualified
-                            .iter()
-                            .sorted_by(|a, b| a.name.cmp(&b.name))
-                            .map(|e| e.to_doc()),
-                        flex_break(",", ", "),
-                    );
-                    let unqualified = break_("", "")
-                        .append(concat(unqualified))
-                        .nest(INDENT)
-                        .append(break_(",", ""))
-                        .group();
-                    ".{".to_doc().append(unqualified).append("}")
-                })
-                .append(if let Some(name) = as_name {
-                    docvec![" as ", name]
-                } else {
-                    nil()
-                }),
+            Definition::Use(import) => self.import(import),
 
             Definition::ModuleConstant(ModuleConstant {
                 public,
@@ -299,6 +278,42 @@ impl<'comments> Formatter<'comments> {
                 head.append(" = ").append(self.const_expr(value))
             }
         }
+    }
+
+    fn import<'a>(
+        &mut self,
+        Use {
+            module,
+            as_name,
+            unqualified,
+            ..
+        }: &'a Use<()>,
+    ) -> Document<'a> {
+        "use "
+            .to_doc()
+            .append(Document::String(module.join("/")))
+            .append(if unqualified.is_empty() {
+                nil()
+            } else {
+                let unqualified = Itertools::intersperse(
+                    unqualified
+                        .iter()
+                        .sorted_by(|a, b| a.name.cmp(&b.name))
+                        .map(|e| e.to_doc()),
+                    flex_break(",", ", "),
+                );
+                let unqualified = break_("", "")
+                    .append(concat(unqualified))
+                    .nest(INDENT)
+                    .append(break_(",", ""))
+                    .group();
+                ".{".to_doc().append(unqualified).append("}")
+            })
+            .append(if let Some(name) = as_name {
+                docvec![" as ", name]
+            } else {
+                nil()
+            })
     }
 
     fn const_expr<'a, A, B>(&mut self, value: &'a Constant<A, B>) -> Document<'a> {
