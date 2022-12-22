@@ -1585,7 +1585,11 @@ impl<'a> Documentable<'a> for &'a ArgName {
             ArgName::Named { name, .. } | ArgName::Discard { name, .. } => name.to_doc(),
             ArgName::LabeledDiscard { label, name, .. }
             | ArgName::NamedLabeled { label, name, .. } => {
-                docvec![label, " ", name]
+                if label == name {
+                    name.to_doc()
+                } else {
+                    docvec![label, " ", name]
+                }
             }
         }
     }
