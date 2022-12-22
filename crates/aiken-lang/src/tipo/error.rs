@@ -14,7 +14,7 @@ use super::Type;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
-    #[error("Duplicate argument\n\n{label}\n")]
+    #[error("Duplicate argument '{label}'\n")]
     #[diagnostic(help("Try renaming it"))]
     DuplicateArgument {
         #[label]
@@ -22,7 +22,7 @@ pub enum Error {
         label: String,
     },
 
-    #[error("Duplicate const\n\n{name}\n")]
+    #[error("Duplicate const '{name}'\n")]
     #[diagnostic(help("Try renaming it"))]
     DuplicateConstName {
         #[label]
@@ -32,7 +32,7 @@ pub enum Error {
         name: String,
     },
 
-    #[error("Duplicate import\n\n{name}\n")]
+    #[error("Duplicate import '{name}'\n")]
     #[diagnostic(help("Try renaming it"))]
     DuplicateImport {
         #[label]
@@ -42,7 +42,7 @@ pub enum Error {
         name: String,
     },
 
-    #[error("Duplicate field\n\n{label}\n")]
+    #[error("Duplicate field '{label}'\n")]
     #[diagnostic(help("Try renaming it"))]
     DuplicateField {
         #[label]
@@ -50,7 +50,7 @@ pub enum Error {
         label: String,
     },
 
-    #[error("Duplicate name\n\n{name}\n")]
+    #[error("Duplicate name '{name}'\n")]
     #[diagnostic(help("Try renaming it"))]
     DuplicateName {
         #[label]
@@ -60,7 +60,7 @@ pub enum Error {
         name: String,
     },
 
-    #[error("Duplicate type name\n\n{name}\n")]
+    #[error("Duplicate type name '{name}'\n")]
     #[diagnostic(help("Try renaming it"))]
     DuplicateTypeName {
         #[label]
@@ -103,17 +103,17 @@ pub enum Error {
         unmatched: Vec<String>,
     },
 
-    #[error("Not a function")]
+    #[error("Not a function\n")]
     NotFn {
         #[label]
         location: Span,
         tipo: Arc<Type>,
     },
 
-    #[error("Module\n\n{name}\n\ncontains keyword\n\n{keyword}\n")]
+    #[error("Module '{name}' contains the keyword '{keyword}', which is forbidden\n")]
     KeywordInModuleName { name: String, keyword: String },
 
-    #[error("Clause guard {name} is not local\n")]
+    #[error("Clause guard '{name}' is not local\n")]
     NonLocalClauseGuardVariable {
         #[label]
         location: Span,
@@ -171,7 +171,7 @@ pub enum Error {
         supplied: Vec<String>,
     },
 
-    #[error("Unknown module\n\n{name}\n")]
+    #[error("Unknown module '{name}'\n")]
     UnknownModule {
         #[label]
         location: Span,
@@ -190,7 +190,7 @@ pub enum Error {
         hint: Option<String>,
     },
 
-    #[error("Unknown module value\n\n{name}\n")]
+    #[error("Unknown module value '{name}'\n")]
     UnknownModuleValue {
         #[label]
         location: Span,
@@ -199,7 +199,7 @@ pub enum Error {
         value_constructors: Vec<String>,
     },
 
-    #[error("Unknown type\n\n{name}\n\nin module\n\n{module_name}\n")]
+    #[error("Unknown type '{name}' in module '{module_name}'\n")]
     UnknownModuleType {
         #[label]
         location: Span,
@@ -218,7 +218,7 @@ pub enum Error {
         situation: Option<UnknownRecordFieldSituation>,
     },
 
-    #[error("Unknown type\n\n{name}\n")]
+    #[error("Unknown type '{name}'\n")]
     UnknownType {
         #[label]
         location: Span,
