@@ -1089,6 +1089,7 @@ pub fn expr_parser(
         enum Chain {
             Call(Vec<ParserArg>, Span),
             FieldAccess(String, Span),
+            TupleIndex(usize, Span),
         }
 
         let field_access_parser = just(Token::Dot)
@@ -1096,6 +1097,19 @@ pub fn expr_parser(
                 Token::Name { name } => name,
             })
             .map_with_span(Chain::FieldAccess);
+
+        let tuple_index_parser = just(Token::Dot)
+            .ignore_then(select! {
+                Token::Ordinal { index } => index,
+            })
+            .validate(|index, span, emit| {
+                if index < 1 {
+                    emit(ParseError::invalid_tuple_index(span, index, None));
+                    Chain::TupleIndex(0, span)
+                } else {
+                    Chain::TupleIndex(index as usize - 1, span)
+                }
+            });
 
         let call_parser = choice((
             select! { Token::Name { name } => name }
@@ -1123,11 +1137,11 @@ pub fn expr_parser(
         .delimited_by(just(Token::LeftParen), just(Token::RightParen))
         .map_with_span(Chain::Call);
 
-        let chain = choice((field_access_parser, call_parser));
+        let chain = choice((tuple_index_parser, field_access_parser, call_parser));
 
         let chained = expr_unit_parser
             .then(chain.repeated())
-            .foldl(|e, chain| match chain {
+            .foldl(|expr, chain| match chain {
                 Chain::Call(args, span) => {
                     let mut holes = Vec::new();
 
@@ -1161,7 +1175,7 @@ pub fn expr_parser(
 
                     let call = expr::UntypedExpr::Call {
                         location: span,
-                        fun: Box::new(e),
+                        fun: Box::new(expr),
                         arguments: args,
                     };
 
@@ -1179,9 +1193,15 @@ pub fn expr_parser(
                 }
 
                 Chain::FieldAccess(label, span) => expr::UntypedExpr::FieldAccess {
-                    location: e.location().union(span),
+                    location: expr.location().union(span),
                     label,
-                    container: Box::new(e),
+                    container: Box::new(expr),
+                },
+
+                Chain::TupleIndex(index, span) => expr::UntypedExpr::TupleIndex {
+                    location: expr.location().union(span),
+                    index,
+                    tuple: Box::new(expr),
                 },
             });
 

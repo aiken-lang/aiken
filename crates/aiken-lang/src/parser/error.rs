@@ -24,6 +24,17 @@ impl ParseError {
         }
         self
     }
+
+    pub fn invalid_tuple_index(span: Span, index: u32, suffix: Option<String>) -> Self {
+        let hint = suffix.map(|suffix| format!("{index}{suffix}"));
+        Self {
+            kind: ErrorKind::InvalidTupleIndex { hint },
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: None,
+        }
+    }
 }
 
 impl PartialEq for ParseError {
@@ -69,20 +80,22 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
 
 #[derive(Debug, PartialEq, Eq, Diagnostic, thiserror::Error)]
 pub enum ErrorKind {
-    #[error("unexpected end")]
+    #[error("Unexpected end")]
     UnexpectedEnd,
     #[error("{0}")]
     #[diagnostic(help("{}", .0.help().unwrap_or_else(|| Box::new(""))))]
     Unexpected(Pattern),
-    #[error("unclosed {start}")]
+    #[error("Unclosed {start}")]
     Unclosed {
         start: Pattern,
         #[label]
         before_span: Span,
         before: Option<Pattern>,
     },
-    #[error("no end branch")]
+    #[error("No end branch")]
     NoEndBranch,
+    #[error("Invalid tuple index{}", hint.as_ref().map(|s| format!("; did you mean '{s}' ?")).unwrap_or_default())]
+    InvalidTupleIndex { hint: Option<String> },
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]

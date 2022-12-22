@@ -532,6 +532,10 @@ impl<'a> CodeGenerator<'a> {
 
                 self.build_ir(then, ir_stack, scope);
             }
+
+            TypedExpr::TupleIndex { .. } => {
+                todo!("Tuple indexing not implementing yet");
+            }
         }
     }
 

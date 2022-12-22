@@ -321,12 +321,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } => self.infer_field_access(*container, label, location),
 
-            // UntypedExpr::TupleIndex {
-            //     location,
-            //     index,
-            //     tuple,
-            //     ..
-            // } => self.infer_tuple_index(*tuple, index, location),
+            UntypedExpr::TupleIndex {
+                location,
+                index,
+                tuple,
+                ..
+            } => self.infer_tuple_index(*tuple, index, location),
+
             UntypedExpr::ByteArray { location, bytes } => {
                 Ok(self.infer_byte_array(bytes, location))
             }
@@ -1698,6 +1699,38 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             elems: typed_elems,
             tipo,
+        })
+    }
+
+    fn infer_tuple_index(
+        &mut self,
+        tuple: UntypedExpr,
+        index: usize,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let tuple = self.infer(tuple)?;
+
+        let tipo = match *tuple.tipo() {
+            Type::Tuple { ref elems, .. } => {
+                let size = elems.len();
+                if index >= size {
+                    Err(Error::TupleIndexOutOfBound {
+                        location,
+                        index,
+                        size,
+                    })
+                } else {
+                    Ok(elems[index].clone())
+                }
+            }
+            _ => Err(Error::NotATuple { location }),
+        }?;
+
+        Ok(TypedExpr::TupleIndex {
+            location,
+            tipo,
+            index,
+            tuple: Box::new(tuple),
         })
     }
 
