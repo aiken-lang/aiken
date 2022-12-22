@@ -514,9 +514,12 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
                 name,
                 location: span,
             }),
-        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
-            name,
-            location: span,
+        select! {Token::Name {name} => name}.map_with_span(|name, span| {
+            ast::ArgName::NamedLabeled {
+                label: name.clone(),
+                name,
+                location: span,
+            }
         }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
