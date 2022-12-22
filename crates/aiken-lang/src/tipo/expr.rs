@@ -1544,7 +1544,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
             for (arg, t) in args.iter().zip(args.iter().map(|arg| arg.tipo.clone())) {
                 match &arg.arg_name {
-                    ArgName::NamedLabeled { name, .. } => {
+                    ArgName::Named { name, .. } => {
                         body_typer.environment.insert_variable(
                             name.to_string(),
                             ValueConstructorVariant::LocalVariable {
@@ -1559,7 +1559,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             arg.location,
                         );
                     }
-                    ArgName::Discard { .. } => (),
+                    ArgName::Discarded { .. } => (),
                 };
             }
 

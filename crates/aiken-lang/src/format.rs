@@ -1330,8 +1330,8 @@ impl<'comments> Formatter<'comments> {
 
     fn docs_fn_arg_name<'a>(&mut self, arg_name: &'a ArgName) -> Document<'a> {
         match arg_name {
-            ArgName::Discard { .. } => "".to_doc(),
-            ArgName::NamedLabeled { label, .. } => label.to_doc().append(": "),
+            ArgName::Discarded { .. } => "".to_doc(),
+            ArgName::Named { label, .. } => label.to_doc().append(": "),
         }
     }
 
@@ -1589,8 +1589,7 @@ impl<'comments> Formatter<'comments> {
 impl<'a> Documentable<'a> for &'a ArgName {
     fn to_doc(self) -> Document<'a> {
         match self {
-            ArgName::Discard { name, .. } => name.to_doc(),
-            ArgName::NamedLabeled { label, name, .. } => {
+            ArgName::Discarded { label, name, .. } | ArgName::Named { label, name, .. } => {
                 if label == name {
                     name.to_doc()
                 } else {

@@ -496,13 +496,13 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
     choice((
         select! {Token::Name {name} => name}
             .then(select! {Token::DiscardName {name} => name})
-            .map_with_span(|(label, name), span| ast::ArgName::Discard {
+            .map_with_span(|(label, name), span| ast::ArgName::Discarded {
                 label,
                 name,
                 location: span,
             }),
         select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
-            ast::ArgName::Discard {
+            ast::ArgName::Discarded {
                 label: name.clone(),
                 name,
                 location: span,
@@ -510,17 +510,15 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
         }),
         select! {Token::Name {name} => name}
             .then(select! {Token::Name {name} => name})
-            .map_with_span(|(label, name), span| ast::ArgName::NamedLabeled {
+            .map_with_span(|(label, name), span| ast::ArgName::Named {
                 label,
                 name,
                 location: span,
             }),
-        select! {Token::Name {name} => name}.map_with_span(|name, span| {
-            ast::ArgName::NamedLabeled {
-                label: name.clone(),
-                name,
-                location: span,
-            }
+        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
+            label: name.clone(),
+            name,
+            location: span,
         }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
@@ -536,18 +534,16 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
     // TODO: return a better error when a label is provided `UnexpectedLabel`
     choice((
         select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
-            ast::ArgName::Discard {
+            ast::ArgName::Discarded {
                 label: name.clone(),
                 name,
                 location: span,
             }
         }),
-        select! {Token::Name {name} => name}.map_with_span(|name, span| {
-            ast::ArgName::NamedLabeled {
-                label: name.clone(),
-                name,
-                location: span,
-            }
+        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
+            label: name.clone(),
+            name,
+            location: span,
         }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
@@ -1160,7 +1156,7 @@ pub fn expr_parser(
                                 holes.push(ast::Arg {
                                     location: Span::empty(),
                                     annotation: None,
-                                    arg_name: ast::ArgName::NamedLabeled {
+                                    arg_name: ast::ArgName::Named {
                                         label: name.clone(),
                                         name,
                                         location: Span::empty(),

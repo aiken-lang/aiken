@@ -320,7 +320,7 @@ fn plus_binop() {
         code,
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![ast::Arg {
-                arg_name: ast::ArgName::NamedLabeled {
+                arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
                     name: "a".to_string(),
                     location: Span::new((), 15..16),
@@ -371,7 +371,7 @@ fn pipeline() {
         code,
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![ast::Arg {
-                arg_name: ast::ArgName::NamedLabeled {
+                arg_name: ast::ArgName::Named {
                     name: "a".to_string(),
                     label: "thing".to_string(),
                     location: Span::new((), 13..20),
@@ -538,7 +538,7 @@ fn let_bindings() {
         code,
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![ast::Arg {
-                arg_name: ast::ArgName::NamedLabeled {
+                arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
                     name: "a".to_string(),
                     location: Span::new((), 11..12),
@@ -663,7 +663,7 @@ fn block() {
         code,
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![ast::Arg {
-                arg_name: ast::ArgName::NamedLabeled {
+                arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
                     name: "a".to_string(),
                     location: Span::new((), 12..13),
@@ -757,7 +757,7 @@ fn when() {
         code,
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![ast::Arg {
-                arg_name: ast::ArgName::NamedLabeled {
+                arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
                     name: "a".to_string(),
                     location: Span::new((), 12..13),
@@ -905,7 +905,7 @@ fn anonymous_function() {
                             location: Span::new((), 39..67),
                             is_capture: false,
                             arguments: vec![ast::Arg {
-                                arg_name: ast::ArgName::NamedLabeled {
+                                arg_name: ast::ArgName::Named {
                                     label: "a".to_string(),
                                     name: "a".to_string(),
                                     location: Span::new((), 43..44),
@@ -987,7 +987,7 @@ fn field_access() {
         code,
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![ast::Arg {
-                arg_name: ast::ArgName::NamedLabeled {
+                arg_name: ast::ArgName::Named {
                     label: "user".to_string(),
                     name: "user".to_string(),
                     location: Span::new((), 8..12),
@@ -1069,7 +1069,7 @@ fn call() {
                             location: Span::new((), 61..82),
                             is_capture: true,
                             arguments: vec![ast::Arg {
-                                arg_name: ast::ArgName::NamedLabeled {
+                                arg_name: ast::ArgName::Named {
                                     label: "_capture__0".to_string(),
                                     name: "_capture__0".to_string(),
                                     location: Span::new((), 0..0),
@@ -1095,7 +1095,7 @@ fn call() {
                                             location: Span::new((), 65..81),
                                             is_capture: false,
                                             arguments: vec![ast::Arg {
-                                                arg_name: ast::ArgName::NamedLabeled {
+                                                arg_name: ast::ArgName::Named {
                                                     label: "y".to_string(),
                                                     name: "y".to_string(),
                                                     location: Span::new((), 69..70),
@@ -1194,7 +1194,7 @@ fn record_update() {
         ast::UntypedDefinition::Fn(Function {
             arguments: vec![
                 ast::Arg {
-                    arg_name: ast::ArgName::NamedLabeled {
+                    arg_name: ast::ArgName::Named {
                         label: "user".to_string(),
                         name: "user".to_string(),
                         location: Span::new((), 15..19),
@@ -1209,7 +1209,7 @@ fn record_update() {
                     tipo: (),
                 },
                 ast::Arg {
-                    arg_name: ast::ArgName::NamedLabeled {
+                    arg_name: ast::ArgName::Named {
                         label: "name".to_string(),
                         name: "name".to_string(),
                         location: Span::new((), 27..31),

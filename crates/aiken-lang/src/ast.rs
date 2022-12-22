@@ -406,12 +406,12 @@ impl<A> Arg<A> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgName {
-    Discard {
+    Discarded {
         name: String,
         label: String,
         location: Span,
     },
-    NamedLabeled {
+    Named {
         name: String,
         label: String,
         location: Span,
@@ -421,15 +421,15 @@ pub enum ArgName {
 impl ArgName {
     pub fn get_variable_name(&self) -> Option<&str> {
         match self {
-            ArgName::Discard { .. } => None,
-            ArgName::NamedLabeled { name, .. } => Some(name),
+            ArgName::Discarded { .. } => None,
+            ArgName::Named { name, .. } => Some(name),
         }
     }
 
     pub fn get_label(&self) -> String {
         match self {
-            ArgName::Discard { label, .. } => label.to_string(),
-            ArgName::NamedLabeled { label, .. } => label.to_string(),
+            ArgName::Discarded { label, .. } => label.to_string(),
+            ArgName::Named { label, .. } => label.to_string(),
         }
     }
 }

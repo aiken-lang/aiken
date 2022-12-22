@@ -1851,7 +1851,7 @@ impl<'a> CodeGenerator<'a> {
 
                                 for arg in function.arguments.iter() {
                                     match &arg.arg_name {
-                                        ArgName::NamedLabeled { name, .. } => {
+                                        ArgName::Named { name, .. } => {
                                             args.push(name.clone());
                                         }
                                         _ => {
