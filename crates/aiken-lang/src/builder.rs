@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -46,12 +50,114 @@ pub struct FunctionAccessKey {
 }
 
 #[derive(Clone, Debug)]
-pub struct ClauseProperties {
-    pub clause_var_name: String,
-    pub needs_constr_var: bool,
-    pub is_complex_clause: bool,
-    pub current_index: usize,
-    pub original_subject_name: String,
+pub enum ClauseProperties {
+    ConstrClause {
+        clause_var_name: String,
+        needs_constr_var: bool,
+        is_complex_clause: bool,
+        original_subject_name: String,
+    },
+    ListClause {
+        clause_var_name: String,
+        needs_constr_var: bool,
+        is_complex_clause: bool,
+        original_subject_name: String,
+        current_index: usize,
+    },
+    TupleClause {
+        clause_var_name: String,
+        needs_constr_var: bool,
+        is_complex_clause: bool,
+        original_subject_name: String,
+        defined_tuple_indices: HashSet<(u64, String)>,
+    },
+}
+
+impl ClauseProperties {
+    pub fn init(t: &Arc<Type>, constr_var: String, subject_name: String) -> Self {
+        if t.is_list() {
+            ClauseProperties::ListClause {
+                clause_var_name: constr_var,
+                needs_constr_var: false,
+                is_complex_clause: false,
+                original_subject_name: subject_name,
+                current_index: 0,
+            }
+        } else if t.is_tuple() {
+            ClauseProperties::TupleClause {
+                clause_var_name: constr_var,
+                needs_constr_var: false,
+                is_complex_clause: false,
+                original_subject_name: subject_name,
+                defined_tuple_indices: HashSet::new(),
+            }
+        } else {
+            ClauseProperties::ConstrClause {
+                clause_var_name: constr_var,
+                needs_constr_var: false,
+                is_complex_clause: false,
+                original_subject_name: subject_name,
+            }
+        }
+    }
+
+    pub fn is_complex_clause(&mut self) -> &mut bool {
+        match self {
+            ClauseProperties::ConstrClause {
+                is_complex_clause, ..
+            }
+            | ClauseProperties::ListClause {
+                is_complex_clause, ..
+            }
+            | ClauseProperties::TupleClause {
+                is_complex_clause, ..
+            } => is_complex_clause,
+        }
+    }
+    pub fn needs_constr_var(&mut self) -> &mut bool {
+        match self {
+            ClauseProperties::ConstrClause {
+                needs_constr_var, ..
+            }
+            | ClauseProperties::ListClause {
+                needs_constr_var, ..
+            }
+            | ClauseProperties::TupleClause {
+                needs_constr_var, ..
+            } => needs_constr_var,
+        }
+    }
+
+    pub fn clause_var_name(&mut self) -> &mut String {
+        match self {
+            ClauseProperties::ConstrClause {
+                clause_var_name, ..
+            }
+            | ClauseProperties::ListClause {
+                clause_var_name, ..
+            }
+            | ClauseProperties::TupleClause {
+                clause_var_name, ..
+            } => clause_var_name,
+        }
+    }
+
+    pub fn original_subject_name(&mut self) -> &mut String {
+        match self {
+            ClauseProperties::ConstrClause {
+                original_subject_name,
+                ..
+            }
+            | ClauseProperties::ListClause {
+                original_subject_name,
+                ..
+            }
+            | ClauseProperties::TupleClause {
+                original_subject_name,
+                ..
+            } => original_subject_name,
+        }
+    }
 }
 
 pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
@@ -639,19 +745,18 @@ pub fn get_common_ancestor(scope: &[u64], scope_prev: &[u64]) -> Vec<u64> {
 
 pub fn check_when_pattern_needs(
     pattern: &Pattern<PatternConstructor, Arc<Type>>,
-    needs_access_to_constr_var: &mut bool,
-    needs_clause_guard: &mut bool,
+    clause_properties: &mut ClauseProperties,
 ) {
     match pattern {
         Pattern::Var { .. } => {
-            *needs_access_to_constr_var = true;
+            *clause_properties.needs_constr_var() = true;
         }
         Pattern::List { .. }
         | Pattern::Constructor { .. }
         | Pattern::Tuple { .. }
         | Pattern::Int { .. } => {
-            *needs_access_to_constr_var = true;
-            *needs_clause_guard = true;
+            *clause_properties.needs_constr_var() = true;
+            *clause_properties.is_complex_clause() = true;
         }
         Pattern::Discard { .. } => {}
 
@@ -1115,6 +1220,7 @@ pub fn monomorphize(
                 tipo,
                 scope,
                 subject_name,
+                invert,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1124,6 +1230,7 @@ pub fn monomorphize(
                         scope,
                         subject_name,
                         tipo,
+                        invert,
                     };
                     needs_variant = false;
                 }
