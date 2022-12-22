@@ -317,19 +317,7 @@ impl<'a> Environment<'a> {
     ) -> Result<&ValueConstructor, Error> {
         match module {
             None => self.scope.get(name).ok_or_else(|| {
-                if name.chars().into_iter().next().unwrap().is_uppercase() {
-                    Error::UnknownTypeConstructor {
-                        name: name.to_string(),
-                        variables: self.local_value_names(),
-                        location,
-                    }
-                } else {
-                    Error::UnknownVariable {
-                        name: name.to_string(),
-                        variables: self.local_value_names(),
-                        location,
-                    }
-                }
+                Error::unknown_variable_or_type(location, name, self.local_value_names())
             }),
 
             Some(m) => {

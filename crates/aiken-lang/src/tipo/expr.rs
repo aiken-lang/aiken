@@ -1781,10 +1781,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     self.environment
                         .get_variable(name)
                         .cloned()
-                        .ok_or_else(|| Error::UnknownVariable {
-                            location: *location,
-                            name: name.to_string(),
-                            variables: self.environment.local_value_names(),
+                        .ok_or_else(|| {
+                            Error::unknown_variable_or_type(
+                                *location,
+                                name,
+                                self.environment.local_value_names(),
+                            )
                         })?;
 
                 // Note whether we are using an ungeneralised function so that we can

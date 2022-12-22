@@ -225,46 +225,24 @@ pub enum Error {
         types: Vec<String>,
     },
 
-    #[error("Unknown variable\n\n    {name}\n")]
+    #[error("Unknown variable '{name}'\n")]
+    #[diagnostic()]
     UnknownVariable {
         #[label]
         location: Span,
         name: String,
-        variables: Vec<String>,
+        #[help]
+        hint: String,
     },
 
     #[error("Unknown data-type constructor '{name}'\n")]
-    #[diagnostic(help(
-        r#"Did you forget to import it?
-
-Data-type constructors are not automatically imported, even if their type
-is imported. So, if a module `aiken/pet` defines the following type:
-
- ┍━ aiken/pet.ak ━━━━━━━━
- │ pub type Pet {{
- │   Cat
- │   Dog
- │ }}
-
-You must import its constructors explicitly to use them, or prefix them
-with the module's name.
-
- ┍━ foo.ak ━━━━━━━━
- │ use aiken/pet.{{Pet, Dog}}
- │
- │ fn foo(pet : Pet) {{
- │   when pet is {{
- │     pet.Cat -> // ...
- │     Dog -> // ...
- │   }}
- │ }}
-"#
-    ))]
+    #[diagnostic()]
     UnknownTypeConstructor {
         #[label]
         location: Span,
         name: String,
-        variables: Vec<String>,
+        #[help]
+        hint: String,
     },
 
     #[error("Unnecessary spread operator\n")]
@@ -453,6 +431,62 @@ impl Error {
             name,
             module_name,
             hint,
+        }
+    }
+
+    pub fn unknown_variable_or_type(location: Span, name: &str, variables: Vec<String>) -> Self {
+        let hint = variables
+            .iter()
+            .map(|s| (s, levenshtein::distance(name, s)))
+            .min_by(|(_, a), (_, b)| a.cmp(b))
+            .and_then(|(suggestion, distance)| {
+                if distance <= 3 {
+                    Some(format!("Did you mean '{suggestion}'?"))
+                } else {
+                    None
+                }
+            });
+
+        if name.chars().into_iter().next().unwrap().is_uppercase() {
+            let hint = hint.unwrap_or_else(|| {
+                r#"Did you forget to import it?
+
+Data-type constructors are not automatically imported, even if their type
+is imported. So, if a module `aiken/pet` defines the following type:
+
+ ┍━ aiken/pet.ak ━━━━━━━━
+ │ pub type Pet {{
+ │   Cat
+ │   Dog
+ │ }}
+
+You must import its constructors explicitly to use them, or prefix them
+with the module's name.
+
+ ┍━ foo.ak ━━━━━━━━
+ │ use aiken/pet.{{Pet, Dog}}
+ │
+ │ fn foo(pet : Pet) {{
+ │   when pet is {{
+ │     pet.Cat -> // ...
+ │     Dog -> // ...
+ │   }}
+ │ }}"#
+                    .to_string()
+            });
+
+            Self::UnknownTypeConstructor {
+                name: name.to_string(),
+                hint,
+                location,
+            }
+        } else {
+            let hint = hint.unwrap_or_else(|| "Did you forget to import it?".to_string());
+            Self::UnknownVariable {
+                name: name.to_string(),
+                location,
+                hint,
+            }
         }
     }
 }
