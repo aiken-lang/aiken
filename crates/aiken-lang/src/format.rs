@@ -6,10 +6,10 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
-        Definition, Function, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
-        RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant, UnqualifiedImport,
-        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition, UntypedModule,
-        UntypedPattern, UntypedRecordUpdateArg, Use, CAPTURE_VARIABLE,
+        Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
+        RecordConstructorArg, RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant,
+        UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition,
+        UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, CAPTURE_VARIABLE,
     },
     docvec,
     expr::UntypedExpr,
@@ -663,44 +663,7 @@ impl<'comments> Formatter<'comments> {
                 branches,
                 final_else,
                 ..
-            } => {
-                let first = branches.first();
-
-                break_("if", "if ")
-                    .append(self.wrap_expr(&first.condition))
-                    .nest(INDENT)
-                    .append(break_("", " "))
-                    .append("{")
-                    .group()
-                    .append(line())
-                    .nest(INDENT)
-                    .append(self.expr(&first.body))
-                    .append(line())
-                    .append("} ")
-                    .append(join(
-                        branches[1..].iter().map(|branch| {
-                            break_("else if", "else if ")
-                                .append(self.wrap_expr(&branch.condition))
-                                .nest(INDENT)
-                                .append(break_("", " "))
-                                .append("{")
-                                .group()
-                                .append(line())
-                                .nest(INDENT)
-                                .append(self.expr(&branch.body))
-                                .append(line())
-                                .append("} ")
-                        }),
-                        nil(),
-                    ))
-                    .append("else {")
-                    .group()
-                    .append(line().nest(INDENT))
-                    .append(self.expr(final_else))
-                    .append(line())
-                    .append("}")
-                    .force_break()
-            }
+            } => self.if_expr(branches, final_else),
             UntypedExpr::Todo { label: None, .. } => "todo".to_doc(),
 
             UntypedExpr::Todo { label: Some(l), .. } => docvec!["todo(\"", l, "\")"],
@@ -915,6 +878,48 @@ impl<'comments> Formatter<'comments> {
                 ))
                 .group(),
         }
+    }
+
+    pub fn if_expr<'a>(
+        &mut self,
+        branches: &'a Vec1<IfBranch<UntypedExpr>>,
+        final_else: &'a UntypedExpr,
+    ) -> Document<'a> {
+        let if_branches = self
+            .if_branch(break_("if", "if "), branches.first())
+            .append(join(
+                branches[1..]
+                    .iter()
+                    .map(|branch| self.if_branch("else if".to_doc(), branch)),
+                nil(),
+            ));
+
+        let else_begin = line().append("} else {");
+
+        let else_body = line().append(self.expr(final_else)).nest(INDENT);
+
+        let else_end = line().append("}");
+
+        if_branches
+            .append(else_begin)
+            .append(else_body)
+            .append(else_end)
+            .force_break()
+    }
+
+    pub fn if_branch<'a>(
+        &mut self,
+        if_keyword: Document<'a>,
+        branch: &'a IfBranch<UntypedExpr>,
+    ) -> Document<'a> {
+        let if_begin = if_keyword
+            .append(self.wrap_expr(&branch.condition))
+            .append(break_("{", " {"))
+            .group();
+
+        let if_body = line().append(self.expr(&branch.body)).nest(INDENT);
+
+        if_begin.append(if_body)
     }
 
     pub fn when<'a>(
