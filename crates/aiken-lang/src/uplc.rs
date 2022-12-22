@@ -5,8 +5,8 @@ use itertools::Itertools;
 use uplc::{
     ast::{
         builder::{
-            self, constr_index_exposer, delayed_if_else, if_else, CONSTR_FIELDS_EXPOSER,
-            CONSTR_GET_FIELD,
+            self, constr_index_exposer, delayed_choose_list, delayed_if_else, if_else,
+            CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD,
         },
         Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType,
     },
@@ -301,13 +301,11 @@ impl<'a> CodeGenerator<'a> {
                 if let Some((last_clause, clauses)) = clauses.split_last() {
                     let mut pattern_vec = vec![];
 
-                    let mut clause_properties = ClauseProperties {
-                        clause_var_name: constr_var.clone(),
-                        needs_constr_var: false,
-                        is_complex_clause: false,
-                        current_index: 0,
-                        original_subject_name: subject_name.clone(),
-                    };
+                    let mut clause_properties = ClauseProperties::init(
+                        &subject.tipo(),
+                        constr_var.clone(),
+                        subject_name.clone(),
+                    );
 
                     self.handle_each_clause(
                         &mut pattern_vec,
@@ -342,7 +340,7 @@ impl<'a> CodeGenerator<'a> {
                         final_scope,
                     );
 
-                    if clause_properties.needs_constr_var {
+                    if *clause_properties.needs_constr_var() {
                         ir_stack.push(Air::Lam {
                             scope: scope.clone(),
                             name: constr_var.clone(),
@@ -562,53 +560,112 @@ impl<'a> CodeGenerator<'a> {
 
             // holds when clause pattern Air
             let mut clause_subject_vec = vec![];
-            let mut clauses_vec = vec![];
+            let mut clause_then_vec = vec![];
 
             // reset complex clause setting per clause back to default
-            clause_properties.is_complex_clause = false;
+            *clause_properties.is_complex_clause() = false;
 
-            self.build_ir(&clause.then, &mut clauses_vec, scope.clone());
+            self.build_ir(&clause.then, &mut clause_then_vec, scope.clone());
 
-            self.when_ir(
-                &clause.pattern[0],
-                &mut clause_subject_vec,
-                &mut clauses_vec,
-                subject_type,
-                clause_properties,
-                scope.clone(),
-            );
+            match clause_properties {
+                ClauseProperties::ConstrClause {
+                    original_subject_name,
+                    ..
+                } => {
+                    let subject_name = original_subject_name.clone();
+                    self.when_ir(
+                        &clause.pattern[0],
+                        &mut clause_subject_vec,
+                        &mut clause_then_vec,
+                        subject_type,
+                        clause_properties,
+                        scope.clone(),
+                    );
 
-            let subject_name = if clause_properties.current_index == 0 {
-                clause_properties.original_subject_name.clone()
-            } else {
-                format!("__tail_{}", clause_properties.current_index - 1)
-            };
+                    ir_stack.push(Air::Clause {
+                        scope,
+                        tipo: subject_type.clone(),
+                        complex_clause: *clause_properties.is_complex_clause(),
+                        subject_name,
+                    });
+                }
+                ClauseProperties::ListClause {
+                    original_subject_name,
+                    current_index,
+                    ..
+                } => {
+                    let current_clause_index = *current_index;
 
-            // Clause is last in Air pattern vec
-            if subject_type.is_list() {
-                let next_tail = if index == clauses.len() - 1 {
-                    None
-                } else {
-                    Some(format!("__tail_{}", clause_properties.current_index))
-                };
+                    let subject_name = if current_clause_index == 0 {
+                        original_subject_name.clone()
+                    } else {
+                        format!("__tail_{}", current_clause_index - 1)
+                    };
 
-                ir_stack.push(Air::ListClause {
-                    scope,
-                    tipo: subject_type.clone(),
-                    tail_name: subject_name,
-                    complex_clause: clause_properties.is_complex_clause,
-                    next_tail_name: next_tail,
-                });
+                    self.when_ir(
+                        &clause.pattern[0],
+                        &mut clause_subject_vec,
+                        &mut clause_then_vec,
+                        subject_type,
+                        clause_properties,
+                        scope.clone(),
+                    );
 
-                clause_properties.current_index += 1;
-            } else {
-                ir_stack.push(Air::Clause {
-                    scope,
-                    tipo: subject_type.clone(),
-                    complex_clause: clause_properties.is_complex_clause,
-                    subject_name,
-                });
+                    let next_tail = if index == clauses.len() - 1 {
+                        None
+                    } else {
+                        Some(format!("__tail_{}", current_clause_index))
+                    };
+
+                    ir_stack.push(Air::ListClause {
+                        scope,
+                        tipo: subject_type.clone(),
+                        tail_name: subject_name,
+                        complex_clause: *clause_properties.is_complex_clause(),
+                        next_tail_name: next_tail,
+                    });
+                }
+                ClauseProperties::TupleClause {
+                    original_subject_name,
+                    defined_tuple_indices,
+                    ..
+                } => {
+                    let prev_defined_tuple_indices = defined_tuple_indices.clone();
+                    let subject_name = original_subject_name.clone();
+
+                    self.when_ir(
+                        &clause.pattern[0],
+                        &mut clause_subject_vec,
+                        &mut clause_then_vec,
+                        subject_type,
+                        clause_properties,
+                        scope.clone(),
+                    );
+                    let current_defined_tuple_indices = match clause_properties {
+                        ClauseProperties::TupleClause {
+                            defined_tuple_indices,
+                            ..
+                        } => defined_tuple_indices.clone(),
+                        _ => unreachable!(),
+                    };
+
+                    let indices_to_define = current_defined_tuple_indices
+                        .difference(&prev_defined_tuple_indices)
+                        .cloned()
+                        .collect();
+
+                    ir_stack.push(Air::TupleClause {
+                        scope,
+                        tipo: subject_type.clone(),
+                        indices: indices_to_define,
+                        predefined_indices: prev_defined_tuple_indices,
+                        subject_name,
+                        count: subject_type.get_inner_types().len(),
+                        complex_clause: *clause_properties.is_complex_clause(),
+                    });
+                }
             }
+
             ir_stack.append(&mut clause_subject_vec);
         }
     }
@@ -649,7 +706,7 @@ impl<'a> CodeGenerator<'a> {
                             location: Span::empty(),
                         },
                     ),
-                    name: clause_properties.original_subject_name.clone(),
+                    name: clause_properties.original_subject_name().clone(),
                     variant_name: String::new(),
                 });
                 pattern_vec.append(values);
@@ -669,7 +726,7 @@ impl<'a> CodeGenerator<'a> {
                             location: Span::empty(),
                         },
                     ),
-                    name: clause_properties.original_subject_name.clone(),
+                    name: clause_properties.original_subject_name().clone(),
                     variant_name: String::new(),
                 });
 
@@ -690,19 +747,14 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(values);
             }
             Pattern::List { elements, tail, .. } => {
-                let mut needs_clause_guard = false;
-
                 for element in elements {
-                    check_when_pattern_needs(element, &mut false, &mut needs_clause_guard);
+                    check_when_pattern_needs(element, clause_properties);
                 }
 
                 if let Some(tail) = tail {
-                    check_when_pattern_needs(tail, &mut false, &mut needs_clause_guard);
+                    check_when_pattern_needs(tail, clause_properties);
                 }
-
-                if needs_clause_guard {
-                    clause_properties.is_complex_clause = true;
-                }
+                *clause_properties.needs_constr_var() = false;
 
                 pattern_vec.push(Air::Discard {
                     scope: scope.clone(),
@@ -725,13 +777,10 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 for arg in arguments {
-                    check_when_pattern_needs(
-                        &arg.value,
-                        &mut clause_properties.needs_constr_var,
-                        &mut clause_properties.is_complex_clause,
-                    );
+                    check_when_pattern_needs(&arg.value, clause_properties);
                 }
 
+                // find data type definition
                 let data_type_key = match tipo {
                     Type::Fn { ret, .. } => match ret.as_ref() {
                         Type::App { module, name, .. } => DataTypeKey {
@@ -763,7 +812,7 @@ impl<'a> CodeGenerator<'a> {
                             location: Span::empty(),
                         },
                     ),
-                    name: clause_properties.clause_var_name.clone(),
+                    name: clause_properties.clause_var_name().clone(),
                     scope: scope.clone(),
                     variant_name: String::new(),
                 }];
@@ -777,7 +826,7 @@ impl<'a> CodeGenerator<'a> {
                     });
                 }
 
-                if clause_properties.needs_constr_var {
+                if *clause_properties.needs_constr_var() {
                     self.when_recursive_ir(
                         pattern,
                         pattern_vec,
@@ -800,17 +849,21 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             Pattern::Tuple { elems, .. } => {
-                let mut needs_clause_guard = false;
-
                 for elem in elems {
-                    check_when_pattern_needs(elem, &mut false, &mut needs_clause_guard);
+                    check_when_pattern_needs(elem, clause_properties);
                 }
+                *clause_properties.needs_constr_var() = false;
 
-                if needs_clause_guard {
-                    clause_properties.is_complex_clause = true;
-                }
+                self.when_recursive_ir(
+                    pattern,
+                    pattern_vec,
+                    &mut vec![],
+                    clause_properties.clone(),
+                    tipo,
+                    scope,
+                );
 
-                todo!()
+                pattern_vec.append(values);
             }
         }
     }
@@ -824,6 +877,7 @@ impl<'a> CodeGenerator<'a> {
         tipo: &Type,
         scope: Vec<u64>,
     ) {
+        let mut clause_properties = clause_properties;
         match pattern {
             Pattern::Int { .. } => todo!(),
             Pattern::String { .. } => todo!(),
@@ -839,42 +893,18 @@ impl<'a> CodeGenerator<'a> {
                 // let mut elements_vec = vec![];
 
                 let mut names = vec![];
+                let mut nested_pattern = vec![];
+                let items_type = &tipo.get_inner_types()[0];
+                // let mut nested_pattern = vec![];
                 for element in elements {
-                    match element {
-                        Pattern::Var { name, .. } => {
-                            names.push(name.clone());
-                        }
-                        Pattern::Discard { .. } => {
-                            names.push("_".to_string());
-                        }
-                        Pattern::List { .. } => {
-                            todo!("Nested List Patterns Not Yet Done");
-                            // let mut var_vec = vec![];
-                            // let item_name = format!("list_item_id_{}", self.id_gen.next());
-                            // names.push(item_name.clone());
-                            // var_vec.push(Air::Var {
-                            //     constructor: ValueConstructor::public(
-                            //         Type::App {
-                            //             public: true,
-                            //             module: String::new(),
-                            //             name: String::new(),
-                            //             args: vec![],
-                            //         }
-                            //         .into(),
-                            //         ValueConstructorVariant::LocalVariable {
-                            //             location: Span::empty(),
-                            //         },
-                            //     ),
-                            //     name: item_name,
-                            //     scope: scope.clone(),
-                            // });
-                            // self.pattern_ir(a, &mut elements_vec, &mut var_vec, scope.clone());
-                        }
-                        Pattern::Tuple { .. } => {
-                            todo!("Nested Tuple Patterns Not Yet Done");
-                        }
-                        _ => todo!(),
-                    }
+                    let name = self.nested_pattern_ir_and_label(
+                        element,
+                        &mut nested_pattern,
+                        items_type,
+                        scope.clone(),
+                    );
+
+                    names.push(name.unwrap_or_else(|| "_".to_string()))
                 }
 
                 let mut tail_name = String::new();
@@ -896,7 +926,7 @@ impl<'a> CodeGenerator<'a> {
                     .map(|(index, name)| {
                         if index == 0 {
                             (
-                                clause_properties.original_subject_name.clone(),
+                                clause_properties.original_subject_name().clone(),
                                 name.clone(),
                             )
                         } else {
@@ -907,7 +937,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if tail.is_some() && !elements.is_empty() {
                     let tail_var = if elements.len() == 1 {
-                        clause_properties.original_subject_name
+                        clause_properties.original_subject_name().clone()
                     } else {
                         format!("__tail_{}", elements.len() - 2)
                     };
@@ -928,6 +958,7 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 pattern_vec.append(values);
+                pattern_vec.append(&mut nested_pattern);
             }
             Pattern::Constructor {
                 is_record,
@@ -978,80 +1009,27 @@ impl<'a> CodeGenerator<'a> {
 
                     let arguments_index = arguments
                         .iter()
-                        .map(|item| {
+                        .filter_map(|item| {
                             let label = item.label.clone().unwrap_or_default();
-                            let field_index =
-                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
-                            let (discard, var_name) = match &item.value {
-                                Pattern::Var { name, .. } => (false, name.clone()),
-                                Pattern::Discard { .. } => (true, "".to_string()),
-                                Pattern::List { .. } => todo!(),
-                                a @ Pattern::Constructor {
-                                    tipo,
-                                    name: constr_name,
-                                    ..
-                                } => {
-                                    let id = self.id_gen.next();
-                                    let constr_var_name = format!("{constr_name}_{id}");
-                                    let data_type_key = match tipo.as_ref() {
-                                        Type::Fn { ret, .. } => match &**ret {
-                                            Type::App { module, name, .. } => DataTypeKey {
-                                                module_name: module.clone(),
-                                                defined_type: name.clone(),
-                                            },
-                                            _ => unreachable!(),
-                                        },
-                                        Type::App { module, name, .. } => DataTypeKey {
-                                            module_name: module.clone(),
-                                            defined_type: name.clone(),
-                                        },
-                                        _ => unreachable!(),
-                                    };
+                            let field_index = field_map.fields.get(&label).unwrap_or(&0);
+                            let var_name = self.nested_pattern_ir_and_label(
+                                &item.value,
+                                &mut nested_pattern,
+                                type_map.get(&label).unwrap(),
+                                scope.clone(),
+                            );
 
-                                    let data_type = self.data_types.get(&data_type_key).unwrap();
-
-                                    if data_type.constructors.len() > 1 {
-                                        nested_pattern.push(Air::ClauseGuard {
-                                            scope: scope.clone(),
-                                            tipo: tipo.clone(),
-                                            subject_name: constr_var_name.clone(),
-                                        });
-                                    }
-
-                                    let mut clause_complexity = ClauseProperties {
-                                        clause_var_name: constr_var_name.clone(),
-                                        needs_constr_var: false,
-                                        is_complex_clause: false,
-                                        current_index: 0,
-                                        original_subject_name: constr_var_name.clone(),
-                                    };
-
-                                    self.when_ir(
-                                        a,
-                                        &mut nested_pattern,
-                                        &mut vec![],
-                                        tipo,
-                                        &mut clause_complexity,
-                                        scope.clone(),
-                                    );
-
-                                    (false, constr_var_name)
-                                }
-                                _ => todo!(),
-                            };
-
-                            (label, var_name, *field_index, discard)
+                            var_name.map(|var_name| (label, var_name, *field_index))
                         })
-                        .filter(|(_, _, _, discard)| !discard)
                         .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
-                        .collect::<Vec<(String, String, usize, bool)>>();
+                        .collect::<Vec<(String, String, usize)>>();
 
                     if !arguments_index.is_empty() {
                         pattern_vec.push(Air::FieldsExpose {
                             count: arguments_index.len() + 2,
                             indices: arguments_index
                                 .iter()
-                                .map(|(label, var_name, index, _)| {
+                                .map(|(label, var_name, index)| {
                                     let field_type = type_map.get(label).unwrap();
                                     (*index, var_name.clone(), field_type.clone())
                                 })
@@ -1071,76 +1049,24 @@ impl<'a> CodeGenerator<'a> {
                     let arguments_index = arguments
                         .iter()
                         .enumerate()
-                        .map(|(index, item)| {
-                            let (discard, var_name) = match &item.value {
-                                Pattern::Var { name, .. } => (false, name.clone()),
-                                Pattern::Discard { .. } => (true, "".to_string()),
-                                Pattern::List { .. } => todo!(),
-                                a @ Pattern::Constructor {
-                                    tipo,
-                                    name: constr_name,
-                                    ..
-                                } => {
-                                    let id = self.id_gen.next();
-                                    let constr_var_name = format!("{constr_name}_{id}");
-                                    let data_type_key = match tipo.as_ref() {
-                                        Type::Fn { ret, .. } => match &**ret {
-                                            Type::App { module, name, .. } => DataTypeKey {
-                                                module_name: module.clone(),
-                                                defined_type: name.clone(),
-                                            },
-                                            _ => unreachable!(),
-                                        },
-                                        Type::App { module, name, .. } => DataTypeKey {
-                                            module_name: module.clone(),
-                                            defined_type: name.clone(),
-                                        },
-                                        _ => unreachable!(),
-                                    };
+                        .filter_map(|(index, item)| {
+                            let var_name = self.nested_pattern_ir_and_label(
+                                &item.value,
+                                &mut nested_pattern,
+                                type_map.get(&index).unwrap(),
+                                scope.clone(),
+                            );
 
-                                    let data_type = self.data_types.get(&data_type_key).unwrap();
-
-                                    if data_type.constructors.len() > 1 {
-                                        nested_pattern.push(Air::ClauseGuard {
-                                            scope: scope.clone(),
-                                            tipo: tipo.clone(),
-                                            subject_name: constr_var_name.clone(),
-                                        });
-                                    }
-
-                                    let mut clause_complexity = ClauseProperties {
-                                        clause_var_name: constr_var_name.clone(),
-                                        needs_constr_var: false,
-                                        is_complex_clause: false,
-                                        current_index: 0,
-                                        original_subject_name: constr_var_name.clone(),
-                                    };
-
-                                    self.when_ir(
-                                        a,
-                                        &mut nested_pattern,
-                                        &mut vec![],
-                                        tipo,
-                                        &mut clause_complexity,
-                                        scope.clone(),
-                                    );
-
-                                    (false, constr_var_name)
-                                }
-                                _ => todo!(),
-                            };
-
-                            (var_name, index, discard)
+                            var_name.map(|var_name| (var_name, index))
                         })
-                        .filter(|(_, _, discard)| !discard)
-                        .collect::<Vec<(String, usize, bool)>>();
+                        .collect::<Vec<(String, usize)>>();
 
                     if !arguments_index.is_empty() {
                         pattern_vec.push(Air::FieldsExpose {
                             count: arguments_index.len() + 2,
                             indices: arguments_index
                                 .iter()
-                                .map(|(name, index, _)| {
+                                .map(|(name, index)| {
                                     let field_type = type_map.get(index).unwrap();
 
                                     (*index, name.clone(), field_type.clone())
@@ -1155,6 +1081,131 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(&mut nested_pattern);
             }
             Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn nested_pattern_ir_and_label(
+        &mut self,
+        pattern: &Pattern<tipo::PatternConstructor, Arc<Type>>,
+        pattern_vec: &mut Vec<Air>,
+        pattern_type: &Arc<Type>,
+        scope: Vec<u64>,
+    ) -> Option<String> {
+        match pattern {
+            Pattern::Var { name, .. } => Some(name.clone()),
+            Pattern::Discard { .. } => None,
+            a @ Pattern::List { elements, tail, .. } => {
+                let item_name = format!("list_item_id_{}", self.id_gen.next());
+
+                if elements.is_empty() {
+                    pattern_vec.push(Air::ClauseGuard {
+                        scope: scope.clone(),
+                        subject_name: item_name.clone(),
+                        tipo: pattern_type.clone(),
+                        invert: false,
+                    });
+                } else {
+                    for (index, element) in elements.iter().enumerate() {
+                        if index == 0 {
+                            pattern_vec.push(Air::ClauseGuard {
+                                scope: scope.clone(),
+                                subject_name: item_name.clone(),
+                                tipo: pattern_type.clone(),
+                                invert: true,
+                            });
+                            pattern_vec.push(Air::ListAccessor {
+                                scope: scope.clone(),
+                                tipo: pattern_type.clone(),
+                                names: vec![format!("todo")],
+                                tail: false,
+                            });
+                            pattern_vec.push(Air::Var {
+                                scope: scope.clone(),
+                                constructor: ValueConstructor::public(
+                                    pattern_type.clone(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: item_name.clone(),
+                                variant_name: String::new(),
+                            });
+                        }
+                    }
+                }
+
+                let mut clause_properties = ClauseProperties::ListClause {
+                    clause_var_name: item_name.clone(),
+                    needs_constr_var: false,
+                    is_complex_clause: false,
+                    original_subject_name: item_name.clone(),
+                    current_index: 0,
+                };
+
+                self.when_ir(
+                    a,
+                    pattern_vec,
+                    &mut vec![],
+                    pattern_type,
+                    &mut clause_properties,
+                    scope,
+                );
+
+                // self.when_recursive_ir(a);
+                Some(item_name)
+            }
+            a @ Pattern::Constructor {
+                tipo,
+                name: constr_name,
+                ..
+            } => {
+                let id = self.id_gen.next();
+                let constr_var_name = format!("{constr_name}_{id}");
+                let data_type_key = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => match &**ret {
+                        Type::App { module, name, .. } => DataTypeKey {
+                            module_name: module.clone(),
+                            defined_type: name.clone(),
+                        },
+                        _ => unreachable!(),
+                    },
+                    Type::App { module, name, .. } => DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                let data_type = self.data_types.get(&data_type_key).unwrap();
+
+                if data_type.constructors.len() > 1 {
+                    pattern_vec.push(Air::ClauseGuard {
+                        scope: scope.clone(),
+                        tipo: tipo.clone(),
+                        subject_name: constr_var_name.clone(),
+                        invert: false,
+                    });
+                }
+
+                let mut clause_properties = ClauseProperties::ConstrClause {
+                    clause_var_name: constr_var_name.clone(),
+                    needs_constr_var: false,
+                    is_complex_clause: false,
+                    original_subject_name: constr_var_name.clone(),
+                };
+
+                self.when_ir(
+                    a,
+                    pattern_vec,
+                    &mut vec![],
+                    tipo,
+                    &mut clause_properties,
+                    scope.clone(),
+                );
+
+                Some(constr_var_name)
+            }
+            _ => todo!(),
         }
     }
 
@@ -3180,31 +3231,22 @@ impl<'a> CodeGenerator<'a> {
                     term
                 };
 
-                term = Term::Apply {
-                    function: Term::Apply {
-                        function: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::ChooseList)
-                                .force_wrap()
-                                .force_wrap()
-                                .into(),
-                            argument: Term::Var(Name {
-                                text: tail_name,
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                        argument: Term::Delay(body.into()).into(),
-                    }
-                    .into(),
-                    argument: Term::Delay(arg.into()).into(),
-                }
-                .force_wrap();
+                term = delayed_choose_list(
+                    Term::Var(Name {
+                        text: tail_name,
+                        unique: 0.into(),
+                    }),
+                    body,
+                    arg,
+                );
 
                 arg_stack.push(term);
             }
             Air::ClauseGuard {
-                subject_name, tipo, ..
+                subject_name,
+                tipo,
+                invert,
+                ..
             } => {
                 let condition = arg_stack.pop().unwrap();
 
@@ -3229,6 +3271,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                 } else if tipo.is_bool() {
+                    // let term =
                     todo!()
                 } else if tipo.is_string() {
                     Term::Apply {
@@ -3576,6 +3619,7 @@ impl<'a> CodeGenerator<'a> {
                 );
                 arg_stack.push(term);
             }
+            Air::TupleIndex { .. } => todo!(),
             Air::TupleAccessor { tipo, names, .. } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
@@ -3757,6 +3801,7 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(Term::Error)
                 }
             }
+            Air::TupleClause { .. } => todo!(),
         }
     }
 }

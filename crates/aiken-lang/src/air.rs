@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use uplc::builtins::DefaultFunction;
 
@@ -132,14 +132,25 @@ pub enum Air {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         tail_name: String,
-        complex_clause: bool,
         next_tail_name: Option<String>,
+        complex_clause: bool,
+    },
+
+    TupleClause {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+        indices: HashSet<(u64, String)>,
+        predefined_indices: HashSet<(u64, String)>,
+        subject_name: String,
+        count: usize,
+        complex_clause: bool,
     },
 
     ClauseGuard {
         scope: Vec<u64>,
         subject_name: String,
         tipo: Arc<Type>,
+        invert: bool,
     },
 
     Discard {
@@ -176,26 +187,19 @@ pub enum Air {
         indices: Vec<(usize, String, Arc<Type>)>,
     },
 
-    // ModuleSelect {
-    //  scope: Vec<u64>,
-    //     tipo: Arc<Type>,
-    //     label: String,
-    //     module_name: String,
-    //     module_alias: String,
-    //     constructor: ModuleValueConstructor,
-    // },
     Tuple {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         count: usize,
     },
 
-    // TupleIndex {
-    //   scope: Vec<u64>,
-    //   tipo: Arc<Type>,
-    //   index: u64,
-    //   tuple: Box<Self>,
-    // },
+    TupleIndex {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+        index: u64,
+        name: String,
+    },
+
     Todo {
         scope: Vec<u64>,
         label: Option<String>,
@@ -274,7 +278,9 @@ impl Air {
             | Air::RecordUpdate { scope, .. }
             | Air::Negate { scope, .. }
             | Air::Trace { scope, .. }
-            | Air::TupleAccessor { scope, .. } => scope.to_vec(),
+            | Air::TupleAccessor { scope, .. }
+            | Air::TupleIndex { scope, .. }
+            | Air::TupleClause { scope, .. } => scope.to_vec(),
         }
     }
 }

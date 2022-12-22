@@ -305,3 +305,48 @@ pub fn if_else(condition: Term<Name>, then_term: Term<Name>, else_term: Term<Nam
         argument: else_term.into(),
     }
 }
+
+pub fn delayed_choose_list(
+    list: Term<Name>,
+    empty_list_term: Term<Name>,
+    else_term: Term<Name>,
+) -> Term<Name> {
+    Term::Apply {
+        function: Term::Apply {
+            function: Term::Apply {
+                function: Term::Builtin(DefaultFunction::IfThenElse)
+                    .force_wrap()
+                    .force_wrap()
+                    .into(),
+                argument: list.into(),
+            }
+            .into(),
+            argument: Term::Delay(empty_list_term.into()).into(),
+        }
+        .into(),
+        argument: Term::Delay(else_term.into()).into(),
+    }
+    .force_wrap()
+}
+
+pub fn choose_list(
+    list: Term<Name>,
+    empty_list_term: Term<Name>,
+    else_term: Term<Name>,
+) -> Term<Name> {
+    Term::Apply {
+        function: Term::Apply {
+            function: Term::Apply {
+                function: Term::Builtin(DefaultFunction::IfThenElse)
+                    .force_wrap()
+                    .force_wrap()
+                    .into(),
+                argument: list.into(),
+            }
+            .into(),
+            argument: empty_list_term.into(),
+        }
+        .into(),
+        argument: else_term.into(),
+    }
+}
