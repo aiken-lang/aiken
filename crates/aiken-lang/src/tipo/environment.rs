@@ -783,21 +783,13 @@ impl<'a> Environment<'a> {
                         };
                     } else if !value_imported {
                         // Error if no type or value was found with that name
-                        return Err(Error::UnknownModuleField {
-                            location: *location,
-                            name: name.clone(),
-                            module_name: module.join("/"),
-                            value_constructors: module_info
-                                .values
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                            type_constructors: module_info
-                                .types
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                        });
+                        return Err(Error::unknown_module_field(
+                            *location,
+                            name.clone(),
+                            module.join("/"),
+                            module_info.values.keys().map(|t| t.to_string()).collect(),
+                            module_info.types.keys().map(|t| t.to_string()).collect(),
+                        ));
                     }
                 }
 

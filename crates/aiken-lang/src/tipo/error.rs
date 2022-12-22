@@ -4,7 +4,10 @@ use ordinal::Ordinal;
 
 use miette::Diagnostic;
 
-use crate::ast::{BinOp, Span, TodoKind};
+use crate::{
+    ast::{BinOp, Span, TodoKind},
+    levenshtein,
+};
 
 use super::Type;
 
@@ -175,13 +178,15 @@ pub enum Error {
         imported_modules: Vec<String>,
     },
 
-    #[error("Unknown module field\n\n{name}\n\nin module\n\n{module_name}\n")]
+    #[error("Unknown import '{name}' from module '{module_name}'\n")]
+    #[diagnostic()]
     UnknownModuleField {
+        #[label]
         location: Span,
         name: String,
         module_name: String,
-        value_constructors: Vec<String>,
-        type_constructors: Vec<String>,
+        #[help]
+        hint: Option<String>,
     },
 
     #[error("Unknown module value\n\n{name}\n")]
@@ -417,6 +422,37 @@ impl Error {
                 rigid_type_names,
             },
             other => other,
+        }
+    }
+
+    pub fn unknown_module_field(
+        location: Span,
+        name: String,
+        module_name: String,
+        value_constructors: Vec<String>,
+        type_constructors: Vec<String>,
+    ) -> Self {
+        let mut candidates = vec![];
+        candidates.extend(value_constructors);
+        candidates.extend(type_constructors);
+
+        let hint = candidates
+            .iter()
+            .map(|s| (s, levenshtein::distance(&name, s)))
+            .min_by(|(_, a), (_, b)| a.cmp(b))
+            .and_then(|(suggestion, distance)| {
+                if distance <= 5 {
+                    Some(format!("Did you mean to import '{suggestion}'?"))
+                } else {
+                    None
+                }
+            });
+
+        Self::UnknownModuleField {
+            location,
+            name,
+            module_name,
+            hint,
         }
     }
 }
