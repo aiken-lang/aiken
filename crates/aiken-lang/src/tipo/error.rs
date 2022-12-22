@@ -225,6 +225,40 @@ pub enum Error {
         variables: Vec<String>,
     },
 
+    #[error("Unknown data-type constructor '{name}'\n")]
+    #[diagnostic(help(
+        r#"Did you forget to import it?
+
+Data-type constructors are not automatically imported, even if their type is
+imported. So, if a module `aiken/pet` defines the following type:
+
+ ┍━ aiken/pet.ak ━━━━━━━━
+ │ pub type Pet {{
+ │   Cat
+ │   Dog
+ │ }}
+
+You must import its constructors explicitly to use them, or prefix them
+with the module's name.
+
+ ┍━ foo.ak ━━━━━━━━
+ │ use aiken/pet.{{Pet, Dog}}
+ │
+ │ fn foo(pet : Pet) {{
+ │   when pet is {{
+ │     pet.Cat -> // ...
+ │     Dog -> // ...
+ │   }}
+ │ }}
+"#
+    ))]
+    UnknownTypeConstructor {
+        #[label]
+        location: Span,
+        name: String,
+        variables: Vec<String>,
+    },
+
     #[error("Unnecessary spread operator\n")]
     UnnecessarySpreadOperator {
         #[label]

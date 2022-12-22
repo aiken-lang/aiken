@@ -74,7 +74,7 @@ pub enum Error {
         error: Box<ParseError>,
     },
 
-    #[error("Checking")]
+    #[error("Type-checking")]
     Type {
         path: PathBuf,
         src: String,
