@@ -9,7 +9,9 @@ use std::{
 use itertools::Itertools;
 
 use super::{
-    environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
+    environment::{
+        assert_no_labeled_arguments_in_pattern, collapse_links, EntityKind, Environment,
+    },
     error::Error,
     hydrator::Hydrator,
     PatternConstructor, Type, ValueConstructor, ValueConstructorVariant,
@@ -483,7 +485,12 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     }
 
                     // The fun has no field map and so we error if arguments have been labelled
-                    None => assert_no_labeled_arguments(&pattern_args)?,
+                    None => assert_no_labeled_arguments_in_pattern(
+                        &name,
+                        &pattern_args,
+                        &module,
+                        with_spread,
+                    )?,
                 }
 
                 let constructor_typ = cons.tipo.clone();

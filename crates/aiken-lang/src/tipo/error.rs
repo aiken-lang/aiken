@@ -144,11 +144,14 @@ pub enum Error {
     #[error("{name} is a reserved module name\n")]
     ReservedModuleName { name: String },
 
-    #[error("Unexpected labeled argument\n\n{label}\n")]
+    #[error("Unexpected labeled argument '{label}'\n")]
+    #[diagnostic()]
     UnexpectedLabeledArg {
         #[label]
         location: Span,
         label: String,
+        #[help]
+        hint: Option<String>,
     },
 
     #[error("Unexpected type hole\n")]
@@ -229,8 +232,8 @@ pub enum Error {
     #[diagnostic(help(
         r#"Did you forget to import it?
 
-Data-type constructors are not automatically imported, even if their type is
-imported. So, if a module `aiken/pet` defines the following type:
+Data-type constructors are not automatically imported, even if their type
+is imported. So, if a module `aiken/pet` defines the following type:
 
  ┍━ aiken/pet.ak ━━━━━━━━
  │ pub type Pet {{
