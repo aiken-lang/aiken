@@ -9,6 +9,7 @@ pub mod builder;
 pub mod builtins;
 pub mod expr;
 pub mod format;
+pub mod levenshtein;
 pub mod parser;
 pub mod pretty;
 pub mod tipo;
