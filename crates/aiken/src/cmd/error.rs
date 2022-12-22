@@ -1,14 +1,17 @@
 use std::fmt;
 
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, miette::Diagnostic)]
 pub enum Error {
-    #[error("'{}' is not a valid project name: {}", name, reason.to_string())]
+    #[error("{} is not a valid project name: {}", name.red(), reason.to_string())]
     InvalidProjectName {
         name: String,
         reason: InvalidProjectNameReason,
     },
+    #[error("A project named {} already exists.", name.red())]
+    ProjectExists { name: String },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,9 +31,12 @@ impl fmt::Display for InvalidProjectNameReason {
             InvalidProjectNameReason::Format => write!(
                 f,
                 "it is malformed.\n\nProjects must be named as:\n\n\t\
-                {{repository}}/{{project}}\n\nEach part must start with a lowercase letter \
+                {}/{}\n\nEach part must start with a lowercase letter \
                 and may only contain lowercase letters, numbers, hyphens or underscores.\
-                \nFor example,\n\n\taiken-lang/stdlib"
+                \nFor example,\n\n\t{}",
+                "{owner}".bright_blue(),
+                "{project}".bright_blue(),
+                "aiken-lang/stdlib".bright_blue(),
             ),
         }
     }
