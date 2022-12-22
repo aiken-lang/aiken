@@ -2678,90 +2678,85 @@ impl<'a> CodeGenerator<'a> {
                         } else if tipo.is_tuple()
                             && matches!(tipo.clone().get_uplc_type(), UplcType::Pair(_, _))
                         {
-                            // let term = Term::Apply {
-                            //     function: Term::Apply {
-                            //         function: default_builtin.into(),
-                            //         argument: Term::Apply {
-                            //             function: DefaultFunction::MapData.into(),
-                            //             argument: Term::Apply {
-                            //                 function: Term::Apply {
-                            //                     function: Term::Builtin(DefaultFunction::MkCons)
-                            //                         .force_wrap()
-                            //                         .into(),
-                            //                     argument: left.into(),
-                            //                 }
-                            //                 .into(),
-                            //                 argument: Term::Constant(UplcConstant::ProtoList(
-                            //                     UplcType::Pair(
-                            //                         UplcType::Data.into(),
-                            //                         UplcType::Data.into(),
-                            //                     ),
-                            //                     vec![],
-                            //                 ))
-                            //                 .into(),
-                            //             }
-                            //             .into(),
-                            //         }
-                            //         .into(),
-                            //     }
-                            //     .into(),
-                            //     argument: Term::Apply {
-                            //         function: Term::Apply {
-                            //             function: Term::Builtin(DefaultFunction::MkCons)
-                            //                 .force_wrap()
-                            //                 .into(),
-                            //             argument: right.into(),
-                            //         }
-                            //         .into(),
-                            //         argument: Term::Constant(UplcConstant::ProtoList(
-                            //             UplcType::Pair(
-                            //                 UplcType::Data.into(),
-                            //                 UplcType::Data.into(),
-                            //             ),
-                            //             vec![],
-                            //         ))
-                            //         .into(),
-                            //     }
-                            //     .into(),
-                            // };
-                            // arg_stack.push(term);
-                            // return;
-                            todo!()
-                        } else if tipo.is_list() {
-                            let term = Term::Apply {
+                            let mut term = Term::Apply {
                                 function: Term::Apply {
-                                    function: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::IfThenElse)
-                                            .force_wrap()
-                                            .into(),
+                                    function: default_builtin.into(),
+                                    argument: Term::Apply {
+                                        function: DefaultFunction::MapData.into(),
                                         argument: Term::Apply {
                                             function: Term::Apply {
-                                                function: default_builtin.into(),
-                                                argument: Term::Apply {
-                                                    function: DefaultFunction::ListData.into(),
-                                                    argument: left.into(),
-                                                }
-                                                .into(),
+                                                function: Term::Builtin(DefaultFunction::MkCons)
+                                                    .force_wrap()
+                                                    .into(),
+                                                argument: left.into(),
                                             }
                                             .into(),
-                                            argument: Term::Apply {
-                                                function: default_builtin.into(),
-                                                argument: Term::Apply {
-                                                    function: DefaultFunction::ListData.into(),
-                                                    argument: right.into(),
-                                                }
-                                                .into(),
-                                            }
+                                            argument: Term::Constant(UplcConstant::ProtoList(
+                                                UplcType::Pair(
+                                                    UplcType::Data.into(),
+                                                    UplcType::Data.into(),
+                                                ),
+                                                vec![],
+                                            ))
                                             .into(),
                                         }
                                         .into(),
                                     }
                                     .into(),
-                                    argument: Term::Constant(UplcConstant::Bool(false)).into(),
                                 }
                                 .into(),
-                                argument: Term::Constant(UplcConstant::Bool(true)).into(),
+                                argument: Term::Apply {
+                                    function: Term::Apply {
+                                        function: Term::Builtin(DefaultFunction::MkCons)
+                                            .force_wrap()
+                                            .into(),
+                                        argument: right.into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Constant(UplcConstant::ProtoList(
+                                        UplcType::Pair(
+                                            UplcType::Data.into(),
+                                            UplcType::Data.into(),
+                                        ),
+                                        vec![],
+                                    ))
+                                    .into(),
+                                }
+                                .into(),
                             };
+
+                            term = if_else(
+                                term,
+                                Term::Constant(UplcConstant::Bool(false)),
+                                Term::Constant(UplcConstant::Bool(true)),
+                            );
+                            arg_stack.push(term);
+                            return;
+                        } else if tipo.is_list() {
+                            let term = if_else(
+                                Term::Apply {
+                                    function: Term::Apply {
+                                        function: default_builtin.into(),
+                                        argument: Term::Apply {
+                                            function: DefaultFunction::ListData.into(),
+                                            argument: left.into(),
+                                        }
+                                        .into(),
+                                    }
+                                    .into(),
+                                    argument: Term::Apply {
+                                        function: default_builtin.into(),
+                                        argument: Term::Apply {
+                                            function: DefaultFunction::ListData.into(),
+                                            argument: right.into(),
+                                        }
+                                        .into(),
+                                    }
+                                    .into(),
+                                },
+                                Term::Constant(UplcConstant::Bool(false)),
+                                Term::Constant(UplcConstant::Bool(true)),
+                            );
 
                             arg_stack.push(term);
                             return;
@@ -3545,8 +3540,9 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                     .into(),
-                    argument: Term::Error.into(),
-                };
+                    argument: Term::Delay(Term::Error.into()).into(),
+                }
+                .force_wrap();
 
                 arg_stack.push(term);
             }
@@ -3716,7 +3712,7 @@ impl<'a> CodeGenerator<'a> {
                     function: Term::Apply {
                         function: Term::Builtin(DefaultFunction::Trace).force_wrap().into(),
                         argument: Term::Constant(UplcConstant::String(
-                            text.unwrap_or_else(|| "aike::trace".to_string()),
+                            text.unwrap_or_else(|| "aiken::trace".to_string()),
                         ))
                         .into(),
                     }
