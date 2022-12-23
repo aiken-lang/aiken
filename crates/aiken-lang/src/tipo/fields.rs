@@ -8,23 +8,34 @@ use crate::ast::{CallArg, Span};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldMap {
     pub arity: usize,
-    pub fields: HashMap<String, usize>,
+    pub fields: HashMap<String, (usize, Span)>,
+    pub is_function: bool,
 }
 
 impl FieldMap {
-    pub fn new(arity: usize) -> Self {
+    pub fn new(arity: usize, is_function: bool) -> Self {
         Self {
             arity,
             fields: HashMap::new(),
+            is_function,
         }
     }
 
     pub fn insert(&mut self, label: String, index: usize, location: &Span) -> Result<(), Error> {
-        match self.fields.insert(label.clone(), index) {
-            Some(_) => Err(Error::DuplicateField {
-                label,
-                location: *location,
-            }),
+        match self.fields.insert(label.clone(), (index, *location)) {
+            Some((_, location_other)) => {
+                if self.is_function {
+                    Err(Error::DuplicateArgument {
+                        label,
+                        locations: vec![*location, location_other],
+                    })
+                } else {
+                    Err(Error::DuplicateField {
+                        label,
+                        locations: vec![*location, location_other],
+                    })
+                }
+            }
             None => Ok(()),
         }
     }
@@ -40,12 +51,12 @@ impl FieldMap {
     /// Reorder an argument list so that labelled fields supplied out-of-order are
     /// in the correct order.
     pub fn reorder<A>(&self, args: &mut [CallArg<A>], location: Span) -> Result<(), Error> {
-        let mut labeled_arguments_given = false;
+        let mut last_labeled_arguments_given: Option<&CallArg<A>> = None;
         let mut seen_labels = std::collections::HashSet::new();
         let mut unknown_labels = Vec::new();
 
         if self.arity != args.len() {
-            return Err(Error::IncorrectArity {
+            return Err(Error::IncorrectFieldsArity {
                 labels: self.incorrect_arity_labels(args),
                 location,
                 expected: self.arity,
@@ -56,13 +67,14 @@ impl FieldMap {
         for arg in args.iter() {
             match &arg.label {
                 Some(_) => {
-                    labeled_arguments_given = true;
+                    last_labeled_arguments_given = Some(arg);
                 }
 
                 None => {
-                    if labeled_arguments_given {
+                    if let Some(label) = last_labeled_arguments_given {
                         return Err(Error::PositionalArgumentAfterLabeled {
                             location: arg.location,
+                            labeled_arg_location: label.location,
                         });
                     }
                 }
@@ -90,7 +102,7 @@ impl FieldMap {
                 }
             };
 
-            let position = match self.fields.get(label) {
+            let (position, other_location) = match self.fields.get(label) {
                 None => {
                     unknown_labels.push((label.clone(), location));
 
@@ -110,7 +122,7 @@ impl FieldMap {
             } else {
                 if seen_labels.contains(label) {
                     return Err(Error::DuplicateArgument {
-                        location,
+                        locations: vec![location, other_location],
                         label: label.to_string(),
                     });
                 }

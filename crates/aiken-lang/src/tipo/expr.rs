@@ -112,7 +112,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             // The fun has no field map and so we error if arguments have been labelled
             None => assert_no_labeled_arguments(&args)
-                .map(|(location, label)| Err(Error::unexpected_labeled_arg(location, label)))
+                .map(|(location, label)| Err(Error::UnexpectedLabeledArg { location, label }))
                 .unwrap_or(Ok(()))?,
         }
 
@@ -501,7 +501,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 None => {
                     panic!("Failed to lookup record field after successfully inferring that field",)
                 }
-                Some(p) => arguments.push(TypedRecordUpdateArg {
+                Some((p, _)) => arguments.push(TypedRecordUpdateArg {
                     location,
                     label: label.to_string(),
                     value,
@@ -1354,7 +1354,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     // The fun has no field map and so we error if arguments have been labelled
                     None => assert_no_labeled_arguments(&args)
                         .map(|(location, label)| {
-                            Err(Error::unexpected_labeled_arg(location, label))
+                            Err(Error::UnexpectedLabeledArg { location, label })
                         })
                         .unwrap_or(Ok(()))?,
                 }
@@ -1729,7 +1729,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Ok(elems[index].clone())
                 }
             }
-            _ => Err(Error::NotATuple { location }),
+            _ => Err(Error::NotATuple {
+                location,
+                tipo: tuple.tipo(),
+            }),
         }?;
 
         Ok(TypedExpr::TupleIndex {
@@ -1787,12 +1790,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     self.environment
                         .get_variable(name)
                         .cloned()
-                        .ok_or_else(|| {
-                            Error::unknown_variable_or_type(
-                                *location,
-                                name,
-                                self.environment.local_value_names(),
-                            )
+                        .ok_or_else(|| Error::UnknownVariable {
+                            location: *location,
+                            name: name.to_string(),
+                            variables: self.environment.local_value_names(),
                         })?;
 
                 // Note whether we are using an ungeneralised function so that we can

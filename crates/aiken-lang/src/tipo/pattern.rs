@@ -240,12 +240,10 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     .environment
                     .get_variable(&name)
                     .cloned()
-                    .ok_or_else(|| {
-                    Error::unknown_variable_or_type(
-                        location,
-                        &name,
-                        self.environment.local_value_names(),
-                    )
+                    .ok_or_else(|| Error::UnknownVariable {
+                    location,
+                    name: name.to_string(),
+                    variables: self.environment.local_value_names(),
                 })?;
 
                 self.environment.increment_usage(&name);
@@ -359,8 +357,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
             Pattern::Tuple { elems, location } => match collapse_links(tipo.clone()).deref() {
                 Type::Tuple { elems: type_elems } => {
                     if elems.len() != type_elems.len() {
-                        return Err(Error::IncorrectArity {
-                            labels: vec![],
+                        return Err(Error::IncorrectTupleArity {
                             location,
                             expected: type_elems.len(),
                             given: elems.len(),
@@ -487,14 +484,14 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     // The fun has no field map and so we error if arguments have been labelled
                     None => assert_no_labeled_arguments(&pattern_args)
                         .map(|(location, label)| {
-                            Err(Error::unexpected_labeled_arg_in_pattern(
+                            Err(Error::UnexpectedLabeledArgInPattern {
                                 location,
                                 label,
-                                &name,
-                                &pattern_args,
-                                &module,
+                                name: name.clone(),
+                                args: pattern_args.clone(),
+                                module: module.clone(),
                                 with_spread,
-                            ))
+                            })
                         })
                         .unwrap_or(Ok(()))?,
                 }
@@ -555,11 +552,13 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 is_record,
                             })
                         } else {
-                            Err(Error::IncorrectArity {
-                                labels: vec![],
+                            Err(Error::IncorrectPatternArity {
                                 location,
-                                expected: args.len(),
-                                given: pattern_args.len(),
+                                given: pattern_args,
+                                expected: 0,
+                                name: name.clone(),
+                                module: module.clone(),
+                                is_record,
                             })
                         }
                     }
@@ -583,11 +582,13 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 is_record,
                             })
                         } else {
-                            Err(Error::IncorrectArity {
-                                labels: vec![],
+                            Err(Error::IncorrectPatternArity {
                                 location,
+                                given: pattern_args,
                                 expected: 0,
-                                given: pattern_args.len(),
+                                name: name.clone(),
+                                module: module.clone(),
+                                is_record,
                             })
                         }
                     }

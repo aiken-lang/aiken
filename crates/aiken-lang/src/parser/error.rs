@@ -80,21 +80,12 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
 
 #[derive(Debug, PartialEq, Eq, Diagnostic, thiserror::Error)]
 pub enum ErrorKind {
-    #[error("Unexpected end")]
+    #[error("I arrived at the end of the file unexpectedly.")]
     UnexpectedEnd,
     #[error("{0}")]
     #[diagnostic(help("{}", .0.help().unwrap_or_else(|| Box::new(""))))]
     Unexpected(Pattern),
-    #[error("Unclosed {start}")]
-    Unclosed {
-        start: Pattern,
-        #[label]
-        before_span: Span,
-        before: Option<Pattern>,
-    },
-    #[error("No end branch")]
-    NoEndBranch,
-    #[error("Invalid tuple index")]
+    #[error("I discovered an invalid tuple index.")]
     #[diagnostic()]
     InvalidTupleIndex {
         #[help]
@@ -104,39 +95,39 @@ pub enum ErrorKind {
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
 pub enum Pattern {
-    #[error("Unexpected {0:?}")]
-    #[diagnostic(help("Try removing it"))]
+    #[error("I found an unexpected char '{0:?}'.")]
+    #[diagnostic(help("Try removing it!"))]
     Char(char),
-    #[error("Unexpected {0}")]
-    #[diagnostic(help("Try removing it"))]
+    #[error("I found an unexpected token '{0}'.")]
+    #[diagnostic(help("Try removing it!"))]
     Token(Token),
-    #[error("Unexpected literal")]
-    #[diagnostic(help("Try removing it"))]
+    #[error("I found an unexpected literal value.")]
+    #[diagnostic(help("Try removing it!"))]
     Literal,
-    #[error("Unexpected type name")]
-    #[diagnostic(help("Try removing it"))]
+    #[error("I found an unexpected type name.")]
+    #[diagnostic(help("Try removing it!"))]
     TypeIdent,
-    #[error("Unexpected indentifier")]
-    #[diagnostic(help("Try removing it"))]
+    #[error("I found an unexpected indentifier.")]
+    #[diagnostic(help("Try removing it!"))]
     TermIdent,
-    #[error("Unexpected end of input")]
+    #[error("I found an unexpected end of input.")]
     End,
-    #[error("Malformed list spread pattern")]
-    #[diagnostic(help("List spread in matches can\nuse have a discard or var"))]
+    #[error("I found a malformed list spread pattern.")]
+    #[diagnostic(help("List spread in matches can use a discard '_' or var."))]
     Match,
-    #[error("Malformed byte literal")]
-    #[diagnostic(help("Bytes must be between 0-255"))]
+    #[error("I found an out-of-bound byte literal.")]
+    #[diagnostic(help("Bytes must be between 0-255."))]
     Byte,
-    #[error("Unexpected pattern")]
+    #[error("I found an unexpected pattern.")]
     #[diagnostic(help(
-        "If no label is provided then only variables\nmatching a field name are allowed"
+        "If no label is provided then only variables\nmatching a field name are allowed."
     ))]
     RecordPunning,
-    #[error("Unexpected label")]
-    #[diagnostic(help("You can only use labels with curly braces"))]
+    #[error("I found an unexpected label.")]
+    #[diagnostic(help("You can only use labels surrounded by curly braces"))]
     Label,
-    #[error("Unexpected hole")]
-    #[diagnostic(help("You can only use capture syntax with functions not constructors"))]
+    #[error("I found an unexpected discard '_'.")]
+    #[diagnostic(help("You can only use capture syntax with functions not constructors."))]
     Discard,
 }
 

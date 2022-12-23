@@ -972,7 +972,8 @@ impl<'a> CodeGenerator<'a> {
                         .iter()
                         .map(|item| {
                             let label = item.label.clone().unwrap_or_default();
-                            let field_index = field_map.fields.get(&label).unwrap_or(&0);
+                            let field_index =
+                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
                             let (discard, var_name) = match &item.value {
                                 Pattern::Var { name, .. } => (false, name.clone()),
                                 Pattern::Discard { .. } => (true, "".to_string()),
@@ -1316,7 +1317,8 @@ impl<'a> CodeGenerator<'a> {
                         .iter()
                         .map(|item| {
                             let label = item.label.clone().unwrap_or_default();
-                            let field_index = field_map.fields.get(&label).unwrap_or(&0);
+                            let field_index =
+                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
                             let (discard, var_name) = match &item.value {
                                 Pattern::Var { name, .. } => (false, name.clone()),
                                 Pattern::Discard { .. } => (true, "".to_string()),
@@ -2031,7 +2033,11 @@ impl<'a> CodeGenerator<'a> {
                                 for field in field_map
                                     .fields
                                     .iter()
-                                    .sorted_by(|item1, item2| item1.1.cmp(item2.1))
+                                    .sorted_by(|item1, item2| {
+                                        let (a, _) = item1.1;
+                                        let (b, _) = item2.1;
+                                        a.cmp(b)
+                                    })
                                     .zip(&args_type)
                                     .rev()
                                 {
@@ -2092,7 +2098,11 @@ impl<'a> CodeGenerator<'a> {
                                 for field in field_map
                                     .fields
                                     .iter()
-                                    .sorted_by(|item1, item2| item1.1.cmp(item2.1))
+                                    .sorted_by(|item1, item2| {
+                                        let (a, _) = item1.1;
+                                        let (b, _) = item2.1;
+                                        a.cmp(b)
+                                    })
                                     .rev()
                                 {
                                     term = Term::Lambda {

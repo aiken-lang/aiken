@@ -146,10 +146,9 @@ impl<'a> Environment<'a> {
 
         if let Type::Fn { args, ret } = tipo.deref() {
             return if args.len() != arity {
-                Err(Error::IncorrectArity {
+                Err(Error::IncorrectFunctionCallArity {
                     expected: args.len(),
                     given: arity,
-                    labels: vec![],
                     location: call_location,
                 })
             } else {
@@ -315,8 +314,10 @@ impl<'a> Environment<'a> {
         location: Span,
     ) -> Result<&ValueConstructor, Error> {
         match module {
-            None => self.scope.get(name).ok_or_else(|| {
-                Error::unknown_variable_or_type(location, name, self.local_value_names())
+            None => self.scope.get(name).ok_or_else(|| Error::UnknownVariable {
+                location,
+                name: name.to_string(),
+                variables: self.local_value_names(),
             }),
 
             Some(m) => {
@@ -770,13 +771,21 @@ impl<'a> Environment<'a> {
                         };
                     } else if !value_imported {
                         // Error if no type or value was found with that name
-                        return Err(Error::unknown_module_field(
-                            *location,
-                            name.clone(),
-                            module.join("/"),
-                            module_info.values.keys().map(|t| t.to_string()).collect(),
-                            module_info.types.keys().map(|t| t.to_string()).collect(),
-                        ));
+                        return Err(Error::UnknownModuleField {
+                            location: *location,
+                            name: name.clone(),
+                            module_name: module.join("/"),
+                            value_constructors: module_info
+                                .values
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                            type_constructors: module_info
+                                .types
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                        });
                     }
                 }
 
@@ -999,10 +1008,10 @@ impl<'a> Environment<'a> {
                 self.ungeneralised_functions.insert(name.to_string());
 
                 // Create the field map so we can reorder labels for usage of this function
-                let mut field_map = FieldMap::new(args.len());
+                let mut field_map = FieldMap::new(args.len(), true);
 
                 for (i, arg) in args.iter().enumerate() {
-                    field_map.insert(arg.arg_name.get_label().clone(), i, location)?;
+                    field_map.insert(arg.arg_name.get_label().clone(), i, &arg.location)?;
                 }
                 let field_map = field_map.into_option();
 
@@ -1067,7 +1076,6 @@ impl<'a> Environment<'a> {
             }
 
             Definition::DataType(DataType {
-                location,
                 public,
                 opaque,
                 name,
@@ -1105,14 +1113,17 @@ impl<'a> Environment<'a> {
                 for constructor in constructors {
                     assert_unique_value_name(names, &constructor.name, &constructor.location)?;
 
-                    let mut field_map = FieldMap::new(constructor.arguments.len());
+                    let mut field_map = FieldMap::new(constructor.arguments.len(), false);
 
                     let mut args_types = Vec::with_capacity(constructor.arguments.len());
 
                     for (
                         i,
                         RecordConstructorArg {
-                            label, annotation, ..
+                            label,
+                            annotation,
+                            location,
+                            ..
                         },
                     ) in constructor.arguments.iter().enumerate()
                     {

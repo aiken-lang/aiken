@@ -488,7 +488,7 @@ impl<'comments> Formatter<'comments> {
         .group()
     }
 
-    fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
+    pub fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
         wrap_generics(args.iter().map(|t| self.annotation(t)))
     }
 
