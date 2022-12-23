@@ -852,8 +852,15 @@ pub fn expr_parser(
             });
 
         let error_parser = just(Token::ErrorTerm)
-            .ignored()
-            .map_with_span(|_, span| expr::UntypedExpr::ErrorTerm { location: span });
+            .ignore_then(
+                select! {Token::String {value} => value}
+                    .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                    .or_not(),
+            )
+            .map_with_span(|label, span| expr::UntypedExpr::ErrorTerm {
+                location: span,
+                label,
+            });
 
         let tuple = just(Token::Hash)
             .ignore_then(
