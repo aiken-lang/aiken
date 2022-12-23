@@ -4,7 +4,6 @@ use std::path::PathBuf;
 /// Build an Aiken project
 pub struct Args {
     /// Path to project
-    #[clap(short, long)]
     directory: Option<PathBuf>,
 
     /// Also dump textual uplc
