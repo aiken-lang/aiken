@@ -151,6 +151,7 @@ pub enum TypedExpr {
     ErrorTerm {
         location: Span,
         tipo: Arc<Type>,
+        label: Option<String>,
     },
 
     RecordUpdate {
@@ -425,6 +426,7 @@ pub enum UntypedExpr {
 
     ErrorTerm {
         location: Span,
+        label: Option<String>,
     },
 
     RecordUpdate {

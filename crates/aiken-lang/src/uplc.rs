@@ -537,10 +537,11 @@ impl<'a> CodeGenerator<'a> {
                 todo!("Tuple indexing not implementing yet");
             }
 
-            TypedExpr::ErrorTerm { tipo, .. } => {
+            TypedExpr::ErrorTerm { tipo, label, .. } => {
                 ir_stack.push(Air::ErrorTerm {
                     scope,
                     tipo: tipo.clone(),
+                    label: label.clone(),
                 });
             }
         }
@@ -3739,7 +3740,23 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::ErrorTerm { .. } => arg_stack.push(Term::Error),
+            Air::ErrorTerm { label, .. } => {
+                if let Some(label) = label {
+                    let term = Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::Trace).force_wrap().into(),
+                            argument: Term::Constant(UplcConstant::String(label)).into(),
+                        }
+                        .into(),
+                        argument: Term::Delay(Term::Error.into()).into(),
+                    }
+                    .force_wrap();
+
+                    arg_stack.push(term);
+                } else {
+                    arg_stack.push(Term::Error)
+                }
+            }
         }
     }
 }

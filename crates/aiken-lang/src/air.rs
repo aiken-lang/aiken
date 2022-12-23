@@ -205,6 +205,7 @@ pub enum Air {
     ErrorTerm {
         scope: Vec<u64>,
         tipo: Arc<Type>,
+        label: Option<String>,
     },
 
     Trace {
