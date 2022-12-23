@@ -13,6 +13,7 @@ pub struct Args {
     /// Project name
     name: String,
     /// Library only
+    #[clap(long)]
     lib: bool,
 }
 
@@ -37,10 +38,10 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
         })?;
     }
 
-    create_lib(&root, package_name)?;
+    create_lib_folder(&root, package_name)?;
 
     if !args.lib {
-        create_validators(&root, package_name)?;
+        create_validators_folder(&root)?;
     }
 
     aiken_toml(&root, package_name)?;
@@ -54,14 +55,13 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
 
 fn print_success_message(package_name: &PackageName) {
     println!(
-        "{}",
+        "\n{}",
         formatdoc! {
-            r#"
-                Your Aiken project {name} has been {s} created.
-                The project can be compiled and tested by running these commands:
+            r#"Your Aiken project {name} has been {s} created.
+               The project can be compiled and tested by running these commands:
 
-                    {cd} {name}
-                    {aiken} check
+                   {cd} {name}
+                   {aiken} check
             "#,
             s = "successfully".bold().bright_green(),
             cd = "cd".bold().purple(),
@@ -71,82 +71,17 @@ fn print_success_message(package_name: &PackageName) {
     )
 }
 
-fn create_lib(root: &Path, package_name: &PackageName) -> miette::Result<()> {
+fn create_lib_folder(root: &Path, package_name: &PackageName) -> miette::Result<()> {
     let lib = root.join("lib");
-
     fs::create_dir_all(&lib).into_diagnostic()?;
-
-    let lib_module_path = lib.join(format!("{}.ak", package_name.repo));
-
-    fs::write(
-        lib_module_path,
-        indoc! {
-            r#"
-                pub fn hello(_name: String) -> Bool {
-                  trace("hello")
-
-                  True
-                }
-
-                test hello_1() {
-                  hello("Human")
-                }
-            "#
-        },
-    )
-    .into_diagnostic()?;
-
     let nested_path = lib.join(&package_name.repo);
-
     fs::create_dir_all(&nested_path).into_diagnostic()?;
-
-    let nested_module_path = nested_path.join("util.ak");
-
-    fs::write(
-        nested_module_path,
-        indoc! {
-            r#"
-                pub fn is_one(a: Int) -> Bool {
-                  trace("hi")
-
-                  a == 1
-                }
-
-                test is_one_1() {
-                  is_one(1)
-                }
-            "#
-        },
-    )
-    .into_diagnostic()?;
-
     Ok(())
 }
 
-fn create_validators(root: &Path, package_name: &PackageName) -> miette::Result<()> {
+fn create_validators_folder(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
-
     fs::create_dir_all(&validators).into_diagnostic()?;
-
-    let always_true_path = validators.join("always_true.ak");
-
-    fs::write(
-        always_true_path,
-        formatdoc! {
-            r#"
-                use aiken/transaction.{{ScriptContext}}
-                use {name}
-                use {name}/util
-
-                pub fn spend(_datum: Data, _redeemer: Data, _context: ScriptContext) -> Bool {{
-                  {name}.hello("World") && util.is_one(1)
-                }}
-            "#,
-            name = package_name.repo
-        },
-    )
-    .into_diagnostic()?;
-
     Ok(())
 }
 
