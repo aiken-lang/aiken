@@ -202,6 +202,11 @@ pub enum Air {
         tipo: Arc<Type>,
     },
 
+    ErrorTerm {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+    },
+
     Trace {
         scope: Vec<u64>,
         text: Option<String>,
@@ -263,6 +268,7 @@ impl Air {
             | Air::FieldsExpose { scope, .. }
             | Air::Tuple { scope, .. }
             | Air::Todo { scope, .. }
+            | Air::ErrorTerm { scope, .. }
             | Air::Record { scope, .. }
             | Air::RecordUpdate { scope, .. }
             | Air::Negate { scope, .. }

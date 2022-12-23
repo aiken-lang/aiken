@@ -148,6 +148,11 @@ pub enum TypedExpr {
         tipo: Arc<Type>,
     },
 
+    ErrorTerm {
+        location: Span,
+        tipo: Arc<Type>,
+    },
+
     RecordUpdate {
         location: Span,
         tipo: Arc<Type>,
@@ -170,6 +175,7 @@ impl TypedExpr {
             Self::Fn { tipo, .. }
             | Self::Int { tipo, .. }
             | Self::Todo { tipo, .. }
+            | Self::ErrorTerm { tipo, .. }
             | Self::When { tipo, .. }
             | Self::List { tipo, .. }
             | Self::Call { tipo, .. }
@@ -214,6 +220,7 @@ impl TypedExpr {
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
             | TypedExpr::Todo { .. }
+            | TypedExpr::ErrorTerm { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Tuple { .. }
             | TypedExpr::Negate { .. }
@@ -252,6 +259,7 @@ impl TypedExpr {
             | Self::Var { location, .. }
             | Self::Trace { location, .. }
             | Self::Todo { location, .. }
+            | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }
@@ -287,6 +295,7 @@ impl TypedExpr {
             | Self::Trace { location, .. }
             | Self::Var { location, .. }
             | Self::Todo { location, .. }
+            | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::If { location, .. }
@@ -372,11 +381,13 @@ pub enum UntypedExpr {
         kind: AssignmentKind,
         annotation: Option<Annotation>,
     },
+
     Trace {
         location: Span,
         then: Box<Self>,
         text: Option<String>,
     },
+
     When {
         location: Span,
         subjects: Vec<Self>,
@@ -410,6 +421,10 @@ pub enum UntypedExpr {
         kind: TodoKind,
         location: Span,
         label: Option<String>,
+    },
+
+    ErrorTerm {
+        location: Span,
     },
 
     RecordUpdate {
@@ -482,6 +497,7 @@ impl UntypedExpr {
             | Self::Var { location, .. }
             | Self::Int { location, .. }
             | Self::Todo { location, .. }
+            | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
             | Self::List { location, .. }

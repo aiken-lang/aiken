@@ -783,7 +783,9 @@ impl<'comments> Formatter<'comments> {
                     .append((index + 1).to_doc())
                     .append(suffix)
             }
+            UntypedExpr::ErrorTerm { .. } => "error".to_doc(),
         };
+
         commented(document, comments)
     }
 
