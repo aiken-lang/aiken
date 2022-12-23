@@ -80,6 +80,7 @@ dependencies = [
  "itertools",
  "miette",
  "ordinal",
+ "owo-colors",
  "pretty_assertions",
  "strum",
  "thiserror",

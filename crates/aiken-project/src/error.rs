@@ -18,17 +18,17 @@ use zip_extract::ZipExtractError;
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
 pub enum Error {
-    #[error("Duplicate module\n\n{module}")]
+    #[error("I just found two modules with the same name: '{module}'")]
     DuplicateModule {
         module: String,
         first: PathBuf,
         second: PathBuf,
     },
 
-    #[error("File operation failed")]
+    #[error("Some operation on the file-system did fail.")]
     FileIo { error: io::Error, path: PathBuf },
 
-    #[error("Source code incorrectly formatted")]
+    #[error("I found some files with incorrectly formatted source code.")]
     Format { problem_files: Vec<Unformatted> },
 
     #[error(transparent)]
@@ -52,29 +52,26 @@ pub enum Error {
         help: String,
     },
 
-    #[error("Missing 'aiken.toml' manifest in {path}")]
+    #[error("I couldn't find any 'aiken.toml' manifest in {path}.")]
     MissingManifest { path: PathBuf },
 
-    #[error("Cyclical module imports")]
+    #[error("I just found a cycle in module hierarchy!")]
     ImportCycle { modules: Vec<String> },
 
     /// Useful for returning many [`Error::Parse`] at once
     #[error("A list of errors")]
     List(Vec<Self>),
 
-    #[error("Parsing")]
+    #[error("While parsing files...")]
     Parse {
         path: PathBuf,
-
         src: String,
-
         named: NamedSource,
-
         #[source]
         error: Box<ParseError>,
     },
 
-    #[error("Checking")]
+    #[error("While trying to make sense of your code...")]
     Type {
         path: PathBuf,
         src: String,
@@ -246,7 +243,10 @@ impl Diagnostic for Error {
             Error::ImportCycle { .. } => Some(Box::new("aiken::module::cyclical")),
             Error::List(_) => None,
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
-            Error::Type { .. } => Some(Box::new("aiken::check")),
+            Error::Type { error, .. } => Some(Box::new(format!(
+                "err::aiken::check{}",
+                error.code().map(|s| format!("::{s}")).unwrap_or_default()
+            ))),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => Some(Box::new("aiken::loading::toml")),
@@ -366,6 +366,27 @@ impl Diagnostic for Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+        }
+    }
+
+    fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::ImportCycle { .. } => None,
+            Error::List { .. } => None,
+            Error::Parse { .. } => None,
+            Error::Type { error, .. } => error.url(),
+            Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => None,
+            Error::TomlLoading { .. } => None,
+            Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { .. } => None,
+            Error::WrongValidatorArity { .. } => None,
+            Error::TestFailure { .. } => None,
+            Error::Http { .. } => None,
+            Error::ZipExtract { .. } => None,
+            Error::JoinError { .. } => None,
         }
     }
 }

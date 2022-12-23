@@ -488,7 +488,7 @@ impl<'comments> Formatter<'comments> {
         .group()
     }
 
-    fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
+    pub fn type_arguments<'a>(&mut self, args: &'a [Annotation]) -> Document<'a> {
         wrap_generics(args.iter().map(|t| self.annotation(t)))
     }
 
@@ -796,7 +796,7 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn pattern_constructor<'a>(
+    pub fn pattern_constructor<'a>(
         &mut self,
         name: &'a str,
         args: &'a [CallArg<UntypedPattern>],
@@ -1478,7 +1478,7 @@ impl<'comments> Formatter<'comments> {
         list(elements_document, elements.len(), tail)
     }
 
-    fn pattern<'a>(&mut self, pattern: &'a UntypedPattern) -> Document<'a> {
+    pub fn pattern<'a>(&mut self, pattern: &'a UntypedPattern) -> Document<'a> {
         let comments = self.pop_comments(pattern.location().start);
         let doc = match pattern {
             Pattern::Int { value, .. } => value.to_doc(),

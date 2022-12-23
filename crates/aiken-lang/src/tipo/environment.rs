@@ -146,10 +146,9 @@ impl<'a> Environment<'a> {
 
         if let Type::Fn { args, ret } = tipo.deref() {
             return if args.len() != arity {
-                Err(Error::IncorrectArity {
+                Err(Error::IncorrectFunctionCallArity {
                     expected: args.len(),
                     given: arity,
-                    labels: vec![],
                     location: call_location,
                 })
             } else {
@@ -316,9 +315,9 @@ impl<'a> Environment<'a> {
     ) -> Result<&ValueConstructor, Error> {
         match module {
             None => self.scope.get(name).ok_or_else(|| Error::UnknownVariable {
+                location,
                 name: name.to_string(),
                 variables: self.local_value_names(),
-                location,
             }),
 
             Some(m) => {
@@ -1009,10 +1008,10 @@ impl<'a> Environment<'a> {
                 self.ungeneralised_functions.insert(name.to_string());
 
                 // Create the field map so we can reorder labels for usage of this function
-                let mut field_map = FieldMap::new(args.len());
+                let mut field_map = FieldMap::new(args.len(), true);
 
                 for (i, arg) in args.iter().enumerate() {
-                    field_map.insert(arg.arg_name.get_label().clone(), i, location)?;
+                    field_map.insert(arg.arg_name.get_label().clone(), i, &arg.location)?;
                 }
                 let field_map = field_map.into_option();
 
@@ -1077,7 +1076,6 @@ impl<'a> Environment<'a> {
             }
 
             Definition::DataType(DataType {
-                location,
                 public,
                 opaque,
                 name,
@@ -1115,14 +1113,17 @@ impl<'a> Environment<'a> {
                 for constructor in constructors {
                     assert_unique_value_name(names, &constructor.name, &constructor.location)?;
 
-                    let mut field_map = FieldMap::new(constructor.arguments.len());
+                    let mut field_map = FieldMap::new(constructor.arguments.len(), false);
 
                     let mut args_types = Vec::with_capacity(constructor.arguments.len());
 
                     for (
                         i,
                         RecordConstructorArg {
-                            label, annotation, ..
+                            label,
+                            annotation,
+                            location,
+                            ..
                         },
                     ) in constructor.arguments.iter().enumerate()
                     {
@@ -1593,16 +1594,13 @@ fn assert_unique_const_name<'a>(
     }
 }
 
-pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Result<(), Error> {
+pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Span, String)> {
     for arg in args {
         if let Some(label) = &arg.label {
-            return Err(Error::UnexpectedLabeledArg {
-                location: arg.location,
-                label: label.to_string(),
-            });
+            return Some((arg.location, label.to_string()));
         }
     }
-    Ok(())
+    None
 }
 
 pub(super) fn collapse_links(t: Arc<Type>) -> Arc<Type> {

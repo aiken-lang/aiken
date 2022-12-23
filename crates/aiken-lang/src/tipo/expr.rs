@@ -111,7 +111,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Some(field_map) => field_map.reorder(&mut args, location)?,
 
             // The fun has no field map and so we error if arguments have been labelled
-            None => assert_no_labeled_arguments(&args)?,
+            None => assert_no_labeled_arguments(&args)
+                .map(|(location, label)| Err(Error::UnexpectedLabeledArg { location, label }))
+                .unwrap_or(Ok(()))?,
         }
 
         // Extract the type of the fun, ensuring it actually is a function
@@ -499,7 +501,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 None => {
                     panic!("Failed to lookup record field after successfully inferring that field",)
                 }
-                Some(p) => arguments.push(TypedRecordUpdateArg {
+                Some((p, _)) => arguments.push(TypedRecordUpdateArg {
                     location,
                     label: label.to_string(),
                     value,
@@ -1350,7 +1352,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Some(field_map) => field_map.reorder(&mut args, location)?,
 
                     // The fun has no field map and so we error if arguments have been labelled
-                    None => assert_no_labeled_arguments(&args)?,
+                    None => assert_no_labeled_arguments(&args)
+                        .map(|(location, label)| {
+                            Err(Error::UnexpectedLabeledArg { location, label })
+                        })
+                        .unwrap_or(Ok(()))?,
                 }
 
                 let (mut args_types, return_type) = self.environment.match_fun_type(
@@ -1723,7 +1729,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Ok(elems[index].clone())
                 }
             }
-            _ => Err(Error::NotATuple { location }),
+            _ => Err(Error::NotATuple {
+                location,
+                tipo: tuple.tipo(),
+            }),
         }?;
 
         Ok(TypedExpr::TupleIndex {
