@@ -368,6 +368,27 @@ impl Diagnostic for Error {
             Error::JoinError(_) => None,
         }
     }
+
+    fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::ImportCycle { .. } => None,
+            Error::List { .. } => None,
+            Error::Parse { .. } => None,
+            Error::Type { error, .. } => error.url(),
+            Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => None,
+            Error::TomlLoading { .. } => None,
+            Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { .. } => None,
+            Error::WrongValidatorArity { .. } => None,
+            Error::TestFailure { .. } => None,
+            Error::Http { .. } => None,
+            Error::ZipExtract { .. } => None,
+            Error::JoinError { .. } => None,
+        }
+    }
 }
 
 #[derive(thiserror::Error)]

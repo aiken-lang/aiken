@@ -97,7 +97,7 @@ pub enum Error {
         given: usize,
     },
 
-    #[error("I realized that a given 'when clause' is non-exhaustive.\n")]
+    #[error("I realized that a given 'when/is' expression is non-exhaustive.\n")]
     NotExhaustivePatternMatch {
         location: Span,
         unmatched: Vec<String>,
@@ -1098,7 +1098,7 @@ impl Diagnostic for Error {
         match self {
             Self::DuplicateArgument { locations, .. } => Some(Box::new(
                 locations
-                    .into_iter()
+                    .iter()
                     .map(|l| LabeledSpan::new_with_span(None, *l)),
             )),
             Self::DuplicateConstName {
@@ -1125,7 +1125,7 @@ impl Diagnostic for Error {
             )),
             Self::DuplicateField { locations, .. } => Some(Box::new(
                 locations
-                    .into_iter()
+                    .iter()
                     .map(|l| LabeledSpan::new_with_span(None, *l)),
             )),
             Self::DuplicateName {
@@ -1258,6 +1258,102 @@ impl Diagnostic for Error {
             )),
             Self::TupleIndexOutOfBound { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+            )),
+        }
+    }
+
+    fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        match self {
+            Self::DuplicateArgument { .. } => None,
+            Self::DuplicateConstName { .. } => None,
+            Self::DuplicateImport { .. } => None,
+            Self::DuplicateField { .. } => None,
+            Self::DuplicateName { .. } => None,
+            Self::DuplicateTypeName { .. } => None,
+            Self::IncorrectFieldsArity { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/custom-types",
+            )),
+            Self::IncorrectFunctionCallArity { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/functions#named-functions",
+            )),
+            Self::IncorrectPatternArity { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#matching",
+            )),
+            Self::IncorrectNumClausePatterns { .. } => None,
+            Self::IncorrectTupleArity { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#destructuring",
+            )),
+            Self::IncorrectTypeArity { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/custom-types#generics",
+            )),
+            Self::NotExhaustivePatternMatch { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#matching",
+            )),
+            Self::NotFn { .. } => None,
+            Self::KeywordInModuleName { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/modules"
+            )),
+            Self::NonLocalClauseGuardVariable { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
+            )),
+            Self::PositionalArgumentAfterLabeled { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/functions#labeled-arguments"
+            )),
+            Self::PrivateTypeLeak { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/modules"
+            )),
+            Self::RecordAccessUnknownType { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/variables-and-constants#type-annotations"
+            )),
+            Self::RecordUpdateInvalidConstructor { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/custom-types#record-updates"
+            )),
+            Self::ReservedModuleName { .. } => None,
+            Self::UnexpectedLabeledArg { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/functions#labeled-arguments"
+            )),
+            Self::UnexpectedLabeledArgInPattern { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/custom-types#named-accessors"
+            )),
+            Self::UnexpectedTypeHole { .. } => None,
+            Self::UnknownLabels { .. } => None,
+            Self::UnknownModule { .. } => None,
+            Self::UnknownModuleField { .. } => None,
+            Self::UnknownModuleValue { .. } => None,
+            Self::UnknownModuleType { .. } => None,
+            Self::UnknownRecordField { .. } => None,
+            Self::UnknownType { .. } => None,
+            Self::UnknownVariable { .. } => None,
+            Self::UnknownTypeConstructor { .. } => None,
+            Self::UnnecessarySpreadOperator { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#destructuring"
+            )),
+            Self::UpdateMultiConstructorType { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/custom-types#record-updates"
+            )),
+            Self::CouldNotUnify { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/primitive-types"
+            )),
+            Self::ExtraVarInAlternativePattern { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
+            )),
+            Self::MissingVarInAlternativePattern { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
+            )),
+            Self::DuplicateVarInPattern { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
+            )),
+            Self::CyclicTypeDefinitions { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/custom-types#type-aliases"
+            )),
+            Self::RecursiveType { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/variables-and-constants#type-annotations"
+            )),
+            Self::NotATuple { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/primitive-types#tuples"
+            )),
+            Self::TupleIndexOutOfBound { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/primitive-types#tuples"
             )),
         }
     }
