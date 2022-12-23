@@ -851,6 +851,10 @@ pub fn expr_parser(
                 label,
             });
 
+        let error_parser = just(Token::ErrorTerm)
+            .ignored()
+            .map_with_span(|_, span| expr::UntypedExpr::ErrorTerm { location: span });
+
         let tuple = just(Token::Hash)
             .ignore_then(
                 r.clone()
@@ -1065,6 +1069,7 @@ pub fn expr_parser(
             field_access_constructor,
             var_parser,
             todo_parser,
+            error_parser,
             tuple,
             bytearray,
             list_parser,

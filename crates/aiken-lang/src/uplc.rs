@@ -536,6 +536,13 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::TupleIndex { .. } => {
                 todo!("Tuple indexing not implementing yet");
             }
+
+            TypedExpr::ErrorTerm { tipo, .. } => {
+                ir_stack.push(Air::ErrorTerm {
+                    scope,
+                    tipo: tipo.clone(),
+                });
+            }
         }
     }
 
@@ -3732,6 +3739,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
+            Air::ErrorTerm { .. } => arg_stack.push(Term::Error),
         }
     }
 }

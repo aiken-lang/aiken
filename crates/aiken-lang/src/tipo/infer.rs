@@ -476,6 +476,8 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "todo" => Some(Token::Todo),
         "type" => Some(Token::Type),
         "trace" => Some(Token::Trace),
+        "test" => Some(Token::Test),
+        "error" => Some(Token::ErrorTerm),
         _ => None,
     }
 }
