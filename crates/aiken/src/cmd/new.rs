@@ -75,13 +75,13 @@ fn create_lib_folder(root: &Path, package_name: &PackageName) -> miette::Result<
     let lib = root.join("lib");
     fs::create_dir_all(&lib).into_diagnostic()?;
     let nested_path = lib.join(&package_name.repo);
-    fs::create_dir_all(&nested_path).into_diagnostic()?;
+    fs::create_dir_all(nested_path).into_diagnostic()?;
     Ok(())
 }
 
 fn create_validators_folder(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
-    fs::create_dir_all(&validators).into_diagnostic()?;
+    fs::create_dir_all(validators).into_diagnostic()?;
     Ok(())
 }
 
