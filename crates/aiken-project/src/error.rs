@@ -393,7 +393,9 @@ impl Diagnostic for Error {
 
 #[derive(thiserror::Error)]
 pub enum Warning {
-    #[error("Checking")]
+    #[error("You do not have any validators to build!")]
+    NoValidators,
+    #[error("While trying to make sense of your code...")]
     Type {
         path: PathBuf,
         src: String,
@@ -411,17 +413,21 @@ impl Diagnostic for Warning {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
             Warning::Type { named, .. } => Some(named),
+            Warning::NoValidators => None,
         }
     }
+
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         match self {
             Warning::Type { warning, .. } => warning.labels(),
+            Warning::NoValidators => None,
         }
     }
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Warning::Type { .. } => Some(Box::new("aiken::check")),
+            Warning::NoValidators => Some(Box::new("aiken::check")),
         }
     }
 }
