@@ -187,6 +187,10 @@ where
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
+                if validators.is_empty() {
+                    self.warnings.push(Warning::NoValidators);
+                }
+
                 let programs = self.code_gen(validators)?;
 
                 self.write_build_outputs(programs, uplc_dump)?;
@@ -401,7 +405,7 @@ where
         Ok(())
     }
 
-    fn validate_validators(&mut self) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
+    fn validate_validators(&self) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
         let mut validators = Vec::new();
 
@@ -462,10 +466,6 @@ where
                     }
                 }
             }
-        }
-
-        if validators.is_empty() {
-            self.warnings.push(Warning::NoValidators);
         }
 
         if errors.is_empty() {
