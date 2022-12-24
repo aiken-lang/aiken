@@ -443,7 +443,7 @@ pub fn rearrange_clauses(
     let mut final_clauses = sorted_clauses.clone();
     let mut holes_to_fill = vec![];
     let mut assign_plug_in_name = None;
-    let mut last_clause_index = sorted_clauses.len() - 1;
+    let mut last_clause_index = 0;
     let mut last_clause_set = false;
 
     // If we have a catch all, use that. Otherwise use todo which will result in error
@@ -454,10 +454,10 @@ pub fn rearrange_clauses(
             sorted_clauses[sorted_clauses.len() - 1].clone().then
         }
         Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
-        _ => TypedExpr::Todo {
+        _ => TypedExpr::ErrorTerm {
             location: Span::empty(),
-            label: None,
             tipo: sorted_clauses[sorted_clauses.len() - 1].then.tipo(),
+            label: Some("Clause not filled".to_string()),
         },
     };
 
@@ -512,49 +512,47 @@ pub fn rearrange_clauses(
         }
 
         // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
-        if let Pattern::List {
-            elements,
-            tail: Some(tail),
-            ..
-        } = &clause.pattern[0]
-        {
-            let mut elements = elements.clone();
-            elements.push(*tail.clone());
-            if elements
-                .iter()
-                .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
-                && !last_clause_set
-            {
+        match &clause.pattern[0] {
+            Pattern::Var { .. } => {
                 last_clause_index = index;
                 last_clause_set = true;
             }
+            Pattern::Discard { .. } => {
+                last_clause_index = index;
+                last_clause_set = true;
+            }
+            Pattern::List {
+                elements,
+                tail: Some(tail),
+                ..
+            } => {
+                let mut elements = elements.clone();
+                elements.push(*tail.clone());
+                if elements
+                    .iter()
+                    .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
+                    && !last_clause_set
+                {
+                    last_clause_index = index + 1;
+                    last_clause_set = true;
+                }
+            }
+            _ => {}
         }
 
         // If the last condition doesn't have a catch all or tail then add a catch all with a todo
         if index == sorted_clauses.len() - 1 {
-            if let Pattern::List {
-                elements,
-                tail: Some(tail),
-                ..
-            } = &clause.pattern[0]
-            {
-                let mut elements = elements.clone();
-                elements.push(*tail.clone());
-                if !elements
-                    .iter()
-                    .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
-                {
-                    final_clauses.push(Clause {
+            if let Pattern::List { tail: None, .. } = &clause.pattern[0] {
+                final_clauses.push(Clause {
+                    location: Span::empty(),
+                    pattern: vec![Pattern::Discard {
+                        name: "_".to_string(),
                         location: Span::empty(),
-                        pattern: vec![Pattern::Discard {
-                            name: "_".to_string(),
-                            location: Span::empty(),
-                        }],
-                        alternative_patterns: vec![],
-                        guard: None,
-                        then: plug_in_then.clone(),
-                    });
-                }
+                    }],
+                    alternative_patterns: vec![],
+                    guard: None,
+                    then: plug_in_then.clone(),
+                });
             }
         }
 
@@ -562,7 +560,9 @@ pub fn rearrange_clauses(
     }
 
     // Encountered a tail so stop there with that as last clause
-    final_clauses = final_clauses[0..(last_clause_index + 1)].to_vec();
+    if last_clause_set {
+        final_clauses = final_clauses[0..last_clause_index].to_vec();
+    }
 
     // insert hole fillers into clauses
     for (index, clause) in holes_to_fill.into_iter().rev() {
@@ -1201,6 +1201,7 @@ pub fn monomorphize(
                 tail_name,
                 complex_clause,
                 next_tail_name,
+                inverse,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1212,6 +1213,7 @@ pub fn monomorphize(
                         tail_name,
                         complex_clause,
                         next_tail_name,
+                        inverse,
                     };
                     needs_variant = false;
                 }
@@ -1220,7 +1222,6 @@ pub fn monomorphize(
                 tipo,
                 scope,
                 subject_name,
-                invert,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1230,7 +1231,6 @@ pub fn monomorphize(
                         scope,
                         subject_name,
                         tipo,
-                        invert,
                     };
                     needs_variant = false;
                 }

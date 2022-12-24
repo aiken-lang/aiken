@@ -134,6 +134,7 @@ pub enum Air {
         tail_name: String,
         next_tail_name: Option<String>,
         complex_clause: bool,
+        inverse: bool,
     },
 
     TupleClause {
@@ -150,7 +151,6 @@ pub enum Air {
         scope: Vec<u64>,
         subject_name: String,
         tipo: Arc<Type>,
-        invert: bool,
     },
 
     Discard {

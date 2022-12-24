@@ -314,7 +314,7 @@ pub fn delayed_choose_list(
     Term::Apply {
         function: Term::Apply {
             function: Term::Apply {
-                function: Term::Builtin(DefaultFunction::IfThenElse)
+                function: Term::Builtin(DefaultFunction::ChooseList)
                     .force_wrap()
                     .force_wrap()
                     .into(),
@@ -337,7 +337,7 @@ pub fn choose_list(
     Term::Apply {
         function: Term::Apply {
             function: Term::Apply {
-                function: Term::Builtin(DefaultFunction::IfThenElse)
+                function: Term::Builtin(DefaultFunction::ChooseList)
                     .force_wrap()
                     .force_wrap()
                     .into(),
