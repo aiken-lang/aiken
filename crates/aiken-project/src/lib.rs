@@ -107,6 +107,8 @@ where
     }
 
     pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Error> {
+        self.compile_deps()?;
+
         self.event_listener
             .handle_event(Event::BuildingDocumentation {
                 root: self.root.clone(),
@@ -399,7 +401,7 @@ where
         Ok(())
     }
 
-    fn validate_validators(&self) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
+    fn validate_validators(&mut self) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
         let mut errors = Vec::new();
         let mut validators = Vec::new();
 
@@ -460,6 +462,10 @@ where
                     }
                 }
             }
+        }
+
+        if validators.is_empty() {
+            self.warnings.push(Warning::NoValidators);
         }
 
         if errors.is_empty() {
