@@ -12,16 +12,36 @@ pub type Redeemer {
   msg: ByteArray,
 }
 
-pub fn spend(datum: Datum, redeemer: Redeemer, context: ScriptContext) -> Bool {
-  let must_say_hello = string.from_bytearray(redeemer.msg) == "Hello, World!"
-
-  let must_be_signed =
-    context.transaction.extra_signatories
-    |> list.any(fn(vk) { vk == datum.owner })
-
-  must_say_hello && must_be_signed
+pub type Dummy {
+  Mannequin {
+    hands: ByteArray,
+    feet: Int,
+  }
+  Doll {
+    hands: ByteArray,
+    datum: Datum,
+    feet: Int,
+  }
+  Puppet {
+    hands: ByteArray,
+    dummy: Dummy,
+  }
+  Statue {
+    hands: ByteArray,
+    boots: ByteArray,
+  }
 }
+ 
+pub fn spend(datum: Datum, redeemer: Redeemer, context: Dummy) -> Bool {
+  let must_say_hello = string.from_bytearray(redeemer.msg) == "Hello, World!"
+  let must_be_signed = #(1, datum, #(redeemer.msg, context ))
+    // context.transaction.extra_signatories
+    // |> list.any(fn(vk) { vk == datum.owner })
 
-test foo() {
-  1 + 1 == 2
+  when must_be_signed is {
+    #(a, b, #(c, Mannequin{ feet, ..})) -> feet == 2
+    _ -> False
+    
+  }
+ 
 }

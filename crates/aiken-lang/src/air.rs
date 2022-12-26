@@ -140,8 +140,8 @@ pub enum Air {
     TupleClause {
         scope: Vec<u64>,
         tipo: Arc<Type>,
-        indices: HashSet<(u64, String)>,
-        predefined_indices: HashSet<(u64, String)>,
+        indices: HashSet<(usize, String)>,
+        predefined_indices: HashSet<(usize, String)>,
         subject_name: String,
         count: usize,
         complex_clause: bool,
