@@ -69,7 +69,7 @@ pub enum ClauseProperties {
         needs_constr_var: bool,
         is_complex_clause: bool,
         original_subject_name: String,
-        defined_tuple_indices: HashSet<(u64, String)>,
+        defined_tuple_indices: HashSet<(usize, String)>,
     },
 }
 

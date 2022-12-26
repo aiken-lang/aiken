@@ -118,6 +118,10 @@ impl<T> Term<T> {
     pub fn force_wrap(self) -> Self {
         Term::Force(self.into())
     }
+
+    pub fn delay_wrap(self) -> Self {
+        Term::Delay(self.into())
+    }
 }
 
 impl<'a, T> Display for Term<T>

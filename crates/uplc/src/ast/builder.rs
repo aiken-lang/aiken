@@ -6,7 +6,14 @@ pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
 
-pub fn final_wrapper<T>(term: Term<T>) -> Term<T> {
+pub fn apply_wrap(function: Term<Name>, arg: Term<Name>) -> Term<Name> {
+    Term::Apply {
+        function: function.into(),
+        argument: arg.into(),
+    }
+}
+
+pub fn final_wrapper(term: Term<Name>) -> Term<Name> {
     Term::Force(
         Term::Apply {
             function: Term::Apply {
@@ -349,4 +356,16 @@ pub fn choose_list(
         .into(),
         argument: else_term.into(),
     }
+}
+
+pub fn repeat_tail_list(term: Term<Name>, repeat: usize) -> Term<Name> {
+    let mut term = term;
+
+    for _ in 0..repeat {
+        term = Term::Apply {
+            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
+            argument: term.into(),
+        };
+    }
+    term
 }
