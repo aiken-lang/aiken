@@ -86,11 +86,9 @@ impl<'a> CodeGenerator<'a> {
         let scope = vec![self.id_gen.next()];
 
         self.build_ir(&body, &mut ir_stack, scope);
-        println!("{ir_stack:#?}");
 
         self.define_ir(&mut ir_stack);
 
-        println!("{ir_stack:#?}");
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
         if self.needs_field_access {
@@ -120,7 +118,6 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
-        println!("{}", program.to_pretty());
 
         let mut interner = Interner::new();
 
@@ -1843,6 +1840,8 @@ impl<'a> CodeGenerator<'a> {
         );
 
         let mut final_func_dep_ir = IndexMap::new();
+        let mut zero_arg_defined_functions = HashMap::new();
+        let mut to_be_defined = HashMap::new();
         for func in func_index_map.clone() {
             if self.defined_functions.contains_key(&func.0) {
                 continue;
@@ -1852,22 +1851,45 @@ impl<'a> CodeGenerator<'a> {
 
             let mut dep_ir = vec![];
 
-            // deal with function dependencies
-            handle_func_deps_ir(
-                &mut dep_ir,
-                funt_comp,
-                &func_components,
-                &mut self.defined_functions,
-                &func_index_map,
-                func_scope,
-            );
-
             if !funt_comp.args.is_empty() {
+                // deal with function dependencies
+                handle_func_deps_ir(
+                    &mut dep_ir,
+                    funt_comp,
+                    &func_components,
+                    &mut self.defined_functions,
+                    &func_index_map,
+                    func_scope,
+                    &mut to_be_defined,
+                );
                 final_func_dep_ir.insert(func.0, dep_ir);
             } else {
+                // since zero arg functions are run at compile time we need to pull all deps
+                let mut defined_functions = HashMap::new();
+                // deal with function dependencies in zero arg functions
+                handle_func_deps_ir(
+                    &mut dep_ir,
+                    funt_comp,
+                    &func_components,
+                    &mut defined_functions,
+                    &func_index_map,
+                    func_scope,
+                    &mut HashMap::new(),
+                );
+
                 let mut final_zero_arg_ir = dep_ir;
                 final_zero_arg_ir.extend(funt_comp.ir.clone());
                 self.zero_arg_functions.insert(func.0, final_zero_arg_ir);
+
+                for (key, val) in defined_functions.into_iter() {
+                    zero_arg_defined_functions.insert(key, val);
+                }
+            }
+        }
+
+        for (key, val) in zero_arg_defined_functions.into_iter() {
+            if !to_be_defined.contains_key(&key) {
+                self.defined_functions.insert(key, val);
             }
         }
 
@@ -1948,7 +1970,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn define_recurse_ir(
         &mut self,
-        ir_stack: &mut Vec<Air>,
+        ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
         mut recursion_func_map: IndexMap<FunctionAccessKey, ()>,
@@ -1992,7 +2014,13 @@ impl<'a> CodeGenerator<'a> {
                         })
                     {
                         skip = true;
-                    } else {
+                    } else if func.clone()
+                        == (FunctionAccessKey {
+                            module_name: module.clone(),
+                            function_name: func_name.clone(),
+                            variant_name: variant_name.clone(),
+                        })
+                    {
                         recursion_func_map_to_add.insert(
                             FunctionAccessKey {
                                 module_name: module.clone(),
@@ -2040,7 +2068,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn process_define_ir(
         &mut self,
-        ir_stack: &mut Vec<Air>,
+        ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
     ) {
@@ -2048,10 +2076,7 @@ impl<'a> CodeGenerator<'a> {
         for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
             match ir {
                 Air::Var {
-                    scope,
-                    constructor,
-                    name: temp_name,
-                    ..
+                    scope, constructor, ..
                 } => {
                     if let ValueConstructorVariant::ModuleFn {
                         name,
@@ -3565,7 +3590,6 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                 } else if tipo.is_bool() {
-                    // let term =
                     todo!()
                 } else if tipo.is_string() {
                     Term::Apply {
