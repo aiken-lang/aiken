@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+if [ -z $1 ]; then
+  echo -e "\033[31mMissing argument: \033[1mACCEPTANCE_TEST\033[0m"
+  echo ""
+  echo -e "\033[1mUsage: \033[0m"
+  echo "  run.sh {ACCEPTANCE_TEST}"
+  echo ""
+  echo -e "\033[1mExample: \033[0m"
+  echo "  run.sh 034"
+  exit 1
+fi
+
+WORKDIR="$(dirname -- "${BASH_SOURCE[0]}")"
+TARGET="$WORKDIR/$(basename $1)"
+
+TMP=$(mktemp)
+RESULT=$(cargo run --quiet -- check $TARGET 2>$TMP)
+if [ "$?" -eq "0" ]; then
+  echo "✅ $(basename $TARGET)"
+else
+  echo "❌ $(basename $TARGET)"
+  cat $TMP
+fi
