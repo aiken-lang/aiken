@@ -570,7 +570,6 @@ where
         Ok(programs)
     }
 
-    // TODO: revisit ownership and lifetimes of data in this function
     fn collect_scripts(
         &mut self,
         verbose: bool,
@@ -595,12 +594,8 @@ where
 
         let mut scripts = Vec::new();
 
-        for module in self
-            .checked_modules
-            .values()
-            .filter(|checked| checked.package == self.config.name.to_string())
-        {
-            for (_index, def) in module.ast.definitions().enumerate() {
+        for module in self.checked_modules.values() {
+            for def in module.ast.definitions() {
                 match def {
                     Definition::Fn(func) => {
                         functions.insert(
@@ -611,15 +606,15 @@ where
                             },
                             func,
                         );
-                        if should_collect(def) {
+
+                        if should_collect(def) && module.package == self.config.name.to_string() {
                             scripts.push((module.input_path.clone(), module.name.clone(), func));
                         }
                     }
                     Definition::Test(func) => {
-                        if should_collect(def) {
+                        if should_collect(def) && module.package == self.config.name.to_string() {
                             scripts.push((module.input_path.clone(), module.name.clone(), func));
                         }
-                        // indices_to_remove.push(index);
                     }
                     Definition::TypeAlias(ta) => {
                         type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
@@ -673,10 +668,12 @@ where
                     .generate(*left_src, vec![], false)
                     .try_into()
                     .unwrap();
+
                 let right = CodeGenerator::new(&functions, &data_types, &self.module_types)
                     .generate(*right_src, vec![], false)
                     .try_into()
                     .unwrap();
+
                 Some(EvalHint {
                     bin_op,
                     left,
