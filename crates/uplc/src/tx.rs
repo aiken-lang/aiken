@@ -49,7 +49,7 @@ pub fn eval_phase_two(
         Some(rs) => {
             let mut collected_redeemers = vec![];
 
-            let mut remaining_budget = initial_budget.unwrap_or(&ExBudget::default()).clone();
+            let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
             for redeemer in rs.iter() {
                 let redeemer = eval::eval_redeemer(
