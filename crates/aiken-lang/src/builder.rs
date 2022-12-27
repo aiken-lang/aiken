@@ -383,9 +383,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                 }
                 .into(),
                 argument: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::UnListData)
-                        .force_wrap()
-                        .into(),
+                    function: Term::Builtin(DefaultFunction::UnListData).into(),
                     argument: term.into(),
                 }
                 .into(),
@@ -514,11 +512,11 @@ pub fn rearrange_clauses(
         // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
         match &clause.pattern[0] {
             Pattern::Var { .. } => {
-                last_clause_index = index;
+                last_clause_index = index + 1;
                 last_clause_set = true;
             }
             Pattern::Discard { .. } => {
-                last_clause_index = index;
+                last_clause_index = index + 1;
                 last_clause_set = true;
             }
             Pattern::List {
@@ -532,6 +530,7 @@ pub fn rearrange_clauses(
                     .iter()
                     .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
                     && !last_clause_set
+                    && !elements.is_empty()
                 {
                     last_clause_index = index + 1;
                     last_clause_set = true;
@@ -627,8 +626,7 @@ pub fn list_access_to_uplc(
                         }
                         .into(),
                         argument: Term::Apply {
-                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
-                                .into(),
+                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
                             argument: Term::Var(Name {
                                 text: format!(
                                     "tail_index_{}_{}",
@@ -697,8 +695,7 @@ pub fn list_access_to_uplc(
                         )
                         .into(),
                         argument: Term::Apply {
-                            function: Term::Force(Term::Builtin(DefaultFunction::TailList).into())
-                                .into(),
+                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
                             argument: Term::Var(Name {
                                 text: format!(
                                     "tail_index_{}_{}",
@@ -1264,6 +1261,8 @@ pub fn monomorphize(
                         find_generics_to_replace(&mut tipo, &generic_types);
                         needs_variant = false;
                         new_indices.push((ind, name, tipo));
+                    } else {
+                        new_indices.push((ind, name, tipo));
                     }
                 }
                 new_air[index] = Air::FieldsExpose {
@@ -1291,7 +1290,40 @@ pub fn monomorphize(
                 }
             }
             Air::RecordUpdate { .. } => todo!(),
-            Air::TupleAccessor { .. } => todo!(),
+            Air::TupleAccessor { scope, names, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::TupleAccessor { scope, names, tipo };
+                    needs_variant = false;
+                }
+            }
+            Air::TupleClause {
+                scope,
+                tipo,
+                indices,
+                predefined_indices,
+                subject_name,
+                count,
+                complex_clause,
+            } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::TupleClause {
+                        scope,
+                        tipo,
+                        indices,
+                        predefined_indices,
+                        subject_name,
+                        count,
+                        complex_clause,
+                    };
+                    needs_variant = false;
+                }
+            }
             _ => {}
         }
     }
