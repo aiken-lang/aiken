@@ -1346,12 +1346,14 @@ pub fn handle_func_deps_ir(
     defined_functions: &mut HashMap<FunctionAccessKey, ()>,
     func_index_map: &IndexMap<FunctionAccessKey, Vec<u64>>,
     func_scope: &[u64],
+    to_be_defined: &mut HashMap<FunctionAccessKey, ()>,
 ) {
     let mut funt_comp = funt_comp.clone();
     // deal with function dependencies
     while let Some(dependency) = funt_comp.dependencies.pop() {
         let mut insert_var_vec = vec![];
-        if defined_functions.contains_key(&dependency) || func_components.get(&dependency).is_none()
+        if (defined_functions.contains_key(&dependency) && !funt_comp.args.is_empty())
+            || func_components.get(&dependency).is_none()
         {
             continue;
         }
@@ -1360,27 +1362,28 @@ pub fn handle_func_deps_ir(
 
         let dep_scope = func_index_map.get(&dependency).unwrap();
 
-        if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
+        if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec()
+            || funt_comp.args.is_empty()
+        {
+            // we handle zero arg functions and their dependencies in a unique way
             if !depend_comp.args.is_empty() {
                 funt_comp
                     .dependencies
                     .extend(depend_comp.dependencies.clone());
-            }
 
-            for (index, ir) in depend_comp.ir.iter().enumerate() {
-                match_ir_for_recursion(
-                    ir.clone(),
-                    &mut insert_var_vec,
-                    &FunctionAccessKey {
-                        function_name: dependency.function_name.clone(),
-                        module_name: dependency.module_name.clone(),
-                        variant_name: dependency.variant_name.clone(),
-                    },
-                    index,
-                );
-            }
-            // we handle zero arg functions and their dependencies in a unique way
-            if !depend_comp.args.is_empty() {
+                for (index, ir) in depend_comp.ir.iter().enumerate() {
+                    match_ir_for_recursion(
+                        ir.clone(),
+                        &mut insert_var_vec,
+                        &FunctionAccessKey {
+                            function_name: dependency.function_name.clone(),
+                            module_name: dependency.module_name.clone(),
+                            variant_name: dependency.variant_name.clone(),
+                        },
+                        index,
+                    );
+                }
+
                 let mut recursion_ir = depend_comp.ir.clone();
                 for (index, ir) in insert_var_vec.clone() {
                     recursion_ir.insert(index, ir);
@@ -1412,8 +1415,13 @@ pub fn handle_func_deps_ir(
                 temp_ir.append(dep_ir);
 
                 *dep_ir = temp_ir;
-                defined_functions.insert(dependency, ());
+                if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
+                    defined_functions.insert(dependency, ());
+                }
             }
+        } else {
+            // Dependency will need to be defined somewhere in the main body
+            to_be_defined.insert(dependency, ());
         }
     }
 }

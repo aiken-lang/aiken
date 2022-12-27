@@ -32,9 +32,9 @@ pub type Dummy {
   }
 }
  
-pub fn spend(datum: Datum, redeemer: Redeemer, context: Dummy) -> Bool {
+pub fn spending(datum: Datum, redeemer: Redeemer, context: Dummy) -> Bool {
   let must_say_hello = string.from_bytearray(redeemer.msg) == "Hello, World!"
-  let must_be_signed = #(1, datum, #(redeemer.msg, context ))
+  let must_be_signed = #(1, datum, #(redeemer, context ))
     // context.transaction.extra_signatories
     // |> list.any(fn(vk) { vk == datum.owner })
 
@@ -44,4 +44,9 @@ pub fn spend(datum: Datum, redeemer: Redeemer, context: Dummy) -> Bool {
     
   }
  
+}
+
+
+test spend_1(){
+  spending(Datum{ owner: #[254]}, Redeemer{msg: string.to_bytearray("Hello, World!")}, Mannequin{hands: #[], feet: 2}) == True
 }
