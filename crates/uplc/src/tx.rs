@@ -49,6 +49,8 @@ pub fn eval_phase_two(
         Some(rs) => {
             let mut collected_redeemers = vec![];
 
+            let mut remaining_budget = initial_budget.unwrap_or(&ExBudget::default()).clone();
+
             for redeemer in rs.iter() {
                 let redeemer = eval::eval_redeemer(
                     tx,
@@ -57,8 +59,13 @@ pub fn eval_phase_two(
                     redeemer,
                     &lookup_table,
                     cost_mdls,
-                    initial_budget,
+                    &remaining_budget,
                 )?;
+
+                // The substraction is safe here as ex units counting is done during evaluation.
+                // Redeemer would fail already if budget was negative.
+                remaining_budget.cpu -= redeemer.ex_units.steps as i64;
+                remaining_budget.mem -= redeemer.ex_units.mem as i64;
 
                 collected_redeemers.push(redeemer)
             }

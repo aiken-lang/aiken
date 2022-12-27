@@ -693,7 +693,7 @@ pub fn eval_redeemer(
     redeemer: &Redeemer,
     lookup_table: &DataLookupTable,
     cost_mdls_opt: Option<&CostMdls>,
-    initial_budget: Option<&ExBudget>,
+    initial_budget: &ExBudget,
 ) -> Result<Redeemer, Error> {
     let result = || {
         let purpose = get_script_purpose(
@@ -733,7 +733,7 @@ pub fn eval_redeemer(
                             return Err(Error::V1CostModelNotFound);
                         };
 
-                        program.eval_as(&Language::PlutusV1, costs, initial_budget)
+                        program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
                     } else {
                         program.eval_v1()
                     };
@@ -742,11 +742,6 @@ pub fn eval_redeemer(
                         Ok(_) => (),
                         Err(err) => return Err(Error::Machine(err, budget, logs)),
                     }
-
-                    let initial_budget = match initial_budget {
-                        Some(b) => *b,
-                        None => ExBudget::default(),
-                    };
 
                     let new_redeemer = Redeemer {
                         tag: redeemer.tag.clone(),
@@ -784,7 +779,7 @@ pub fn eval_redeemer(
                             return Err(Error::V2CostModelNotFound);
                         };
 
-                        program.eval_as(&Language::PlutusV2, costs, initial_budget)
+                        program.eval_as(&Language::PlutusV2, costs, Some(initial_budget))
                     } else {
                         program.eval(ExBudget::default())
                     };
@@ -793,11 +788,6 @@ pub fn eval_redeemer(
                         Ok(_) => (),
                         Err(err) => return Err(Error::Machine(err, budget, logs)),
                     }
-
-                    let initial_budget = match initial_budget {
-                        Some(b) => *b,
-                        None => ExBudget::default(),
-                    };
 
                     let new_redeemer = Redeemer {
                         tag: redeemer.tag.clone(),
@@ -837,7 +827,7 @@ pub fn eval_redeemer(
                             return Err(Error::V1CostModelNotFound);
                         };
 
-                        program.eval_as(&Language::PlutusV1, costs, initial_budget)
+                        program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
                     } else {
                         program.eval_v1()
                     };
@@ -846,11 +836,6 @@ pub fn eval_redeemer(
                         Ok(_) => (),
                         Err(err) => return Err(Error::Machine(err, budget, logs)),
                     }
-
-                    let initial_budget = match initial_budget {
-                        Some(b) => *b,
-                        None => ExBudget::default(),
-                    };
 
                     let new_redeemer = Redeemer {
                         tag: redeemer.tag.clone(),
@@ -887,7 +872,7 @@ pub fn eval_redeemer(
                             return Err(Error::V2CostModelNotFound);
                         };
 
-                        program.eval_as(&Language::PlutusV2, costs, initial_budget)
+                        program.eval_as(&Language::PlutusV2, costs, Some(initial_budget))
                     } else {
                         program.eval(ExBudget::default())
                     };
@@ -896,11 +881,6 @@ pub fn eval_redeemer(
                         Ok(_) => (),
                         Err(err) => return Err(Error::Machine(err, budget, logs)),
                     }
-
-                    let initial_budget = match initial_budget {
-                        Some(b) => *b,
-                        None => ExBudget::default(),
-                    };
 
                     let new_redeemer = Redeemer {
                         tag: redeemer.tag.clone(),
