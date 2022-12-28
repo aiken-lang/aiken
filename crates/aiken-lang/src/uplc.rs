@@ -140,18 +140,15 @@ impl<'a> CodeGenerator<'a> {
                 scope,
                 bytes: bytes.to_vec(),
             }),
-            TypedExpr::Sequence { expressions, .. } => {
-                for expr in expressions {
-                    let mut scope = scope.clone();
-                    scope.push(self.id_gen.next());
-                    self.build_ir(expr, ir_stack, scope);
-                }
-            }
-            TypedExpr::Pipeline { expressions, .. } => {
-                for expr in expressions {
-                    let mut scope = scope.clone();
-                    scope.push(self.id_gen.next());
-                    self.build_ir(expr, ir_stack, scope);
+            TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
+                for (index, expr) in expressions.iter().enumerate() {
+                    if index == 0 {
+                        self.build_ir(expr, ir_stack, scope.clone());
+                    } else {
+                        let mut branch_scope = scope.clone();
+                        branch_scope.push(self.id_gen.next());
+                        self.build_ir(expr, ir_stack, branch_scope);
+                    }
                 }
             }
             TypedExpr::Var {
