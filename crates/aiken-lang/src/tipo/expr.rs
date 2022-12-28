@@ -6,7 +6,7 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
         RecordUpdateSpread, Span, TodoKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
-        TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UntypedArg,
+        TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
         UntypedPattern, UntypedRecordUpdateArg,
     },
@@ -345,7 +345,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 arguments: args,
             } => self.infer_record_update(*constructor, spread, args, location),
 
-            UntypedExpr::Negate { location, value } => self.infer_negate(location, value),
+            UntypedExpr::UnOp {
+                location,
+                value,
+                op,
+            } => self.infer_un_op(location, value, op),
         }
     }
 
@@ -534,18 +538,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn infer_negate(
+    fn infer_un_op(
         &mut self,
         location: Span,
         value: Box<UntypedExpr>,
+        op: UnOp,
     ) -> Result<TypedExpr, Error> {
         let value = self.infer(*value)?;
 
-        self.unify(bool(), value.tipo(), value.location())?;
+        let tipo = match op {
+            UnOp::Not => bool(),
+            UnOp::Negate => int(),
+        };
 
-        Ok(TypedExpr::Negate {
+        self.unify(tipo.clone(), value.tipo(), value.location())?;
+
+        Ok(TypedExpr::UnOp {
             location,
             value: Box::new(value),
+            op,
+            tipo,
         })
     }
 

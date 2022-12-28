@@ -613,6 +613,14 @@ pub enum BinOp {
     ModInt,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnOp {
+    // !
+    Not,
+    // -
+    Negate,
+}
+
 impl BinOp {
     pub fn precedence(&self) -> u8 {
         // Ensure that this matches the other precedence function for guards

@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{AssignmentKind, BinOp, TypedRecordUpdateArg},
+    ast::{AssignmentKind, BinOp, TypedRecordUpdateArg, UnOp},
     tipo::{Type, ValueConstructor},
 };
 
@@ -229,8 +229,9 @@ pub enum Air {
         args: Vec<TypedRecordUpdateArg>,
     },
 
-    Negate {
+    UnOp {
         scope: Vec<u64>,
+        op: UnOp,
     },
 
     TupleAccessor {
@@ -276,7 +277,7 @@ impl Air {
             | Air::ErrorTerm { scope, .. }
             | Air::Record { scope, .. }
             | Air::RecordUpdate { scope, .. }
-            | Air::Negate { scope, .. }
+            | Air::UnOp { scope, .. }
             | Air::Trace { scope, .. }
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }

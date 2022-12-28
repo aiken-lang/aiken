@@ -5,9 +5,10 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
-        Pattern, RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UntypedRecordUpdateArg,
+        Pattern, RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UnOp,
+        UntypedRecordUpdateArg,
     },
-    builtins::{bool, void},
+    builtins::void,
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
@@ -161,16 +162,17 @@ pub enum TypedExpr {
         args: Vec<TypedRecordUpdateArg>,
     },
 
-    Negate {
+    UnOp {
         location: Span,
         value: Box<Self>,
+        tipo: Arc<Type>,
+        op: UnOp,
     },
 }
 
 impl TypedExpr {
     pub fn tipo(&self) -> Arc<Type> {
         match self {
-            Self::Negate { .. } => bool(),
             Self::Var { constructor, .. } => constructor.tipo.clone(),
             Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
@@ -181,6 +183,7 @@ impl TypedExpr {
             | Self::List { tipo, .. }
             | Self::Call { tipo, .. }
             | Self::If { tipo, .. }
+            | Self::UnOp { tipo, .. }
             | Self::BinOp { tipo, .. }
             | Self::Tuple { tipo, .. }
             | Self::String { tipo, .. }
@@ -224,7 +227,7 @@ impl TypedExpr {
             | TypedExpr::ErrorTerm { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Tuple { .. }
-            | TypedExpr::Negate { .. }
+            | TypedExpr::UnOp { .. }
             | TypedExpr::String { .. }
             | TypedExpr::Sequence { .. }
             | TypedExpr::Pipeline { .. }
@@ -267,7 +270,7 @@ impl TypedExpr {
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::String { location, .. }
-            | Self::Negate { location, .. }
+            | Self::UnOp { location, .. }
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
             | Self::Assignment { location, .. }
@@ -304,7 +307,7 @@ impl TypedExpr {
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::String { location, .. }
-            | Self::Negate { location, .. }
+            | Self::UnOp { location, .. }
             | Self::Sequence { location, .. }
             | Self::Pipeline { location, .. }
             | Self::ByteArray { location, .. }
@@ -436,7 +439,8 @@ pub enum UntypedExpr {
         arguments: Vec<UntypedRecordUpdateArg>,
     },
 
-    Negate {
+    UnOp {
+        op: UnOp,
         location: Span,
         value: Box<Self>,
     },
@@ -511,7 +515,7 @@ impl UntypedExpr {
             | Self::TupleIndex { location, .. }
             | Self::FieldAccess { location, .. }
             | Self::RecordUpdate { location, .. }
-            | Self::Negate { location, .. }
+            | Self::UnOp { location, .. }
             | Self::If { location, .. } => *location,
             Self::Sequence {
                 location,
