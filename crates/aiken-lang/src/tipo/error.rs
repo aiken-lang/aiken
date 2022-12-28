@@ -1361,7 +1361,8 @@ impl Diagnostic for Error {
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error, Diagnostic)]
 pub enum Warning {
-    #[error("Todo\n")]
+    #[error("I found a todo left in the code.\n")]
+    #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
     Todo {
         kind: TodoKind,
         #[label]
@@ -1369,31 +1370,38 @@ pub enum Warning {
         tipo: Arc<Type>,
     },
 
-    #[error("Implicitly discarded result\n")]
+    #[error(
+        "I realized the following expression returned a result that is implicitly discarded.\n"
+    )]
+    #[diagnostic(help(
+        "You can use the '_' symbol should you want to explicitly discard a result."
+    ))]
     ImplicitlyDiscardedResult {
         #[label]
         location: Span,
     },
 
-    #[error("Unused literal\n")]
+    #[error("I found a literal that is unused.\n")]
     UnusedLiteral {
         #[label]
         location: Span,
     },
 
-    #[error("Record update with no fields\n")]
+    #[error("I found a record update with no fields; effectively updating nothing.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     NoFieldsRecordUpdate {
         #[label]
         location: Span,
     },
 
-    #[error("Record update using all fields\n")]
+    #[error("I found a record update using all fields; thus redundant.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     AllFieldsRecordUpdate {
         #[label]
         location: Span,
     },
 
-    #[error("Unused type {name}\n")]
+    #[error("I discovered an unused type: '{}'.\n", name.purple())]
     UnusedType {
         #[label]
         location: Span,
@@ -1401,7 +1409,10 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("Unused constructor {name}\n")]
+    #[error("I discovered an unused constructor: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to remove it to get rid of that warning."
+    ))]
     UnusedConstructor {
         #[label]
         location: Span,
@@ -1409,35 +1420,52 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("Unused imported value {name}\n")]
+    #[error("I discovered an unused imported value: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to remove it to get rid of that warning."
+    ))]
     UnusedImportedValue {
         #[label]
         location: Span,
         name: String,
     },
 
-    #[error("Unused imported module {name}\n")]
+    #[error("I discovered an unused imported module: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to remove it to get rid of that warning."
+    ))]
     UnusedImportedModule {
         #[label]
         location: Span,
         name: String,
     },
 
-    #[error("Unused private module constant {name}\n")]
+    #[error("I found an unused (private) module constant: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "Perhaps your forgot to make it public using the 'pub' keyword?\n\
+         Otherwise, you might want to get rid of it altogether."
+    ))]
     UnusedPrivateModuleConstant {
         #[label]
         location: Span,
         name: String,
     },
 
-    #[error("Unused private function {name}\n")]
+    #[error("I found an unused private function: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "Perhaps your forgot to make it public using the 'pub' keyword?\n\
+         Otherwise, you might want to get rid of it altogether."
+    ))]
     UnusedPrivateFunction {
         #[label]
         location: Span,
         name: String,
     },
 
-    #[error("Unused variable {name}\n")]
+    #[error("I came across an unused variable: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to remove it to get rid of that warning."
+    ))]
     UnusedVariable {
         #[label]
         location: Span,
