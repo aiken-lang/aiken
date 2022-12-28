@@ -14,7 +14,7 @@ fn assert_fmt(src: &str, expected: &str) {
     let (module2, extra2) = parser::module(&out, ModuleKind::Lib).unwrap();
     let mut out2 = String::new();
     format::pretty(&mut out2, module2, extra2, &out);
-    assert_eq!(out, out2);
+    assert!(out == out2, "formatting isn't idempotent");
 }
 
 #[test]
@@ -193,6 +193,23 @@ fn test_format_imports() {
         use aiken/transaction
         use aiken/transaction/certificate
         use aiken/transaction/value
+    "#};
+
+    assert_fmt(src, expected)
+}
+
+#[test]
+fn test_negate() {
+    let src = indoc! {r#"
+        fn foo() {
+            - 42
+        }
+    "#};
+
+    let expected = indoc! {r#"
+        fn foo() {
+          -42
+        }
     "#};
 
     assert_fmt(src, expected)

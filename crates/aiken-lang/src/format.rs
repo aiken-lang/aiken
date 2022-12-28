@@ -7,7 +7,7 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
         Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant,
+        RecordConstructorArg, RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant, UnOp,
         UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition,
         UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, CAPTURE_VARIABLE,
     },
@@ -695,7 +695,7 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Var { name, .. } => name.to_doc(),
 
-            UntypedExpr::UnOp { value, .. } => self.negate(value),
+            UntypedExpr::UnOp { value, op, .. } => self.un_op(value, op),
 
             UntypedExpr::Fn {
                 is_capture: true,
@@ -1603,8 +1603,11 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn negate<'a>(&mut self, value: &'a UntypedExpr) -> Document<'a> {
-        docvec!["!", self.wrap_expr(value)]
+    fn un_op<'a>(&mut self, value: &'a UntypedExpr, op: &'a UnOp) -> Document<'a> {
+        match op {
+            UnOp::Not => docvec!["!", self.wrap_expr(value)],
+            UnOp::Negate => docvec!["-", self.wrap_expr(value)],
+        }
     }
 }
 
