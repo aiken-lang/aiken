@@ -320,7 +320,9 @@ impl<'a> CodeGenerator<'a> {
                     let last_pattern = &last_clause.pattern[0];
 
                     let mut final_scope = scope.clone();
+
                     final_scope.push(self.id_gen.next());
+
                     pattern_vec.push(Air::Finally {
                         scope: final_scope.clone(),
                     });
@@ -785,8 +787,11 @@ impl<'a> CodeGenerator<'a> {
                 name: constr_name,
                 ..
             } => {
+                let mut temp_clause_properties = clause_properties.clone();
+                *temp_clause_properties.needs_constr_var() = false;
+
                 for arg in arguments {
-                    check_when_pattern_needs(&arg.value, clause_properties);
+                    check_when_pattern_needs(&arg.value, &mut temp_clause_properties);
                 }
 
                 // find data type definition
@@ -821,7 +826,7 @@ impl<'a> CodeGenerator<'a> {
                             location: Span::empty(),
                         },
                     ),
-                    name: clause_properties.clause_var_name().clone(),
+                    name: temp_clause_properties.clause_var_name().clone(),
                     scope: scope.clone(),
                     variant_name: String::new(),
                 }];
@@ -835,7 +840,7 @@ impl<'a> CodeGenerator<'a> {
                     });
                 }
 
-                if *clause_properties.needs_constr_var() {
+                if *temp_clause_properties.needs_constr_var() {
                     self.when_recursive_ir(
                         pattern,
                         pattern_vec,
@@ -844,7 +849,6 @@ impl<'a> CodeGenerator<'a> {
                         tipo,
                         scope,
                     );
-                    pattern_vec.append(values);
                 } else {
                     self.when_recursive_ir(
                         pattern,
@@ -854,8 +858,16 @@ impl<'a> CodeGenerator<'a> {
                         tipo,
                         scope,
                     );
-                    pattern_vec.append(values);
                 }
+
+                pattern_vec.append(values);
+
+                // unify clause properties
+                *clause_properties.is_complex_clause() = *clause_properties.is_complex_clause()
+                    || *temp_clause_properties.is_complex_clause();
+
+                *clause_properties.needs_constr_var() = *clause_properties.needs_constr_var()
+                    || *temp_clause_properties.needs_constr_var();
             }
             Pattern::Tuple { elems, .. } => {
                 for elem in elems {

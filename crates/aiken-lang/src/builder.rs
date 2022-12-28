@@ -748,15 +748,42 @@ pub fn check_when_pattern_needs(
         Pattern::Var { .. } => {
             *clause_properties.needs_constr_var() = true;
         }
-        Pattern::List { .. }
-        | Pattern::Constructor { .. }
-        | Pattern::Tuple { .. }
-        | Pattern::Int { .. } => {
+        Pattern::List { elements, tail, .. } => {
             *clause_properties.needs_constr_var() = true;
+
+            *clause_properties.is_complex_clause() = true;
+
+            for element in elements {
+                check_when_pattern_needs(element, clause_properties);
+            }
+            if let Some(tail) = tail {
+                check_when_pattern_needs(tail, clause_properties);
+            }
+        }
+        Pattern::Tuple { elems, .. } => {
+            *clause_properties.needs_constr_var() = true;
+
+            *clause_properties.is_complex_clause() = true;
+
+            for element in elems {
+                check_when_pattern_needs(element, clause_properties);
+            }
+        }
+        Pattern::Int { .. } => {
+            *clause_properties.needs_constr_var() = true;
+
             *clause_properties.is_complex_clause() = true;
         }
-        Pattern::Discard { .. } => {}
+        Pattern::Constructor { arguments, .. } => {
+            *clause_properties.needs_constr_var() = true;
 
+            *clause_properties.is_complex_clause() = true;
+
+            for argument in arguments {
+                check_when_pattern_needs(&argument.value, clause_properties);
+            }
+        }
+        Pattern::Discard { .. } => {}
         _ => todo!("{pattern:#?}"),
     }
 }
