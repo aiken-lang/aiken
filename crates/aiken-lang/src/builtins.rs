@@ -314,8 +314,6 @@ pub fn from_default_function(
 
             Some((tipo, 3))
         }
-        DefaultFunction::VerifyEcdsaSecp256k1Signature => None,
-        DefaultFunction::VerifySchnorrSecp256k1Signature => None,
         DefaultFunction::AppendString => {
             let tipo = function(vec![string(), string()], string());
 
@@ -343,12 +341,6 @@ pub fn from_default_function(
 
             Some((tipo, 3))
         }
-        DefaultFunction::ChooseUnit => None,
-        DefaultFunction::Trace => None,
-        DefaultFunction::FstPair => None,
-        DefaultFunction::SndPair => None,
-        DefaultFunction::ChooseList => None,
-        DefaultFunction::MkCons => None,
         DefaultFunction::HeadList => {
             let ret = generic_var(id_gen.next());
 
@@ -370,10 +362,21 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
-        DefaultFunction::ChooseData => None,
-        DefaultFunction::ConstrData => None,
-        DefaultFunction::MapData => None,
-        DefaultFunction::ListData => None,
+        DefaultFunction::ConstrData => {
+            let tipo = function(vec![int(), list(data())], data());
+
+            Some((tipo, 2))
+        }
+        DefaultFunction::MapData => {
+            let tipo = function(vec![list(tuple(vec![data(), data()]))], data());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::ListData => {
+            let tipo = function(vec![list(data())], data());
+
+            Some((tipo, 1))
+        }
         DefaultFunction::IData => {
             let tipo = function(vec![int()], data());
 
@@ -384,11 +387,31 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
-        DefaultFunction::UnConstrData => None,
-        DefaultFunction::UnMapData => None,
-        DefaultFunction::UnListData => None,
-        DefaultFunction::UnIData => None,
-        DefaultFunction::UnBData => None,
+        DefaultFunction::UnConstrData => {
+            let tipo = function(vec![data()], tuple(vec![int(), list(data())]));
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::UnMapData => {
+            let tipo = function(vec![data()], list(tuple(vec![data(), data()])));
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::UnListData => {
+            let tipo = function(vec![data()], list(data()));
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::UnIData => {
+            let tipo = function(vec![data()], int());
+
+            Some((tipo, 1))
+        }
+        DefaultFunction::UnBData => {
+            let tipo = function(vec![data()], byte_array());
+
+            Some((tipo, 1))
+        }
         DefaultFunction::EqualsData => {
             let tipo = function(vec![data(), data()], bool());
 
@@ -399,9 +422,21 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
+        // Disabled until the next hard-fork
+        DefaultFunction::VerifyEcdsaSecp256k1Signature => None,
+        DefaultFunction::VerifySchnorrSecp256k1Signature => None,
+        // Anything below has a direct syntax equivalent in Aiken, so
+        // there's no need to support builtin for those.
+        DefaultFunction::ChooseData => None,
         DefaultFunction::MkPairData => None,
         DefaultFunction::MkNilData => None,
         DefaultFunction::MkNilPairData => None,
+        DefaultFunction::ChooseUnit => None,
+        DefaultFunction::Trace => None,
+        DefaultFunction::FstPair => None,
+        DefaultFunction::SndPair => None,
+        DefaultFunction::ChooseList => None,
+        DefaultFunction::MkCons => None,
     };
 
     info.map(|(tipo, arity)| {
