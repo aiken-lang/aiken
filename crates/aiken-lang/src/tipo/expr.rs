@@ -1505,7 +1505,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             self.unify(bool(), condition.tipo(), condition.type_defining_location())?;
 
-            let body = self.infer(first.body.clone())?;
+            let body = self.infer(branch.body.clone())?;
 
             self.unify(tipo.clone(), body.tipo(), body.type_defining_location())?;
 
