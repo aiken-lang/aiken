@@ -1,4 +1,4 @@
-pub fn clamp(n: Int, min min: Int, max max: Int) -> Int {
+pub fn clamp(n: Int, min: Int, max: Int) -> Int {
   if n < min {
     min
   } else if n > max {
