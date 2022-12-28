@@ -905,9 +905,9 @@ impl<'comments> Formatter<'comments> {
         let if_branches = self
             .if_branch(break_("if", "if "), branches.first())
             .append(join(
-                branches[1..]
-                    .iter()
-                    .map(|branch| self.if_branch("else if".to_doc(), branch)),
+                branches[1..].iter().map(|branch| {
+                    self.if_branch(line().append(break_("} else if", "} else if ")), branch)
+                }),
                 nil(),
             ));
 

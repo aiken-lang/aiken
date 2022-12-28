@@ -174,6 +174,23 @@ fn test_format_nested_when() {
 }
 
 #[test]
+fn test_format_else_if() {
+    let src = indoc! {r#"
+        pub fn foo(xs: List<a>, n: Int) -> List<a> {
+          if n <= 0 {
+            xs
+          } else if n <= 10 {
+            xs
+          } else {
+            xs
+          }
+        }
+    "#};
+
+    assert_fmt(src, src)
+}
+
+#[test]
 fn test_format_imports() {
     let src = indoc! {r#"
         use aiken/list
