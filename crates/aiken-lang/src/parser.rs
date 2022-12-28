@@ -7,7 +7,7 @@ pub mod lexer;
 pub mod token;
 
 use crate::{
-    ast::{self, BinOp, Span, TodoKind, UntypedDefinition, CAPTURE_VARIABLE},
+    ast::{self, BinOp, Span, TodoKind, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
     expr,
 };
 
@@ -1221,14 +1221,17 @@ pub fn expr_parser(
             });
 
         // Negate
-        let op = just(Token::Bang);
+        let op = choice((
+            just(Token::Bang).to(UnOp::Not),
+            just(Token::Minus).to(UnOp::Negate),
+        ));
 
         let unary = op
-            .ignored()
-            .map_with_span(|_, span| span)
+            .map_with_span(|op, span| (op, span))
             .repeated()
             .then(chained)
-            .foldr(|span, value| expr::UntypedExpr::Negate {
+            .foldr(|(un_op, span), value| expr::UntypedExpr::UnOp {
+                op: un_op,
                 location: span.union(value.location()),
                 value: Box::new(value),
             })

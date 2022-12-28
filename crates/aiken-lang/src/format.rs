@@ -695,7 +695,7 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Var { name, .. } => name.to_doc(),
 
-            UntypedExpr::Negate { value, .. } => self.negate(value),
+            UntypedExpr::UnOp { value, .. } => self.negate(value),
 
             UntypedExpr::Fn {
                 is_capture: true,

@@ -24,7 +24,7 @@ use crate::{
     air::Air,
     ast::{
         ArgName, AssignmentKind, BinOp, Clause, Pattern, Span, TypedArg, TypedDataType,
-        TypedFunction,
+        TypedFunction, UnOp,
     },
     builder::{
         check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
@@ -496,9 +496,10 @@ impl<'a> CodeGenerator<'a> {
                 });
             }
             TypedExpr::RecordUpdate { .. } => todo!(),
-            TypedExpr::Negate { value, .. } => {
-                ir_stack.push(Air::Negate {
+            TypedExpr::UnOp { value, op, .. } => {
+                ir_stack.push(Air::UnOp {
                     scope: scope.clone(),
+                    op: *op,
                 });
 
                 self.build_ir(value, ir_stack, scope);
@@ -3925,14 +3926,25 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::Record { .. } => todo!(),
             Air::RecordUpdate { .. } => todo!(),
-            Air::Negate { .. } => {
+            Air::UnOp { op, .. } => {
                 let value = arg_stack.pop().unwrap();
 
-                let term = if_else(
-                    value,
-                    Term::Constant(UplcConstant::Bool(false)),
-                    Term::Constant(UplcConstant::Bool(true)),
-                );
+                let term = match op {
+                    UnOp::Not => if_else(
+                        value,
+                        Term::Constant(UplcConstant::Bool(false)),
+                        Term::Constant(UplcConstant::Bool(true)),
+                    ),
+                    UnOp::Negate => Term::Apply {
+                        function: Term::Apply {
+                            function: Term::Builtin(DefaultFunction::SubtractInteger).into(),
+                            argument: Term::Constant(UplcConstant::Integer(0)).into(),
+                        }
+                        .into(),
+                        argument: value.into(),
+                    },
+                };
+
                 arg_stack.push(term);
             }
             Air::TupleIndex { .. } => todo!(),
