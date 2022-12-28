@@ -1371,7 +1371,7 @@ pub fn handle_func_deps_ir(
                     .dependencies
                     .extend(depend_comp.dependencies.clone());
 
-                for (index, ir) in depend_comp.ir.iter().enumerate() {
+                for (index, ir) in depend_comp.ir.iter().enumerate().rev() {
                     match_ir_for_recursion(
                         ir.clone(),
                         &mut insert_var_vec,
