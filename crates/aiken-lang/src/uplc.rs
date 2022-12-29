@@ -29,7 +29,7 @@ use crate::{
     builder::{
         check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
         convert_type_to_data, get_common_ancestor, get_generics_and_type, get_variant_name,
-        handle_func_deps_ir, list_access_to_uplc, match_ir_for_recursion, monomorphize,
+        handle_func_deps_ir, handle_recursion_ir, list_access_to_uplc, monomorphize,
         rearrange_clauses, wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents,
         FunctionAccessKey,
     },
@@ -1845,12 +1845,30 @@ impl<'a> CodeGenerator<'a> {
         let mut final_func_dep_ir = IndexMap::new();
         let mut zero_arg_defined_functions = HashMap::new();
         let mut to_be_defined = HashMap::new();
-        for func in func_index_map.clone() {
-            if self.defined_functions.contains_key(&func.0) {
+
+        let mut dependency_map = IndexMap::new();
+        let mut dependency_vec = vec![];
+
+        let mut func_keys = func_components.keys().cloned().collect_vec();
+
+        // deal with function dependencies by sorting order in which we iter over them.
+        while let Some(function) = func_keys.pop() {
+            let funct_comp = func_components.get(&function).unwrap();
+            if dependency_map.contains_key(&function) {
+                dependency_map.shift_remove(&function);
+            }
+            dependency_map.insert(function, ());
+            func_keys.extend(funct_comp.dependencies.clone().into_iter());
+        }
+
+        dependency_vec.extend(dependency_map.keys().cloned());
+
+        for func in dependency_vec {
+            if self.defined_functions.contains_key(&func) {
                 continue;
             }
-            let funt_comp = func_components.get(&func.0).unwrap();
-            let func_scope = func_index_map.get(&func.0).unwrap();
+            let funt_comp = func_components.get(&func).unwrap();
+            let func_scope = func_index_map.get(&func).unwrap();
 
             let mut dep_ir = vec![];
 
@@ -1865,7 +1883,7 @@ impl<'a> CodeGenerator<'a> {
                     func_scope,
                     &mut to_be_defined,
                 );
-                final_func_dep_ir.insert(func.0, dep_ir);
+                final_func_dep_ir.insert(func, dep_ir);
             } else {
                 // since zero arg functions are run at compile time we need to pull all deps
                 let mut defined_functions = HashMap::new();
@@ -1882,7 +1900,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut final_zero_arg_ir = dep_ir;
                 final_zero_arg_ir.extend(funt_comp.ir.clone());
-                self.zero_arg_functions.insert(func.0, final_zero_arg_ir);
+                self.zero_arg_functions.insert(func, final_zero_arg_ir);
 
                 for (key, val) in defined_functions.into_iter() {
                     zero_arg_defined_functions.insert(key, val);
@@ -1890,6 +1908,8 @@ impl<'a> CodeGenerator<'a> {
             }
         }
 
+        // handle functions that are used in zero arg funcs but also used by the validator
+        // or a func used by the validator
         for (key, val) in zero_arg_defined_functions.into_iter() {
             if !to_be_defined.contains_key(&key) {
                 self.defined_functions.insert(key, val);
@@ -1909,7 +1929,6 @@ impl<'a> CodeGenerator<'a> {
                     .collect_vec();
 
                 for (function_access_key, scopes) in to_insert.into_iter() {
-                    let mut insert_var_vec = vec![];
                     func_index_map.remove(&function_access_key);
 
                     self.defined_functions
@@ -1918,33 +1937,12 @@ impl<'a> CodeGenerator<'a> {
                     let mut full_func_ir =
                         final_func_dep_ir.get(&function_access_key).unwrap().clone();
 
-                    let mut func_comp = func_components.get(&function_access_key).unwrap().clone();
+                    let func_comp = func_components.get(&function_access_key).unwrap().clone();
+
                     // zero arg functions are not recursive
                     if !func_comp.args.is_empty() {
-                        for (index, ir) in func_comp.ir.clone().iter().enumerate().rev() {
-                            match_ir_for_recursion(
-                                ir.clone(),
-                                &mut insert_var_vec,
-                                &function_access_key,
-                                index,
-                            );
-                        }
-
-                        for (index, ir) in insert_var_vec {
-                            func_comp.ir.insert(index, ir.clone());
-
-                            let current_call = func_comp.ir[index - 1].clone();
-
-                            match current_call {
-                                Air::Call { scope, count } => {
-                                    func_comp.ir[index - 1] = Air::Call {
-                                        scope,
-                                        count: count + 1,
-                                    }
-                                }
-                                _ => unreachable!("{current_call:#?}"),
-                            }
-                        }
+                        let mut recursion_ir = vec![];
+                        handle_recursion_ir(&function_access_key, &func_comp, &mut recursion_ir);
 
                         full_func_ir.push(Air::DefineFunc {
                             scope: scopes.clone(),
@@ -1955,7 +1953,7 @@ impl<'a> CodeGenerator<'a> {
                             variant_name: function_access_key.variant_name.clone(),
                         });
 
-                        full_func_ir.extend(func_comp.ir.clone());
+                        full_func_ir.extend(recursion_ir);
 
                         for ir in full_func_ir.into_iter().rev() {
                             ir_stack.insert(index, ir);
