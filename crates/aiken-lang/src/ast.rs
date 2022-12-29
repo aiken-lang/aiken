@@ -87,16 +87,47 @@ pub type UntypedTypeAlias = TypeAlias<()>;
 
 impl TypedFunction {
     pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
-        match &self.body {
-            TypedExpr::BinOp {
-                name,
-                tipo,
-                left,
-                right,
-                ..
-            } if tipo == &bool() => Some((*name, left.clone(), right.clone())),
-            _ => None,
+        do_test_hint(&self.body)
+    }
+}
+
+pub fn do_test_hint(body: &TypedExpr) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
+    match body {
+        TypedExpr::BinOp {
+            name,
+            tipo,
+            left,
+            right,
+            ..
+        } if tipo == &bool() => Some((*name, left.clone(), right.clone())),
+        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+            if let Some((binop, left, right)) = do_test_hint(&expressions[expressions.len() - 1]) {
+                let mut new_left_expressions = expressions.clone();
+                new_left_expressions.pop();
+                new_left_expressions.push(*left);
+
+                let mut new_right_expressions = expressions.clone();
+                new_right_expressions.pop();
+                new_right_expressions.push(*right);
+
+                Some((
+                    binop,
+                    TypedExpr::Sequence {
+                        expressions: new_left_expressions,
+                        location: Span::empty(),
+                    }
+                    .into(),
+                    TypedExpr::Sequence {
+                        expressions: new_right_expressions,
+                        location: Span::empty(),
+                    }
+                    .into(),
+                ))
+            } else {
+                None
+            }
         }
+        _ => None,
     }
 }
 
