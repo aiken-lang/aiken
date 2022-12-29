@@ -486,8 +486,12 @@ where
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
 
-        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
+        let prelude_functions = builtins::prelude_functions();
+        for (access_key, func) in prelude_functions.iter() {
+            functions.insert(access_key.clone(), func);
+        }
 
+        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
         data_types.insert(
             DataTypeKey {
                 module_name: "".to_string(),
@@ -581,6 +585,11 @@ where
         let mut data_types = HashMap::new();
         let mut imports = HashMap::new();
         let mut constants = HashMap::new();
+
+        let prelude_functions = builtins::prelude_functions();
+        for (access_key, func) in prelude_functions.iter() {
+            functions.insert(access_key.clone(), func);
+        }
 
         let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
 

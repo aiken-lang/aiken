@@ -5,7 +5,9 @@ use strum::IntoEnumIterator;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{ModuleKind, Span},
+    ast::{Arg, ArgName, Function, ModuleKind, Span, TypedFunction, UnOp},
+    builder::FunctionAccessKey,
+    expr::TypedExpr,
     tipo::{
         fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant,
@@ -117,6 +119,21 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             module: "".to_string(),
             public: true,
         },
+    );
+
+    prelude.values.insert(
+        "not".to_string(),
+        ValueConstructor::public(
+            function(vec![bool()], bool()),
+            ValueConstructorVariant::ModuleFn {
+                name: "not".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
     );
 
     // List(a)
@@ -452,6 +469,59 @@ pub fn from_default_function(
             },
         )
     })
+}
+
+pub fn prelude_functions() -> HashMap<FunctionAccessKey, TypedFunction> {
+    let mut functions = HashMap::new();
+
+    // /// Negate the argument. Useful for map/fold and pipelines.
+    // pub fn not(self: Bool) -> Bool {
+    //   !self
+    // }
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "not".to_string(),
+            variant_name: "".to_string(),
+        },
+        Function {
+            arguments: vec![Arg {
+                arg_name: ArgName::Named {
+                    name: "self".to_string(),
+                    label: "self".to_string(),
+                    location: Span::empty(),
+                },
+                location: Span::empty(),
+                annotation: None,
+                tipo: bool(),
+            }],
+            doc: None,
+            location: Span::empty(),
+            name: "not".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type: bool(),
+            end_position: 0,
+            body: TypedExpr::UnOp {
+                location: Span::empty(),
+                tipo: bool(),
+                op: UnOp::Negate,
+                value: Box::new(TypedExpr::Var {
+                    location: Span::empty(),
+                    constructor: ValueConstructor {
+                        public: true,
+                        tipo: bool(),
+                        variant: ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    },
+                    name: "self".to_string(),
+                }),
+            },
+        },
+    );
+
+    functions
 }
 
 pub fn int() -> Arc<Type> {
