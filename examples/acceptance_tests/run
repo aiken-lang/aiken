@@ -15,7 +15,13 @@ WORKDIR="$(dirname -- "${BASH_SOURCE[0]}")"
 TARGET="$WORKDIR/$(basename $1)"
 
 TMP=$(mktemp)
-RESULT=$(cargo run --quiet -- check $TARGET 2>$TMP)
+VALIDATORS=$(find $TARGET -type f -path "*validators/*.ak")
+if [ -z $VALIDATORS ]; then
+  RESULT=$(cargo run --quiet -- check $TARGET 2>$TMP)
+else
+  RESULT=$(cargo run --quiet -- build $TARGET 2>$TMP)
+fi
+
 if [ "$?" -eq "0" ]; then
   echo "✅ $(basename $TARGET)"
 else
