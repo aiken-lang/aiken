@@ -12,6 +12,7 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
 [dependencies]
 chumsky = "0.8.0"
+hex = "0.4.3"
 indexmap = "1.9.1"
 indoc = "1.0.7"
 itertools = "0.10.5"

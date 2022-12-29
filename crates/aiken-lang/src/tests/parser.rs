@@ -3,7 +3,7 @@ use indoc::indoc;
 use pretty_assertions::assert_eq;
 
 use crate::{
-    ast::{self, DataType, Function, Span, TypeAlias, Use},
+    ast::{self, Constant, DataType, Function, ModuleConstant, Span, TypeAlias, Use},
     expr, parser,
 };
 
@@ -1539,6 +1539,52 @@ fn parse_tuple() {
             return_annotation: None,
             return_type: (),
             end_position: 87,
+        }),
+    )
+}
+
+#[test]
+fn plain_bytearray_literals() {
+    let code = indoc! {r#"
+        pub const my_policy_id = #[0, 170, 255]
+    "#};
+
+    assert_definition(
+        code,
+        ast::UntypedDefinition::ModuleConstant(ModuleConstant {
+            doc: None,
+            location: Span::new((), 0..39),
+            public: true,
+            name: "my_policy_id".to_string(),
+            annotation: None,
+            value: Box::new(Constant::ByteArray {
+                location: Span::new((), 25..39),
+                bytes: vec![0, 170, 255],
+            }),
+            tipo: (),
+        }),
+    )
+}
+
+#[test]
+fn base16_bytearray_literals() {
+    let code = indoc! {r#"
+        pub const my_policy_id = #"00aaff"
+    "#};
+
+    assert_definition(
+        code,
+        ast::UntypedDefinition::ModuleConstant(ModuleConstant {
+            doc: None,
+            location: Span::new((), 0..34),
+            public: true,
+            name: "my_policy_id".to_string(),
+            annotation: None,
+            value: Box::new(Constant::ByteArray {
+                location: Span::new((), 25..34),
+                bytes: vec![0, 170, 255],
+            }),
+            tipo: (),
         }),
     )
 }

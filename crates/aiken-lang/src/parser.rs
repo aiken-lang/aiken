@@ -344,7 +344,7 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
                 elements,
             });
 
-        let constant_bytearray_parser = just(Token::Hash)
+        let constant_bytearray_list_parser = just(Token::Hash)
             .ignore_then(
                 select! {Token::Int {value} => value}
                     .validate(|value, span, emit| {
@@ -371,6 +371,27 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
                 location: span,
                 bytes,
             });
+
+        let constant_bytearray_hexstring_parser =
+            just(Token::Hash)
+                .ignore_then(select! {Token::String {value} => value}.validate(
+                    |value, span, emit| match hex::decode(&value) {
+                        Ok(bytes) => bytes,
+                        Err(_) => {
+                            emit(ParseError::malformed_base16_string_literal(span));
+                            vec![]
+                        }
+                    },
+                ))
+                .map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
+                    location: span,
+                    bytes,
+                });
+
+        let constant_bytearray_parser = choice((
+            constant_bytearray_list_parser,
+            constant_bytearray_hexstring_parser,
+        ));
 
         let constant_list_parser = r
             .clone()

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use miette::Diagnostic;
 
 use crate::{ast::Span, parser::token::Token};
+use indoc::formatdoc;
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 #[error("{kind}\n")]
@@ -29,6 +30,16 @@ impl ParseError {
         let hint = suffix.map(|suffix| format!("Did you mean '{index}{suffix}'?"));
         Self {
             kind: ErrorKind::InvalidTupleIndex { hint },
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: None,
+        }
+    }
+
+    pub fn malformed_base16_string_literal(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::MalformedBase16StringLiteral,
             span,
             while_parsing: None,
             expected: HashSet::new(),
@@ -91,6 +102,18 @@ pub enum ErrorKind {
         #[help]
         hint: Option<String>,
     },
+    #[error("I tripped over a malformed base16-encoded string literal")]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal)
+           string literals.
+
+           For example:
+
+             pub const my_policy_id =
+               #"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50"
+        "#
+    }))]
+    MalformedBase16StringLiteral,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]

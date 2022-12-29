@@ -75,6 +75,7 @@ name = "aiken-lang"
 version = "0.0.26"
 dependencies = [
  "chumsky",
+ "hex",
  "indexmap",
  "indoc",
  "itertools",
