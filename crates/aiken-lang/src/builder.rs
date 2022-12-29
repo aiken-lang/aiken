@@ -1409,9 +1409,26 @@ pub fn handle_func_deps_ir(
     to_be_defined: &mut HashMap<FunctionAccessKey, ()>,
 ) {
     let mut funt_comp = funt_comp.clone();
-    // deal with function dependencies
+
+    let mut dependency_map = IndexMap::new();
+    let mut dependency_vec = vec![];
+
+    // deal with function dependencies by sorting order in which we pop them.
     while let Some(dependency) = funt_comp.dependencies.pop() {
-        let mut insert_var_vec = vec![];
+        let depend_comp = func_components.get(&dependency).unwrap();
+        if dependency_map.contains_key(&dependency) {
+            dependency_map.shift_remove(&dependency);
+        }
+        dependency_map.insert(dependency, ());
+        funt_comp
+            .dependencies
+            .extend(depend_comp.dependencies.clone().into_iter());
+    }
+
+    dependency_vec.extend(dependency_map.keys().cloned());
+    dependency_vec.reverse();
+
+    while let Some(dependency) = dependency_vec.pop() {
         if (defined_functions.contains_key(&dependency) && !funt_comp.args.is_empty())
             || func_components.get(&dependency).is_none()
         {
@@ -1419,7 +1436,6 @@ pub fn handle_func_deps_ir(
         }
 
         let depend_comp = func_components.get(&dependency).unwrap();
-
         let dep_scope = func_index_map.get(&dependency).unwrap();
 
         if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec()
@@ -1427,39 +1443,8 @@ pub fn handle_func_deps_ir(
         {
             // we handle zero arg functions and their dependencies in a unique way
             if !depend_comp.args.is_empty() {
-                funt_comp
-                    .dependencies
-                    .extend(depend_comp.dependencies.clone());
-
-                for (index, ir) in depend_comp.ir.iter().enumerate().rev() {
-                    match_ir_for_recursion(
-                        ir.clone(),
-                        &mut insert_var_vec,
-                        &FunctionAccessKey {
-                            function_name: dependency.function_name.clone(),
-                            module_name: dependency.module_name.clone(),
-                            variant_name: dependency.variant_name.clone(),
-                        },
-                        index,
-                    );
-                }
-
-                let mut recursion_ir = depend_comp.ir.clone();
-                for (index, ir) in insert_var_vec.clone() {
-                    recursion_ir.insert(index, ir);
-
-                    let current_call = recursion_ir[index - 1].clone();
-
-                    match current_call {
-                        Air::Call { scope, count } => {
-                            recursion_ir[index - 1] = Air::Call {
-                                scope,
-                                count: count + 1,
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                }
+                let mut recursion_ir = vec![];
+                handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
 
                 let mut temp_ir = vec![Air::DefineFunc {
                     scope: func_scope.to_vec(),
@@ -1482,6 +1467,44 @@ pub fn handle_func_deps_ir(
         } else {
             // Dependency will need to be defined somewhere in the main body
             to_be_defined.insert(dependency, ());
+        }
+    }
+}
+
+pub fn handle_recursion_ir(
+    func_key: &FunctionAccessKey,
+    func_comp: &FuncComponents,
+    recursion_ir: &mut Vec<Air>,
+) {
+    let mut insert_var_vec = vec![];
+
+    for (index, ir) in func_comp.ir.iter().enumerate().rev() {
+        match_ir_for_recursion(
+            ir.clone(),
+            &mut insert_var_vec,
+            &FunctionAccessKey {
+                function_name: func_key.function_name.clone(),
+                module_name: func_key.module_name.clone(),
+                variant_name: func_key.variant_name.clone(),
+            },
+            index,
+        );
+    }
+    *recursion_ir = func_comp.ir.clone();
+    // Deals with self recursive function
+    for (index, ir) in insert_var_vec.clone() {
+        recursion_ir.insert(index, ir);
+
+        let current_call = recursion_ir[index - 1].clone();
+
+        match current_call {
+            Air::Call { scope, count } => {
+                recursion_ir[index - 1] = Air::Call {
+                    scope,
+                    count: count + 1,
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }
