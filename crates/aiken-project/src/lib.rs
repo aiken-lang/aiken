@@ -118,7 +118,7 @@ where
 
         self.read_source_files()?;
 
-        let destination = destination.unwrap_or_else(|| self.root.join("doc"));
+        let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
         let mut parsed_modules = self.parse_sources(self.config.name.clone())?;
 

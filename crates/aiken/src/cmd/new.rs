@@ -185,7 +185,12 @@ fn gitignore(root: &Path) -> miette::Result<()> {
         gitignore_path,
         indoc! {
             r#"
+                # Aiken compilation artifacts
+                assets/
+                # Aiken's project working directory
                 build/
+                # Aiken's default documentation export
+                docs/
             "#
         },
     )
