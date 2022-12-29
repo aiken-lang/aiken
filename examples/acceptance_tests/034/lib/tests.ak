@@ -5,6 +5,10 @@ pub fn foldr(self: List<a>, with: fn(a, b) -> b, zero: b) -> b {
   }
 }
 
+pub fn concat(left: List<a>, right: List<a>) -> List<a> {
+  foldr(left, fn(x, xs) { [x, ..xs] }, right)
+}
+
 pub fn flat_map(self: List<a>, with: fn(a) -> List<b>) -> List<b> {
   foldr(self, fn(x, xs) { concat(with(x), xs) }, [])
 }
