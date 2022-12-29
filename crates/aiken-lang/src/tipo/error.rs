@@ -429,16 +429,16 @@ impl Diagnostic for Error {
             Self::DuplicateArgument { .. } => {
                 // TODO: Suggest names based on types when the duplicate argument is `_`
                 Some(Box::new(formatdoc! {
-                    r#"Function arguments cannot have the same name. You can use '_' and
-                       numbers to distinguish between similar names.
+                    r#"Function arguments cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names.
                     "#
+                    , discard = "_".yellow()
                 }))
             },
 
             Self::DuplicateConstName { .. } => Some(Box::new(formatdoc! {
-                r#"Top-level constants of a same module cannot have the same name.
-                   You can use '_' and numbers to distinguish between similar names.
+                r#"Top-level constants of a same module cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names.
                 "#
+                , discard = "_".yellow()
             })),
 
             Self::DuplicateImport { .. } => Some(Box::new(formatdoc! {
@@ -447,58 +447,61 @@ impl Diagnostic for Error {
             })),
 
             Self::DuplicateField { .. } => Some(Box::new(formatdoc! {
-                r#"Data-types must have fields with strictly different names. You can
-                   use '_' and numbers to distinguish between similar names.
-
-                   Note that it is also possible to declare data-types with positional
-                   (nameless) fields only. For example:
+                r#"Data-types must have fields with strictly different names. You can use '{discard}' and numbers to distinguish between similar names.
+                   Note that it is also possible to declare data-types with positional (nameless) fields only.
+                   For example:
 
                      ┍━━━━━━━━━━━━━━━━━━━━━━━
-                     │ pub type Point {{
-                     │   Point(Int, Int, Int)
+                     │ {keyword_pub} {keyword_type} {type_Point} {{
+                     │   {variant_Point}({type_Int}, {type_Int}, {type_Int})
                      │ }}
                 "#
+                , discard = "_".yellow()
+                , keyword_pub = "pub".bright_blue()
+                , keyword_type = "type".yellow()
+                , type_Int = "Int".green()
+                , type_Point = "Point".green()
+                , variant_Point = "Point".green()
             })),
 
             Self::DuplicateName { .. } => Some(Box::new(formatdoc! {
-                r#"Top-level definitions cannot have the same name, even if they
-                   refer to objects with different natures (e.g. function and test).
+                r#"Top-level definitions cannot have the same name, even if they refer to objects with different natures (e.g. function and test).
 
-                   You can use '_' and numbers to distinguish between similar names.
+                   You can use '{discard}' and numbers to distinguish between similar names.
                 "#
+                , discard = "_".yellow()
             })),
 
             Self::DuplicateTypeName { .. } => Some(Box::new(formatdoc! {
-                r#"Types cannot have the same top-level name. You {} use '_' in
-                   types name, but you can use numbers to distinguish between similar
-                   names.
-                "#, "cannot".red()
+                r#"Types cannot have the same top-level name. You {cannot} use '_' in types name, but you can use numbers to distinguish between similar names.
+                "#
+                , cannot = "cannot".red()
             })),
 
             Self::IncorrectFieldsArity { .. } => None,
 
             Self::IncorrectFunctionCallArity { expected, .. } => Some(Box::new(formatdoc! {
-                r#"Functions (and constructors) must always be called with all their
-                   arguments (comma-separated, between brackets).
+                r#"Functions (and constructors) must always be called with all their arguments (comma-separated, between brackets).
 
-                   Here, the function or constructor needs {} arguments.
+                   Here, the function or constructor needs {expected} arguments.
 
-                   Note that Aiken supports argument capturing using '_' as placeholder
-                   for arguments that aren't yet defined. This is like currying in some
-                   other languages.
+                   Note that Aiken supports argument capturing using '{discard}' as placeholder for arguments that aren't yet defined. This is like currying in some other languages.
 
                    For example, imagine the following function:
 
                      ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                     │ fn add(x :Int, y: Int) -> Int
+                     │ {keyword_fn} add(x: {type_Int}, y: {type_Int}) -> {type_Int}
 
-                   From there, you can define 'increment', a function that takes a
-                   single argument and adds one to it, as such:
+                   From there, you can define 'increment', a function that takes a single argument and adds one to it, as such:
 
                      ┍━━━━━━━━━━━━━━━━━━━━━━━━━━
-                     │ let increment = add(1, _)
-                "#,
-                expected.purple()
+                     │ {keyword_let} increment = add(1, _)
+                "#
+                , discard = "_".yellow()
+                , expected = expected.purple()
+                , keyword_fn = "fn".yellow()
+                , keyword_let = "let".yellow()
+                , type_Int = "Int".green()
             })),
 
             Self::IncorrectPatternArity {
@@ -525,20 +528,18 @@ impl Diagnostic for Error {
                 };
 
                 Some(Box::new(formatdoc! {
-                    r#"When pattern-matching on constructors, you must either match the
-                       exact number of fields, or use the spread operator. Note that unused
-                       fields must be discarded by prefixing their name with '_'.{suggestion}
+                    r#"When pattern-matching on constructors, you must either match the exact number of fields, or use the spread operator. Note that unused fields must be discarded by prefixing their name with '{discard}'.{suggestion}
                     "#
+                    , discard = "_".yellow()
                 }))
             },
 
             Self::IncorrectNumClausePatterns { .. } => None,
 
             Self::IncorrectTupleArity { .. } => Some(Box::new(formatdoc! {
-                r#"When pattern matching on a tuple, you must match all
-                   of its elements. Note that unused fields must be
-                   discarded by prefixing their name with '_'.
+                r#"When pattern matching on a tuple, you must match all of its elements. Note that unused fields must be discarded by prefixing their name with '{discard}'.
                 "#
+                , discard = "_".yellow()
             })),
 
             Self::IncorrectTypeArity { expected, name, .. } => {
@@ -556,15 +557,14 @@ impl Diagnostic for Error {
                     .to_pretty_string(70);
 
                 Some(Box::new(formatdoc! {
-                    r#"Data-types that are generic in one or more types must be written
-                       with all their generic types in type annotations.
-
-                       Generic types must be indicated between chevrons '<' and '>'.
+                    r#"Data-types that are generic in one or more types must be written with all their generic types in type annotations. Generic types must be indicated between chevrons '{chevron_left}' and '{chevron_right}'.
 
                        Perhaps, try the following:
 
                        ╰─▶  {suggestion}
                     "#
+                    , chevron_left = "<".yellow()
+                    , chevron_right = ">".yellow()
                 }))
             },
 
@@ -576,23 +576,20 @@ impl Diagnostic for Error {
                     .join("\n");
 
                 Some(Box::new(formatdoc! {
-                    r#"When clauses must be exhaustive -- that is, they must cover all possible
-                       cases of the type they match. While it is recommended to have an explicit
-                       branch for each constructor, you can also use the wildcard '_' as a last
-                       branch to match any remaining result.
+                    r#"When clauses must be exhaustive -- that is, they must cover all possible cases of the type they match. While it is recommended to have an explicit branch for each constructor, you can also use the wildcard '{discard}' as a last branch to match any remaining result.
 
                        In this particular instance, the following cases are missing:
 
                        {missing}
                     "#
+                    , discard = "_".yellow()
                 }))
             },
 
             Self::NotFn { tipo, .. } => {
                 let inference = tipo.to_pretty(4);
                 Some(Box::new(formatdoc! {
-                    r#"It seems like you're trying to call something that isn't a function.
-                       I am inferring the following type:
+                    r#"It seems like you're trying to call something that isn't a function. I am inferring the following type:
 
                        ╰─▶  {inference}
                     "#
@@ -600,75 +597,66 @@ impl Diagnostic for Error {
             },
 
             Self::KeywordInModuleName { .. } => Some(Box::new(formatdoc! {
-                r#"You cannot use keywords as part of a module path name. As a quick
-                   reminder, here's a list of all the keywords (and thus, of invalid
-                   module path names):
+                r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
 
-                   as, assert, check, const, else, fn, if, is, let, opaque, pub, test,
-                   todo, trace, type, use, when,
+                   as, assert, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when,
                 "#
             })),
 
             Self::NonLocalClauseGuardVariable { .. } => Some(Box::new(formatdoc! {
-                r#"There are some conditions regarding what can be used in a guard.
-                   Values must be either local to the function, or defined as module
-                   constants. You can't use functions or records in there.
+                r#"There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there.
                 "#
             })),
 
             Self::PositionalArgumentAfterLabeled { .. } => Some(Box::new(formatdoc! {
-                r#"You can mix positional and labeled arguments, but you must put all
-                   positional arguments (i.e. without label) at the front.
+                r#"You can mix positional and labeled arguments, but you must put all positional arguments (i.e. without label) at the front.
 
-                   To fix this, you'll need to either turn that argument as a labeled
-                   argument, or make the next one positional.
+                   To fix this, you'll need to either turn that argument as a labeled argument, or make the next one positional.
                 "#
             })),
 
             Self::PrivateTypeLeak { leaked, .. } => Some(Box::new(formatdoc! {
-                r#"I found a public value that is making use of a private type.
-                   This would prevent other modules from actually using that value
-                   because they wouldn't know what this type refer to.
+                r#"I found a public value that is making use of a private type. This would prevent other modules from actually using that value because they wouldn't know what this type refer to.
 
                    The culprit is:
 
-                     {type_info}
+                   {type_info}
 
-                   Maybe you meant to turn it public using the 'pub' keyword?
+                   Maybe you meant to turn it public using the '{keyword_pub}' keyword?
                 "#
-            , type_info = leaked.to_pretty(4) })),
+               , type_info = leaked.to_pretty(4).red()
+               , keyword_pub = "pub".bright_blue()
+            })),
 
             Self::RecordAccessUnknownType { .. } => Some(Box::new(formatdoc! {
-                r#"I do my best to infer types of any expression; yet sometimes I
-                   need help (don't we all?).
+                r#"I do my best to infer types of any expression; yet sometimes I need help (don't we all?).
 
                    Take for example the following expression:
 
                      ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                     │ let foo = fn(x) {{ x.transaction }}
+                     │ {keyword_let} foo = {keyword_fn}(x) {{ x.transaction }}
 
-                   At this stage, I can't quite figure out whether 'x' has indeed a
-                   field 'transaction', because I don't know what the type of 'x' is.
+                   At this stage, I can't quite figure out whether 'x' has indeed a field 'transaction', because I don't know what the type of 'x' is.
                    You can help me by providing a type-annotation for 'x', as such:
 
                      ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                     │ let foo = fn(x: ScriptContext) {{ x.transaction }}
+                     │ {keyword_let} foo = {keyword_fn}(x: {type_ScriptContext}) {{ x.transaction }}
                 "#
+                , keyword_fn = "fn".yellow()
+                , keyword_let = "let".yellow()
+                , type_ScriptContext = "ScriptContext".green()
             })),
 
             // TODO: Come back to this one once we support record updates.
             Self::RecordUpdateInvalidConstructor { .. } => None,
 
             Self::ReservedModuleName { .. } => Some(Box::new(formatdoc! {
-                r#"Some module names are reserved for internal use. This the case
-                   of:
+                r#"Some module names are reserved for internal use. This the case of:
 
                    - aiken: where the prelude is located;
                    - aiken/builtin: where I store low-level Plutus builtins.
 
-                   Note that 'aiken' is also imported by default; but you can refer to
-                   it explicitly to disambiguate with a local value that would clash
-                   with one from that module.
+                   Note that 'aiken' is also imported by default; but you can refer to it explicitly to disambiguate with a local value that would clash with one from that module.
                 "#
             })),
 
@@ -695,13 +683,13 @@ impl Diagnostic for Error {
                     .to_pretty_string(70);
 
                 Some(Box::new(formatdoc! {
-                    r#"The constructor '{name}' does not have any labeled field. Its
-                       fields must therefore be matched only by position.
+                    r#"The constructor '{constructor}' does not have any labeled field. Its fields must therefore be matched only by position.
 
                        Perhaps, try the following:
 
                        ╰─▶  {suggestion}
                     "#
+                    , constructor = name.green()
                 }))
             },
 
@@ -714,8 +702,7 @@ impl Diagnostic for Error {
                     .collect::<Vec<_>>()
                     .join("\n");
                 Some(Box::new(formatdoc! {
-                    r#"I don't know some of the labels used in this expression. I've
-                       highlighted them just above.
+                    r#"I don't know some of the labels used in this expression. I've highlighted them just above.
 
                        Here's a list of all the (valid) labels that I know of:
 
@@ -735,7 +722,7 @@ impl Diagnostic for Error {
                     .min_by(|(_, a), (_, b)| a.cmp(b))
                     .and_then(|(suggestion, distance)| {
                         if distance <= 4 {
-                            Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                            Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                         } else {
                             None
                         }
@@ -759,7 +746,7 @@ impl Diagnostic for Error {
                         .min_by(|(_, a), (_, b)| a.cmp(b))
                         .and_then(|(suggestion, distance)| {
                             if distance <= 4 {
-                                Some(Box::new(format!("Did you mean to import '{suggestion}'?")))
+                                Some(Box::new(format!("Did you mean to import '{}'?", suggestion.yellow())))
                             } else {
                                 None
                             }
@@ -768,21 +755,24 @@ impl Diagnostic for Error {
                             Box::new(formatdoc! {
                                 r#"Did you forget to make this value public?
 
-                                   Values from module must be exported using the keyword 'pub' in order to
-                                   be available from other modules.
-
+                                   Values from module must be exported using the keyword '{keyword_pub}' in order to be available from other modules.
                                    For example:
 
                                      ┍━ aiken/foo.ak ━━━━━━━━
-                                     │ fn foo () {{ "foo" }}
+                                     │ {keyword_fn} foo() {{ {literal_foo} }}
                                      │
-                                     │ pub type Bar {{
-                                     │   Bar
+                                     │ {keyword_pub} {keyword_type} {type_Bar} {{
+                                     │   {variant_Bar}
                                      │ }}
 
-                                   The function 'foo' is private and can't be accessed from outside of the
-                                   'aiken/foo' module. But the data-type 'Bar' is public and available.
+                                   The function 'foo' is private and can't be accessed from outside of the 'aiken/foo' module. But the data-type '{type_Bar}' is public and available.
                                 "#
+                                , keyword_fn = "fn".yellow()
+                                , keyword_pub = "pub".bright_blue()
+                                , keyword_type = "type".yellow()
+                                , literal_foo = "\"foo\"".bright_purple()
+                                , type_Bar = "Bar".green()
+                                , variant_Bar = "Bar".green()
                             })
                         }),
                 )
@@ -799,7 +789,7 @@ impl Diagnostic for Error {
                     .min_by(|(_, a), (_, b)| a.cmp(b))
                     .and_then(|(suggestion, distance)| {
                         if distance <= 4 {
-                            Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                            Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                         } else {
                             None
                         }
@@ -808,21 +798,24 @@ impl Diagnostic for Error {
                         Box::new(formatdoc! {
                             r#"Did you forget to make this value public?
 
-                               Values from module must be exported using the keyword 'pub' in order to
-                               be available from other modules.
-
+                               Values from module must be exported using the keyword '{keyword_pub}' in order to be available from other modules.
                                For example:
 
                                  ┍━ aiken/foo.ak ━━━━━━━━
-                                 │ fn foo () {{ "foo" }}
+                                 │ {keyword_fn} foo() {{ {literal_foo} }}
                                  │
-                                 │ pub type Bar {{
-                                 │   Bar
+                                 │ {keyword_pub} {keyword_type} {type_Bar} {{
+                                 │   {variant_Bar}
                                  │ }}
 
-                               The function 'foo' is private and can't be accessed from outside of the
-                               'aiken/foo' module. But the data-type 'Bar' is public and available.
+                               The function 'foo' is private and can't be accessed from outside of the 'aiken/foo' module. But the data-type '{type_Bar}' is public and available.
                             "#
+                            , keyword_fn = "fn".yellow()
+                            , keyword_pub = "pub".bright_blue()
+                            , keyword_type = "type".yellow()
+                            , literal_foo = "\"foo\"".bright_purple()
+                            , type_Bar = "Bar".green()
+                            , variant_Bar = "Bar".green()
                         })
                     }),
             ),
@@ -838,7 +831,7 @@ impl Diagnostic for Error {
                     .min_by(|(_, a), (_, b)| a.cmp(b))
                     .and_then(|(suggestion, distance)| {
                         if distance <= 4 {
-                            Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                            Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                         } else {
                             None
                         }
@@ -847,21 +840,24 @@ impl Diagnostic for Error {
                         Box::new(formatdoc! {
                             r#"Did you forget to make this value public?
 
-                               Values from module must be exported using the keyword 'pub' in order to
-                               be available from other modules.
-
+                               Values from module must be exported using the keyword '{keyword_pub}' in order to be available from other modules.
                                For example:
 
                                  ┍━ aiken/foo.ak ━━━━━━━━
-                                 │ fn foo () {{ "foo" }}
+                                 │ {keyword_fn} foo() {{ {literal_foo} }}
                                  │
-                                 │ pub type Bar {{
-                                 │   Bar
+                                 │ {keyword_pub} {keyword_type} {type_Bar} {{
+                                 │   {variant_Bar}
                                  │ }}
 
-                               The function 'foo' is private and can't be accessed from outside of the
-                               'aiken/foo' module. But the data-type 'Bar' is public and available.
+                               The function 'foo' is private and can't be accessed from outside of the 'aiken/foo' module. But the data-type '{type_Bar}' is public and available.
                             "#
+                            , keyword_fn = "fn".yellow()
+                            , keyword_pub = "pub".bright_blue()
+                            , keyword_type = "type".yellow()
+                            , literal_foo = "\"foo\"".bright_purple()
+                            , type_Bar = "Bar".green()
+                            , variant_Bar = "Bar".green()
                         })
                     })
             ),
@@ -872,7 +868,7 @@ impl Diagnostic for Error {
                 .min_by(|(_, a), (_, b)| a.cmp(b))
                 .and_then(|(suggestion, distance)| {
                     if distance <= 4 {
-                        Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                        Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                     } else {
                         None
                     }
@@ -887,7 +883,7 @@ impl Diagnostic for Error {
                     .min_by(|(_, a), (_, b)| a.cmp(b))
                     .and_then(|(suggestion, distance)| {
                         if distance <= 4 {
-                            Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                            Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                         } else {
                             None
                         }
@@ -904,7 +900,7 @@ impl Diagnostic for Error {
                     .min_by(|(_, a), (_, b)| a.cmp(b))
                     .and_then(|(suggestion, distance)| {
                         if distance <= 4 {
-                            Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                            Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                         } else {
                             None
                         }
@@ -915,28 +911,35 @@ impl Diagnostic for Error {
                         Box::new(formatdoc! {
                             r#"Did you forget to import it?
 
-                               Data-type constructors are not automatically imported, even if their type
-                               is imported. So, if a module 'aiken/pet' defines the following type:
+                               Data-type constructors are not automatically imported, even if their type is imported. So, if a module 'aiken/pet' defines the following type:
 
                                  ┍━ aiken/pet.ak ━━━━━━━━
-                                 │ pub type Pet {{
-                                 │   Cat
-                                 │   Dog
+                                 │ {keyword_pub} {keyword_type} {type_Pet} {{
+                                 │   {variant_Cat}
+                                 │   {variant_Dog}
                                  │ }}
 
-                               You must import its constructors explicitly to use them, or prefix them
-                               with the module's name.
+                               You must import its constructors explicitly to use them, or prefix them with the module's name.
 
                                  ┍━ foo.ak ━━━━━━━━
-                                 │ use aiken/pet.{{Pet, Dog}}
+                                 │ {keyword_use} aiken/pet.{{{type_Pet}, {variant_Dog}}}
                                  │
-                                 │ fn foo(pet : Pet) {{
-                                 │   when pet is {{
-                                 │     pet.Cat -> // ...
-                                 │     Dog -> // ...
+                                 │ {keyword_fn} foo(pet : {type_Pet}) {{
+                                 │   {keyword_when} pet {keyword_is} {{
+                                 │     pet.{variant_Cat} -> // ...
+                                 │     {variant_Dog} -> // ...
                                  │   }}
-                                 │ }}"
+                                 │ }}
                             "#
+                            , keyword_fn =  "fn".yellow()
+                            , keyword_is = "is".yellow()
+                            , keyword_pub = "pub".bright_blue()
+                            , keyword_type = "type".yellow()
+                            , keyword_use = "use".bright_blue()
+                            , keyword_when = "when".yellow()
+                            , type_Pet = "Pet".green()
+                            , variant_Cat = "Cat".green()
+                            , variant_Dog = "Dog".green()
                         })
                     ))
                 } else {
@@ -951,7 +954,7 @@ impl Diagnostic for Error {
                     .min_by(|(_, a), (_, b)| a.cmp(b))
                     .and_then(|(suggestion, distance)| {
                         if distance <= 4 {
-                            Some(Box::new(format!("Did you mean '{suggestion}'?")))
+                            Some(Box::new(format!("Did you mean '{}'?", suggestion.yellow())))
                         } else {
                             None
                         }
@@ -960,9 +963,7 @@ impl Diagnostic for Error {
             ),
 
             Self::UnnecessarySpreadOperator { arity, .. } => Some(Box::new(formatdoc! {
-                r#"The spread operator comes in handy when matching on some fields of
-                   a constructor. However, here you've matched all {arity} fields of the
-                   constructor which makes the spread operator redundant.
+                r#"The spread operator comes in handy when matching on some fields of a constructor. However, here you've matched all {arity} fields of the constructor which makes the spread operator redundant.
 
                    The best thing to do from here is to remove it.
                 "# })
@@ -977,26 +978,25 @@ impl Diagnostic for Error {
                 Some(Box::new(
                     match situation {
                         Some(UnifyErrorSituation::CaseClauseMismatch) => formatdoc! {
-                            r#"While comparing branches from a 'when/is' expression, I realized
-                               not all branches have the same type.
+                            r#"While comparing branches from a '{keyword_when}/{keyword_is}' expression, I realized not all branches have the same type.
 
                                I am expecting all of them to have the following type:
 
-                               {}
+                               {expected}
 
                                but I found some with type:
 
-                               {}
+                               {given}
 
-                               Note that I infer the type of the entire 'when/is' expression
-                               based on the type of the first branch I encounter.
-                             "#,
-                             expected.green(),
-                             given.red()
+                               Note that I infer the type of the entire '{keyword_when}/{keyword_is}' expression based on the type of the first branch I encounter.
+                             "#
+                             , keyword_when = "when".yellow()
+                             , keyword_is = "is".yellow()
+                             , expected = expected.green()
+                             , given = given.red()
                         },
                         Some(UnifyErrorSituation::ReturnAnnotationMismatch) => formatdoc! {
-                            r#"While comparing the return annotation of a function with
-                               its actual return type, I realized that both don't match.
+                            r#"While comparing the return annotation of a function with its actual return type, I realized that both don't match.
 
                                I am inferring the function should return:
 
@@ -1006,15 +1006,13 @@ impl Diagnostic for Error {
 
                                {}
 
-                               Either, fix the annotation or adjust the function body to
-                               return the expected type.
+                               Either, fix the annotation or adjust the function body to return the expected type.
                              "#,
                              expected.green(),
                              given.red()
                         },
                         Some(UnifyErrorSituation::PipeTypeMismatch) => formatdoc! {
-                            r#"As I was looking at a pipeline you have defined, I realized
-                               that one of the pipe isn't valid.
+                            r#"As I was looking at a pipeline you have defined, I realized that one of the pipe isn't valid.
 
                                I am expecting the pipe to send into something of type:
 
@@ -1030,8 +1028,7 @@ impl Diagnostic for Error {
                             given.red()
                         },
                         Some(UnifyErrorSituation::Operator(op)) => formatdoc! {
-                            r#"While checking operands of a binary operator, I realized
-                               that at least one of them doesn't have the expected type.
+                            r#"While checking operands of a binary operator, I realized that at least one of them doesn't have the expected type.
 
                                The '{}' operator expects operands of type:
 
@@ -1041,7 +1038,7 @@ impl Diagnostic for Error {
 
                                {}
                             "#,
-                            op.to_doc().to_pretty_string(70),
+                            op.to_doc().to_pretty_string(70).yellow(),
                             expected.green(),
                             given.red()
                         },
@@ -1054,8 +1051,7 @@ impl Diagnostic for Error {
 
                                {}
 
-                               Either, add type-annotation to improve my inference, or
-                               adjust the expression to have the expected type.
+                               Either, add type-annotation to improve my inference, or adjust the expression to have the expected type.
                             "#,
                             expected.green(),
                             given.red()
@@ -1073,16 +1069,12 @@ impl Diagnostic for Error {
             Self::CyclicTypeDefinitions { .. } => None,
 
             Self::RecursiveType { .. } => Some(Box::new(formatdoc! {
-                r#"I have several aptitudes, but inferring recursive types isn't one them.
-                   It is still possible to define recursive types just fine, but I will
-                   need a little help in the form of type annotation to infer their types
-                   should they show up.
+                r#"I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up.
                 "#
             })),
 
             Self::NotATuple { tipo, .. } => Some(Box::new(formatdoc! {
-                r#"Because you used a tuple-index on an element, I assumed it had to
-                   be a tuple or some kind, but instead I found:
+                r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
 
                    {type_info}
                 "#,
@@ -1442,8 +1434,9 @@ pub enum Warning {
 
     #[error("I found an unused (private) module constant: '{}'.\n", name.purple())]
     #[diagnostic(help(
-        "Perhaps your forgot to make it public using the 'pub' keyword?\n\
+        "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
          Otherwise, you might want to get rid of it altogether."
+        , keyword_pub = "pub".bright_blue()
     ))]
     UnusedPrivateModuleConstant {
         #[label]
@@ -1453,8 +1446,9 @@ pub enum Warning {
 
     #[error("I found an unused private function: '{}'.\n", name.purple())]
     #[diagnostic(help(
-        "Perhaps your forgot to make it public using the 'pub' keyword?\n\
+        "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
          Otherwise, you might want to get rid of it altogether."
+         , keyword_pub = "pub".bright_blue()
     ))]
     UnusedPrivateFunction {
         #[label]

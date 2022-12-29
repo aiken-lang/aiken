@@ -1,9 +1,8 @@
-use std::collections::HashSet;
-
-use miette::Diagnostic;
-
 use crate::{ast::Span, parser::token::Token};
 use indoc::formatdoc;
+use miette::Diagnostic;
+use owo_colors::OwoColorize;
+use std::collections::HashSet;
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 #[error("{kind}\n")]
@@ -104,15 +103,15 @@ pub enum ErrorKind {
     },
     #[error("I tripped over a malformed base16-encoded string literal")]
     #[diagnostic(help("{}", formatdoc! {
-        r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal)
-           string literals.
+        r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal) string literals.
 
            For example:
 
-             pub const my_policy_id =
-               #"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50"
+             ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+             │ {} my_policy_id {}
+             │   #{}
         "#
-    }))]
+    , "pub const".bright_blue(), "=".yellow(), "\"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50\"".bright_purple()}))]
     MalformedBase16StringLiteral,
 }
 
