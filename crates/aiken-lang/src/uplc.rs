@@ -30,7 +30,8 @@ use crate::{
         check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
         convert_type_to_data, get_common_ancestor, get_generics_and_type, get_variant_name,
         handle_func_deps_ir, list_access_to_uplc, match_ir_for_recursion, monomorphize,
-        rearrange_clauses, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
+        rearrange_clauses, wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents,
+        FunctionAccessKey,
     },
     expr::TypedExpr,
     tipo::{
@@ -104,15 +105,7 @@ impl<'a> CodeGenerator<'a> {
             term
         };
 
-        for arg in arguments.iter().rev() {
-            term = Term::Lambda {
-                parameter_name: uplc::ast::Name {
-                    text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                    unique: 0.into(),
-                },
-                body: term.into(),
-            }
-        }
+        term = wrap_validator_args(term, arguments);
 
         let mut program = Program {
             version: (1, 0, 0),
@@ -3921,7 +3914,7 @@ impl<'a> CodeGenerator<'a> {
                 let term = Term::Apply {
                     function: Term::Apply {
                         function: Term::Builtin(DefaultFunction::Trace).force_wrap().into(),
-                        argument: Term::Constant(uplc::ast::Constant::String(
+                        argument: Term::Constant(UplcConstant::String(
                             label.unwrap_or_else(|| "aiken::todo".to_string()),
                         ))
                         .into(),

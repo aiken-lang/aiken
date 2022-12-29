@@ -7,7 +7,7 @@ use std::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::{
-    ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
+    ast::{builder::apply_wrap, Constant as UplcConstant, Name, Term, Type as UplcType},
     builtins::DefaultFunction,
     machine::runtime::convert_constr_to_tag,
     BigInt, Constr, KeyValuePairs, PlutusData,
@@ -15,7 +15,7 @@ use uplc::{
 
 use crate::{
     air::Air,
-    ast::{Clause, Constant, Pattern, Span},
+    ast::{Clause, Constant, Pattern, Span, TypedArg},
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
 };
@@ -1049,6 +1049,39 @@ pub fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConsta
         new_constants.push(constant);
     }
     new_constants
+}
+
+pub fn wrap_validator_args(term: Term<Name>, arguments: Vec<TypedArg>) -> Term<Name> {
+    let mut term = term;
+    for arg in arguments.iter().rev() {
+        if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
+            term = apply_wrap(
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                        unique: 0.into(),
+                    },
+                    body: term.into(),
+                },
+                convert_data_to_type(
+                    Term::Var(Name {
+                        text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                        unique: 0.into(),
+                    }),
+                    &arg.tipo,
+                ),
+            );
+        }
+
+        term = Term::Lambda {
+            parameter_name: Name {
+                text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                unique: 0.into(),
+            },
+            body: term.into(),
+        }
+    }
+    term
 }
 
 pub fn monomorphize(
