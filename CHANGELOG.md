@@ -4,6 +4,20 @@
 
 ### Added
 
+N/A
+
+### Changed
+
+N/A
+
+### Removed
+
+N/A
+
+## [v0.0.27] - 2022-MM-DD
+
+### Added
+
 - **aiken-lang**: integrated unit tests
 
   Aiken now supports writing unit tests directly in source files using the new
