@@ -4,6 +4,10 @@ pub opaque type Dict<key, value> {
   inner: List<#(ByteArray, value)>,
 }
 
+pub fn toList(self: Dict<ByteArray, value>){
+  self.inner
+}
+
 /// Create a new map
 pub fn new() -> Dict<key, value> {
   Dict { inner: [] }

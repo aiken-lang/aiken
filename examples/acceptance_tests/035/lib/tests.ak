@@ -30,8 +30,7 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
     v0,
     v1,
     fn(_, a0, a1) {
-      Some(
-      dict.union_with(
+      let asset = dict.union_with(
         a0,
         a1,
         fn(_, q0, q1) {
@@ -42,8 +41,12 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
             Some(q)
           }
         },
-      ))
-      
+      )
+
+      when dict.toList(asset) is {
+        [] -> None
+        _ -> Some(asset)
+      }
     },
   )
 }
