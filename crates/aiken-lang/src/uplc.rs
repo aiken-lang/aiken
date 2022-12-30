@@ -28,10 +28,9 @@ use crate::{
     },
     builder::{
         check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
-        convert_type_to_data, get_common_ancestor, get_generics_and_type, get_variant_name,
-        handle_func_deps_ir, handle_recursion_ir, list_access_to_uplc, monomorphize,
-        rearrange_clauses, wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents,
-        FunctionAccessKey,
+        convert_type_to_data, get_common_ancestor, get_generics_and_type, handle_func_deps_ir,
+        handle_recursion_ir, list_access_to_uplc, monomorphize, rearrange_clauses,
+        wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     expr::TypedExpr,
     tipo::{
@@ -176,11 +175,8 @@ impl<'a> CodeGenerator<'a> {
                 self.build_ir(body, &mut func_body, func_scope);
                 let mut arg_names = vec![];
                 for arg in args {
-                    let name = arg
-                        .arg_name
-                        .get_variable_name()
-                        .unwrap_or_default()
-                        .to_string();
+                    let name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+
                     arg_names.push(name);
                 }
 
@@ -2172,29 +2168,48 @@ impl<'a> CodeGenerator<'a> {
                                         let function = self.functions.get(&current_func);
                                         if function_key.clone() == current_func_as_variant {
                                             func_calls.insert(current_func_as_variant, ());
-                                        } else if let (Some(function), Type::Fn { args, .. }) =
+                                        } else if let (Some(function), Type::Fn { .. }) =
                                             (function, &*tipo)
                                         {
-                                            if function
-                                                .arguments
-                                                .iter()
-                                                .any(|arg| arg.tipo.is_generic())
+                                            let mut generics_type_map: HashMap<u64, Arc<Type>> =
+                                                HashMap::new();
+
+                                            let param_types = tipo.arg_types().unwrap();
+
+                                            for (index, arg) in
+                                                function.arguments.iter().enumerate()
                                             {
-                                                let mut new_name = String::new();
-                                                for arg in args.iter() {
-                                                    get_variant_name(&mut new_name, arg);
+                                                if arg.tipo.is_generic() {
+                                                    let mut map =
+                                                        generics_type_map.into_iter().collect_vec();
+                                                    map.append(&mut get_generics_and_type(
+                                                        &arg.tipo,
+                                                        &param_types[index],
+                                                    ));
+
+                                                    generics_type_map = map.into_iter().collect();
                                                 }
-                                                func_calls.insert(
-                                                    FunctionAccessKey {
-                                                        module_name: module,
-                                                        function_name: func_name,
-                                                        variant_name: new_name,
-                                                    },
-                                                    (),
-                                                );
-                                            } else {
-                                                func_calls.insert(current_func, ());
                                             }
+
+                                            let mut func_ir = vec![];
+
+                                            self.build_ir(
+                                                &function.body,
+                                                &mut func_ir,
+                                                scope.to_vec(),
+                                            );
+
+                                            let (variant_name, _) =
+                                                monomorphize(func_ir, generics_type_map, &tipo);
+
+                                            func_calls.insert(
+                                                FunctionAccessKey {
+                                                    module_name: current_func.module_name,
+                                                    function_name: current_func.function_name,
+                                                    variant_name,
+                                                },
+                                                (),
+                                            );
                                         } else {
                                             func_calls.insert(current_func, ());
                                         }

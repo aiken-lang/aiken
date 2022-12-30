@@ -992,8 +992,33 @@ pub fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
             let list_type = &t.get_inner_types()[0];
             get_variant_name(&mut full_type, list_type);
             full_type
+        } else if t.is_tuple() {
+            let mut full_type = "tuple".to_string();
+            match &**t {
+                Type::App { .. } => {}
+                Type::Fn { .. } => {}
+                Type::Var { .. } => {}
+                Type::Tuple { elems } => {
+                    for elem in elems {
+                        get_variant_name(&mut full_type, elem);
+                    }
+                }
+            };
+            full_type
         } else {
-            "data".to_string()
+            let mut full_type = "data".to_string();
+            match &**t {
+                Type::App { args, .. } => {
+                    for arg in args {
+                        get_variant_name(&mut full_type, arg);
+                    }
+                }
+                Type::Fn { .. } => {}
+                Type::Var { .. } => {}
+                Type::Tuple { .. } => {}
+            };
+
+            full_type
         }
     ));
 }
