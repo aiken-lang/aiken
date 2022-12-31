@@ -196,8 +196,7 @@ pub enum Air {
     TupleIndex {
         scope: Vec<u64>,
         tipo: Arc<Type>,
-        index: u64,
-        name: String,
+        index: usize,
     },
 
     Todo {
