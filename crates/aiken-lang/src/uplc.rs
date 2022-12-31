@@ -525,8 +525,15 @@ impl<'a> CodeGenerator<'a> {
                 self.build_ir(then, ir_stack, scope);
             }
 
-            TypedExpr::TupleIndex { .. } => {
-                todo!("Tuple indexing not implementing yet");
+            TypedExpr::TupleIndex {
+                tipo, index, tuple, ..
+            } => {
+                ir_stack.push(Air::TupleIndex {
+                    scope: scope.clone(),
+                    tipo: tuple.tipo(),
+                    index: *index,
+                });
+                self.build_ir(tuple, ir_stack, scope);
             }
 
             TypedExpr::ErrorTerm { tipo, label, .. } => {
@@ -3962,7 +3969,47 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::TupleIndex { .. } => todo!(),
+            Air::TupleIndex { tipo, index, .. } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) {
+                    if index == 0 {
+                        term = convert_data_to_type(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::FstPair)
+                                    .force_wrap()
+                                    .force_wrap(),
+                                term,
+                            ),
+                            &tipo.get_inner_types()[0],
+                        );
+                    } else {
+                        term = convert_data_to_type(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::SndPair)
+                                    .force_wrap()
+                                    .force_wrap(),
+                                term,
+                            ),
+                            &tipo.get_inner_types()[1],
+                        );
+                    }
+                } else {
+                    self.needs_field_access = true;
+                    term = apply_wrap(
+                        apply_wrap(
+                            Term::Var(Name {
+                                text: CONSTR_GET_FIELD.to_string(),
+                                unique: 0.into(),
+                            }),
+                            term,
+                        ),
+                        Term::Constant(UplcConstant::Integer(index as i128)),
+                    );
+                }
+
+                arg_stack.push(term);
+            }
             Air::TupleAccessor { tipo, names, .. } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
