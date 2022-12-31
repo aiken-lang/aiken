@@ -45,8 +45,6 @@ pub struct CodeGenerator<'a> {
     functions: &'a HashMap<FunctionAccessKey, &'a TypedFunction>,
     // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
     data_types: &'a HashMap<DataTypeKey, &'a TypedDataType>,
-    // imports: &'a HashMap<(String, String), &'a Use<String>>,
-    // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
     module_types: &'a HashMap<String, TypeInfo>,
     id_gen: IdGenerator,
     needs_field_access: bool,
@@ -58,8 +56,6 @@ impl<'a> CodeGenerator<'a> {
         functions: &'a HashMap<FunctionAccessKey, &'a TypedFunction>,
         // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
         data_types: &'a HashMap<DataTypeKey, &'a TypedDataType>,
-        // imports: &'a HashMap<(String, String), &'a Use<String>>,
-        // constants: &'a HashMap<(String, String), &'a ModuleConstant<Arc<tipo::Type>, String>>,
         module_types: &'a HashMap<String, TypeInfo>,
     ) -> Self {
         CodeGenerator {
@@ -67,8 +63,6 @@ impl<'a> CodeGenerator<'a> {
             functions,
             // type_aliases,
             data_types,
-            // imports,
-            // constants,
             module_types,
             id_gen: IdGenerator::new(),
             needs_field_access: false,
@@ -525,14 +519,13 @@ impl<'a> CodeGenerator<'a> {
                 self.build_ir(then, ir_stack, scope);
             }
 
-            TypedExpr::TupleIndex {
-                tipo, index, tuple, ..
-            } => {
+            TypedExpr::TupleIndex { index, tuple, .. } => {
                 ir_stack.push(Air::TupleIndex {
                     scope: scope.clone(),
                     tipo: tuple.tipo(),
                     index: *index,
                 });
+
                 self.build_ir(tuple, ir_stack, scope);
             }
 
@@ -2337,7 +2330,9 @@ impl<'a> CodeGenerator<'a> {
                         module,
                         ..
                     } => {
-                        let name = if *func_name == name || name == format!("{module}_{func_name}")
+                        let name = if (*func_name == name
+                            || name == format!("{module}_{func_name}"))
+                            && !module.is_empty()
                         {
                             format!("{module}_{func_name}{variant_name}")
                         } else {

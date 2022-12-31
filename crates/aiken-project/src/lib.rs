@@ -483,8 +483,6 @@ where
         let mut functions = HashMap::new();
         let mut type_aliases = HashMap::new();
         let mut data_types = HashMap::new();
-        let mut imports = HashMap::new();
-        let mut constants = HashMap::new();
 
         let prelude_functions = builtins::prelude_functions();
         for (access_key, func) in prelude_functions.iter() {
@@ -513,7 +511,6 @@ where
                             func,
                         );
                     }
-                    Definition::Test(_) => {}
                     Definition::TypeAlias(ta) => {
                         type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
                     }
@@ -526,12 +523,8 @@ where
                             dt,
                         );
                     }
-                    Definition::Use(import) => {
-                        imports.insert((module.name.clone(), import.module.join("/")), import);
-                    }
-                    Definition::ModuleConstant(mc) => {
-                        constants.insert((module.name.clone(), mc.name.clone()), mc);
-                    }
+
+                    Definition::ModuleConstant(_) | Definition::Test(_) | Definition::Use(_) => {}
                 }
             }
         }
@@ -548,8 +541,6 @@ where
                 &functions,
                 // &type_aliases,
                 &data_types,
-                // &imports,
-                // &constants,
                 &self.module_types,
             );
 
@@ -583,8 +574,6 @@ where
         let mut functions = HashMap::new();
         let mut type_aliases = HashMap::new();
         let mut data_types = HashMap::new();
-        let mut imports = HashMap::new();
-        let mut constants = HashMap::new();
 
         let prelude_functions = builtins::prelude_functions();
         for (access_key, func) in prelude_functions.iter() {
@@ -637,12 +626,7 @@ where
                             dt,
                         );
                     }
-                    Definition::Use(import) => {
-                        imports.insert((module.name.clone(), import.module.join("/")), import);
-                    }
-                    Definition::ModuleConstant(mc) => {
-                        constants.insert((module.name.clone(), mc.name.clone()), mc);
-                    }
+                    Definition::Use(_) | Definition::ModuleConstant(_) => (),
                 }
             }
         }
@@ -666,8 +650,6 @@ where
                 &functions,
                 // &type_aliases,
                 &data_types,
-                // &imports,
-                // &constants,
                 &self.module_types,
             );
 

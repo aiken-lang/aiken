@@ -505,7 +505,7 @@ pub fn prelude_functions() -> HashMap<FunctionAccessKey, TypedFunction> {
             body: TypedExpr::UnOp {
                 location: Span::empty(),
                 tipo: bool(),
-                op: UnOp::Negate,
+                op: UnOp::Not,
                 value: Box::new(TypedExpr::Var {
                     location: Span::empty(),
                     constructor: ValueConstructor {
