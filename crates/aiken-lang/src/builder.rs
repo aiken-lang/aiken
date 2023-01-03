@@ -1283,7 +1283,6 @@ pub fn monomorphize(
                 tail_name,
                 complex_clause,
                 next_tail_name,
-                inverse,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1295,7 +1294,6 @@ pub fn monomorphize(
                         tail_name,
                         complex_clause,
                         next_tail_name,
-                        inverse,
                     };
                     needs_variant = false;
                 }
@@ -1313,6 +1311,27 @@ pub fn monomorphize(
                         scope,
                         subject_name,
                         tipo,
+                    };
+                    needs_variant = false;
+                }
+            }
+            Air::ListClauseGuard {
+                scope,
+                tipo,
+                tail_name,
+                next_tail_name,
+                inverse,
+            } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::ListClauseGuard {
+                        scope,
+                        tipo,
+                        tail_name,
+                        next_tail_name,
+                        inverse,
                     };
                     needs_variant = false;
                 }
