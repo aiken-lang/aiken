@@ -312,7 +312,8 @@ fn get_tx_info_v1(
         .clone()
         .into_iter()
         .sorted()
-        .collect();
+        .map(|(reward_account, coin)| (Address::from_bytes(&reward_account).unwrap(), coin))
+        .collect_vec();
 
     let valid_range = slot_range_to_posix_time_range(
         TimeRange {
@@ -388,6 +389,7 @@ fn get_tx_info_v2(
             .clone()
             .into_iter()
             .sorted()
+            .map(|(reward_account, coin)| (Address::from_bytes(&reward_account).unwrap(), coin))
             .collect(),
     );
 
