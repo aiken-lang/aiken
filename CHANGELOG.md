@@ -8,7 +8,7 @@ N/A
 
 ### Changed
 
-N/A
+- **uplc**: Reward accounts are now correctly turned into script credentials in ScriptContext.
 
 ### Removed
 

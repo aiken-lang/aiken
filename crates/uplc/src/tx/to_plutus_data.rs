@@ -1,4 +1,4 @@
-use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart};
+use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
 use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{AssetName, BigInt, Constr, Mint, PlutusData, ScriptRef};
@@ -84,6 +84,17 @@ impl ToPlutusData for Address {
                 };
 
                 wrap_multiple_with_constr(0, vec![payment_part_plutus_data, stake_part_plutus_data])
+            }
+            Address::Stake(stake_address) => {
+                // This is right now only used in Withdrawals (Reward account)
+                match stake_address.payload() {
+                    StakePayload::Stake(stake_keyhash) => {
+                        StakeCredential::AddrKeyhash(*stake_keyhash).to_plutus_data()
+                    }
+                    StakePayload::Script(script_hash) => {
+                        StakeCredential::Scripthash(*script_hash).to_plutus_data()
+                    }
+                }
             }
             _ => unreachable!(),
         }

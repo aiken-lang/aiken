@@ -1,8 +1,9 @@
+use pallas_addresses::Address;
 use pallas_codec::utils::KeyValuePairs;
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{
-    AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer, RewardAccount,
-    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
+    AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer, StakeCredential,
+    TransactionInput, TransactionOutput, Value,
 };
 use serde::Deserialize;
 
@@ -40,7 +41,7 @@ pub struct TxInfoV1 {
     pub fee: Value,
     pub mint: MintValue,
     pub dcert: Vec<Certificate>,
-    pub wdrl: Vec<(RewardAccount, Coin)>,
+    pub wdrl: Vec<(Address, Coin)>,
     pub valid_range: TimeRange,
     pub signatories: Vec<AddrKeyhash>,
     pub data: Vec<(DatumHash, PlutusData)>,
@@ -55,7 +56,7 @@ pub struct TxInfoV2 {
     pub fee: Value,
     pub mint: MintValue,
     pub dcert: Vec<Certificate>,
-    pub wdrl: Withdrawals,
+    pub wdrl: KeyValuePairs<Address, Coin>,
     pub valid_range: TimeRange,
     pub signatories: Vec<AddrKeyhash>,
     pub redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
