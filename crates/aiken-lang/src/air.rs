@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{AssignmentKind, BinOp, TypedRecordUpdateArg, UnOp},
+    ast::{AssignmentKind, BinOp, UnOp},
     tipo::{Type, ValueConstructor},
 };
 
@@ -134,7 +134,6 @@ pub enum Air {
         tail_name: String,
         next_tail_name: Option<String>,
         complex_clause: bool,
-        inverse: bool,
     },
 
     TupleClause {
@@ -151,6 +150,14 @@ pub enum Air {
         scope: Vec<u64>,
         subject_name: String,
         tipo: Arc<Type>,
+    },
+
+    ListClauseGuard {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+        tail_name: String,
+        next_tail_name: Option<String>,
+        inverse: bool,
     },
 
     Discard {
@@ -224,8 +231,7 @@ pub enum Air {
     RecordUpdate {
         scope: Vec<u64>,
         tipo: Arc<Type>,
-        spread: Box<Self>,
-        args: Vec<TypedRecordUpdateArg>,
+        count: usize,
     },
 
     UnOp {
@@ -264,6 +270,7 @@ impl Air {
             | Air::Clause { scope, .. }
             | Air::ListClause { scope, .. }
             | Air::ClauseGuard { scope, .. }
+            | Air::ListClauseGuard { scope, .. }
             | Air::Discard { scope }
             | Air::Finally { scope }
             | Air::If { scope, .. }
