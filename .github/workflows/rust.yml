@@ -22,7 +22,7 @@ jobs:
       run: cargo test --verbose --workspace
     - name: Acceptance Tests
       working-directory: examples/acceptance_tests
-      run: run-all
+      run: ./run-all
     - name: Lint
       run: cargo fmt --all -- --check
     - name: Clippy
