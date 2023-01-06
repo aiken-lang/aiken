@@ -1,6 +1,20 @@
 # Changelog
 
-## [next] - 2022-MM-DD
+## [next] - 2023-MM-DD
+
+### Added
+
+N/A
+
+### Changed
+
+N/A
+
+### Removed
+
+N/A
+
+## [v0.0.28] - 2023-01-06
 
 ### Added
 
