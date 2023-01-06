@@ -1,2 +1,4 @@
 build/
 assets/
+*.sk
+*.addr
