@@ -778,6 +778,10 @@ impl<'a> CodeGenerator<'a> {
                 }
                 *clause_properties.needs_constr_var() = false;
 
+                pattern_vec.push(Air::Discard {
+                    scope: scope.clone(),
+                });
+
                 self.when_recursive_ir(
                     pattern,
                     pattern_vec,
