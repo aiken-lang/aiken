@@ -1,6 +1,0 @@
-name = "aiken/sample"
-version = "0.0.1"
-
-dependencies = [
-  { name = "aiken-lang/stdlib", version = "main", source = "github" },
-]
