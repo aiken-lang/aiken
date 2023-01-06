@@ -1038,7 +1038,7 @@ pub fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConsta
             )),
 
             UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: u64::from(b),
+                tag: convert_constr_to_tag(b.into()),
                 any_constructor: None,
                 fields: vec![],
             })),
@@ -1170,7 +1170,7 @@ pub fn monomorphize(
                         tipo,
                         tail,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::ListAccessor {
@@ -1189,7 +1189,7 @@ pub fn monomorphize(
                         tipo,
                         tail,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::ListExpose {
@@ -1208,7 +1208,7 @@ pub fn monomorphize(
                         tipo,
                         tail,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::BinOp {
@@ -1227,7 +1227,7 @@ pub fn monomorphize(
                         tipo,
                         count,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::Builtin { scope, func, tipo } => {
@@ -1236,7 +1236,7 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Builtin { scope, func, tipo };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             // TODO check on assignment if type is needed
@@ -1255,7 +1255,7 @@ pub fn monomorphize(
                         subject_name,
                         tipo,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::Clause {
@@ -1274,7 +1274,7 @@ pub fn monomorphize(
                         subject_name,
                         complex_clause,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::ListClause {
@@ -1283,7 +1283,6 @@ pub fn monomorphize(
                 tail_name,
                 complex_clause,
                 next_tail_name,
-                inverse,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1295,9 +1294,8 @@ pub fn monomorphize(
                         tail_name,
                         complex_clause,
                         next_tail_name,
-                        inverse,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::ClauseGuard {
@@ -1314,7 +1312,28 @@ pub fn monomorphize(
                         subject_name,
                         tipo,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
+                }
+            }
+            Air::ListClauseGuard {
+                scope,
+                tipo,
+                tail_name,
+                next_tail_name,
+                inverse,
+            } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::ListClauseGuard {
+                        scope,
+                        tipo,
+                        tail_name,
+                        next_tail_name,
+                        inverse,
+                    };
+                    needs_variant = true;
                 }
             }
             Air::RecordAccess {
@@ -1331,7 +1350,7 @@ pub fn monomorphize(
                         index: record_index,
                         tipo,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::FieldsExpose {
@@ -1344,7 +1363,7 @@ pub fn monomorphize(
                     if tipo.is_generic() {
                         let mut tipo = tipo.clone();
                         find_generics_to_replace(&mut tipo, &generic_types);
-                        needs_variant = false;
+                        needs_variant = true;
                         new_indices.push((ind, name, tipo));
                     } else {
                         new_indices.push((ind, name, tipo));
@@ -1362,7 +1381,7 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Tuple { scope, count, tipo };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::Todo { scope, label, tipo } => {
@@ -1371,17 +1390,25 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Todo { scope, label, tipo };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
-            Air::RecordUpdate { .. } => todo!(),
+            Air::RecordUpdate { scope, tipo, count } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::RecordUpdate { scope, tipo, count };
+                    needs_variant = true;
+                }
+            }
             Air::TupleAccessor { scope, names, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::TupleAccessor { scope, names, tipo };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             Air::TupleClause {
@@ -1406,7 +1433,7 @@ pub fn monomorphize(
                         count,
                         complex_clause,
                     };
-                    needs_variant = false;
+                    needs_variant = true;
                 }
             }
             _ => {}
