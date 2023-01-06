@@ -1,7 +1,7 @@
 name = "aiken-lang/hello_world"
-version = "0.0.0"
+version = "1.0.0"
 licences = ["Apache-2.0"]
 description = "Aiken contracts for project 'aiken-lang/hello_world'"
 dependencies = [
-  { name = "aiken-lang/stdlib", version = "main", source = "github" },
+  { name = "aiken-lang/stdlib", version = "7ca9e659688ea88e1cfdc439b6c20c4c7fae9985", source = "github" },
 ]
