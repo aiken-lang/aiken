@@ -617,6 +617,7 @@ impl<'a> CodeGenerator<'a> {
                         tail_name: subject_name,
                         next_tail_name: next_tail,
                         complex_clause: *clause_properties.is_complex_clause(),
+                        inverse: false,
                     });
 
                     match clause_properties {
@@ -756,6 +757,10 @@ impl<'a> CodeGenerator<'a> {
                     check_when_pattern_needs(tail, clause_properties);
                 }
                 *clause_properties.needs_constr_var() = false;
+
+                pattern_vec.push(Air::Discard {
+                    scope: scope.clone(),
+                });
 
                 self.when_recursive_ir(
                     pattern,
@@ -1186,12 +1191,29 @@ impl<'a> CodeGenerator<'a> {
                 let new_tail_name = "__list_tail".to_string();
 
                 if elements.is_empty() {
-                    pattern_vec.push(Air::ListClauseGuard {
-                        scope,
+                    pattern_vec.push(Air::ListClause {
+                        scope: scope.clone(),
                         tipo: pattern_type.clone(),
                         tail_name: item_name.clone(),
                         next_tail_name: None,
-                        inverse: false,
+                        complex_clause: false,
+                        inverse: true,
+                    });
+
+                    pattern_vec.push(Air::Discard {
+                        scope: scope.clone(),
+                    });
+
+                    pattern_vec.push(Air::Var {
+                        scope,
+                        constructor: ValueConstructor::public(
+                            pattern_type.clone(),
+                            ValueConstructorVariant::LocalVariable {
+                                location: Span::empty(),
+                            },
+                        ),
+                        name: "__other_clauses_delayed".to_string(),
+                        variant_name: String::new(),
                     });
                 } else {
                     for (index, _) in elements.iter().enumerate() {
@@ -1219,12 +1241,29 @@ impl<'a> CodeGenerator<'a> {
                                     _ => unreachable!(),
                                 };
 
-                                pattern_vec.push(Air::ListClauseGuard {
+                                pattern_vec.push(Air::ListClause {
                                     scope: scope.clone(),
                                     tipo: pattern_type.clone(),
                                     tail_name: prev_tail_name,
                                     next_tail_name: Some(tail_name),
-                                    inverse: true,
+                                    complex_clause: false,
+                                    inverse: false,
+                                });
+
+                                pattern_vec.push(Air::Discard {
+                                    scope: scope.clone(),
+                                });
+
+                                pattern_vec.push(Air::Var {
+                                    scope: scope.clone(),
+                                    constructor: ValueConstructor::public(
+                                        pattern_type.clone(),
+                                        ValueConstructorVariant::LocalVariable {
+                                            location: Span::empty(),
+                                        },
+                                    ),
+                                    name: "__other_clauses_delayed".to_string(),
+                                    variant_name: "".to_string(),
                                 });
 
                                 self.when_ir(
@@ -1236,20 +1275,54 @@ impl<'a> CodeGenerator<'a> {
                                     scope.clone(),
                                 );
                             } else {
-                                pattern_vec.push(Air::ListClauseGuard {
+                                pattern_vec.push(Air::ListClause {
                                     scope: scope.clone(),
                                     tipo: pattern_type.clone(),
                                     tail_name: prev_tail_name,
                                     next_tail_name: Some(tail_name.clone()),
-                                    inverse: true,
+                                    complex_clause: false,
+                                    inverse: false,
                                 });
 
-                                pattern_vec.push(Air::ListClauseGuard {
+                                pattern_vec.push(Air::Discard {
+                                    scope: scope.clone(),
+                                });
+
+                                pattern_vec.push(Air::Var {
+                                    scope: scope.clone(),
+                                    constructor: ValueConstructor::public(
+                                        pattern_type.clone(),
+                                        ValueConstructorVariant::LocalVariable {
+                                            location: Span::empty(),
+                                        },
+                                    ),
+                                    name: "__other_clauses_delayed".to_string(),
+                                    variant_name: String::new(),
+                                });
+
+                                pattern_vec.push(Air::ListClause {
                                     scope: scope.clone(),
                                     tipo: pattern_type.clone(),
                                     tail_name: tail_name.clone(),
                                     next_tail_name: None,
-                                    inverse: false,
+                                    complex_clause: false,
+                                    inverse: true,
+                                });
+
+                                pattern_vec.push(Air::Discard {
+                                    scope: scope.clone(),
+                                });
+
+                                pattern_vec.push(Air::Var {
+                                    scope: scope.clone(),
+                                    constructor: ValueConstructor::public(
+                                        pattern_type.clone(),
+                                        ValueConstructorVariant::LocalVariable {
+                                            location: Span::empty(),
+                                        },
+                                    ),
+                                    name: "__other_clauses_delayed".to_string(),
+                                    variant_name: String::new(),
                                 });
 
                                 self.when_ir(
@@ -1268,12 +1341,29 @@ impl<'a> CodeGenerator<'a> {
                                 _ => unreachable!(),
                             };
 
-                            pattern_vec.push(Air::ListClauseGuard {
+                            pattern_vec.push(Air::ListClause {
                                 scope: scope.clone(),
                                 tipo: pattern_type.clone(),
                                 tail_name: prev_tail_name,
                                 next_tail_name: Some(tail_name),
-                                inverse: true,
+                                complex_clause: false,
+                                inverse: false,
+                            });
+
+                            pattern_vec.push(Air::Discard {
+                                scope: scope.clone(),
+                            });
+
+                            pattern_vec.push(Air::Var {
+                                scope: scope.clone(),
+                                constructor: ValueConstructor::public(
+                                    pattern_type.clone(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: "__other_clauses_delayed".to_string(),
+                                variant_name: "".to_string(),
                             });
 
                             self.when_ir(
@@ -3392,6 +3482,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                         argument: Term::Delay(term.into()).into(),
                     }
+                    .force_wrap()
                 } else {
                     term = delayed_if_else(
                         Term::Apply {
@@ -3408,11 +3499,26 @@ impl<'a> CodeGenerator<'a> {
             Air::ListClause {
                 tail_name,
                 next_tail_name,
+                inverse,
                 complex_clause,
                 ..
             } => {
-                let body = arg_stack.pop().unwrap();
-                let mut term = arg_stack.pop().unwrap();
+                // discard to pop off
+                let _ = arg_stack.pop().unwrap();
+
+                // the body to be run if the clause matches
+                // the next branch in the when expression
+                let (body, mut term) = if inverse {
+                    let term = arg_stack.pop().unwrap();
+                    let body = arg_stack.pop().unwrap();
+
+                    (body, term)
+                } else {
+                    let body = arg_stack.pop().unwrap();
+                    let term = arg_stack.pop().unwrap();
+
+                    (body, term)
+                };
 
                 let arg = if let Some(next_tail_name) = next_tail_name {
                     Term::Apply {
@@ -3513,7 +3619,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     }
                 } else if tipo.is_list() {
-                    unreachable!()
+                    todo!()
                 } else {
                     Term::Apply {
                         function: DefaultFunction::EqualsInteger.into(),
@@ -3537,70 +3643,6 @@ impl<'a> CodeGenerator<'a> {
                     }),
                 )
                 .force_wrap();
-
-                arg_stack.push(term);
-            }
-            Air::ListClauseGuard {
-                tail_name,
-                next_tail_name,
-                inverse,
-                ..
-            } => {
-                // the body to be run if the clause matches
-                // the next branch in the when expression
-                let mut term = arg_stack.pop().unwrap();
-
-                term = if let Some(next_tail_name) = next_tail_name {
-                    Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: next_tail_name,
-                                unique: 0.into(),
-                            },
-                            body: term.into(),
-                        }
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
-                            argument: Term::Var(Name {
-                                text: tail_name.clone(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
-                } else {
-                    term
-                };
-
-                if !inverse {
-                    term = choose_list(
-                        Term::Var(Name {
-                            text: tail_name,
-                            unique: 0.into(),
-                        }),
-                        Term::Delay(term.into()),
-                        Term::Var(Name {
-                            text: "__other_clauses_delayed".to_string(),
-                            unique: 0.into(),
-                        }),
-                    )
-                    .force_wrap();
-                } else {
-                    term = choose_list(
-                        Term::Var(Name {
-                            text: tail_name,
-                            unique: 0.into(),
-                        }),
-                        Term::Var(Name {
-                            text: "__other_clauses_delayed".to_string(),
-                            unique: 0.into(),
-                        }),
-                        Term::Delay(term.into()),
-                    )
-                    .force_wrap();
-                }
 
                 arg_stack.push(term);
             }

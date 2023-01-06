@@ -134,6 +134,7 @@ pub enum Air {
         tail_name: String,
         next_tail_name: Option<String>,
         complex_clause: bool,
+        inverse: bool,
     },
 
     TupleClause {
@@ -150,14 +151,6 @@ pub enum Air {
         scope: Vec<u64>,
         subject_name: String,
         tipo: Arc<Type>,
-    },
-
-    ListClauseGuard {
-        scope: Vec<u64>,
-        tipo: Arc<Type>,
-        tail_name: String,
-        next_tail_name: Option<String>,
-        inverse: bool,
     },
 
     Discard {
@@ -271,7 +264,6 @@ impl Air {
             | Air::Clause { scope, .. }
             | Air::ListClause { scope, .. }
             | Air::ClauseGuard { scope, .. }
-            | Air::ListClauseGuard { scope, .. }
             | Air::Discard { scope }
             | Air::Finally { scope }
             | Air::If { scope, .. }
