@@ -9,6 +9,7 @@ N/A
 ### Changed
 
 - **uplc**: Reward accounts are now correctly turned into script credentials in ScriptContext.
+- **all**: bump pallas version to `v0.16.0`
 
 ### Removed
 
