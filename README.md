@@ -22,9 +22,7 @@ For now you'll need rust installed, see [rustup](https://rustup.rs).
 In case you have fresh installation of `rustup` you might need to do:
 
 ```console
-
 rustup install stable
-
 ```
 
 ```console
@@ -32,6 +30,8 @@ $ cargo install --git https://github.com/aiken-lang/aiken.git
 
 $ aiken --help
 ```
+
+Alternatively nix builds are available via [flakes](https://aiken-lang.org/getting-started#from-nix-flakes).
 
 ### How to use
 

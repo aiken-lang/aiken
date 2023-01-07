@@ -1,0 +1,3 @@
+Cargo.lock linguist-generated=true merge=binary linguist-vendored
+Cargo.nix  linguist-generated=true merge=binary linguist-vendored
+flake.lock linguist-generated=true merge=binary linguist-vendored
