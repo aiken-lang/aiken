@@ -11,18 +11,16 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --verbose --workspace
-    - name: Run tests
+    - name: Run unit tests
       run: cargo test --verbose --workspace
-    - name: Acceptance Tests
+    - name: Run acceptance tests
       working-directory: examples/acceptance_tests
-      run: run-all
+      run: find . -maxdepth 1 -mindepth 1 -type d -exec ./run {} \;
     - name: Lint
       run: cargo fmt --all -- --check
     - name: Clippy

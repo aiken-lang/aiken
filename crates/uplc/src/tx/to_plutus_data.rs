@@ -121,7 +121,7 @@ impl<const BYTES: usize> ToPlutusData for Hash<BYTES> {
 
 impl ToPlutusData for Bytes {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::BoundedBytes(self.clone())
+        PlutusData::BoundedBytes(self.to_vec().into())
     }
 }
 

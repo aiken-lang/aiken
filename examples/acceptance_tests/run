@@ -27,4 +27,5 @@ if [ "$?" -eq "0" ]; then
 else
   echo "❌ $(basename $TARGET)"
   cat $TMP
+  exit 1
 fi

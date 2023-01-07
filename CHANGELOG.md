@@ -1,6 +1,20 @@
 # Changelog
 
-## [next] - 2022-MM-DD
+## [next] - 2023-MM-DD
+
+### Added
+
+N/A
+
+### Changed
+
+N/A
+
+### Removed
+
+N/A
+
+## [v0.0.28] - 2023-01-06
 
 ### Added
 
@@ -9,6 +23,7 @@ N/A
 ### Changed
 
 - **uplc**: Reward accounts are now correctly turned into script credentials in ScriptContext.
+- **all**: bump pallas version to `v0.16.0`
 
 ### Removed
 
