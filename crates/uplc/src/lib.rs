@@ -4,6 +4,7 @@ mod debruijn;
 mod flat;
 pub mod machine;
 pub mod parser;
+pub mod shrinker;
 mod pretty;
 pub mod program_builder;
 pub mod tx;
