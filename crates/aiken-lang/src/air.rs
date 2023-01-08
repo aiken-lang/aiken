@@ -230,8 +230,8 @@ pub enum Air {
 
     RecordUpdate {
         scope: Vec<u64>,
-        tipo: Arc<Type>,
-        count: usize,
+        highest_index: usize,
+        indices: Vec<(usize, Arc<Type>)>,
     },
 
     UnOp {
