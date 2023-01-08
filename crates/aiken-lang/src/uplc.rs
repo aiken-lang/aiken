@@ -483,7 +483,6 @@ impl<'a> CodeGenerator<'a> {
                 let mut index_types = vec![];
                 let mut highest_index = 0;
                 spread_scope.push(self.id_gen.next());
-                println!("{:#?}", args);
 
                 self.build_ir(spread, &mut update_ir, spread_scope);
 
@@ -3719,7 +3718,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let tail_name_prefix = "__tail_index".to_string();
 
-                let mut record = arg_stack.pop().unwrap();
+                let record = arg_stack.pop().unwrap();
 
                 let mut args = HashMap::new();
                 let mut unchanged_field_indices = vec![];
@@ -3727,6 +3726,7 @@ impl<'a> CodeGenerator<'a> {
                 for (index, tipo) in indices
                     .iter()
                     .sorted_by(|(index1, _), (index2, _)| index1.cmp(index2))
+                    .rev()
                 {
                     let arg = arg_stack.pop().unwrap();
                     args.insert(*index, (tipo.clone(), arg));
@@ -3753,15 +3753,114 @@ impl<'a> CodeGenerator<'a> {
                     if let Some((tipo, arg)) = args.get(&current_index) {
                         term = apply_wrap(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons),
+                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
                                 convert_type_to_data(arg.clone(), tipo),
                             ),
                             term,
                         );
                     } else {
+                        term = apply_wrap(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                    Term::Var(Name {
+                                        text: tail_name,
+                                        unique: 0.into(),
+                                    }),
+                                ),
+                            ),
+                            term,
+                        )
                     }
                 }
-                todo!()
+
+                term = apply_wrap(
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::ConstrData),
+                        Term::Constant(UplcConstant::Integer(0)),
+                    ),
+                    term,
+                );
+
+                if !unchanged_field_indices.is_empty() {
+                    prev_index = highest_index;
+                    for index in unchanged_field_indices.into_iter() {
+                        let tail_name = format!("{tail_name_prefix}_{}", prev_index);
+                        let prev_tail_name = format!("{tail_name_prefix}_{index}");
+
+                        let mut tail_list = Term::Var(Name {
+                            text: prev_tail_name,
+                            unique: 0.into(),
+                        });
+
+                        if index < prev_index {
+                            for _ in index..prev_index {
+                                tail_list = apply_wrap(
+                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    tail_list,
+                                );
+                            }
+
+                            term = apply_wrap(
+                                Term::Lambda {
+                                    parameter_name: Name {
+                                        text: tail_name,
+                                        unique: 0.into(),
+                                    },
+                                    body: term.into(),
+                                },
+                                tail_list,
+                            );
+                        }
+                        prev_index = index;
+                    }
+                }
+                let tail_name = format!("{tail_name_prefix}_{prev_index}");
+                let prev_tail_name = format!("{tail_name_prefix}_0");
+
+                let mut tail_list = Term::Var(Name {
+                    text: prev_tail_name.clone(),
+                    unique: 0.into(),
+                });
+
+                for _ in 0..prev_index {
+                    tail_list = apply_wrap(
+                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                        tail_list,
+                    );
+                }
+                if prev_index != 0 {
+                    term = apply_wrap(
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        },
+                        tail_list,
+                    );
+                }
+
+                self.needs_field_access = true;
+                term = apply_wrap(
+                    Term::Lambda {
+                        parameter_name: Name {
+                            text: prev_tail_name,
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    },
+                    apply_wrap(
+                        Term::Var(Name {
+                            text: CONSTR_FIELDS_EXPOSER.to_string(),
+                            unique: 0.into(),
+                        }),
+                        record,
+                    ),
+                );
+                arg_stack.push(term);
             }
             Air::UnOp { op, .. } => {
                 let value = arg_stack.pop().unwrap();
