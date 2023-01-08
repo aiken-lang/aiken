@@ -1729,7 +1729,7 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
-                        Pattern::Discard { name, location } => {
+                        Pattern::Discard { .. } => {
                             names.push("_".to_string());
                         }
                         a @ Pattern::List { .. } => {
