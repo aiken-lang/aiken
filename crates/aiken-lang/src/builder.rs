@@ -7,7 +7,10 @@ use std::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::{
-    ast::{builder::apply_wrap, Constant as UplcConstant, Name, Term, Type as UplcType},
+    ast::{
+        builder::{apply_wrap, if_else},
+        Constant as UplcConstant, Name, Term, Type as UplcType,
+    },
     builtins::DefaultFunction,
     machine::runtime::convert_constr_to_tag,
     BigInt, Constr, KeyValuePairs, PlutusData,
@@ -162,129 +165,75 @@ impl ClauseProperties {
 
 pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
     if field_type.is_bytearray() {
-        Term::Apply {
-            function: DefaultFunction::BData.into(),
-            argument: term.into(),
-        }
+        apply_wrap(DefaultFunction::BData.into(), term)
     } else if field_type.is_int() {
-        Term::Apply {
-            function: DefaultFunction::IData.into(),
-            argument: term.into(),
-        }
+        apply_wrap(DefaultFunction::IData.into(), term)
     } else if field_type.is_map() {
-        Term::Apply {
-            function: DefaultFunction::MapData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_list() {
-        Term::Apply {
-            function: DefaultFunction::ListData.into(),
-            argument: term.into(),
-        }
+        apply_wrap(DefaultFunction::MapData.into(), term)
     } else if field_type.is_string() {
-        Term::Apply {
-            function: DefaultFunction::BData.into(),
-            argument: Term::Apply {
-                function: DefaultFunction::EncodeUtf8.into(),
-                argument: term.into(),
-            }
-            .into(),
-        }
-    } else if field_type.is_tuple() {
-        match field_type.get_uplc_type() {
-            UplcType::List(_) => Term::Apply {
-                function: DefaultFunction::ListData.into(),
-                argument: term.into(),
-            },
-            UplcType::Pair(_, _) => Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: "__pair".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: DefaultFunction::ListData.into(),
-                        argument: Term::Apply {
-                            function: Term::Apply {
-                                function: Term::Builtin(DefaultFunction::MkCons)
+        apply_wrap(
+            DefaultFunction::BData.into(),
+            apply_wrap(DefaultFunction::EncodeUtf8.into(), term),
+        )
+    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+        apply_wrap(
+            Term::Lambda {
+                parameter_name: Name {
+                    text: "__pair".to_string(),
+                    unique: 0.into(),
+                },
+                body: apply_wrap(
+                    DefaultFunction::ListData.into(),
+                    apply_wrap(
+                        apply_wrap(
+                            Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::FstPair)
                                     .force_wrap()
-                                    .into(),
-                                argument: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::FstPair)
+                                    .force_wrap(),
+                                Term::Var(Name {
+                                    text: "__pair".to_string(),
+                                    unique: 0.into(),
+                                }),
+                            ),
+                        ),
+                        apply_wrap(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::SndPair)
                                         .force_wrap()
-                                        .force_wrap()
-                                        .into(),
-                                    argument: Term::Var(Name {
+                                        .force_wrap(),
+                                    Term::Var(Name {
                                         text: "__pair".to_string(),
                                         unique: 0.into(),
-                                    })
-                                    .into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-
-                            argument: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::MkCons)
-                                        .force_wrap()
-                                        .into(),
-                                    argument: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::SndPair)
-                                            .force_wrap()
-                                            .force_wrap()
-                                            .into(),
-                                        argument: Term::Var(Name {
-                                            text: "__pair".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
-                                .into(),
-                                argument: Term::Constant(UplcConstant::ProtoList(
-                                    UplcType::Data,
-                                    vec![],
-                                ))
-                                .into(),
-                            }
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
+                                    }),
+                                ),
+                            ),
+                            Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![])),
+                        ),
+                    ),
+                )
                 .into(),
-                argument: term.into(),
             },
-            _ => unreachable!(),
-        }
+            term,
+        )
+    } else if field_type.is_list() || field_type.is_tuple() {
+        apply_wrap(DefaultFunction::ListData.into(), term)
     } else if field_type.is_bool() {
-        Term::Apply {
-            function: Term::Apply {
-                function: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::IfThenElse)
-                        .force_wrap()
-                        .into(),
-                    argument: term.into(),
-                }
-                .into(),
-                argument: Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(1),
-                    any_constructor: None,
-                    fields: vec![],
-                })))
-                .into(),
-            }
-            .into(),
-            argument: Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
+        if_else(
+            term,
+            Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
+                tag: convert_constr_to_tag(1),
+                any_constructor: None,
+                fields: vec![],
+            }))),
+            Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
                 tag: convert_constr_to_tag(0),
                 any_constructor: None,
                 fields: vec![],
-            })))
-            .into(),
-        }
+            }))),
+        )
     } else {
         term
     }
@@ -292,124 +241,77 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
 
 pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
     if field_type.is_int() {
-        Term::Apply {
-            function: DefaultFunction::UnIData.into(),
-            argument: term.into(),
-        }
+        apply_wrap(DefaultFunction::UnIData.into(), term)
     } else if field_type.is_bytearray() {
-        Term::Apply {
-            function: DefaultFunction::UnBData.into(),
-            argument: term.into(),
-        }
+        apply_wrap(DefaultFunction::UnBData.into(), term)
     } else if field_type.is_map() {
-        Term::Apply {
-            function: DefaultFunction::UnMapData.into(),
-            argument: term.into(),
-        }
-    } else if field_type.is_list() {
-        Term::Apply {
-            function: DefaultFunction::UnListData.into(),
-            argument: term.into(),
-        }
+        apply_wrap(DefaultFunction::UnMapData.into(), term)
     } else if field_type.is_string() {
-        Term::Apply {
-            function: DefaultFunction::DecodeUtf8.into(),
-            argument: Term::Apply {
-                function: DefaultFunction::UnBData.into(),
-                argument: term.into(),
-            }
-            .into(),
-        }
-    } else if field_type.is_tuple() {
-        match field_type.get_uplc_type() {
-            UplcType::List(_) => Term::Apply {
-                function: DefaultFunction::UnListData.into(),
-                argument: term.into(),
-            },
-            UplcType::Pair(_, _) => Term::Apply {
-                function: Term::Lambda {
-                    parameter_name: Name {
-                        text: "__list_data".to_string(),
-                        unique: 0.into(),
-                    },
-                    body: Term::Apply {
-                        function: Term::Lambda {
-                            parameter_name: Name {
-                                text: "__tail".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: Term::Apply {
-                                function: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::MkPairData).into(),
-                                    argument: Term::Apply {
-                                        function: Term::Builtin(DefaultFunction::HeadList)
-                                            .force_wrap()
-                                            .into(),
-                                        argument: Term::Var(Name {
-                                            text: "__list_data".to_string(),
-                                            unique: 0.into(),
-                                        })
-                                        .into(),
-                                    }
-                                    .into(),
-                                }
-                                .into(),
-                                argument: Term::Apply {
-                                    function: Term::Builtin(DefaultFunction::HeadList)
-                                        .force_wrap()
-                                        .into(),
-                                    argument: Term::Var(Name {
-                                        text: "__tail".to_string(),
+        apply_wrap(
+            DefaultFunction::DecodeUtf8.into(),
+            apply_wrap(DefaultFunction::UnBData.into(), term),
+        )
+    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+        apply_wrap(
+            Term::Lambda {
+                parameter_name: Name {
+                    text: "__list_data".to_string(),
+                    unique: 0.into(),
+                },
+                body: apply_wrap(
+                    Term::Lambda {
+                        parameter_name: Name {
+                            text: "__tail".to_string(),
+                            unique: 0.into(),
+                        },
+                        body: apply_wrap(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::MkPairData),
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                    Term::Var(Name {
+                                        text: "__list_data".to_string(),
                                         unique: 0.into(),
-                                    })
-                                    .into(),
-                                }
-                                .into(),
-                            }
-                            .into(),
-                        }
+                                    }),
+                                ),
+                            ),
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                Term::Var(Name {
+                                    text: "__tail".to_string(),
+                                    unique: 0.into(),
+                                }),
+                            ),
+                        )
                         .into(),
-                        argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
-                            argument: Term::Var(Name {
-                                text: "__list_data".to_string(),
-                                unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                }
-                .into(),
-                argument: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::UnListData).into(),
-                    argument: term.into(),
-                }
+                    },
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                        Term::Var(Name {
+                            text: "__list_data".to_string(),
+                            unique: 0.into(),
+                        }),
+                    ),
+                )
                 .into(),
             },
-            _ => unreachable!(),
-        }
+            apply_wrap(Term::Builtin(DefaultFunction::UnListData), term),
+        )
+    } else if field_type.is_list() || field_type.is_tuple() {
+        apply_wrap(DefaultFunction::UnListData.into(), term)
     } else if field_type.is_bool() {
-        Term::Apply {
-            function: Term::Apply {
-                function: Term::Builtin(DefaultFunction::EqualsInteger).into(),
-                argument: Term::Constant(UplcConstant::Integer(1)).into(),
-            }
-            .into(),
-            argument: Term::Apply {
-                function: Term::Builtin(DefaultFunction::FstPair)
+        apply_wrap(
+            apply_wrap(
+                DefaultFunction::EqualsInteger.into(),
+                Term::Constant(UplcConstant::Integer(1)),
+            ),
+            apply_wrap(
+                Term::Builtin(DefaultFunction::FstPair)
                     .force_wrap()
-                    .force_wrap()
-                    .into(),
-                argument: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                    argument: term.into(),
-                }
-                .into(),
-            }
-            .into(),
-        }
+                    .force_wrap(),
+                apply_wrap(DefaultFunction::UnConstrData.into(), term),
+            ),
+        )
     } else {
         term
     }
@@ -582,24 +484,22 @@ pub fn list_access_to_uplc(
     let (first, names) = names.split_first().unwrap();
 
     let head_list = if tipo.is_map() {
-        Term::Apply {
-            function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
-            argument: Term::Var(Name {
+        apply_wrap(
+            Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+            Term::Var(Name {
                 text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                 unique: 0.into(),
-            })
-            .into(),
-        }
+            }),
+        )
     } else {
         convert_data_to_type(
-            Term::Apply {
-                function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
-                argument: Term::Var(Name {
+            apply_wrap(
+                Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                Term::Var(Name {
                     text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                     unique: 0.into(),
-                })
-                .into(),
-            },
+                }),
+            ),
             &tipo.clone().get_inner_types()[0],
         )
     };
@@ -610,39 +510,35 @@ pub fn list_access_to_uplc(
                 text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                 unique: 0.into(),
             },
-            body: Term::Apply {
-                function: Term::Lambda {
+            body: apply_wrap(
+                Term::Lambda {
                     parameter_name: Name {
                         text: first.clone(),
                         unique: 0.into(),
                     },
-                    body: Term::Apply {
-                        function: Term::Lambda {
+                    body: apply_wrap(
+                        Term::Lambda {
                             parameter_name: Name {
                                 text: names[0].clone(),
                                 unique: 0.into(),
                             },
                             body: term.into(),
-                        }
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
-                            argument: Term::Var(Name {
+                        },
+                        apply_wrap(
+                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Var(Name {
                                 text: format!(
                                     "tail_index_{}_{}",
                                     current_index, id_list[current_index]
                                 ),
                                 unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
+                            }),
+                        ),
+                    )
                     .into(),
-                }
-                .into(),
-                argument: head_list.into(),
-            }
+                },
+                head_list,
+            )
             .into(),
         }
     } else if names.is_empty() {
@@ -651,25 +547,22 @@ pub fn list_access_to_uplc(
                 text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                 unique: 0.into(),
             },
-            body: Term::Apply {
-                function: Term::Lambda {
+            body: apply_wrap(
+                Term::Lambda {
                     parameter_name: Name {
                         text: first.clone(),
                         unique: 0.into(),
                     },
                     body: term.into(),
-                }
-                .into(),
-                argument: Term::Apply {
-                    function: Term::Force(Term::Builtin(DefaultFunction::HeadList).into()).into(),
-                    argument: Term::Var(Name {
+                },
+                apply_wrap(
+                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                    Term::Var(Name {
                         text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                         unique: 0.into(),
-                    })
-                    .into(),
-                }
-                .into(),
-            }
+                    }),
+                ),
+            )
             .into(),
         }
     } else {
@@ -678,40 +571,29 @@ pub fn list_access_to_uplc(
                 text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                 unique: 0.into(),
             },
-            body: Term::Apply {
-                function: Term::Lambda {
+            body: apply_wrap(
+                Term::Lambda {
                     parameter_name: Name {
                         text: first.clone(),
                         unique: 0.into(),
                     },
-                    body: Term::Apply {
-                        function: list_access_to_uplc(
-                            names,
-                            id_list,
-                            tail,
-                            current_index + 1,
-                            term,
-                            tipo,
-                        )
-                        .into(),
-                        argument: Term::Apply {
-                            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
-                            argument: Term::Var(Name {
+                    body: apply_wrap(
+                        list_access_to_uplc(names, id_list, tail, current_index + 1, term, tipo),
+                        apply_wrap(
+                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Var(Name {
                                 text: format!(
                                     "tail_index_{}_{}",
                                     current_index, id_list[current_index]
                                 ),
                                 unique: 0.into(),
-                            })
-                            .into(),
-                        }
-                        .into(),
-                    }
+                            }),
+                        ),
+                    )
                     .into(),
-                }
-                .into(),
-                argument: head_list.into(),
-            }
+                },
+                head_list,
+            )
             .into(),
         }
     }
@@ -1393,14 +1275,27 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::RecordUpdate { scope, tipo, count } => {
-                if tipo.is_generic() {
-                    let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
-
-                    new_air[index] = Air::RecordUpdate { scope, tipo, count };
-                    needs_variant = true;
+            Air::RecordUpdate {
+                scope,
+                highest_index,
+                indices,
+            } => {
+                let mut new_indices = vec![];
+                for (ind, tipo) in indices {
+                    if tipo.is_generic() {
+                        let mut tipo = tipo.clone();
+                        find_generics_to_replace(&mut tipo, &generic_types);
+                        needs_variant = true;
+                        new_indices.push((ind, tipo));
+                    } else {
+                        new_indices.push((ind, tipo));
+                    }
                 }
+                new_air[index] = Air::RecordUpdate {
+                    scope,
+                    highest_index,
+                    indices: new_indices,
+                };
             }
             Air::TupleAccessor { scope, names, tipo } => {
                 if tipo.is_generic() {
