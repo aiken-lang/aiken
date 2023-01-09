@@ -12,7 +12,8 @@ impl Program<Name> {
 }
 
 fn shrink_term(term: Term<Name>) -> Term<Name> {
-    let term = remove_dead_code(&term);
+    let mut term = term;
+    remove_dead_code(&mut term);
 
     match term {
         Term::Delay(term) => Term::Delay(Rc::new(shrink_term(term.as_ref().clone()))),
@@ -32,22 +33,24 @@ fn shrink_term(term: Term<Name>) -> Term<Name> {
     }
 }
 
-pub fn remove_dead_code(a: &Term<Name>) -> Term<Name> {
-    match a {
+pub fn remove_dead_code(a: &mut Term<Name>) {
+    match &*a {
         Term::Apply { function, argument } => match function.as_ref() {
             Term::Lambda {
                 parameter_name,
                 body,
             } => match argument.as_ref() {
-                Term::Var(t) => substitute_var(body, parameter_name.clone(), Term::Var(t.clone())),
+                Term::Var(t) => {
+                    *a=substitute_var(body, parameter_name.clone(), Term::Var(t.clone()))
+                },
                 Term::Constant(x) => {
-                    substitute_var(body, parameter_name.clone(), Term::Constant(x.clone()))
+                    *a=substitute_var(body, parameter_name.clone(), Term::Constant(x.clone()))
                 }
-                _ => a.clone(),
+                _ => (),
             },
-            _ => a.clone(),
+            _ => (),
         },
-        _ => a.clone(),
+        _ => (),
     }
 }
 
