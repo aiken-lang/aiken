@@ -3,7 +3,7 @@ use aiken_lang::ast::BinOp;
 use std::path::PathBuf;
 use uplc::ast::{NamedDeBruijn, Program};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Script {
     pub input_path: PathBuf,
     pub module: String,
@@ -11,6 +11,8 @@ pub struct Script {
     pub program: Program<NamedDeBruijn>,
     pub evaluation_hint: Option<EvalHint>,
 }
+
+unsafe impl Send for Script {}
 
 impl Script {
     pub fn new(
@@ -45,3 +47,5 @@ pub struct EvalInfo {
     pub output: Option<Term<NamedDeBruijn>>,
     pub logs: Vec<String>,
 }
+
+unsafe impl Send for EvalInfo {}

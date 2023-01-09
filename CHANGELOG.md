@@ -4,7 +4,7 @@
 
 ### Added
 
-N/A
+- **aiken-project**: new dep rayon for parallel test execution
 
 ### Changed
 

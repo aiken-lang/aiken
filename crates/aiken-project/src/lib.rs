@@ -10,7 +10,6 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::module::{CERT, MINT, SPEND, VALIDATOR_NAMES, WITHDRAW};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedDefinition, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -44,7 +43,10 @@ use uplc::{
 use crate::{
     config::Config,
     error::{Error, Warning},
-    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    module::{
+        CheckedModule, CheckedModules, ParsedModule, ParsedModules, CERT, MINT, SPEND,
+        VALIDATOR_NAMES, WITHDRAW,
+    },
     telemetry::Event,
 };
 
@@ -691,6 +693,8 @@ where
     }
 
     fn eval_scripts(&self, scripts: Vec<Script>, match_name: Option<String>) -> Vec<EvalInfo> {
+        use rayon::prelude::*;
+
         // TODO: in the future we probably just want to be able to
         // tell the machine to not explode on budget consumption.
         let initial_budget = ExBudget {
@@ -698,43 +702,31 @@ where
             cpu: i64::MAX,
         };
 
-        let mut results = Vec::new();
+        scripts
+            .into_par_iter()
+            .filter(|script| -> bool {
+                let path = format!("{}{}", script.module, script.name);
 
-        for script in scripts {
-            let path = format!("{}{}", script.module, script.name);
-
-            if matches!(&match_name, Some(search_str) if !path.to_string().contains(search_str)) {
-                continue;
-            }
-
-            match script.program.eval(initial_budget) {
-                (Ok(result), remaining_budget, logs) => {
-                    let eval_info = EvalInfo {
-                        success: result != Term::Error
-                            && result != Term::Constant(Constant::Bool(false)),
-                        script,
-                        spent_budget: initial_budget - remaining_budget,
-                        output: Some(result),
-                        logs,
-                    };
-
-                    results.push(eval_info);
-                }
-                (Err(..), remaining_budget, logs) => {
-                    let eval_info = EvalInfo {
-                        success: false,
-                        script,
-                        spent_budget: initial_budget - remaining_budget,
-                        output: None,
-                        logs,
-                    };
-
-                    results.push(eval_info);
-                }
-            }
-        }
-
-        results
+                !matches!(&match_name, Some(search_str) if !path.contains(search_str))
+            })
+            .map(|script| match script.program.eval(initial_budget) {
+                (Ok(result), remaining_budget, logs) => EvalInfo {
+                    success: result != Term::Error
+                        && result != Term::Constant(Constant::Bool(false)),
+                    script,
+                    spent_budget: initial_budget - remaining_budget,
+                    output: Some(result),
+                    logs,
+                },
+                (Err(..), remaining_budget, logs) => EvalInfo {
+                    success: false,
+                    script,
+                    spent_budget: initial_budget - remaining_budget,
+                    output: None,
+                    logs,
+                },
+            })
+            .collect()
     }
 
     fn output_path(&self) -> PathBuf {
