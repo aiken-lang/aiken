@@ -1153,7 +1153,7 @@ impl<'a> CodeGenerator<'a> {
                 for (name, index) in names.clone() {
                     if let Some(defined_index) = defined_indices
                         .iter()
-                        .find(|(defined_index, _)| *defined_index as usize == index)
+                        .find(|(defined_index, _)| *defined_index == index)
                     {
                         previous_defined_names.push(defined_index.clone());
                     } else {

@@ -375,7 +375,7 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
         let constant_bytearray_hexstring_parser =
             just(Token::Hash)
                 .ignore_then(select! {Token::String {value} => value}.validate(
-                    |value, span, emit| match hex::decode(&value) {
+                    |value, span, emit| match hex::decode(value) {
                         Ok(bytes) => bytes,
                         Err(_) => {
                             emit(ParseError::malformed_base16_string_literal(span));
