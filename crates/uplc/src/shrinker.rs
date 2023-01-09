@@ -2,108 +2,85 @@ use std::rc::Rc;
 
 use crate::ast::{Name, Program, Term};
 
-// pub fn subname(a: &Name, b: &Name, c: &Term<Name>) -> Term<Name> {
-//     let mut stack: Vec<Term<Name>> = vec![c.clone()];
-//     let mut i = 0;
-//     while i < stack.len() {
-//         match &stack[i] {
-//             Term::Var(name) => {
-//                 if name.eq(a) {
-//                     stack.push(Term::Var(b.clone()))
-//                 }else{
-//                     stack.push(Term::Var(name.clone()))
-//                 }
-//             },
-//             x => {
-//                 stack.push(x);
-//                 match x {
+impl Program<Name> {
+    pub fn shrink(self) -> Program<Name> {
+        Program {
+            version: self.version,
+            term: shrink_term(self.term),
+        }
+    }
+}
 
-//                 }
-//             }
-//         };
-//         i+=1;
-//     }
-//     todo!()
-// }
+fn shrink_term(term: Term<Name>) -> Term<Name> {
+    let term = remove_dead_code(&term);
 
-pub fn remove_dead_code(a: Term<Name>) -> Term<Name> {
+    match term {
+        Term::Delay(term) => Term::Delay(Rc::new(shrink_term(term.as_ref().clone()))),
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => Term::Lambda {
+            parameter_name,
+            body: Rc::new(shrink_term(body.as_ref().clone())),
+        },
+        Term::Apply { function, argument } => Term::Apply {
+            function: Rc::new(shrink_term(function.as_ref().clone())),
+            argument: Rc::new(shrink_term(argument.as_ref().clone())),
+        },
+        Term::Force(term) => Term::Force(Rc::new(shrink_term(term.as_ref().clone()))),
+        x => x,
+    }
+}
+
+pub fn remove_dead_code(a: &Term<Name>) -> Term<Name> {
     match a {
-        Term::Apply { function, argument } => {
-            match &*function {
-                Term::Lambda {
-                    parameter_name,
-                    body,
-                } => {
-                    // let argument = argument.as_ref();
-                    match &*argument {
-                        Term::Var(t) => body.subvar(*parameter_name, Term::Var(t)), //Some(subname(parameter_name, t, body)),
-                        Term::Constant(x) => body.subvar(*parameter_name, Term::Constant(x)),
-                        _ => a,
-                    }
-                }
-                _ => a,
-            }
-        }
-        _ => a,
-    }
-}
-
-trait Shrinkable {
-    fn subvar(self, a: Name, b: Term<Name>) -> Self;
-    fn shrinkterm(self) -> Self;
-}
-
-impl Shrinkable for Term<Name> {
-    fn subvar(self, a: Name, b: Term<Name>) -> Self {
-        match self {
-            Term::Var(name) => {
-                if name.eq(&a) {
-                    b.clone()
-                } else {
-                    Term::Var(name.clone())
-                }
-            }
-            Term::Delay(body) => Term::Delay(Rc::new(body.as_ref().clone().subvar(a, b))),
+        Term::Apply { function, argument } => match function.as_ref() {
             Term::Lambda {
                 parameter_name,
                 body,
-            } => Term::Lambda {
-                parameter_name: parameter_name.clone(),
-                body: Rc::new(body.as_ref().clone().subvar(a, b)),
+            } => match argument.as_ref() {
+                Term::Var(t) => substitute_var(body, parameter_name.clone(), Term::Var(t.clone())),
+                Term::Constant(x) => {
+                    substitute_var(body, parameter_name.clone(), Term::Constant(x.clone()))
+                }
+                _ => a.clone(),
             },
-            Term::Apply { function, argument } => Term::Apply {
-                function: Rc::new(function.as_ref().clone().subvar(a, b)),
-                argument: Rc::new(argument.as_ref().clone().subvar(a, b)),
-            },
-            Term::Force(x) => Term::Force(Rc::new(x.clone().subvar(a, b))),
-            x => x.clone(),
-        }
-    }
-    fn shrinkterm(self) -> Term<Name> {
-        let mut a = self.clone();
-        a = remove_dead_code(a);
-        match &a {
-            Term::Delay(term) => Term::Delay(Rc::new(term.as_ref().clone().shrinkterm())),
-            Term::Lambda {
-                parameter_name,
-                body,
-            } => Term::Lambda {
-                parameter_name: parameter_name.clone(),
-                body: Rc::new(body.as_ref().clone().shrinkterm()),
-            },
-            Term::Apply { function, argument } => Term::Apply {
-                function: Rc::new(function.as_ref().clone().shrinkterm()),
-                argument: Rc::new(argument.as_ref().clone().shrinkterm()),
-            },
-            Term::Force(term) => Term::Force(Rc::new(term.as_ref().clone().shrinkterm())),
-            x => x.clone(),
-        }
+            _ => a.clone(),
+        },
+        _ => a.clone(),
     }
 }
 
-pub fn shrink(program: Program<Name>) -> Program<Name> {
-    Program {
-        version: program.version,
-        term: program.term.shrinkterm(),
+fn substitute_var(term: &Term<Name>, original: Name, replace_with: Term<Name>) -> Term<Name> {
+    match term {
+        Term::Var(name) => {
+            if name.text == original.text {
+                replace_with
+            } else {
+                Term::Var(name.clone())
+            }
+        }
+        Term::Delay(body) => Term::Delay(Rc::new(substitute_var(
+            body.as_ref(),
+            original,
+            replace_with,
+        ))),
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => Term::Lambda {
+            parameter_name: parameter_name.clone(),
+            body: Rc::new(substitute_var(body.as_ref(), original, replace_with)),
+        },
+        Term::Apply { function, argument } => Term::Apply {
+            function: Rc::new(substitute_var(
+                function.as_ref(),
+                original.clone(),
+                replace_with.clone(),
+            )),
+            argument: Rc::new(substitute_var(argument.as_ref(), original, replace_with)),
+        },
+        Term::Force(x) => Term::Force(Rc::new(substitute_var(x.as_ref(), original, replace_with))),
+        x => x.clone(),
     }
 }

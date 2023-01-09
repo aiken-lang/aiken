@@ -1,11 +1,12 @@
 use miette::IntoDiagnostic;
 use std::{fs, path::PathBuf};
 use uplc::ast::{Name, Program};
-use uplc::{parser, shrinker};
+use uplc::parser;
 
-#[derive(clap::Args)]
+// TODO: OR Unflatten, shrink, flatten
+
 /// Shrink textual untyped plutus core, output untyped plutus core
-/// TODO: OR Unflatten, shrink, flatten
+#[derive(clap::Args)]
 pub struct Args {
     /// Untyped Plutus Core file
     input: PathBuf,
@@ -30,8 +31,7 @@ pub fn exec(
     let code = std::fs::read_to_string(&input).into_diagnostic()?;
     let program = parser::program(&code).into_diagnostic()?;
 
-    let program: Program<Name> = program.try_into().into_diagnostic()?;
-    let program: Program<Name> = shrinker::shrink(program);
+    let program: Program<Name> = program.shrink();
 
     let pretty = program.to_pretty();
 
