@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{AssignmentKind, BinOp, UnOp},
+    ast::{BinOp, UnOp},
     tipo::{Type, ValueConstructor},
 };
 
@@ -59,6 +59,7 @@ pub enum Air {
     Call {
         scope: Vec<u64>,
         count: usize,
+        tipo: Arc<Type>,
     },
 
     Builtin {
@@ -77,7 +78,10 @@ pub enum Air {
     Assignment {
         scope: Vec<u64>,
         name: String,
-        kind: AssignmentKind,
+    },
+
+    Assert {
+        scope: Vec<u64>,
     },
 
     DefineFunc {
@@ -87,27 +91,6 @@ pub enum Air {
         params: Vec<String>,
         recursive: bool,
         variant_name: String,
-    },
-
-    DefineConst {
-        scope: Vec<u64>,
-        func_name: String,
-        module_name: String,
-        count: usize,
-    },
-
-    DefineConstrFields {
-        scope: Vec<u64>,
-        func_name: String,
-        module_name: String,
-        count: usize,
-    },
-
-    DefineConstrFieldAccess {
-        scope: Vec<u64>,
-        func_name: String,
-        module_name: String,
-        count: usize,
     },
 
     Lam {
@@ -224,10 +207,6 @@ pub enum Air {
         tipo: Arc<Type>,
     },
 
-    Record {
-        scope: Vec<u64>,
-    },
-
     RecordUpdate {
         scope: Vec<u64>,
         highest_index: usize,
@@ -261,10 +240,8 @@ impl Air {
             | Air::Builtin { scope, .. }
             | Air::BinOp { scope, .. }
             | Air::Assignment { scope, .. }
+            | Air::Assert { scope }
             | Air::DefineFunc { scope, .. }
-            | Air::DefineConst { scope, .. }
-            | Air::DefineConstrFields { scope, .. }
-            | Air::DefineConstrFieldAccess { scope, .. }
             | Air::Lam { scope, .. }
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
@@ -281,7 +258,6 @@ impl Air {
             | Air::Tuple { scope, .. }
             | Air::Todo { scope, .. }
             | Air::ErrorTerm { scope, .. }
-            | Air::Record { scope, .. }
             | Air::RecordUpdate { scope, .. }
             | Air::UnOp { scope, .. }
             | Air::Trace { scope, .. }
