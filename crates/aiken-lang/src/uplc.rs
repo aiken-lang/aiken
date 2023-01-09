@@ -1,10 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
-    ops::Deref,
     sync::Arc,
     vec,
 };
 
+use crate::tipo::TypeVar;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::{
@@ -23,7 +23,7 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Clause, Pattern, Span, TypedArg, TypedDataType,
+        ArgName, AssignmentKind, BinOp, Clause, DataType, Pattern, Span, TypedArg, TypedDataType,
         TypedFunction, UnOp,
     },
     builder::{
@@ -207,10 +207,13 @@ impl<'a> CodeGenerator<'a> {
                     self.build_ir(tail, ir_stack, scope);
                 }
             }
-            TypedExpr::Call { fun, args, .. } => {
+            TypedExpr::Call {
+                fun, args, tipo, ..
+            } => {
                 ir_stack.push(Air::Call {
                     scope: scope.clone(),
                     count: args.len(),
+                    tipo: tipo.clone(),
                 });
                 let mut scope_fun = scope.clone();
                 scope_fun.push(self.id_gen.next());
@@ -811,22 +814,7 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 // find data type definition
-                let data_type_key = match tipo {
-                    Type::Fn { ret, .. } => match ret.as_ref() {
-                        Type::App { module, name, .. } => DataTypeKey {
-                            module_name: module.clone(),
-                            defined_type: name.clone(),
-                        },
-                        _ => unreachable!(),
-                    },
-                    Type::App { module, name, .. } => DataTypeKey {
-                        module_name: module.clone(),
-                        defined_type: name.clone(),
-                    },
-                    _ => unreachable!(),
-                };
-
-                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
 
                 let (index, _) = data_type
                     .constructors
@@ -1002,22 +990,8 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let data_type_key = match tipo.as_ref() {
-                    Type::Fn { ret, .. } => match &**ret {
-                        Type::App { module, name, .. } => DataTypeKey {
-                            module_name: module.clone(),
-                            defined_type: name.clone(),
-                        },
-                        _ => unreachable!(),
-                    },
-                    Type::App { module, name, .. } => DataTypeKey {
-                        module_name: module.clone(),
-                        defined_type: name.clone(),
-                    },
-                    _ => unreachable!(),
-                };
+                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
 
-                let data_type = self.data_types.get(&data_type_key).unwrap();
                 let (_, constructor_type) = data_type
                     .constructors
                     .iter()
@@ -1027,9 +1001,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut nested_pattern = vec![];
                 if *is_record {
                     let field_map = match constructor {
-                        tipo::PatternConstructor::Record { field_map, .. } => {
-                            field_map.clone().unwrap()
-                        }
+                        PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
                     };
 
                     let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
@@ -1336,22 +1308,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let id = self.id_gen.next();
                 let constr_var_name = format!("{constr_name}_{id}");
-                let data_type_key = match tipo.as_ref() {
-                    Type::Fn { ret, .. } => match &**ret {
-                        Type::App { module, name, .. } => DataTypeKey {
-                            module_name: module.clone(),
-                            defined_type: name.clone(),
-                        },
-                        _ => unreachable!(),
-                    },
-                    Type::App { module, name, .. } => DataTypeKey {
-                        module_name: module.clone(),
-                        defined_type: name.clone(),
-                    },
-                    _ => unreachable!(),
-                };
-
-                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
 
                 if data_type.constructors.len() > 1 {
                     pattern_vec.push(Air::ClauseGuard {
@@ -1441,7 +1398,6 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Var { name, .. } => {
                 pattern_vec.push(Air::Assignment {
                     name: name.clone(),
-                    kind,
                     scope,
                 });
 
@@ -1549,22 +1505,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let data_type_key = match tipo.as_ref() {
-                    Type::Fn { ret, .. } => match &**ret {
-                        Type::App { module, name, .. } => DataTypeKey {
-                            module_name: module.clone(),
-                            defined_type: name.clone(),
-                        },
-                        _ => unreachable!(),
-                    },
-                    Type::App { module, name, .. } => DataTypeKey {
-                        module_name: module.clone(),
-                        defined_type: name.clone(),
-                    },
-                    _ => unreachable!(),
-                };
-
-                let data_type = self.data_types.get(&data_type_key).unwrap();
+                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
                 let (_, constructor_type) = data_type
                     .constructors
                     .iter()
@@ -2299,29 +2240,14 @@ impl<'a> CodeGenerator<'a> {
                         arity,
                         ..
                     } => {
-                        let data_type_key = match &*constructor.tipo {
-                            Type::App { module, name, .. } => DataTypeKey {
-                                module_name: module.to_string(),
-                                defined_type: name.to_string(),
-                            },
-                            Type::Fn { ret, .. } => match ret.deref() {
-                                Type::App { module, name, .. } => DataTypeKey {
-                                    module_name: module.to_string(),
-                                    defined_type: name.to_string(),
-                                },
-                                _ => unreachable!(),
-                            },
-                            Type::Var { .. } => todo!(),
-                            Type::Tuple { .. } => todo!(),
-                        };
-
                         if constructor.tipo.is_bool() {
                             arg_stack
                                 .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
                         } else if constructor.tipo.is_void() {
                             arg_stack.push(Term::Constant(UplcConstant::Unit));
                         } else {
-                            let data_type = self.data_types.get(&data_type_key).unwrap();
+                            let data_type =
+                                self.lookup_data_type_by_tipo(&constructor.tipo).unwrap();
 
                             let (constr_index, _) = data_type
                                 .constructors
@@ -3033,6 +2959,9 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
+            Air::Assert { .. } => {
+                todo!()
+            }
             Air::DefineFunc {
                 func_name,
                 params,
@@ -3115,9 +3044,6 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(term);
                 }
             }
-            Air::DefineConst { .. } => todo!(),
-            Air::DefineConstrFields { .. } => todo!(),
-            Air::DefineConstrFieldAccess { .. } => todo!(),
             Air::Lam { name, .. } => {
                 let arg = arg_stack.pop().unwrap();
 
@@ -3708,7 +3634,6 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Record { .. } => todo!(),
             Air::RecordUpdate {
                 highest_index,
                 indices,
@@ -4175,6 +4100,37 @@ impl<'a> CodeGenerator<'a> {
                 }
                 arg_stack.push(term);
             }
+        }
+    }
+
+    fn lookup_data_type_by_tipo(&self, tipo: &Type) -> Option<&&DataType<Arc<Type>>> {
+        match tipo {
+            Type::Fn { ret, .. } => match ret.as_ref() {
+                Type::App { module, name, .. } => {
+                    let data_type_key = DataTypeKey {
+                        module_name: module.clone(),
+                        defined_type: name.clone(),
+                    };
+                    self.data_types.get(&data_type_key)
+                }
+                _ => unreachable!(),
+            },
+            Type::App { module, name, .. } => {
+                let data_type_key = DataTypeKey {
+                    module_name: module.clone(),
+                    defined_type: name.clone(),
+                };
+
+                self.data_types.get(&data_type_key)
+            }
+            Type::Var { tipo } => {
+                if let TypeVar::Link { tipo } = &*tipo.borrow() {
+                    self.lookup_data_type_by_tipo(tipo)
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
     }
 }

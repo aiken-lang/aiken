@@ -1123,6 +1123,15 @@ pub fn monomorphize(
             }
             // TODO check on assignment if type is needed
             Air::Assignment { .. } => {}
+            Air::Call { scope, count, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::Call { scope, count, tipo };
+                    needs_variant = true;
+                }
+            }
             Air::When {
                 scope,
                 tipo,
@@ -1445,10 +1454,11 @@ pub fn handle_recursion_ir(
         let current_call = recursion_ir[index - 1].clone();
 
         match current_call {
-            Air::Call { scope, count } => {
+            Air::Call { scope, count, tipo } => {
                 recursion_ir[index - 1] = Air::Call {
                     scope,
                     count: count + 1,
+                    tipo,
                 }
             }
             _ => unreachable!(),
