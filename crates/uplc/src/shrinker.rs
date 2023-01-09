@@ -26,24 +26,18 @@ use crate::ast::{Name, Program, Term};
 //     todo!()
 // }
 
-trait Shrinkable {
-    fn subvar(&self, a: &Name, b: &Term<Name>) -> Self;
-    fn shrinkterm(self) -> Self;
-}
-
 pub fn remove_dead_code(a: Term<Name>) -> Term<Name> {
-    match &a {
+    match a {
         Term::Apply { function, argument } => {
-            let function = function.as_ref();
-            match function {
+            match &*function {
                 Term::Lambda {
                     parameter_name,
                     body,
                 } => {
-                    let argument = argument.as_ref();
-                    match argument {
-                        Term::Var(t) => body.as_ref().clone().subvar(parameter_name, &Term::Var(t.clone())), //Some(subname(parameter_name, t, body)),
-                        Term::Constant(x) => body.as_ref().clone().subvar(parameter_name, &Term::Constant(x.clone())),
+                    // let argument = argument.as_ref();
+                    match &*argument {
+                        Term::Var(t) => body.subvar(*parameter_name, Term::Var(t)), //Some(subname(parameter_name, t, body)),
+                        Term::Constant(x) => body.subvar(*parameter_name, Term::Constant(x)),
                         _ => a,
                     }
                 }
@@ -54,11 +48,16 @@ pub fn remove_dead_code(a: Term<Name>) -> Term<Name> {
     }
 }
 
+trait Shrinkable {
+    fn subvar(self, a: Name, b: Term<Name>) -> Self;
+    fn shrinkterm(self) -> Self;
+}
+
 impl Shrinkable for Term<Name> {
-    fn subvar(&self, a: &Name, b: &Term<Name>) -> Self {
+    fn subvar(self, a: Name, b: Term<Name>) -> Self {
         match self {
             Term::Var(name) => {
-                if name.eq(a) {
+                if name.eq(&a) {
                     b.clone()
                 } else {
                     Term::Var(name.clone())
