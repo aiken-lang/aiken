@@ -703,12 +703,14 @@ where
         };
 
         scripts
-            .into_par_iter()
+            .into_iter()
             .filter(|script| -> bool {
                 let path = format!("{}{}", script.module, script.name);
 
                 !matches!(&match_name, Some(search_str) if !path.contains(search_str))
             })
+            .collect::<Vec<Script>>()
+            .into_par_iter()
             .map(|script| match script.program.eval(initial_budget) {
                 (Ok(result), remaining_budget, logs) => EvalInfo {
                     success: result != Term::Error
