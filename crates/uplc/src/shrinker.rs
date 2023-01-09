@@ -13,7 +13,7 @@ impl Program<Name> {
 
 fn shrink_term(term: Term<Name>) -> Term<Name> {
     let mut term = term;
-    remove_dead_code(&mut term);
+    reduce(&mut term);
 
     match term {
         Term::Delay(term) => Term::Delay(Rc::new(shrink_term(term.as_ref().clone()))),
@@ -33,7 +33,7 @@ fn shrink_term(term: Term<Name>) -> Term<Name> {
     }
 }
 
-pub fn remove_dead_code(a: &mut Term<Name>) {
+pub fn reduce(a: &mut Term<Name>) {
     match &*a {
         Term::Apply { function, argument } => match function.as_ref() {
             Term::Lambda {
@@ -54,6 +54,9 @@ pub fn remove_dead_code(a: &mut Term<Name>) {
     }
 }
 
+pub fn remove_dead_code(a: &mut Term<Name>) {
+}
+
 fn substitute_var(term: &Term<Name>, original: Name, replace_with: Term<Name>) -> Term<Name> {
     match term {
         Term::Var(name) => {
@@ -71,10 +74,20 @@ fn substitute_var(term: &Term<Name>, original: Name, replace_with: Term<Name>) -
         Term::Lambda {
             parameter_name,
             body,
-        } => Term::Lambda {
-            parameter_name: parameter_name.clone(),
-            body: Rc::new(substitute_var(body.as_ref(), original, replace_with)),
-        },
+        } => {
+            if parameter_name.text != original.text {
+                Term::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: Rc::new(substitute_var(body.as_ref(), original, replace_with)),
+                }
+            }
+            else {
+                Term::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: Rc::new(body.as_ref().clone()),
+                }
+            }
+        }
         Term::Apply { function, argument } => Term::Apply {
             function: Rc::new(substitute_var(
                 function.as_ref(),
