@@ -16,7 +16,7 @@ pub struct Args {
 
     /// Only run tests if their path + name match the given string
     #[clap(short, long)]
-    match_tests: Option<String>,
+    match_tests: Option<Vec<String>>,
 }
 
 pub fn exec(

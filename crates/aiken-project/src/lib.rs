@@ -152,7 +152,7 @@ where
     pub fn check(
         &mut self,
         skip_tests: bool,
-        match_tests: Option<String>,
+        match_tests: Option<Vec<String>>,
         verbose: bool,
     ) -> Result<(), Error> {
         let options = Options {
@@ -692,7 +692,11 @@ where
         Ok(programs)
     }
 
-    fn eval_scripts(&self, scripts: Vec<Script>, match_name: Option<String>) -> Vec<EvalInfo> {
+    fn eval_scripts(
+        &self,
+        scripts: Vec<Script>,
+        match_tests: Option<Vec<String>>,
+    ) -> Vec<EvalInfo> {
         use rayon::prelude::*;
 
         // TODO: in the future we probably just want to be able to
@@ -702,14 +706,51 @@ where
             cpu: i64::MAX,
         };
 
-        scripts
-            .into_iter()
-            .filter(|script| -> bool {
-                let path = format!("{}{}", script.module, script.name);
+        let scripts = if let Some(match_tests) = match_tests {
+            let match_tests: Vec<(&str, Option<Vec<String>>)> = match_tests
+                .iter()
+                .map(|match_test| {
+                    let mut match_split_dot = match_test.split('.');
 
-                !matches!(&match_name, Some(search_str) if !path.contains(search_str))
-            })
-            .collect::<Vec<Script>>()
+                    let match_module = match_split_dot.next().unwrap_or("");
+
+                    let match_names = match_split_dot.next().map(|names| {
+                        let names = names.replace(&['{', '}'][..], "");
+
+                        let names_split_comma = names.split(',');
+
+                        names_split_comma.map(str::to_string).collect()
+                    });
+
+                    (match_module, match_names)
+                })
+                .collect();
+
+            scripts
+                .into_iter()
+                .filter(|script| -> bool {
+                    match_tests.iter().any(|(match_module, match_names)| {
+                        if *match_module == script.module {
+                            if let Some(match_names) = match_names {
+                                match_names
+                                    .iter()
+                                    .any(|name| name == &script.name || script.name.contains(name))
+                            } else {
+                                true
+                            }
+                        } else {
+                            false
+                        }
+                    })
+
+                    // !matches!(&match_tests, Some(search_str) if !path.contains(search_str))
+                })
+                .collect::<Vec<Script>>()
+        } else {
+            scripts
+        };
+
+        scripts
             .into_par_iter()
             .map(|script| match script.program.eval(initial_budget) {
                 (Ok(result), remaining_budget, logs) => EvalInfo {
