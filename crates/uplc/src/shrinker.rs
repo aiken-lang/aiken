@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use crate::ast::{Name, Program, Term};
+use crate::builtins::{DefaultFunction};
 
 impl Program<Name> {
     pub fn shrink(self) -> Program<Name> {
@@ -11,9 +12,9 @@ impl Program<Name> {
     }
 }
 
-fn shrink_term(term: Term<Name>) -> Term<Name> {
-    let mut term = term;
+fn shrink_term(mut term: Term<Name>) -> Term<Name> {
     reduce(&mut term);
+    // remove_dead_code(&mut term);
 
     match term {
         Term::Delay(term) => Term::Delay(Rc::new(shrink_term(term.as_ref().clone()))),
@@ -33,7 +34,9 @@ fn shrink_term(term: Term<Name>) -> Term<Name> {
     }
 }
 
-pub fn reduce(a: &mut Term<Name>) {
+// var: ((\x -> a) x) => a
+// const: ((\x -> c) x) => c
+fn reduce(a: &mut Term<Name>) {
     match &*a {
         Term::Apply { function, argument } => match function.as_ref() {
             Term::Lambda {
@@ -54,8 +57,24 @@ pub fn reduce(a: &mut Term<Name>) {
     }
 }
 
-pub fn remove_dead_code(a: &mut Term<Name>) {
+fn const_if_then_else(a: &mut Term<Name>) {
+    match &*a {
+        Term::Apply{ function: f, argument: outerarg } => {
+            ()
+        },
+        _ => ()
+    }
 }
+
+// pub fn remove_dead_code(a: &mut Term<Name>) {
+//     match &*a {
+//         Term::Apply { function, argument } => match function.as_ref() {
+//             Term::Builtin(DefaultFunction::IfThenElse) => match argument.as_ref() {
+//                 Term::Constant(Constant::Bool(true)) =>
+//             }
+//         }
+//     }
+// }
 
 fn substitute_var(term: &Term<Name>, original: Name, replace_with: Term<Name>) -> Term<Name> {
     match term {
