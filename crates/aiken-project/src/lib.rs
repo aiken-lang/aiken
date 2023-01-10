@@ -716,7 +716,11 @@ where
                 .map(|match_test| {
                     let mut match_split_dot = match_test.split('.');
 
-                    let match_module = match_split_dot.next().unwrap_or("");
+                    let match_module = if match_test.contains('.') {
+                        match_split_dot.next().unwrap_or("")
+                    } else {
+                        ""
+                    };
 
                     let match_names = match_split_dot.next().map(|names| {
                         let names = names.replace(&['{', '}'][..], "");
@@ -733,29 +737,19 @@ where
             scripts
                 .into_iter()
                 .filter(|script| -> bool {
-                    match_tests.iter().any(|(match_module, match_names)| {
-                        let matches_name = || {
-                            matches!(match_names, Some(match_names) if match_names
-                                .iter()
-                                .any(|name| if exact_match {
-                                    name == &script.name
-                                } else {
-                                    script.name.contains(name)
-                                }
-                            ))
-                        };
+                    match_tests.iter().any(|(module, names)| {
+                        let matched_module = module == &"" || script.module.contains(module);
 
-                        if *match_module == script.module || script.module.contains(match_module) {
-                            if match_names.is_some() {
-                                matches_name()
+                        let matched_name = matches!(names, Some(names) if names
+                            .iter()
+                            .any(|name| if exact_match {
+                                name == &script.name
                             } else {
-                                true
+                                script.name.contains(name)
                             }
-                        } else if match_names.is_some() && match_module == &"" {
-                            matches_name()
-                        } else {
-                            false
-                        }
+                        ));
+
+                        matched_module && matched_name
                     })
                 })
                 .collect::<Vec<Script>>()
