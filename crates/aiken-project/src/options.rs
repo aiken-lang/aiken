@@ -4,8 +4,9 @@ pub struct Options {
 
 pub enum CodeGenMode {
     Test {
-        match_tests: Option<String>,
+        match_tests: Option<Vec<String>>,
         verbose: bool,
+        exact_match: bool,
     },
     Build(bool),
     NoOp,
