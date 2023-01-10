@@ -154,6 +154,7 @@ where
         skip_tests: bool,
         match_tests: Option<Vec<String>>,
         verbose: bool,
+        exact_match: bool,
     ) -> Result<(), Error> {
         let options = Options {
             code_gen_mode: if skip_tests {
@@ -162,6 +163,7 @@ where
                 CodeGenMode::Test {
                     match_tests,
                     verbose,
+                    exact_match,
                 }
             },
         };
@@ -202,6 +204,7 @@ where
             CodeGenMode::Test {
                 match_tests,
                 verbose,
+                exact_match,
             } => {
                 let tests =
                     self.collect_scripts(verbose, |def| matches!(def, Definition::Test(..)))?;
@@ -210,7 +213,7 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let results = self.eval_scripts(tests, match_tests);
+                let results = self.eval_scripts(tests, match_tests, exact_match);
 
                 let errors: Vec<Error> = results
                     .iter()
@@ -696,6 +699,7 @@ where
         &self,
         scripts: Vec<Script>,
         match_tests: Option<Vec<String>>,
+        exact_match: bool,
     ) -> Vec<EvalInfo> {
         use rayon::prelude::*;
 
@@ -730,20 +734,29 @@ where
                 .into_iter()
                 .filter(|script| -> bool {
                     match_tests.iter().any(|(match_module, match_names)| {
-                        if *match_module == script.module {
-                            if let Some(match_names) = match_names {
-                                match_names
-                                    .iter()
-                                    .any(|name| name == &script.name || script.name.contains(name))
+                        let matches_name = || {
+                            matches!(match_names, Some(match_names) if match_names
+                                .iter()
+                                .any(|name| if exact_match {
+                                    name == &script.name
+                                } else {
+                                    script.name.contains(name)
+                                }
+                            ))
+                        };
+
+                        if *match_module == script.module || script.module.contains(match_module) {
+                            if match_names.is_some() {
+                                matches_name()
                             } else {
                                 true
                             }
+                        } else if match_names.is_some() && match_module == &"" {
+                            matches_name()
                         } else {
                             false
                         }
                     })
-
-                    // !matches!(&match_tests, Some(search_str) if !path.contains(search_str))
                 })
                 .collect::<Vec<Script>>()
         } else {
