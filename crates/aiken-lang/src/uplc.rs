@@ -1449,9 +1449,7 @@ impl<'a> CodeGenerator<'a> {
             }
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => {
-                self.pattern_ir(pattern, pattern_vec, value_vec, tipo, scope)
-            }
+            Pattern::Discard { .. } => {}
             list @ Pattern::List { .. } => {
                 self.pattern_ir(list, pattern_vec, value_vec, tipo, scope);
             }
