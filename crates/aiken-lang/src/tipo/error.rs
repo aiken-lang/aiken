@@ -62,7 +62,7 @@ pub enum Error {
         given: usize,
     },
 
-    #[error("I saw a pattern on a constructor that has {} fields be matched with {} arguments.\n", expected.purple(), given.len().purple())]
+    #[error("I saw a pattern on a constructor that has {} field(s) be matched with {} arguments.\n", expected.purple(), given.len().purple())]
     IncorrectPatternArity {
         location: Span,
         expected: usize,
