@@ -783,7 +783,10 @@ impl<'comments> Formatter<'comments> {
                     .append((index + 1).to_doc())
                     .append(suffix)
             }
-            UntypedExpr::ErrorTerm { .. } => "error".to_doc(),
+
+            UntypedExpr::ErrorTerm { label: None, .. } => "error".to_doc(),
+
+            UntypedExpr::ErrorTerm { label: Some(l), .. } => docvec!["error(\"", l, "\")"],
         };
 
         commented(document, comments)
