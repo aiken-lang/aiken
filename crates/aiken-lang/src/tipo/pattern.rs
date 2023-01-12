@@ -555,7 +555,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             Err(Error::IncorrectPatternArity {
                                 location,
                                 given: pattern_args,
-                                expected: 0,
+                                expected: args.len(),
                                 name: name.clone(),
                                 module: module.clone(),
                                 is_record,
