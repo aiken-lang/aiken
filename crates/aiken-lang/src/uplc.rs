@@ -210,10 +210,39 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Call {
                 fun, args, tipo, ..
             } => {
+                if let Some(data_type) = self.lookup_data_type_by_tipo(tipo) {
+                    if let TypedExpr::Var { constructor, .. } = &**fun {
+                        if let ValueConstructorVariant::Record {
+                            name: constr_name, ..
+                        } = &constructor.variant
+                        {
+                            let (constr_index, _) = data_type
+                                .constructors
+                                .iter()
+                                .enumerate()
+                                .find(|(_, dt)| &dt.name == constr_name)
+                                .unwrap();
+
+                            ir_stack.push(Air::Record {
+                                scope: scope.clone(),
+                                constr_index,
+                                constr_type: constructor.tipo.clone(),
+                                count: args.len(),
+                            });
+
+                            for arg in args {
+                                let mut scope = scope.clone();
+                                scope.push(self.id_gen.next());
+                                self.build_ir(&arg.value, ir_stack, scope);
+                            }
+                            return;
+                        }
+                    }
+                }
+
                 ir_stack.push(Air::Call {
                     scope: scope.clone(),
                     count: args.len(),
-                    tipo: tipo.clone(),
                 });
                 let mut scope_fun = scope.clone();
                 scope_fun.push(self.id_gen.next());
@@ -250,7 +279,6 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let mut define_vec: Vec<Air> = vec![];
                 let mut value_vec: Vec<Air> = vec![];
                 let mut pattern_vec: Vec<Air> = vec![];
 
@@ -268,7 +296,6 @@ impl<'a> CodeGenerator<'a> {
                     scope,
                 );
 
-                ir_stack.append(&mut define_vec);
                 ir_stack.append(&mut pattern_vec);
             }
             TypedExpr::When {
@@ -1405,12 +1432,81 @@ impl<'a> CodeGenerator<'a> {
             }
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => {}
+            Pattern::Discard { .. } => {
+                pattern_vec.push(Air::Assignment {
+                    name: "_".to_string(),
+                    scope,
+                });
+
+                pattern_vec.append(value_vec);
+            }
             list @ Pattern::List { .. } => {
                 self.pattern_ir(list, pattern_vec, value_vec, tipo, scope);
             }
-            Pattern::Constructor { .. } => {
-                self.pattern_ir(pattern, pattern_vec, value_vec, tipo, scope);
+            Pattern::Constructor {
+                name: constr_name,
+                tipo,
+                ..
+            } => {
+                let data_type = self.lookup_data_type_by_tipo(tipo);
+
+                let (index, _) = data_type
+                    .unwrap()
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == constr_name)
+                    .unwrap();
+                match kind {
+                    AssignmentKind::Let => {
+                        self.pattern_ir(pattern, pattern_vec, value_vec, tipo, scope);
+                    }
+                    AssignmentKind::Assert => {
+                        let name_id = self.id_gen.next();
+                        pattern_vec.push(Air::Lam {
+                            scope: scope.clone(),
+                            name: format!("__constr_{}", name_id),
+                        });
+
+                        pattern_vec.append(value_vec);
+
+                        pattern_vec.push(Air::Assert {
+                            scope: scope.clone(),
+                            constr_index: index,
+                        });
+
+                        pattern_vec.push(Air::Var {
+                            scope: scope.clone(),
+                            constructor: ValueConstructor::public(
+                                tipo.clone(),
+                                ValueConstructorVariant::LocalVariable {
+                                    location: Span::empty(),
+                                },
+                            ),
+                            name: format!("__constr_{}", name_id),
+                            variant_name: String::new(),
+                        });
+
+                        self.pattern_ir(
+                            pattern,
+                            pattern_vec,
+                            &mut vec![Air::Var {
+                                scope: scope.clone(),
+                                constructor: ValueConstructor::public(
+                                    tipo.clone(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: format!("__constr_{}", name_id),
+                                variant_name: String::new(),
+                            }],
+                            tipo,
+                            scope,
+                        );
+                    }
+                    AssignmentKind::Check => todo!(),
+                }
             }
             Pattern::Tuple { .. } => {
                 self.pattern_ir(pattern, pattern_vec, value_vec, tipo, scope);
@@ -2959,8 +3055,31 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Assert { .. } => {
-                todo!()
+            Air::Assert { constr_index, .. } => {
+                let constr = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+
+                let trace_error = apply_wrap(
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                        Term::Constant(UplcConstant::String("Assert Failed".to_string())),
+                    ),
+                    Term::Delay(Term::Error.into()),
+                )
+                .force_wrap();
+
+                let condition = apply_wrap(
+                    apply_wrap(
+                        DefaultFunction::EqualsInteger.into(),
+                        Term::Constant(UplcConstant::Integer(constr_index as i128)),
+                    ),
+                    constr_index_exposer(constr),
+                );
+
+                term = delayed_if_else(condition, term, trace_error);
+
+                arg_stack.push(term);
             }
             Air::DefineFunc {
                 func_name,
@@ -3382,8 +3501,59 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Constr { .. } => todo!(),
-            Air::Fields { .. } => todo!(),
+            Air::Record {
+                constr_index,
+                constr_type,
+                count,
+                ..
+            } => {
+                let mut arg_vec = vec![];
+                for _ in 0..count {
+                    arg_vec.push(arg_stack.pop().unwrap());
+                }
+
+                let mut term = Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]));
+
+                for (index, arg) in arg_vec.iter().enumerate().rev() {
+                    term = apply_wrap(
+                        apply_wrap(
+                            Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                            convert_type_to_data(
+                                arg.clone(),
+                                &constr_type.arg_types().unwrap()[index],
+                            ),
+                        ),
+                        term,
+                    );
+                }
+
+                term = apply_wrap(
+                    apply_wrap(
+                        DefaultFunction::ConstrData.into(),
+                        Term::Constant(UplcConstant::Integer(constr_index as i128)),
+                    ),
+                    term,
+                );
+
+                if arg_vec.iter().all(|item| matches!(item, Term::Constant(_))) {
+                    let mut program: Program<Name> = Program {
+                        version: (1, 0, 0),
+                        term,
+                    };
+
+                    let mut interner = Interner::new();
+
+                    interner.program(&mut program);
+
+                    let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+                    let evaluated_term: Term<NamedDeBruijn> =
+                        eval_program.eval(ExBudget::default()).0.unwrap();
+                    term = evaluated_term.try_into().unwrap();
+                }
+
+                arg_stack.push(term);
+            }
             Air::RecordAccess { index, tipo, .. } => {
                 let constr = arg_stack.pop().unwrap();
 

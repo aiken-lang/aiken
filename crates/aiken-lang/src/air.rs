@@ -59,7 +59,6 @@ pub enum Air {
     Call {
         scope: Vec<u64>,
         count: usize,
-        tipo: Arc<Type>,
     },
 
     Builtin {
@@ -82,6 +81,7 @@ pub enum Air {
 
     Assert {
         scope: Vec<u64>,
+        constr_index: usize,
     },
 
     DefineFunc {
@@ -155,13 +155,10 @@ pub enum Air {
         scope: Vec<u64>,
     },
 
-    Constr {
+    Record {
         scope: Vec<u64>,
-        count: usize,
-    },
-
-    Fields {
-        scope: Vec<u64>,
+        constr_index: usize,
+        constr_type: Arc<Type>,
         count: usize,
     },
 
@@ -240,7 +237,7 @@ impl Air {
             | Air::Builtin { scope, .. }
             | Air::BinOp { scope, .. }
             | Air::Assignment { scope, .. }
-            | Air::Assert { scope }
+            | Air::Assert { scope, .. }
             | Air::DefineFunc { scope, .. }
             | Air::Lam { scope, .. }
             | Air::When { scope, .. }
@@ -251,8 +248,7 @@ impl Air {
             | Air::Discard { scope }
             | Air::Finally { scope }
             | Air::If { scope, .. }
-            | Air::Constr { scope, .. }
-            | Air::Fields { scope, .. }
+            | Air::Record { scope, .. }
             | Air::RecordAccess { scope, .. }
             | Air::FieldsExpose { scope, .. }
             | Air::Tuple { scope, .. }
