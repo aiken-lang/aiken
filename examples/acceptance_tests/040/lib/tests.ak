@@ -7,10 +7,14 @@ pub type Car{
 }
 
 
+// test update_owner2_should_fail(){
+//   let initial_car: Data = Ford{remote_connect: #[], owner: #[], wheels: 4, truck_bed_limit: 10000}
+//   assert Honda{ owner, ..} = initial_car
+//   owner == #[]
+// }
 
 test update_owner1(){
   let initial_car: Data = Ford{remote_connect: #[], owner: #[], wheels: 4, truck_bed_limit: 10000}
   assert Ford{ owner, ..} = initial_car
   owner == #[]
-  
 }
