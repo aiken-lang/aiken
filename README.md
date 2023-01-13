@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" height="150" />
   <img src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" height="150" />
   <hr />
-    <h2 align="center" style="border-bottom: none">Cardano smart contract language and toolchain</h2>
+    <h2 align="center" style="border-bottom: none">A modern smart contract platform for Cardano</h2>
 
 [![Licence](https://img.shields.io/github/license/aiken-lang/aiken)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
