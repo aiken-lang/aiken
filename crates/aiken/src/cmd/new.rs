@@ -43,9 +43,11 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
         create_validators_folder(&root)?;
     }
 
-    aiken_toml(&root, package_name)?;
-
     readme(&root, &package_name.repo)?;
+
+    Config::default(package_name)
+        .save(&root)
+        .into_diagnostic()?;
 
     gitignore(&root)?;
 
@@ -82,28 +84,6 @@ fn create_validators_folder(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
     fs::create_dir_all(validators).into_diagnostic()?;
     Ok(())
-}
-
-fn aiken_toml(root: &Path, package_name: &PackageName) -> miette::Result<()> {
-    let aiken_toml_path = root.join("aiken.toml");
-
-    fs::write(
-        aiken_toml_path,
-        formatdoc! {
-            r#"
-                name = "{name}"
-                version = "0.0.0"
-                licences = ["Apache-2.0"]
-                description = "Aiken contracts for project '{name}'"
-
-                dependencies = [
-                  {{ name = "aiken-lang/stdlib", version = "main", source = "github" }},
-                ]
-            "#,
-            name = package_name.to_string(),
-        },
-    )
-    .into_diagnostic()
 }
 
 fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
