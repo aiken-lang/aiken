@@ -2,17 +2,13 @@ use crate::{package_name::PackageName, Error};
 use aiken_lang::ast::Span;
 use miette::NamedSource;
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::Display,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{fmt::Display, fs, io, path::Path};
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub name: PackageName,
     pub version: String,
-    pub license: String,
+    pub license: Option<String>,
     #[serde(default)]
     pub description: String,
     pub repository: Option<Repository>,
@@ -57,7 +53,7 @@ impl Config {
         Config {
             name: name.clone(),
             version: "0.0.0".to_string(),
-            license: "Apache-2.0".to_string(),
+            license: Some("Apache-2.0".to_string()),
             description: format!("Aiken contracts for project '{name}'"),
             repository: Some(Repository {
                 user: name.owner.clone(),
@@ -81,10 +77,11 @@ impl Config {
         fs::write(aiken_toml_path, aiken_toml)
     }
 
-    pub fn load(dir: PathBuf) -> Result<Config, Error> {
+    pub fn load(dir: &Path) -> Result<Config, Error> {
         let config_path = dir.join("aiken.toml");
-        let raw_config = fs::read_to_string(&config_path)
-            .map_err(|_| Error::MissingManifest { path: dir.clone() })?;
+        let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
+            path: dir.to_path_buf(),
+        })?;
 
         let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
             path: config_path.clone(),
@@ -99,5 +96,20 @@ impl Config {
         })?;
 
         Ok(result)
+    }
+
+    pub fn insert(mut self, dependency: &Dependency, and_replace: bool) -> Option<Self> {
+        for mut existing in self.dependencies.iter_mut() {
+            if existing.name == dependency.name {
+                return if and_replace {
+                    existing.version = dependency.version.clone();
+                    Some(self)
+                } else {
+                    None
+                };
+            }
+        }
+        self.dependencies.push(dependency.clone());
+        Some(self)
     }
 }

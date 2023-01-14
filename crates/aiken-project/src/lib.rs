@@ -86,7 +86,7 @@ where
         module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
         module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-        let config = Config::load(root.clone())?;
+        let config = Config::load(&root)?;
 
         Ok(Project {
             config,
