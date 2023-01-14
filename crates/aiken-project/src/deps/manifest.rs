@@ -5,8 +5,9 @@ use miette::NamedSource;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{Config, Dependency, PackageName, Platform},
+    config::{Config, Dependency, Platform},
     error::Error,
+    package_name::PackageName,
     paths,
     telemetry::{Event, EventListener},
 };

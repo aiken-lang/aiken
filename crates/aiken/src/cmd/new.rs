@@ -1,11 +1,15 @@
-use aiken_project::config::PackageName;
+use aiken_project::{
+    config::Config,
+    package_name::{self, PackageName},
+};
 use indoc::{formatdoc, indoc};
 use miette::IntoDiagnostic;
 use owo_colors::OwoColorize;
-use std::path::PathBuf;
-use std::{fs, path::Path};
-
-use super::error::{Error, InvalidProjectNameReason};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 #[derive(clap::Args)]
 /// Create a new Aiken project
@@ -18,14 +22,9 @@ pub struct Args {
 }
 
 pub fn exec(args: Args) -> miette::Result<()> {
-    validate_name(&args.name)?;
-
-    let package_name = package_name_from_str(&args.name)?;
-
+    let package_name = PackageName::from_str(&args.name).into_diagnostic()?;
     create_project(args, &package_name)?;
-
     print_success_message(&package_name);
-
     Ok(())
 }
 
@@ -33,7 +32,7 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
     let root = PathBuf::from(&package_name.repo);
 
     if root.exists() {
-        Err(Error::ProjectExists {
+        Err(package_name::Error::ProjectExists {
             name: package_name.repo.clone(),
         })?;
     }
@@ -197,50 +196,4 @@ fn gitignore(root: &Path) -> miette::Result<()> {
     .into_diagnostic()?;
 
     Ok(())
-}
-
-fn validate_name(name: &str) -> Result<(), Error> {
-    if name.starts_with("aiken_") {
-        Err(Error::InvalidProjectName {
-            name: name.to_string(),
-            reason: InvalidProjectNameReason::AikenPrefix,
-        })
-    } else if name == "aiken" {
-        Err(Error::InvalidProjectName {
-            name: name.to_string(),
-            reason: InvalidProjectNameReason::AikenReservedModule,
-        })
-    } else if !regex::Regex::new("^[a-z0-9_-]+/[a-z0-9_-]+$")
-        .expect("regex could not be compiled")
-        .is_match(name)
-    {
-        Err(Error::InvalidProjectName {
-            name: name.to_string(),
-            reason: InvalidProjectNameReason::Format,
-        })
-    } else {
-        Ok(())
-    }
-}
-
-fn package_name_from_str(name: &str) -> Result<PackageName, Error> {
-    let mut name_split = name.split('/');
-
-    let owner = name_split
-        .next()
-        .ok_or_else(|| Error::InvalidProjectName {
-            name: name.to_string(),
-            reason: InvalidProjectNameReason::Format,
-        })?
-        .to_string();
-
-    let repo = name_split
-        .next()
-        .ok_or_else(|| Error::InvalidProjectName {
-            name: name.to_string(),
-            reason: InvalidProjectNameReason::Format,
-        })?
-        .to_string();
-
-    Ok(PackageName { owner, repo })
 }
