@@ -1,8 +1,8 @@
 mod eval;
 mod flat;
 mod fmt;
-mod unflat;
 mod shrink;
+mod unflat;
 
 use clap::Subcommand;
 
@@ -14,7 +14,7 @@ pub enum Cmd {
     Eval(eval::Args),
     Flat(flat::Args),
     Unflat(unflat::Args),
-    Shrink(shrink::Args)
+    Shrink(shrink::Args),
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
@@ -23,6 +23,6 @@ pub fn exec(cmd: Cmd) -> miette::Result<()> {
         Cmd::Eval(args) => eval::exec(args),
         Cmd::Flat(args) => flat::exec(args),
         Cmd::Unflat(args) => unflat::exec(args),
-        Cmd::Shrink(args) => shrink::exec(args)
+        Cmd::Shrink(args) => shrink::exec(args),
     }
 }

@@ -1,6 +1,6 @@
 use miette::IntoDiagnostic;
-use std::{ fs, path::PathBuf };
-use uplc::ast::{ Name, Program };
+use std::{fs, path::PathBuf};
+use uplc::ast::{Name, Program};
 use uplc::parser;
 
 // TODO: OR Unflatten, shrink, flatten
@@ -20,12 +20,14 @@ pub struct Args {
     print: bool,
 }
 
-pub fn exec(Args {
-    input,
-    out,
-    print,
-    // cbor_hex,
-}: Args) -> miette::Result<()> {
+pub fn exec(
+    Args {
+        input,
+        out,
+        print,
+        // cbor_hex,
+    }: Args,
+) -> miette::Result<()> {
     let code = std::fs::read_to_string(&input).into_diagnostic()?;
     let program = parser::program(&code).into_diagnostic()?;
 
