@@ -13,17 +13,6 @@ pub struct PackageName {
 }
 
 impl PackageName {
-    pub fn restrict(&self) -> Result<(), Error> {
-        if self.owner.starts_with("aiken") {
-            return Err(Error::InvalidProjectName {
-                reason: InvalidProjectNameReason::Reserved,
-                name: self.to_string(),
-            });
-        }
-
-        Ok(())
-    }
-
     fn validate(&self) -> Result<(), Error> {
         let r = regex::Regex::new("^[a-z0-9_-]+$").expect("regex could not be compiled");
 

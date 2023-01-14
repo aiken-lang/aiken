@@ -29,8 +29,6 @@ pub fn exec(args: Args) -> miette::Result<()> {
 }
 
 fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> {
-    package_name.restrict().into_diagnostic()?;
-
     let root = PathBuf::from(&package_name.repo);
 
     if root.exists() {
