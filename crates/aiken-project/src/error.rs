@@ -1,4 +1,4 @@
-use crate::{pretty, script::EvalHint};
+use crate::{deps::manifest::Package, pretty, script::EvalHint};
 use aiken_lang::{
     ast::{BinOp, Span},
     parser::error::ParseError,
@@ -106,6 +106,14 @@ pub enum Error {
         src: String,
         evaluation_hint: Option<EvalHint>,
     },
+
+    #[error(
+        "I was unable to resolve '{}' for {}/{}",
+        package.version,
+        package.name.owner,
+        package.name.repo
+    )]
+    UnknownPackageVersion { package: Package },
 }
 
 impl Error {
@@ -187,6 +195,7 @@ impl Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => None,
         }
     }
 
@@ -208,6 +217,7 @@ impl Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => None,
         }
     }
 }
@@ -257,6 +267,7 @@ impl Diagnostic for Error {
             Error::Http(_) => Some(Box::new("aiken::deps")),
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::deps")),
         }
     }
 
@@ -312,6 +323,7 @@ impl Diagnostic for Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::UnknownPackageVersion{..} => None,
         }
     }
 
@@ -345,6 +357,7 @@ impl Diagnostic for Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => None,
         }
     }
 
@@ -366,6 +379,7 @@ impl Diagnostic for Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => None,
         }
     }
 
@@ -387,6 +401,7 @@ impl Diagnostic for Error {
             Error::Http { .. } => None,
             Error::ZipExtract { .. } => None,
             Error::JoinError { .. } => None,
+            Error::UnknownPackageVersion { .. } => None,
         }
     }
 }

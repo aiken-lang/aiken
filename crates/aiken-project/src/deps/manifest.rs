@@ -87,7 +87,7 @@ impl Manifest {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Package {
     pub name: PackageName,
     pub version: String,
