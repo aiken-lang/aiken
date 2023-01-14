@@ -1,5 +1,5 @@
 pub opaque type Map<key, value> {
-  inner: List<#(key, value)>,
+  inner: List<(key, value)>,
 }
 
 pub fn new() {

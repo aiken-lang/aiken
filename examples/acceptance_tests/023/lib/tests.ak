@@ -1,12 +1,12 @@
 pub opaque type AssocList<key, value> {
-  inner: List<#(key, value)>,
+  inner: List<(key, value)>,
 }
 
 pub fn new() -> AssocList<key, value> {
   AssocList { inner: [] }
 }
 
-pub fn to_list(m: AssocList<key, value>) -> List<#(key, value)> {
+pub fn to_list(m: AssocList<key, value>) -> List<(key, value)> {
   m.inner
 }
 
@@ -19,17 +19,17 @@ pub fn insert(
 }
 
 fn do_insert(
-  elems: List<#(key, value)>,
+  elems: List<(key, value)>,
   k: key,
   v: value,
-) -> List<#(key, value)> {
+) -> List<(key, value)> {
   when elems is {
-    [] -> [#(k, v)]
-    [#(k2, v2), ..rest] ->
+    [] -> [(k, v)]
+    [(k2, v2), ..rest] ->
       if k == k2 {
-        [#(k, v), ..rest]
+        [(k, v), ..rest]
       } else {
-        [#(k2, v2), ..do_insert(rest, k, v)]
+        [(k2, v2), ..do_insert(rest, k, v)]
       }
   }
 }
@@ -41,5 +41,5 @@ fn fixture_1() {
 }
 
 test to_list_2() {
-  to_list(fixture_1()) == [#("foo", 42), #("bar", 14)]
+  to_list(fixture_1()) == [("foo", 42), ("bar", 14)]
 }

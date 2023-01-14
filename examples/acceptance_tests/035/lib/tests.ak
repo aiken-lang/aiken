@@ -30,18 +30,19 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
     v0,
     v1,
     fn(_, a0, a1) {
-      let asset = dict.union_with(
-        a0,
-        a1,
-        fn(_, q0, q1) {
-          let q = q0 + q1
-          if q == 0 {
-            None
-          } else {
-            Some(q)
-          }
-        },
-      )
+      let asset =
+        dict.union_with(
+          a0,
+          a1,
+          fn(_, q0, q1) {
+            let q = q0 + q1
+            if q == 0 {
+              None
+            } else {
+              Some(q)
+            }
+          },
+        )
 
       when dict.toList(asset) is {
         [] -> None
