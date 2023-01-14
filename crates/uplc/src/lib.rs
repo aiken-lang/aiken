@@ -4,9 +4,9 @@ mod debruijn;
 mod flat;
 pub mod machine;
 pub mod parser;
-pub mod shrinker;
 mod pretty;
 pub mod program_builder;
+pub mod shrinker;
 pub mod tx;
 
 pub use pallas_codec::utils::KeyValuePairs;
