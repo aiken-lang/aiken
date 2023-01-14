@@ -30,25 +30,39 @@ pub fn module(
 
     let mut extra = ModuleExtra::new();
 
-    let tokens = tokens.into_iter().filter(|(token, span)| match token {
-        Token::ModuleComment => {
-            extra.module_comments.push(*span);
-            false
-        }
-        Token::DocComment => {
-            extra.doc_comments.push(*span);
-            false
-        }
-        Token::Comment => {
-            extra.comments.push(*span);
-            false
-        }
-        Token::EmptyLine => {
-            extra.empty_lines.push(span.start);
-            false
-        }
-        Token::NewLine => false,
-        _ => true,
+    let mut previous_is_newline = false;
+
+    let tokens = tokens.into_iter().filter_map(|(token, ref span)| {
+        let current_is_newline = token == Token::NewLine;
+        let result = match token {
+            Token::ModuleComment => {
+                extra.module_comments.push(*span);
+                None
+            }
+            Token::DocComment => {
+                extra.doc_comments.push(*span);
+                None
+            }
+            Token::Comment => {
+                extra.comments.push(*span);
+                None
+            }
+            Token::EmptyLine => {
+                extra.empty_lines.push(span.start);
+                None
+            }
+            Token::NewLine => None,
+            Token::LeftParen => {
+                if previous_is_newline {
+                    Some((Token::NewLineLeftParen, *span))
+                } else {
+                    Some((Token::LeftParen, *span))
+                }
+            }
+            _ => Some((token, *span)),
+        };
+        previous_is_newline = current_is_newline;
+        result
     });
 
     let definitions = module_parser().parse(chumsky::Stream::from_iter(span(len), tokens))?;
@@ -942,9 +956,15 @@ pub fn expr_parser(
                 tail,
             });
 
-        let block_parser = seq_r
-            .clone()
-            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
+        let block_parser = choice((
+            seq_r
+                .clone()
+                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+            seq_r.clone().delimited_by(
+                choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
+                just(Token::RightParen),
+            ),
+        ));
 
         let anon_fn_parser = just(Token::Fn)
             .ignore_then(

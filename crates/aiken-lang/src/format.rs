@@ -1008,11 +1008,11 @@ impl<'comments> Formatter<'comments> {
 
     pub fn operator_side<'a>(&mut self, doc: Document<'a>, op: u8, side: u8) -> Document<'a> {
         if op > side {
-            break_("{", "{ ")
+            break_("(", "( ")
                 .append(doc)
                 .nest(INDENT)
                 .append(break_("", " "))
-                .append("}")
+                .append(")")
                 .group()
         } else {
             doc

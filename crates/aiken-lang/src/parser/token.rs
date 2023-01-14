@@ -10,12 +10,13 @@ pub enum Token {
     Int { value: String },
     String { value: String },
     // Groupings
-    LeftParen,   // (
-    RightParen,  // )
-    LeftSquare,  // [
-    RightSquare, // }
-    LeftBrace,   // {
-    RightBrace,  // }
+    NewLineLeftParen, // ↳(
+    LeftParen,        // (
+    RightParen,       // )
+    LeftSquare,       // [
+    RightSquare,      // }
+    LeftBrace,        // {
+    RightBrace,       // }
     // Int Operators
     Plus,
     Minus,
@@ -95,6 +96,7 @@ impl fmt::Display for Token {
             Token::DiscardName { name } => name,
             Token::Int { value } => value,
             Token::String { value } => value,
+            Token::NewLineLeftParen => "↳(",
             Token::LeftParen => "(",
             Token::RightParen => ")",
             Token::LeftSquare => "[",

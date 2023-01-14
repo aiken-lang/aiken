@@ -231,3 +231,28 @@ fn test_negate() {
 
     assert_fmt(src, expected)
 }
+
+#[test]
+fn test_block_expr() {
+    let src = indoc! {r#"
+        fn foo() {
+          ( 14 + 42 ) * 1337
+        }
+
+        fn bar() {
+          { 14 + 42 } * 1337
+        }
+    "#};
+
+    let expected = indoc! {r#"
+        fn foo() {
+          ( 14 + 42 ) * 1337
+        }
+
+        fn bar() {
+          ( 14 + 42 ) * 1337
+        }
+    "#};
+
+    assert_fmt(src, expected);
+}
