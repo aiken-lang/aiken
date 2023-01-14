@@ -1,5 +1,6 @@
 pub mod build;
 pub mod check;
+pub mod deps;
 pub mod docs;
 pub mod error;
 pub mod fmt;
