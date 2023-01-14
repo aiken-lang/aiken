@@ -1,12 +1,10 @@
 fn is_negative(i: Int) -> Bool {
   if i < 0 {
     trace("is negative")
-
-  True
+    True
   } else {
     trace("is non-negative")
-
-  False
+    False
   }
 }
 

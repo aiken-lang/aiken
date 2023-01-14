@@ -14,5 +14,5 @@ pub fn map2(
 }
 
 test map2_3() {
-  map2(Some(14), Some(42), fn(a, b) { #(a, b) }) == Some(#(14, 42))
+  map2(Some(14), Some(42), fn(a, b) { (a, b) }) == Some((14, 42))
 }

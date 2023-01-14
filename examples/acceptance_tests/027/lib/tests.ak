@@ -1,4 +1,4 @@
-pub fn foo(_a : a) -> Bool {
+pub fn foo(_a: a) -> Bool {
   True
 }
 
