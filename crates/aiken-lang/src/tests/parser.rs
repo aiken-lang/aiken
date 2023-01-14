@@ -1444,7 +1444,7 @@ fn record_create_unlabeled() {
 fn parse_tuple() {
     let code = indoc! {r#"
             fn foo() {
-              let tuple = #(1, 2, 3, 4)
+              let tuple = (1, 2, 3, 4)
               tuple.1st + tuple.2nd + tuple.3rd + tuple.4th
             }
         "#};
@@ -1454,27 +1454,27 @@ fn parse_tuple() {
         vec![ast::UntypedDefinition::Fn(Function {
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
-                location: Span::new((), 13..86),
+                location: Span::new((), 13..85),
                 expressions: vec![
                     expr::UntypedExpr::Assignment {
-                        location: Span::new((), 13..38),
+                        location: Span::new((), 13..37),
                         value: Box::new(expr::UntypedExpr::Tuple {
-                            location: Span::new((), 25..38),
+                            location: Span::new((), 25..37),
                             elems: vec![
                                 expr::UntypedExpr::Int {
-                                    location: Span::new((), 27..28),
+                                    location: Span::new((), 26..27),
                                     value: "1".to_string(),
                                 },
                                 expr::UntypedExpr::Int {
-                                    location: Span::new((), 30..31),
+                                    location: Span::new((), 29..30),
                                     value: "2".to_string(),
                                 },
                                 expr::UntypedExpr::Int {
-                                    location: Span::new((), 33..34),
+                                    location: Span::new((), 32..33),
                                     value: "3".to_string(),
                                 },
                                 expr::UntypedExpr::Int {
-                                    location: Span::new((), 36..37),
+                                    location: Span::new((), 35..36),
                                     value: "4".to_string(),
                                 },
                             ],
@@ -1487,45 +1487,45 @@ fn parse_tuple() {
                         annotation: None,
                     },
                     expr::UntypedExpr::BinOp {
-                        location: Span::new((), 41..86),
+                        location: Span::new((), 40..85),
                         name: ast::BinOp::AddInt,
                         left: Box::new(expr::UntypedExpr::BinOp {
-                            location: Span::new((), 41..74),
+                            location: Span::new((), 40..73),
                             name: ast::BinOp::AddInt,
                             left: Box::new(expr::UntypedExpr::BinOp {
-                                location: Span::new((), 41..62),
+                                location: Span::new((), 40..61),
                                 name: ast::BinOp::AddInt,
                                 left: Box::new(expr::UntypedExpr::TupleIndex {
-                                    location: Span::new((), 41..50),
+                                    location: Span::new((), 40..49),
                                     index: 0,
                                     tuple: Box::new(expr::UntypedExpr::Var {
-                                        location: Span::new((), 41..46),
+                                        location: Span::new((), 40..45),
                                         name: "tuple".to_string(),
                                     }),
                                 }),
                                 right: Box::new(expr::UntypedExpr::TupleIndex {
-                                    location: Span::new((), 53..62),
+                                    location: Span::new((), 52..61),
                                     index: 1,
                                     tuple: Box::new(expr::UntypedExpr::Var {
-                                        location: Span::new((), 53..58),
+                                        location: Span::new((), 52..57),
                                         name: "tuple".to_string(),
                                     }),
                                 }),
                             }),
                             right: Box::new(expr::UntypedExpr::TupleIndex {
-                                location: Span::new((), 65..74),
+                                location: Span::new((), 64..73),
                                 index: 2,
                                 tuple: Box::new(expr::UntypedExpr::Var {
-                                    location: Span::new((), 65..70),
+                                    location: Span::new((), 64..69),
                                     name: "tuple".to_string(),
                                 }),
                             }),
                         }),
                         right: Box::new(expr::UntypedExpr::TupleIndex {
-                            location: Span::new((), 77..86),
+                            location: Span::new((), 76..85),
                             index: 3,
                             tuple: Box::new(expr::UntypedExpr::Var {
-                                location: Span::new((), 77..82),
+                                location: Span::new((), 76..81),
                                 name: "tuple".to_string(),
                             }),
                         }),
@@ -1538,9 +1538,75 @@ fn parse_tuple() {
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 87,
+            end_position: 86,
         })],
     )
+}
+
+#[test]
+fn parse_tuple2() {
+    let code = indoc! {r#"
+            fn foo() {
+              let a = foo(14)
+              (a, 42)
+            }
+        "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 13..38),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 13..28),
+                        value: Box::new(expr::UntypedExpr::Call {
+                            arguments: vec![ast::CallArg {
+                                label: None,
+                                location: Span::new((), 25..27),
+                                value: expr::UntypedExpr::Int {
+                                    location: Span::new((), 25..27),
+                                    value: "14".to_string(),
+                                },
+                            }],
+                            fun: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new((), 21..24),
+                                name: "foo".to_string(),
+                            }),
+                            location: Span::new((), 24..28),
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..18),
+                            name: "a".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Tuple {
+                        location: Span::new((), 31..38),
+                        elems: vec![
+                            expr::UntypedExpr::Var {
+                                location: Span::new((), 32..33),
+                                name: "a".to_string(),
+                            },
+                            expr::UntypedExpr::Int {
+                                location: Span::new((), 35..37),
+                                value: "42".to_string(),
+                            },
+                        ],
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 39,
+        })],
+    );
 }
 
 #[test]

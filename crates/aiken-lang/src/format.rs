@@ -396,13 +396,9 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => docvec![module, ".", name],
 
-            Constant::Tuple { elements, .. } => "#"
-                .to_doc()
-                .append(wrap_args(
-                    false,
-                    elements.iter().map(|e| (self.const_expr(e), false)),
-                ))
-                .group(),
+            Constant::Tuple { elements, .. } => {
+                wrap_args(false, elements.iter().map(|e| (self.const_expr(e), false))).group()
+            }
         }
     }
 
@@ -480,10 +476,9 @@ impl<'comments> Formatter<'comments> {
                 .append(break_("", " ").append(self.annotation(retrn)).nest(INDENT)),
 
             Annotation::Var { name, .. } => name.to_doc(),
-            Annotation::Tuple { elems, .. } => "#".to_doc().append(wrap_args(
-                false,
-                elems.iter().map(|t| (self.annotation(t), false)),
-            )),
+            Annotation::Tuple { elems, .. } => {
+                wrap_args(false, elems.iter().map(|t| (self.annotation(t), false)))
+            }
         }
         .group()
     }
@@ -768,13 +763,9 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.record_update(constructor, spread, args),
 
-            UntypedExpr::Tuple { elems, .. } => "#"
-                .to_doc()
-                .append(wrap_args(
-                    false,
-                    elems.iter().map(|e| (self.wrap_expr(e), false)),
-                ))
-                .group(),
+            UntypedExpr::Tuple { elems, .. } => {
+                wrap_args(false, elems.iter().map(|e| (self.wrap_expr(e), false))).group()
+            }
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();
@@ -1500,13 +1491,9 @@ impl<'comments> Formatter<'comments> {
 
             Pattern::Discard { name, .. } => name.to_doc(),
 
-            Pattern::Tuple { elems, .. } => "#"
-                .to_doc()
-                .append(wrap_args(
-                    false,
-                    elems.iter().map(|e| (self.pattern(e), false)),
-                ))
-                .group(),
+            Pattern::Tuple { elems, .. } => {
+                wrap_args(false, elems.iter().map(|e| (self.pattern(e), false))).group()
+            }
 
             Pattern::List { elements, tail, .. } => {
                 let elements_document =

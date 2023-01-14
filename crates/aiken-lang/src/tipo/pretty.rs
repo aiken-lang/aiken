@@ -75,7 +75,7 @@ impl Printer {
 
             Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
 
-            Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("#(", ")"),
+            Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("(", ")"),
         }
     }
 

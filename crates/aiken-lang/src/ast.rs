@@ -703,7 +703,7 @@ pub enum Pattern<Constructor, Type> {
     },
 
     /// A name given to a sub-pattern using the `as` keyword.
-    /// e.g. `assert #(1, [_, _] as the_list) = x`
+    /// e.g. `assert (1, [_, _] as the_list) = x`
     Assign {
         name: String,
         location: Span,
