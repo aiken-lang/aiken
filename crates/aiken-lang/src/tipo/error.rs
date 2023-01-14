@@ -179,7 +179,7 @@ pub enum Error {
         type_constructors: Vec<String>,
     },
 
-    #[error("I tried to find '{}' in '{}' but didn't.\n", name.purple(), module_name.purple())]
+    #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
     UnknownModuleValue {
         location: Span,
         name: String,
@@ -187,7 +187,7 @@ pub enum Error {
         value_constructors: Vec<String>,
     },
 
-    #[error("I tried to find '{}' in '{}' but didn't.\n", name.purple(), module_name.purple())]
+    #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
     UnknownModuleType {
         location: Span,
         name: String,
@@ -196,7 +196,7 @@ pub enum Error {
     },
 
     #[error(
-      "I tried to find the field '{}' in a record of type '{}' but didn't.\n",
+      "I looked for the field '{}' in a record of type '{}' couldn't find it.\n",
       label.purple(),
       typ.to_pretty(4).purple()
     )]
