@@ -264,10 +264,10 @@ impl Diagnostic for Error {
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
             Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
             Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
-            Error::Http(_) => Some(Box::new("aiken::deps")),
+            Error::Http(_) => Some(Box::new("aiken::packages::download")),
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::deps")),
+            Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::packages::resolve")),
         }
     }
 
@@ -448,7 +448,7 @@ impl Diagnostic for Warning {
             Warning::Type { .. } => Some(Box::new("aiken::check")),
             Warning::NoValidators => Some(Box::new("aiken::check")),
             Warning::DependencyAlreadyExists { .. } => {
-                Some(Box::new("aiken::deps::already_exists"))
+                Some(Box::new("aiken::packages::already_exists"))
             }
         }
     }

@@ -1,7 +1,7 @@
 use aiken::cmd::{
-    build, check,
-    deps::{self, add},
-    docs, fmt, lsp, new, tx, uplc,
+    build, check, docs, fmt, lsp, new,
+    packages::{self, add},
+    tx, uplc,
 };
 use clap::Parser;
 
@@ -19,7 +19,7 @@ pub enum Cmd {
     Add(add::Args),
 
     #[clap(subcommand)]
-    Deps(deps::Cmd),
+    Packages(packages::Cmd),
 
     #[clap(subcommand)]
     Tx(tx::Cmd),
@@ -46,7 +46,7 @@ fn main() -> miette::Result<()> {
         Cmd::Check(args) => check::exec(args),
         Cmd::Docs(args) => docs::exec(args),
         Cmd::Add(args) => add::exec(args),
-        Cmd::Deps(args) => deps::exec(args),
+        Cmd::Packages(args) => packages::exec(args),
         Cmd::Lsp(args) => lsp::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),

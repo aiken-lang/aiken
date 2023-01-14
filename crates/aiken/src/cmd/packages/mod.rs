@@ -7,7 +7,7 @@ use clap::Subcommand;
 #[derive(Subcommand)]
 #[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
-    /// Add a new dependency
+    /// Add a new package dependency
     Add(add::Args),
 
     /// Clear the system-wide dependencies cache
