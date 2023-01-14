@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::ast::{Name, Program, Term};
-use crate::builtins::{DefaultFunction};
+// use crate::builtins::{DefaultFunction};
 
 impl Program<Name> {
     pub fn shrink(self) -> Program<Name> {
@@ -12,9 +12,60 @@ impl Program<Name> {
     }
 }
 
+enum Tactic {
+    BetaReduce,
+    RemoveTraces,
+    ConstIf
+}
+
+fn ApplyTactic(term: &mut Term<Name>, tactic: Tactic) {
+    match tactic {
+        Tactic::BetaReduce => {
+            // var: ((\x -> a) x) => a
+            // const: ((\x -> c) x) => c
+            match &*term {
+                Term::Apply { function, argument } => match function.as_ref() {
+                    Term::Lambda {
+                        parameter_name,
+                        body,
+                    } => match argument.as_ref() {
+                        Term::Var(t) => {
+                            *term=substitute_var(body, parameter_name.clone(), Term::Var(t.clone()))
+                        },
+                        Term::Constant(x) => {
+                            *term=substitute_var(body, parameter_name.clone(), Term::Constant(x.clone()))
+                        }
+                        _ => (),
+                    },
+                    _ => (),
+                },
+                _ => (),
+            }
+        },
+        Tactic::RemoveTraces => {
+            match &*term {
+                Term::Apply{ function: f, argument: outerarg } => {
+                    ()
+                },
+                _ => ()
+            }
+        },
+        Tactic::ConstIf => {
+            match &*term {
+                Term::Apply{ function: f, argument: outerarg } => {
+                    ()
+                },
+                _ => ()
+            }
+        },
+        
+    }
+}
+
 fn shrink_term(mut term: Term<Name>) -> Term<Name> {
-    reduce(&mut term);
-    // remove_dead_code(&mut term);
+    ApplyTactic(&mut term, Tactic::BetaReduce);
+    ApplyTactic(&mut term, Tactic::RemoveTraces);
+    ApplyTactic(&mut term, Tactic::ConstIf);
 
     match term {
         Term::Delay(term) => Term::Delay(Rc::new(shrink_term(term.as_ref().clone()))),
@@ -33,48 +84,6 @@ fn shrink_term(mut term: Term<Name>) -> Term<Name> {
         x => x,
     }
 }
-
-// var: ((\x -> a) x) => a
-// const: ((\x -> c) x) => c
-fn reduce(a: &mut Term<Name>) {
-    match &*a {
-        Term::Apply { function, argument } => match function.as_ref() {
-            Term::Lambda {
-                parameter_name,
-                body,
-            } => match argument.as_ref() {
-                Term::Var(t) => {
-                    *a=substitute_var(body, parameter_name.clone(), Term::Var(t.clone()))
-                },
-                Term::Constant(x) => {
-                    *a=substitute_var(body, parameter_name.clone(), Term::Constant(x.clone()))
-                }
-                _ => (),
-            },
-            _ => (),
-        },
-        _ => (),
-    }
-}
-
-fn const_if_then_else(a: &mut Term<Name>) {
-    match &*a {
-        Term::Apply{ function: f, argument: outerarg } => {
-            ()
-        },
-        _ => ()
-    }
-}
-
-// pub fn remove_dead_code(a: &mut Term<Name>) {
-//     match &*a {
-//         Term::Apply { function, argument } => match function.as_ref() {
-//             Term::Builtin(DefaultFunction::IfThenElse) => match argument.as_ref() {
-//                 Term::Constant(Constant::Bool(true)) =>
-//             }
-//         }
-//     }
-// }
 
 fn substitute_var(term: &Term<Name>, original: Name, replace_with: Term<Name>) -> Term<Name> {
     match term {
