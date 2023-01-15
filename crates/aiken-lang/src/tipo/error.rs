@@ -47,6 +47,9 @@ pub enum Error {
         name: String,
     },
 
+    #[error("I found a data type that has a function type in it. This is not allowed.")]
+    FunctionTypeInData { location: Span },
+
     #[error("I saw a {} fields in a context where there should be {}.\n", given.purple(), expected.purple())]
     IncorrectFieldsArity {
         location: Span,
@@ -365,6 +368,7 @@ impl Diagnostic for Error {
             Self::DuplicateField { .. } => Some(Box::new("duplicate_field")),
             Self::DuplicateName { .. } => Some(Box::new("duplicate_name")),
             Self::DuplicateTypeName { .. } => Some(Box::new("duplicate_type_name")),
+            Self::FunctionTypeInData { .. } => Some(Box::new("function_type_in_data")),
             Self::IncorrectFieldsArity { .. } => Some(Box::new("incorrect_fields_arity")),
             Self::IncorrectFunctionCallArity { .. } => Some(Box::new("incorrect_fn_arity")),
             Self::IncorrectPatternArity { .. } => Some(Box::new("incorrect_pattern_arity")),
@@ -477,6 +481,8 @@ impl Diagnostic for Error {
                 "#
                 , cannot = "cannot".red()
             })),
+
+            Self::FunctionTypeInData { .. } => Some(Box::new("Data types can't have functions in them due to how Plutus Data works.")),
 
             Self::IncorrectFieldsArity { .. } => None,
 
@@ -1134,6 +1140,9 @@ impl Diagnostic for Error {
             Self::DuplicateTypeName { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
+            Self::FunctionTypeInData { location } => Some(Box::new(
+                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+            )),
             Self::IncorrectFieldsArity { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
@@ -1262,6 +1271,7 @@ impl Diagnostic for Error {
             Self::DuplicateField { .. } => None,
             Self::DuplicateName { .. } => None,
             Self::DuplicateTypeName { .. } => None,
+            Self::FunctionTypeInData { .. } => None,
             Self::IncorrectFieldsArity { .. } => Some(Box::new(
                 "https://aiken-lang.org/language-tour/custom-types",
             )),

@@ -73,6 +73,10 @@ impl Type {
         matches!(self, Self::Var { tipo } if tipo.borrow().is_unbound())
     }
 
+    pub fn is_function(&self) -> bool {
+        matches!(self, Self::Fn { .. })
+    }
+
     pub fn return_type(&self) -> Option<Arc<Self>> {
         match self {
             Self::Fn { ret, .. } => Some(ret.clone()),

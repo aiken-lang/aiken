@@ -281,10 +281,10 @@ fn infer_definition(
             opaque,
             name,
             parameters,
-            constructors,
+            constructors: untyped_constructors,
             ..
         }) => {
-            let constructors = constructors
+            let constructors = untyped_constructors
                 .into_iter()
                 .map(
                     |RecordConstructor {
@@ -346,7 +346,7 @@ fn infer_definition(
                 .parameters
                 .clone();
 
-            Ok(Definition::DataType(DataType {
+            let typed_data = DataType {
                 doc,
                 location,
                 public,
@@ -355,7 +355,19 @@ fn infer_definition(
                 parameters,
                 constructors,
                 typed_parameters,
-            }))
+            };
+
+            for constr in &typed_data.constructors {
+                for RecordConstructorArg { tipo, location, .. } in &constr.arguments {
+                    if tipo.is_function() {
+                        return Err(Error::FunctionTypeInData {
+                            location: *location,
+                        });
+                    }
+                }
+            }
+
+            Ok(Definition::DataType(typed_data))
         }
 
         Definition::Use(Use {
