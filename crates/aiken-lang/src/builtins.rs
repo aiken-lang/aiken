@@ -5,7 +5,7 @@ use strum::IntoEnumIterator;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{Arg, ArgName, Function, ModuleKind, Span, TypedFunction, UnOp},
+    ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedFunction, UnOp},
     builder::FunctionAccessKey,
     expr::TypedExpr,
     tipo::{
@@ -121,12 +121,74 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         },
     );
 
+    // not
     prelude.values.insert(
         "not".to_string(),
         ValueConstructor::public(
             function(vec![bool()], bool()),
             ValueConstructorVariant::ModuleFn {
                 name: "not".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // identity
+    let identity_var = generic_var(id_gen.next());
+    prelude.values.insert(
+        "identity".to_string(),
+        ValueConstructor::public(
+            function(vec![identity_var.clone()], identity_var),
+            ValueConstructorVariant::ModuleFn {
+                name: "identity".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // always
+    let always_a_var = generic_var(id_gen.next());
+    let always_b_var = generic_var(id_gen.next());
+    prelude.values.insert(
+        "always".to_string(),
+        ValueConstructor::public(
+            function(vec![always_a_var.clone(), always_b_var], always_a_var),
+            ValueConstructorVariant::ModuleFn {
+                name: "always".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 2,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // flip
+    let flip_a_var = generic_var(id_gen.next());
+    let flip_b_var = generic_var(id_gen.next());
+    let flip_c_var = generic_var(id_gen.next());
+
+    let input_type = function(
+        vec![flip_a_var.clone(), flip_b_var.clone()],
+        flip_c_var.clone(),
+    );
+    let return_type = function(vec![flip_b_var, flip_a_var], flip_c_var);
+
+    prelude.values.insert(
+        "flip".to_string(),
+        ValueConstructor::public(
+            function(vec![input_type], return_type),
+            ValueConstructorVariant::ModuleFn {
+                name: "flip".to_string(),
                 field_map: None,
                 module: "".to_string(),
                 arity: 1,
@@ -471,7 +533,7 @@ pub fn from_default_function(
     })
 }
 
-pub fn prelude_functions() -> HashMap<FunctionAccessKey, TypedFunction> {
+pub fn prelude_functions(id_gen: &IdGenerator) -> HashMap<FunctionAccessKey, TypedFunction> {
     let mut functions = HashMap::new();
 
     // /// Negate the argument. Useful for map/fold and pipelines.
@@ -518,6 +580,220 @@ pub fn prelude_functions() -> HashMap<FunctionAccessKey, TypedFunction> {
                     name: "self".to_string(),
                 }),
             },
+        },
+    );
+
+    // /// A function that returns its argument. Handy as a default behavior sometimes.
+    // pub fn identity(a: a) -> a {
+    //   a
+    // }
+    let a_var = generic_var(id_gen.next());
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "identity".to_string(),
+            variant_name: "".to_string(),
+        },
+        Function {
+            arguments: vec![Arg {
+                arg_name: ArgName::Named {
+                    name: "a".to_string(),
+                    label: "a".to_string(),
+                    location: Span::empty(),
+                },
+                location: Span::empty(),
+                annotation: None,
+                tipo: a_var.clone(),
+            }],
+            body: TypedExpr::Var {
+                location: Span::empty(),
+                constructor: ValueConstructor {
+                    public: true,
+                    tipo: a_var.clone(),
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                },
+                name: "a".to_string(),
+            },
+            doc: None,
+            location: Span::empty(),
+            name: "identity".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type: a_var,
+            end_position: 0,
+        },
+    );
+
+    // /// A function that always return its first argument. Handy in folds and maps.
+    // pub fn always(a: a, b _b: b) -> a {
+    //   a
+    // }
+    let a_var = generic_var(id_gen.next());
+    let b_var = generic_var(id_gen.next());
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "always".to_string(),
+            variant_name: "".to_string(),
+        },
+        Function {
+            arguments: vec![
+                Arg {
+                    arg_name: ArgName::Named {
+                        name: "a".to_string(),
+                        label: "a".to_string(),
+                        location: Span::empty(),
+                    },
+                    location: Span::empty(),
+                    annotation: None,
+                    tipo: a_var.clone(),
+                },
+                Arg {
+                    arg_name: ArgName::Discarded {
+                        name: "_b".to_string(),
+                        label: "_b".to_string(),
+                        location: Span::empty(),
+                    },
+                    location: Span::empty(),
+                    annotation: None,
+                    tipo: b_var,
+                },
+            ],
+            body: TypedExpr::Var {
+                location: Span::empty(),
+                constructor: ValueConstructor {
+                    public: true,
+                    tipo: a_var.clone(),
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                },
+                name: "a".to_string(),
+            },
+            doc: None,
+            location: Span::empty(),
+            name: "always".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type: a_var,
+            end_position: 0,
+        },
+    );
+
+    // /// A function that flips the arguments of a function.
+    // pub fn flip(f: fn(a, b) -> c) -> fn(b, a) -> c {
+    //   fn(b, a) { f(a, b) }
+    // }
+    let a_var = generic_var(id_gen.next());
+    let b_var = generic_var(id_gen.next());
+    let c_var = generic_var(id_gen.next());
+
+    let input_type = function(vec![a_var.clone(), b_var.clone()], c_var.clone());
+    let return_type = function(vec![b_var.clone(), a_var.clone()], c_var.clone());
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "flip".to_string(),
+            variant_name: "".to_string(),
+        },
+        Function {
+            arguments: vec![Arg {
+                arg_name: ArgName::Named {
+                    name: "f".to_string(),
+                    label: "f".to_string(),
+                    location: Span::empty(),
+                },
+                location: Span::empty(),
+                annotation: None,
+                tipo: input_type.clone(),
+            }],
+            body: TypedExpr::Fn {
+                location: Span::empty(),
+                tipo: return_type.clone(),
+                is_capture: false,
+                args: vec![
+                    Arg {
+                        arg_name: ArgName::Named {
+                            name: "b".to_string(),
+                            label: "b".to_string(),
+                            location: Span::empty(),
+                        },
+                        location: Span::empty(),
+                        annotation: None,
+                        tipo: b_var.clone(),
+                    },
+                    Arg {
+                        arg_name: ArgName::Named {
+                            name: "a".to_string(),
+                            label: "a".to_string(),
+                            location: Span::empty(),
+                        },
+                        location: Span::empty(),
+                        annotation: None,
+                        tipo: a_var.clone(),
+                    },
+                ],
+                body: Box::new(TypedExpr::Call {
+                    location: Span::empty(),
+                    tipo: c_var,
+                    fun: Box::new(TypedExpr::Var {
+                        location: Span::empty(),
+                        constructor: ValueConstructor {
+                            public: true,
+                            tipo: input_type,
+                            variant: ValueConstructorVariant::LocalVariable {
+                                location: Span::empty(),
+                            },
+                        },
+                        name: "f".to_string(),
+                    }),
+                    args: vec![
+                        CallArg {
+                            label: None,
+                            location: Span::empty(),
+                            value: TypedExpr::Var {
+                                location: Span::empty(),
+                                constructor: ValueConstructor {
+                                    public: true,
+                                    tipo: a_var,
+                                    variant: ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                },
+                                name: "a".to_string(),
+                            },
+                        },
+                        CallArg {
+                            label: None,
+                            location: Span::empty(),
+                            value: TypedExpr::Var {
+                                location: Span::empty(),
+                                constructor: ValueConstructor {
+                                    public: true,
+                                    tipo: b_var,
+                                    variant: ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                },
+                                name: "b".to_string(),
+                            },
+                        },
+                    ],
+                }),
+                return_annotation: None,
+            },
+            doc: None,
+            location: Span::empty(),
+            name: "flip".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type,
+            end_position: 0,
         },
     );
 
