@@ -277,6 +277,9 @@ pub enum Error {
         index: usize,
         size: usize,
     },
+
+    #[error("I discovered an attempt to import a validator module: '{}'\n", name.purple())]
+    ValidatorImported { location: Span, name: String },
 }
 
 impl Error {
@@ -424,6 +427,7 @@ impl Diagnostic for Error {
             Self::RecursiveType { .. } => Some(Box::new("recursive_type")),
             Self::NotATuple { .. } => Some(Box::new("not_a_tuple")),
             Self::TupleIndexOutOfBound { .. } => Some(Box::new("tuple_index_out_of_bound")),
+            Self::ValidatorImported { .. } => Some(Box::new("validator_imported")),
         }
     }
 
@@ -1088,6 +1092,8 @@ impl Diagnostic for Error {
             })),
 
             Self::TupleIndexOutOfBound { .. } => None,
+
+            Self::ValidatorImported { .. } => Some(Box::new(format!("If you are trying to share code defined in\na validator then move it to a module in {}", "lib/".purple())))
         }
     }
 
@@ -1260,6 +1266,10 @@ impl Diagnostic for Error {
             Self::TupleIndexOutOfBound { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
+
+            Self::ValidatorImported { location, .. } => Some(Box::new(
+                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+            )),
         }
     }
 
@@ -1357,6 +1367,7 @@ impl Diagnostic for Error {
             Self::TupleIndexOutOfBound { .. } => Some(Box::new(
                 "https://aiken-lang.org/language-tour/primitive-types#tuples"
             )),
+            Self::ValidatorImported { .. } => None
         }
     }
 }
