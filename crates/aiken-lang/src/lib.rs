@@ -30,5 +30,11 @@ impl IdGenerator {
     }
 }
 
+pub const SPEND: &str = "spend";
+pub const CERT: &str = "cert";
+pub const MINT: &str = "mint";
+pub const WITHDRAW: &str = "withdraw";
+pub const VALIDATOR_NAMES: [&str; 4] = [SPEND, CERT, MINT, WITHDRAW];
+
 #[cfg(test)]
 mod tests;
