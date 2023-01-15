@@ -17,7 +17,7 @@ use aiken_lang::{
     builtins::{self, generic_var},
     tipo::TypeInfo,
     uplc::CodeGenerator,
-    IdGenerator,
+    IdGenerator, CERT, MINT, SPEND, VALIDATOR_NAMES, WITHDRAW,
 };
 use deps::UseManifest;
 use miette::NamedSource;
@@ -44,10 +44,7 @@ use uplc::{
 use crate::{
     config::Config,
     error::{Error, Warning},
-    module::{
-        CheckedModule, CheckedModules, ParsedModule, ParsedModules, CERT, MINT, SPEND,
-        VALIDATOR_NAMES, WITHDRAW,
-    },
+    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
     telemetry::Event,
 };
 

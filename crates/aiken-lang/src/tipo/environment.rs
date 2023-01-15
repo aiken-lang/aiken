@@ -8,13 +8,13 @@ use itertools::Itertools;
 
 use crate::{
     ast::{
-        Annotation, CallArg, DataType, Definition, Function, ModuleConstant, Pattern,
+        Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind, Pattern,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
         UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
     },
     builtins::{self, function, generic_var, tuple, unbound_var},
     tipo::fields::FieldMap,
-    IdGenerator,
+    IdGenerator, VALIDATOR_NAMES,
 };
 
 use super::{
@@ -993,6 +993,7 @@ impl<'a> Environment<'a> {
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
         names: &mut HashMap<&'a str, &'a Span>,
+        kind: ModuleKind,
     ) -> Result<(), Error> {
         match def {
             Definition::Fn(Function {
@@ -1051,7 +1052,7 @@ impl<'a> Environment<'a> {
                     tipo,
                 );
 
-                if !public {
+                if !public && (kind.is_lib() || !VALIDATOR_NAMES.contains(&name.as_str())) {
                     self.init_usage(name.clone(), EntityKind::PrivateFunction, *location);
                 }
             }

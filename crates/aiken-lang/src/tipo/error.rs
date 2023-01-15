@@ -1389,6 +1389,12 @@ pub enum Warning {
         location: Span,
     },
 
+    #[error("I found a public definition in a validator module.\nDefinitions in validator modules do not need to be public.\n")]
+    PubInValidatorModule {
+        #[label]
+        location: Span,
+    },
+
     #[error("I found a record update with no fields; effectively updating nothing.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     NoFieldsRecordUpdate {
