@@ -490,7 +490,7 @@ where
         let mut type_aliases = HashMap::new();
         let mut data_types = HashMap::new();
 
-        let prelude_functions = builtins::prelude_functions();
+        let prelude_functions = builtins::prelude_functions(&self.id_gen);
         for (access_key, func) in prelude_functions.iter() {
             functions.insert(access_key.clone(), func);
         }
@@ -581,7 +581,7 @@ where
         let mut type_aliases = HashMap::new();
         let mut data_types = HashMap::new();
 
-        let prelude_functions = builtins::prelude_functions();
+        let prelude_functions = builtins::prelude_functions(&self.id_gen);
         for (access_key, func) in prelude_functions.iter() {
             functions.insert(access_key.clone(), func);
         }
