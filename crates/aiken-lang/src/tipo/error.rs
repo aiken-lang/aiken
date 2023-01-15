@@ -116,7 +116,7 @@ pub enum Error {
     )]
     KeywordInModuleName { name: String, keyword: String },
 
-    #[error("I stumble upon an invalid (non-local) clause guard '{}'.\n", name.purple())]
+    #[error("I stumbled upon an invalid (non-local) clause guard '{}'.\n", name.purple())]
     NonLocalClauseGuardVariable { location: Span, name: String },
 
     #[error("I discovered a positional argument after a label argument.\n")]
@@ -162,7 +162,7 @@ pub enum Error {
         supplied: Vec<String>,
     },
 
-    #[error("I stumble upon a reference to an unknown module: '{}'\n", name.purple())]
+    #[error("I stumbled upon a reference to an unknown module: '{}'\n", name.purple())]
     UnknownModule {
         location: Span,
         name: String,
