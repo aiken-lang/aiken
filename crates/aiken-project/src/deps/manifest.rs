@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use aiken_lang::ast::Span;
+use futures::future;
 use miette::NamedSource;
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +88,7 @@ impl Manifest {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Package {
     pub name: PackageName,
     pub version: String,
@@ -96,15 +97,25 @@ pub struct Package {
 }
 
 fn resolve_versions<T>(
-    _runtime: tokio::runtime::Handle,
+    runtime: tokio::runtime::Handle,
     config: &Config,
-    _manifest: Option<&Manifest>,
+    manifest: Option<&Manifest>,
     event_listener: &T,
 ) -> Result<Manifest, Error>
 where
     T: EventListener,
 {
     event_listener.handle_event(Event::ResolvingVersions);
+
+    let specified_dependencies = config.dependencies.clone();
+
+    let locked = config.locked(manifest)?;
+
+    let resolved = pubgrub::solver::resolve(Provider::new(), config.name, "0.0.0".to_string())
+        .expect("still need to map this to Project Error")
+        .into_iter()
+        .filter(|(name, _)| name != &config.name)
+        .collect();
 
     // let resolved = hex::resolve_versions(
     //     PackageFetcher::boxed(runtime.clone()),
@@ -113,25 +124,24 @@ where
     //     manifest,
     // )?;
 
-    // let packages = runtime.block_on(future::try_join_all(
-    //     resolved
-    //         .into_iter()
-    //         .map(|(name, version)| lookup_package(name, version)),
-    // ))?;
+    let packages = runtime.block_on(future::try_join_all(
+        resolved
+            .into_iter()
+            .map(|(name, version)| lookup_package(name, version)),
+    ))?;
 
     let manifest = Manifest {
-        packages: config
-            .dependencies
-            .iter()
-            .map(|dep| Package {
-                name: dep.name.clone(),
-                version: dep.version.clone(),
-                requirements: vec![],
-                source: dep.source,
-            })
-            .collect(),
+        packages,
         requirements: config.dependencies.clone(),
     };
 
     Ok(manifest)
+}
+
+struct Provider {}
+
+impl Provider {
+    fn new() -> Self {
+        Self {}
+    }
 }

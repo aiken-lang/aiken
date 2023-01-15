@@ -21,6 +21,7 @@ miette = { version = "5.3.0", features = ["fancy"] }
 pallas = "0.16.0"
 pallas-traverse = "0.16.0"
 petgraph = "0.6.2"
+pubgrub = "0.2.1"
 pulldown-cmark = { version = "0.8.0", default-features = false }
 rayon = "1.6.1"
 regex = "1.6.0"

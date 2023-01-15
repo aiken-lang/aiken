@@ -1,8 +1,16 @@
-use crate::error::Error;
+use crate::{
+    deps::manifest::{Manifest, Package},
+    error::Error,
+};
 use aiken_lang::ast::Span;
 use miette::NamedSource;
 use serde::{de::Visitor, Deserialize, Serialize};
-use std::{fmt::Display, fs, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    fs,
+    path::PathBuf,
+};
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -127,5 +135,86 @@ impl Config {
         })?;
 
         Ok(result)
+    }
+
+    /// Get the locked packages for the current config and a given (optional)
+    /// manifest of previously locked packages.
+    ///
+    /// If a package is removed or the specified required version range for it
+    /// changes then it is not considered locked. This also goes for any child
+    /// packages of the package which have no other parents.
+    ///
+    /// This function should be used each time resolution is performed so that
+    /// outdated deps are removed from the manifest and not locked to the
+    /// previously selected versions.
+    ///
+    pub fn locked(&self, manifest: Option<&Manifest>) -> Result<Vec<Package>, Error> {
+        Ok(match manifest {
+            None => vec![],
+            Some(manifest) => StalePackageRemover::fresh_and_locked(&self.dependencies, manifest),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct StalePackageRemover<'a> {
+    // These are the packages for which the requirement or their parents
+    // requirement has not changed.
+    fresh: HashSet<String>,
+    locked: HashMap<String, &'a Vec<String>>,
+}
+
+impl<'a> StalePackageRemover<'a> {
+    pub fn fresh_and_locked(
+        requirements: &'a Vec<Dependency>,
+        manifest: &'a Manifest,
+    ) -> Vec<Package> {
+        let locked = manifest
+            .packages
+            .iter()
+            .map(|p| (p.name.to_string(), &p.requirements))
+            .collect();
+
+        Self {
+            fresh: HashSet::new(),
+            locked,
+        }
+        .run(requirements, manifest)
+    }
+
+    fn run(&mut self, requirements: &'a Vec<Dependency>, manifest: &'a Manifest) -> Vec<Package> {
+        // Record all the requirements that have not changed
+        for dep in requirements {
+            if manifest.requirements.iter().find(|d| d.name == dep.name) != Some(dep) {
+                continue; // This package has changed, don't record it
+            }
+
+            // Recursively record the package and its deps as being fresh
+            self.record_tree_fresh(dep.name.to_string());
+        }
+
+        // Return all the previously resolved packages that have not been
+        // recorded as fresh
+        manifest
+            .packages
+            .iter()
+            .filter(|package| self.fresh.contains(package.name.to_string().as_str()))
+            .cloned()
+            .collect()
+    }
+
+    fn record_tree_fresh(&mut self, name: String) {
+        let deps = self
+            .locked
+            .get(&name)
+            .expect("Package fresh but not in manifest");
+
+        // Record the top level package
+        let _ = self.fresh.insert(name);
+
+        // Record each of its deps recursively
+        for package in *deps {
+            self.record_tree_fresh(package.clone());
+        }
     }
 }
