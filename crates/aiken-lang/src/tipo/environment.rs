@@ -680,9 +680,16 @@ impl<'a> Environment<'a> {
                         .get(&name)
                         .ok_or_else(|| Error::UnknownModule {
                             location: *location,
-                            name,
+                            name: name.clone(),
                             imported_modules: self.imported_modules.keys().cloned().collect(),
                         })?;
+
+                if module_info.kind.is_validator() {
+                    return Err(Error::ValidatorImported {
+                        location: *location,
+                        name,
+                    });
+                }
 
                 // Determine local alias of imported module
                 let module_name = as_name
