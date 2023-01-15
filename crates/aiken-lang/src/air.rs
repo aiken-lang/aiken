@@ -220,6 +220,10 @@ pub enum Air {
         names: Vec<String>,
         tipo: Arc<Type>,
     },
+    Check {
+        scope: Vec<u64>,
+        constr_index: usize,
+    },
 }
 
 impl Air {
@@ -259,7 +263,8 @@ impl Air {
             | Air::Trace { scope, .. }
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
-            | Air::TupleClause { scope, .. } => scope.to_vec(),
+            | Air::TupleClause { scope, .. }
+            | Air::Check { scope, .. } => scope.to_vec(),
         }
     }
 }

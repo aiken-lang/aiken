@@ -4270,6 +4270,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 arg_stack.push(term);
             }
+            Air::Check { scope, .. } => todo!(),
         }
     }
 
