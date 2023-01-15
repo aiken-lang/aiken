@@ -5,6 +5,7 @@ pub mod error;
 pub mod format;
 pub mod module;
 pub mod options;
+pub mod package_name;
 pub mod paths;
 pub mod pretty;
 pub mod script;
@@ -18,10 +19,10 @@ use aiken_lang::{
     uplc::CodeGenerator,
     IdGenerator,
 };
-use config::PackageName;
 use deps::UseManifest;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
+use package_name::PackageName;
 use pallas::{
     codec::minicbor,
     ledger::{addresses::Address, primitives::babbage},
@@ -85,7 +86,7 @@ where
         module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
         module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-        let config = Config::load(root.clone())?;
+        let config = Config::load(&root)?;
 
         Ok(Project {
             config,

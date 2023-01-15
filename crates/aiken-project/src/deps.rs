@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 
 use crate::{
-    config::{Config, Dependency, PackageName},
+    config::{Config, Dependency},
     error::Error,
+    package_name::PackageName,
     paths,
     telemetry::{Event, EventListener},
 };

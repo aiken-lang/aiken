@@ -1,4 +1,4 @@
-use crate::{deps::manifest::Package, pretty, script::EvalHint};
+use crate::{deps::manifest::Package, package_name::PackageName, pretty, script::EvalHint};
 use aiken_lang::{
     ast::{BinOp, Span},
     parser::error::ParseError,
@@ -264,10 +264,10 @@ impl Diagnostic for Error {
             Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
             Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
             Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
-            Error::Http(_) => Some(Box::new("aiken::deps")),
+            Error::Http(_) => Some(Box::new("aiken::packages::download")),
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::deps")),
+            Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::packages::resolve")),
         }
     }
 
@@ -418,6 +418,8 @@ pub enum Warning {
         #[source]
         warning: tipo::error::Warning,
     },
+    #[error("{name} is already a dependency.")]
+    DependencyAlreadyExists { name: PackageName },
 }
 
 impl Diagnostic for Warning {
@@ -429,6 +431,7 @@ impl Diagnostic for Warning {
         match self {
             Warning::Type { named, .. } => Some(named),
             Warning::NoValidators => None,
+            Warning::DependencyAlreadyExists { .. } => None,
         }
     }
 
@@ -436,6 +439,7 @@ impl Diagnostic for Warning {
         match self {
             Warning::Type { warning, .. } => warning.labels(),
             Warning::NoValidators => None,
+            Warning::DependencyAlreadyExists { .. } => None,
         }
     }
 
@@ -443,6 +447,19 @@ impl Diagnostic for Warning {
         match self {
             Warning::Type { .. } => Some(Box::new("aiken::check")),
             Warning::NoValidators => Some(Box::new("aiken::check")),
+            Warning::DependencyAlreadyExists { .. } => {
+                Some(Box::new("aiken::packages::already_exists"))
+            }
+        }
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        match self {
+            Warning::Type { .. } => None,
+            Warning::NoValidators => None,
+            Warning::DependencyAlreadyExists { .. } => Some(Box::new(
+                "If you need to change the version, try 'aiken packages upgrade' instead.",
+            )),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::deps::manifest::Package;
-use crate::{config::PackageName, error::Error};
+use crate::{error::Error, package_name::PackageName};
 use reqwest::Client;
 use std::path::PathBuf;
 

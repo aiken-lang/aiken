@@ -119,6 +119,7 @@ dependencies = [
  "ignore",
  "itertools",
  "miette",
+ "owo-colors",
  "pallas",
  "pallas-traverse",
  "petgraph",

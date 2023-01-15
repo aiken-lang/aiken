@@ -1,13 +1,14 @@
-use crate::error::Error;
+use crate::{package_name::PackageName, Error};
 use aiken_lang::ast::Span;
 use miette::NamedSource;
-use serde::{de::Visitor, Deserialize, Serialize};
-use std::{fmt::Display, fs, path::PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{fmt::Display, fs, io, path::Path};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Config {
     pub name: PackageName,
     pub version: String,
+    pub license: Option<String>,
     #[serde(default)]
     pub description: String,
     pub repository: Option<Repository>,
@@ -15,7 +16,7 @@ pub struct Config {
     pub dependencies: Vec<Dependency>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Repository {
     pub user: String,
     pub project: String,
@@ -37,67 +38,6 @@ pub struct Dependency {
     pub source: Platform,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
-pub struct PackageName {
-    pub owner: String,
-    pub repo: String,
-}
-
-impl Display for PackageName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.owner, self.repo)
-    }
-}
-
-impl Serialize for PackageName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for PackageName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct PackageNameVisitor;
-
-        impl<'de> Visitor<'de> for PackageNameVisitor {
-            type Value = PackageName;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter
-                    .write_str("a string representing an owner and repo, ex: aiken-lang/stdlib")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                let mut name = v.split('/');
-
-                let owner = name.next().ok_or_else(|| {
-                    serde::de::Error::invalid_value(serde::de::Unexpected::Str(v), &self)
-                })?;
-
-                let repo = name.next().ok_or_else(|| {
-                    serde::de::Error::invalid_value(serde::de::Unexpected::Str(v), &self)
-                })?;
-
-                Ok(PackageName {
-                    owner: owner.to_string(),
-                    repo: repo.to_string(),
-                })
-            }
-        }
-
-        deserializer.deserialize_str(PackageNameVisitor)
-    }
-}
-
 impl Display for Platform {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::result::Result<(), ::std::fmt::Error> {
         match *self {
@@ -109,10 +49,39 @@ impl Display for Platform {
 }
 
 impl Config {
-    pub fn load(dir: PathBuf) -> Result<Config, Error> {
+    pub fn default(name: &PackageName) -> Self {
+        Config {
+            name: name.clone(),
+            version: "0.0.0".to_string(),
+            license: Some("Apache-2.0".to_string()),
+            description: format!("Aiken contracts for project '{name}'"),
+            repository: Some(Repository {
+                user: name.owner.clone(),
+                project: name.repo.clone(),
+                platform: Platform::Github,
+            }),
+            dependencies: vec![Dependency {
+                name: PackageName {
+                    owner: "aiken-lang".to_string(),
+                    repo: "stdlib".to_string(),
+                },
+                version: "main".to_string(),
+                source: Platform::Github,
+            }],
+        }
+    }
+
+    pub fn save(&self, dir: &Path) -> Result<(), io::Error> {
+        let aiken_toml_path = dir.join("aiken.toml");
+        let aiken_toml = toml::to_string_pretty(self).unwrap();
+        fs::write(aiken_toml_path, aiken_toml)
+    }
+
+    pub fn load(dir: &Path) -> Result<Config, Error> {
         let config_path = dir.join("aiken.toml");
-        let raw_config = fs::read_to_string(&config_path)
-            .map_err(|_| Error::MissingManifest { path: dir.clone() })?;
+        let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
+            path: dir.to_path_buf(),
+        })?;
 
         let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
             path: config_path.clone(),
@@ -127,5 +96,20 @@ impl Config {
         })?;
 
         Ok(result)
+    }
+
+    pub fn insert(mut self, dependency: &Dependency, and_replace: bool) -> Option<Self> {
+        for mut existing in self.dependencies.iter_mut() {
+            if existing.name == dependency.name {
+                return if and_replace {
+                    existing.version = dependency.version.clone();
+                    Some(self)
+                } else {
+                    None
+                };
+            }
+        }
+        self.dependencies.push(dependency.clone());
+        Some(self)
     }
 }

@@ -4,8 +4,8 @@ use futures::future;
 use reqwest::Client;
 
 use crate::{
-    config::PackageName,
     error::Error,
+    package_name::PackageName,
     paths::{self, CacheKey},
 };
 
