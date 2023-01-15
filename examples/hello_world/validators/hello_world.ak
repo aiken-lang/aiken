@@ -4,15 +4,15 @@ use aiken/string
 use aiken/transaction.{ScriptContext}
 use aiken/transaction/credential.{VerificationKey}
 
-pub type Datum {
+type Datum {
   owner: Hash<Blake2b_224, VerificationKey>,
 }
 
-pub type Redeemer {
+type Redeemer {
   msg: ByteArray,
 }
 
-pub fn spend(datum: Datum, redeemer: Redeemer, context: ScriptContext) -> Bool {
+fn spend(datum: Datum, redeemer: Redeemer, context: ScriptContext) -> Bool {
   let must_say_hello = string.from_bytearray(redeemer.msg) == "Hello, World!"
 
   let must_be_signed =
