@@ -216,13 +216,21 @@ impl ToPlutusData for u64 {
 impl ToPlutusData for Value {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
-            Value::Coin(coin) => PlutusData::Map(KeyValuePairs::Def(vec![(
-                Bytes::from(vec![]).to_plutus_data(),
-                PlutusData::Map(KeyValuePairs::Def(vec![(
-                    AssetName::from(vec![]).to_plutus_data(),
-                    coin.to_plutus_data(),
-                )])),
-            )])),
+            Value::Coin(coin) => {
+                let map_value = PlutusData::Map(KeyValuePairs::Def(vec![(
+                    Bytes::from(vec![]).to_plutus_data(),
+                    PlutusData::Map(KeyValuePairs::Def(vec![(
+                        AssetName::from(vec![]).to_plutus_data(),
+                        coin.to_plutus_data(),
+                    )])),
+                )]));
+
+                PlutusData::Constr(Constr {
+                    tag: 121,
+                    any_constructor: None,
+                    fields: vec![map_value],
+                })
+            }
             Value::Multiasset(coin, multiassets) => {
                 let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![(
                     Bytes::from(vec![]).to_plutus_data(),
@@ -243,7 +251,11 @@ impl ToPlutusData for Value {
                     ));
                 }
 
-                PlutusData::Map(KeyValuePairs::Def(data_vec))
+                PlutusData::Constr(Constr {
+                    tag: 121,
+                    any_constructor: None,
+                    fields: vec![PlutusData::Map(KeyValuePairs::Def(data_vec))],
+                })
             }
         }
     }
@@ -270,7 +282,11 @@ impl ToPlutusData for MintValue {
             ));
         }
 
-        PlutusData::Map(KeyValuePairs::Def(data_vec))
+        PlutusData::Constr(Constr {
+            tag: 121,
+            any_constructor: None,
+            fields: vec![PlutusData::Map(KeyValuePairs::Def(data_vec))],
+        })
     }
 }
 
