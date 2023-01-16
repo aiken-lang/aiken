@@ -1234,7 +1234,7 @@ pub fn expr_parser(
                         .collect();
 
                     let call = expr::UntypedExpr::Call {
-                        location: span,
+                        location: expr.location().union(span),
                         fun: Box::new(expr),
                         arguments: args,
                     };
