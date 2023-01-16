@@ -171,7 +171,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     /// Emit a warning if the given expressions should not be discarded.
     /// e.g. because it's a literal (why was it made in the first place?)
     /// e.g. because it's of the `Result` type (errors should be handled)
-    fn expression_discarded(&mut self, discarded: &TypedExpr) {
+    fn _expression_discarded(&mut self, discarded: &TypedExpr) {
         if discarded.is_literal() {
             self.environment.warnings.push(Warning::UnusedLiteral {
                 location: discarded.location(),
@@ -1684,9 +1684,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let expression = self.infer(expression)?;
             // This isn't the final expression in the sequence, so call the
             // `expression_discarded` function to see if anything is being
-            // discarded that we think shouldn't be.
+            // discarded that we think shouldn't be. We also want to make sure
+            // that there are no implicitly discarded expressions
             if i < count - 1 {
-                self.expression_discarded(&expression);
+                // self.expression_discarded(&expression);
+
+                if !matches!(expression, TypedExpr::Assignment { .. }) {
+                    return Err(Error::ImplicityDiscardedExpression {
+                        location: expression.location(),
+                    });
+                }
             }
 
             expressions.push(expression);
