@@ -158,7 +158,7 @@ pub enum Air {
     Record {
         scope: Vec<u64>,
         constr_index: usize,
-        constr_type: Arc<Type>,
+        tipo: Arc<Type>,
         count: usize,
     },
 
@@ -260,6 +260,31 @@ impl Air {
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
             | Air::TupleClause { scope, .. } => scope.to_vec(),
+        }
+    }
+
+    pub fn tipo(&self) -> Option<Arc<Type>> {
+        match self {
+            Air::List { tipo, .. }
+            | Air::ListAccessor { tipo, .. }
+            | Air::ListExpose { tipo, .. }
+            | Air::Builtin { tipo, .. }
+            | Air::BinOp { tipo, .. }
+            | Air::When { tipo, .. }
+            | Air::Clause { tipo, .. }
+            | Air::ListClause { tipo, .. }
+            | Air::TupleClause { tipo, .. }
+            | Air::ClauseGuard { tipo, .. }
+            | Air::ListClauseGuard { tipo, .. }
+            | Air::Record { tipo, .. }
+            | Air::RecordAccess { tipo, .. }
+            | Air::Tuple { tipo, .. }
+            | Air::TupleIndex { tipo, .. }
+            | Air::Todo { tipo, .. }
+            | Air::ErrorTerm { tipo, .. }
+            | Air::Trace { tipo, .. }
+            | Air::TupleAccessor { tipo, .. } => Some(tipo.clone()),
+            _ => None,
         }
     }
 }

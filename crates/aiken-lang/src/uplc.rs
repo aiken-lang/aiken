@@ -4,7 +4,6 @@ use std::{
     vec,
 };
 
-use crate::tipo::TypeVar;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::{
@@ -23,13 +22,14 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Clause, DataType, Pattern, Span, TypedArg, TypedDataType,
+        ArgName, AssignmentKind, BinOp, Clause, Pattern, Span, TypedArg, TypedDataType,
         TypedFunction, UnOp,
     },
     builder::{
-        check_when_pattern_needs, constants_ir, convert_constants_to_data, convert_data_to_type,
-        convert_type_to_data, get_common_ancestor, get_generics_and_type, handle_func_deps_ir,
-        handle_recursion_ir, list_access_to_uplc, monomorphize, rearrange_clauses,
+        check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
+        convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
+        get_generics_and_type, handle_func_deps_ir, handle_recursion_ir, list_access_to_uplc,
+        lookup_data_type_by_tipo, monomorphize, rearrange_clauses, replace_opaque_type,
         wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     expr::TypedExpr,
@@ -82,6 +82,8 @@ impl<'a> CodeGenerator<'a> {
         self.build_ir(&body, &mut ir_stack, scope);
 
         self.define_ir(&mut ir_stack);
+
+        self.convert_opaque_type_to_inner_ir(&mut ir_stack);
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -210,7 +212,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Call {
                 fun, args, tipo, ..
             } => {
-                if let Some(data_type) = self.lookup_data_type_by_tipo(tipo) {
+                if let Some(data_type) = lookup_data_type_by_tipo(self.data_types.clone(), tipo) {
                     if let TypedExpr::Var { constructor, .. } = &**fun {
                         if let ValueConstructorVariant::Record {
                             name: constr_name, ..
@@ -226,7 +228,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::Record {
                                 scope: scope.clone(),
                                 constr_index,
-                                constr_type: constructor.tipo.clone(),
+                                tipo: constructor.tipo.clone(),
                                 count: args.len(),
                             });
 
@@ -841,7 +843,7 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 // find data type definition
-                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
+                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
                 let (index, _) = data_type
                     .constructors
@@ -1017,7 +1019,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
+                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
                 let (_, constructor_type) = data_type
                     .constructors
@@ -1335,7 +1337,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let id = self.id_gen.next();
                 let constr_var_name = format!("{constr_name}_{id}");
-                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
+                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
                 if data_type.constructors.len() > 1 {
                     pattern_vec.push(Air::ClauseGuard {
@@ -1448,7 +1450,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let data_type = self.lookup_data_type_by_tipo(tipo);
+                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo);
 
                 let (index, _) = data_type
                     .unwrap()
@@ -1601,7 +1603,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let data_type = self.lookup_data_type_by_tipo(tipo).unwrap();
+                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
                 let (_, constructor_type) = data_type
                     .constructors
                     .iter()
@@ -2260,10 +2262,385 @@ impl<'a> CodeGenerator<'a> {
             }
         }
 
-        //Still to be defined
+        // Still to be defined
         for func in to_be_defined_map.clone().iter() {
             let index_scope = func_index_map.get(func.0).unwrap();
             func_index_map.insert(func.0.clone(), get_common_ancestor(func.1, index_scope));
+        }
+    }
+
+    fn convert_opaque_type_to_inner_ir(&mut self, ir_stack: &mut Vec<Air>) {
+        for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
+            match ir {
+                Air::Var {
+                    scope,
+                    constructor,
+                    name,
+                    variant_name,
+                } => {
+                    let mut replaced_type = constructor.tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Var {
+                        scope,
+                        constructor: ValueConstructor {
+                            public: constructor.public,
+                            variant: constructor.variant,
+                            tipo: replaced_type,
+                        },
+                        name,
+                        variant_name,
+                    };
+                }
+                Air::List {
+                    tipo,
+                    scope,
+                    count,
+                    tail,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::List {
+                        scope,
+                        tipo: replaced_type,
+                        count,
+                        tail,
+                    };
+                }
+                Air::ListAccessor {
+                    tipo,
+                    scope,
+                    names,
+                    tail,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::ListAccessor {
+                        scope,
+                        tipo: replaced_type,
+                        names,
+                        tail,
+                    };
+                }
+                Air::ListExpose {
+                    tipo,
+                    scope,
+                    tail_head_names,
+                    tail,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::ListExpose {
+                        scope,
+                        tipo: replaced_type,
+                        tail_head_names,
+                        tail,
+                    };
+                }
+                Air::Builtin { tipo, scope, func } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Builtin {
+                        scope,
+                        func,
+                        tipo: replaced_type,
+                    };
+                }
+                Air::BinOp {
+                    tipo,
+                    scope,
+                    name,
+                    count,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::BinOp {
+                        scope,
+                        name,
+                        count,
+                        tipo: replaced_type,
+                    };
+                }
+                Air::When {
+                    tipo,
+                    scope,
+                    subject_name,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::When {
+                        scope,
+                        tipo: replaced_type,
+                        subject_name,
+                    };
+                }
+                Air::Clause {
+                    tipo,
+                    scope,
+                    subject_name,
+                    complex_clause,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Clause {
+                        scope,
+                        tipo: replaced_type,
+                        subject_name,
+                        complex_clause,
+                    };
+                }
+                Air::ListClause {
+                    tipo,
+                    scope,
+                    tail_name,
+                    next_tail_name,
+                    complex_clause,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::ListClause {
+                        scope,
+                        tipo: replaced_type,
+                        tail_name,
+                        next_tail_name,
+                        complex_clause,
+                    };
+                }
+                Air::TupleClause {
+                    tipo,
+                    scope,
+                    indices,
+                    predefined_indices,
+                    subject_name,
+                    count,
+                    complex_clause,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::TupleClause {
+                        scope,
+                        tipo: replaced_type,
+                        indices,
+                        predefined_indices,
+                        subject_name,
+                        count,
+                        complex_clause,
+                    };
+                }
+                Air::ClauseGuard {
+                    tipo,
+                    scope,
+                    subject_name,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::ClauseGuard {
+                        scope,
+                        subject_name,
+                        tipo: replaced_type,
+                    };
+                }
+                Air::ListClauseGuard {
+                    tipo,
+                    scope,
+                    tail_name,
+                    next_tail_name,
+                    inverse,
+                } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::ListClauseGuard {
+                        scope,
+                        tipo: replaced_type,
+                        tail_name,
+                        next_tail_name,
+                        inverse,
+                    };
+                }
+                Air::Tuple { tipo, scope, count } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Tuple {
+                        scope,
+                        tipo: replaced_type,
+                        count,
+                    };
+                }
+                Air::TupleIndex { tipo, scope, index } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::TupleIndex {
+                        scope,
+                        tipo: replaced_type,
+                        index,
+                    };
+                }
+                Air::Todo { tipo, scope, label } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Todo {
+                        scope,
+                        label,
+                        tipo: replaced_type,
+                    };
+                }
+                Air::ErrorTerm { tipo, scope, label } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::ErrorTerm {
+                        scope,
+                        tipo: replaced_type,
+                        label,
+                    };
+                }
+                Air::Trace { tipo, scope, text } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Trace {
+                        scope,
+                        text,
+                        tipo: replaced_type,
+                    };
+                }
+                Air::TupleAccessor { tipo, scope, names } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::TupleAccessor {
+                        scope,
+                        names,
+                        tipo: replaced_type,
+                    };
+                }
+                Air::Record {
+                    constr_index,
+                    tipo,
+                    count,
+                    scope,
+                } => {
+                    if check_replaceable_opaque_type(&tipo, self.data_types) {
+                        ir_stack.remove(index);
+                    } else {
+                        let mut replaced_type = tipo.clone();
+                        replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                        ir_stack[index] = Air::Record {
+                            scope,
+                            constr_index,
+                            tipo: replaced_type,
+                            count,
+                        };
+                    }
+                }
+                Air::RecordAccess {
+                    index: record_field_index,
+                    tipo,
+                    scope,
+                } => {
+                    let record = ir_stack[index + 1].clone();
+                    let record_type = record.tipo();
+                    if let Some(record_type) = record_type {
+                        if check_replaceable_opaque_type(&record_type, self.data_types) {
+                            ir_stack.remove(index);
+                        } else {
+                            let mut replaced_type = tipo.clone();
+                            replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                            ir_stack[index] = Air::RecordAccess {
+                                scope,
+                                index: record_field_index,
+                                tipo: replaced_type,
+                            };
+                        }
+                    } else {
+                        let mut replaced_type = tipo.clone();
+                        replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                        ir_stack[index] = Air::RecordAccess {
+                            scope,
+                            index: record_field_index,
+                            tipo: replaced_type,
+                        };
+                    }
+                }
+                Air::FieldsExpose {
+                    count,
+                    indices,
+                    scope,
+                } => {
+                    let record = ir_stack[index + 1].clone();
+                    let record_type = record.tipo();
+                    if let Some(record_type) = record_type {
+                        if check_replaceable_opaque_type(&record_type, self.data_types) {
+                            ir_stack[index] = Air::Lam {
+                                scope,
+                                name: indices[0].1.clone(),
+                            };
+                        } else {
+                            let mut new_indices = vec![];
+                            for (ind, name, tipo) in indices {
+                                let mut replaced_type = tipo.clone();
+                                replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                                new_indices.push((ind, name, replaced_type));
+                            }
+
+                            ir_stack[index] = Air::FieldsExpose {
+                                scope,
+                                indices: new_indices,
+                                count,
+                            };
+                        }
+                    } else {
+                        let mut new_indices = vec![];
+                        for (ind, name, tipo) in indices {
+                            let mut replaced_type = tipo.clone();
+                            replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                            new_indices.push((ind, name, replaced_type));
+                        }
+
+                        ir_stack[index] = Air::FieldsExpose {
+                            scope,
+                            indices: new_indices,
+                            count,
+                        };
+                    }
+                }
+                Air::RecordUpdate {
+                    highest_index,
+                    indices,
+                    scope,
+                } => {
+                    let mut new_indices = vec![];
+                    for (ind, tipo) in indices {
+                        let mut replaced_type = tipo.clone();
+                        replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                        new_indices.push((ind, replaced_type));
+                    }
+
+                    ir_stack[index] = Air::RecordUpdate {
+                        scope,
+                        indices: new_indices,
+                        highest_index,
+                    };
+                }
+                _ => {}
+            }
         }
     }
 
@@ -2342,8 +2719,11 @@ impl<'a> CodeGenerator<'a> {
                         } else if constructor.tipo.is_void() {
                             arg_stack.push(Term::Constant(UplcConstant::Unit));
                         } else {
-                            let data_type =
-                                self.lookup_data_type_by_tipo(&constructor.tipo).unwrap();
+                            let data_type = lookup_data_type_by_tipo(
+                                self.data_types.clone(),
+                                &constructor.tipo,
+                            )
+                            .unwrap();
 
                             let (constr_index, _) = data_type
                                 .constructors
@@ -3503,7 +3883,7 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::Record {
                 constr_index,
-                constr_type,
+                tipo,
                 count,
                 ..
             } => {
@@ -3518,10 +3898,7 @@ impl<'a> CodeGenerator<'a> {
                     term = apply_wrap(
                         apply_wrap(
                             Term::Builtin(DefaultFunction::MkCons).force_wrap(),
-                            convert_type_to_data(
-                                arg.clone(),
-                                &constr_type.arg_types().unwrap()[index],
-                            ),
+                            convert_type_to_data(arg.clone(), &tipo.arg_types().unwrap()[index]),
                         ),
                         term,
                     );
@@ -4270,37 +4647,6 @@ impl<'a> CodeGenerator<'a> {
                 }
                 arg_stack.push(term);
             }
-        }
-    }
-
-    fn lookup_data_type_by_tipo(&self, tipo: &Type) -> Option<&&DataType<Arc<Type>>> {
-        match tipo {
-            Type::Fn { ret, .. } => match ret.as_ref() {
-                Type::App { module, name, .. } => {
-                    let data_type_key = DataTypeKey {
-                        module_name: module.clone(),
-                        defined_type: name.clone(),
-                    };
-                    self.data_types.get(&data_type_key)
-                }
-                _ => unreachable!(),
-            },
-            Type::App { module, name, .. } => {
-                let data_type_key = DataTypeKey {
-                    module_name: module.clone(),
-                    defined_type: name.clone(),
-                };
-
-                self.data_types.get(&data_type_key)
-            }
-            Type::Var { tipo } => {
-                if let TypeVar::Link { tipo } = &*tipo.borrow() {
-                    self.lookup_data_type_by_tipo(tipo)
-                } else {
-                    None
-                }
-            }
-            _ => None,
         }
     }
 }
