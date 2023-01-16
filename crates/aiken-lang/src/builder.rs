@@ -18,7 +18,7 @@ use uplc::{
 
 use crate::{
     air::Air,
-    ast::{Clause, Constant, Pattern, Span, TypedArg},
+    ast::{Clause, Constant, DataType, Pattern, Span, TypedArg, TypedDataType},
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
 };
@@ -1221,16 +1221,16 @@ pub fn monomorphize(
             Air::Record {
                 scope,
                 constr_index,
-                constr_type,
+                tipo,
                 count,
             } => {
-                if constr_type.is_generic() {
-                    let mut constr_type = constr_type.clone();
-                    find_generics_to_replace(&mut constr_type, &generic_types);
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::Record {
                         scope,
-                        constr_type,
+                        tipo,
                         constr_index,
                         count,
                     };
@@ -1472,6 +1472,122 @@ pub fn handle_recursion_ir(
                 }
             }
             _ => unreachable!(),
+        }
+    }
+}
+
+pub fn lookup_data_type_by_tipo(
+    data_types: HashMap<DataTypeKey, &TypedDataType>,
+    tipo: &Type,
+) -> Option<DataType<Arc<Type>>> {
+    match tipo {
+        Type::Fn { ret, .. } => match ret.as_ref() {
+            Type::App { module, name, .. } => {
+                let data_type_key = DataTypeKey {
+                    module_name: module.clone(),
+                    defined_type: name.clone(),
+                };
+                data_types.get(&data_type_key).map(|item| (*item).clone())
+            }
+            _ => None,
+        },
+        Type::App { module, name, .. } => {
+            let data_type_key = DataTypeKey {
+                module_name: module.clone(),
+                defined_type: name.clone(),
+            };
+
+            data_types.get(&data_type_key).map(|item| (*item).clone())
+        }
+        Type::Var { tipo } => {
+            if let TypeVar::Link { tipo } = &*tipo.borrow() {
+                lookup_data_type_by_tipo(data_types, tipo)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+pub fn check_replaceable_opaque_type(
+    t: &Arc<Type>,
+    data_types: &HashMap<DataTypeKey, &TypedDataType>,
+) -> bool {
+    let data_type = lookup_data_type_by_tipo(data_types.clone(), t);
+    let args = t.arg_types();
+    if let Some(args) = args {
+        if let Some(data_type) = data_type {
+            args.len() == 1 && data_type.opaque && data_type.constructors.len() == 1
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: HashMap<DataTypeKey, &TypedDataType>) {
+    if check_replaceable_opaque_type(t, &data_types) {
+        let new_args = t.arg_types();
+        let mut new_type = new_args.unwrap()[0].clone();
+        replace_opaque_type(&mut new_type, data_types.clone());
+        *t = new_type;
+    } else {
+        match (**t).clone() {
+            Type::App {
+                public,
+                module,
+                name,
+                args,
+            } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let mut new_arg_type = arg.clone();
+                    replace_opaque_type(&mut new_arg_type, data_types.clone());
+                    new_args.push(new_arg_type);
+                }
+                *t = Type::App {
+                    public,
+                    module,
+                    name,
+                    args: new_args,
+                }
+                .into();
+            }
+            Type::Fn { args, ret } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let mut new_arg_type = arg.clone();
+                    replace_opaque_type(&mut new_arg_type, data_types.clone());
+                    new_args.push(new_arg_type);
+                }
+
+                let mut new_ret = ret;
+                replace_opaque_type(&mut new_ret, data_types.clone());
+
+                *t = Type::Fn {
+                    args: new_args,
+                    ret: new_ret,
+                }
+                .into();
+            }
+            Type::Var { tipo } => {
+                if let TypeVar::Link { tipo } = &*tipo.borrow() {
+                    let mut new_type = tipo.clone();
+                    replace_opaque_type(&mut new_type, data_types.clone());
+                    *t = new_type;
+                }
+            }
+            Type::Tuple { elems } => {
+                let mut new_elems = vec![];
+                for arg in elems {
+                    let mut new_arg_type = arg.clone();
+                    replace_opaque_type(&mut new_arg_type, data_types.clone());
+                    new_elems.push(new_arg_type);
+                }
+                *t = Type::Tuple { elems: new_elems }.into();
+            }
         }
     }
 }
