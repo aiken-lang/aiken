@@ -1911,3 +1911,40 @@ fn function_ambiguous_sequence() {
         ],
     )
 }
+
+#[test]
+fn tuple_type_alias() {
+    let code = indoc! {r#"
+          type RoyaltyToken =
+            (PolicyId, AssetName)
+        "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::TypeAlias(TypeAlias {
+            alias: "RoyaltyToken".to_string(),
+            annotation: ast::Annotation::Tuple {
+                location: Span::new((), 22..43),
+                elems: vec![
+                    ast::Annotation::Constructor {
+                        location: Span::new((), 23..31),
+                        module: None,
+                        name: "PolicyId".to_string(),
+                        arguments: vec![],
+                    },
+                    ast::Annotation::Constructor {
+                        location: Span::new((), 33..42),
+                        module: None,
+                        name: "AssetName".to_string(),
+                        arguments: vec![],
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..43),
+            parameters: vec![],
+            public: false,
+            tipo: (),
+        })],
+    )
+}
