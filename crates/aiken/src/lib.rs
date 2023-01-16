@@ -32,21 +32,29 @@ where
         warning.report()
     }
 
+    let plural = if warning_count == 1 { "" } else { "s" };
+
     if let Err(err) = build_result {
         err.report();
         println!("\n{}", "Summary".purple().bold());
-        println!(
-            "    {} error(s), {}",
-            err.len(),
-            format!("{warning_count} warning(s)").yellow(),
-        );
+
+        let warning_text = format!("{warning_count} warning{}", plural);
+
+        let plural = if err.len() == 1 { "" } else { "s" };
+
+        let error_text = format!("{} error{}", err.len(), plural);
+
+        let full_summary = format!("    {}, {}", error_text.red(), warning_text.yellow());
+
+        println!("{}", full_summary);
+
         process::exit(1);
     } else {
         println!("\n{}", "Summary".purple().bold());
-        println!(
-            "    0 error, {}",
-            format!("{warning_count} warning(s)").yellow(),
-        );
+
+        let warning_text = format!("{warning_count} warning{}", plural);
+
+        println!("    0 errors, {}", warning_text.yellow(),);
     }
     Ok(())
 }
