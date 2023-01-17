@@ -24,6 +24,11 @@ pub enum Air {
         bytes: Vec<u8>,
     },
 
+    Bool {
+        scope: Vec<u64>,
+        value: bool,
+    },
+
     Var {
         scope: Vec<u64>,
         constructor: ValueConstructor,
@@ -228,6 +233,7 @@ impl Air {
             Air::Int { scope, .. }
             | Air::String { scope, .. }
             | Air::ByteArray { scope, .. }
+            | Air::Bool { scope, .. }
             | Air::Var { scope, .. }
             | Air::List { scope, .. }
             | Air::ListAccessor { scope, .. }
