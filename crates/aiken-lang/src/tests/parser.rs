@@ -1054,7 +1054,7 @@ fn call() {
                                 location: Span::new((), 23..30),
                                 name: "add_one".to_string(),
                             }),
-                            location: Span::new((), 30..33),
+                            location: Span::new((), 23..33),
                         }),
                         pattern: ast::Pattern::Var {
                             location: Span::new((), 19..20),
@@ -1066,7 +1066,7 @@ fn call() {
                     expr::UntypedExpr::Assignment {
                         location: Span::new((), 37..82),
                         value: Box::new(expr::UntypedExpr::Fn {
-                            location: Span::new((), 61..82),
+                            location: Span::new((), 53..82),
                             is_capture: true,
                             arguments: vec![ast::Arg {
                                 arg_name: ast::ArgName::Named {
@@ -1128,7 +1128,7 @@ fn call() {
                                         name: "list".to_string(),
                                     }),
                                 }),
-                                location: Span::new((), 61..82),
+                                location: Span::new((), 53..82),
                             }),
                             return_annotation: None,
                         }),
@@ -1166,7 +1166,7 @@ fn call() {
                             location: Span::new((), 86..95),
                             name: "map_add_x".to_string(),
                         }),
-                        location: Span::new((), 95..108),
+                        location: Span::new((), 86..108),
                     },
                 ],
             },
@@ -1574,7 +1574,7 @@ fn parse_tuple2() {
                                 location: Span::new((), 21..24),
                                 name: "foo".to_string(),
                             }),
-                            location: Span::new((), 24..28),
+                            location: Span::new((), 21..28),
                         }),
                         pattern: ast::Pattern::Var {
                             location: Span::new((), 17..18),
@@ -1703,7 +1703,7 @@ fn function_invoke() {
                     name: "a".to_string(),
                 },
                 value: Box::new(expr::UntypedExpr::Call {
-                    location: Span::new((), 24..28),
+                    location: Span::new((), 21..28),
                     fun: Box::new(expr::UntypedExpr::Var {
                         location: Span::new((), 21..24),
                         name: "bar".to_string(),
@@ -1869,7 +1869,7 @@ fn function_ambiguous_sequence() {
                                     location: Span::new((), 130..133),
                                     name: "bar".to_string(),
                                 }),
-                                location: Span::new((), 133..137),
+                                location: Span::new((), 130..137),
                             }),
                             pattern: ast::Pattern::Var {
                                 location: Span::new((), 126..127),
