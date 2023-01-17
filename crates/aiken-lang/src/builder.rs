@@ -1180,6 +1180,31 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
+            Air::TupleClause {
+                scope,
+                tipo,
+                indices,
+                predefined_indices,
+                subject_name,
+                count,
+                complex_clause,
+            } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::TupleClause {
+                        scope,
+                        tipo,
+                        indices,
+                        predefined_indices,
+                        subject_name,
+                        count,
+                        complex_clause,
+                    };
+                    needs_variant = true;
+                }
+            }
             Air::ClauseGuard {
                 tipo,
                 scope,
@@ -1218,6 +1243,59 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
+            Air::Tuple { scope, tipo, count } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::Tuple { scope, tipo, count };
+                    needs_variant = true;
+                }
+            }
+            Air::TupleIndex {
+                scope,
+                tipo,
+                tuple_index,
+            } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::TupleIndex {
+                        scope,
+                        tipo,
+                        tuple_index,
+                    };
+                    needs_variant = true;
+                }
+            }
+            Air::Todo { scope, label, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::Todo { scope, tipo, label };
+                    needs_variant = true;
+                }
+            }
+            Air::ErrorTerm { scope, label, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::ErrorTerm { scope, tipo, label };
+                    needs_variant = true;
+                }
+            }
+            Air::Trace { scope, text, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::Trace { scope, tipo, text };
+                    needs_variant = true;
+                }
+            }
             Air::Record {
                 scope,
                 constr_index,
@@ -1237,10 +1315,9 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-
             Air::RecordAccess {
                 scope,
-                index: record_index,
+                record_index,
                 tipo,
             } => {
                 if tipo.is_generic() {
@@ -1249,7 +1326,7 @@ pub fn monomorphize(
 
                     new_air[index] = Air::RecordAccess {
                         scope,
-                        index: record_index,
+                        record_index,
                         tipo,
                     };
                     needs_variant = true;
@@ -1276,24 +1353,6 @@ pub fn monomorphize(
                     count,
                     indices: new_indices,
                 };
-            }
-            Air::Tuple { scope, tipo, count } => {
-                if tipo.is_generic() {
-                    let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
-
-                    new_air[index] = Air::Tuple { scope, count, tipo };
-                    needs_variant = true;
-                }
-            }
-            Air::Todo { scope, label, tipo } => {
-                if tipo.is_generic() {
-                    let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
-
-                    new_air[index] = Air::Todo { scope, label, tipo };
-                    needs_variant = true;
-                }
             }
             Air::RecordUpdate {
                 scope,
@@ -1323,31 +1382,6 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::TupleAccessor { scope, names, tipo };
-                    needs_variant = true;
-                }
-            }
-            Air::TupleClause {
-                scope,
-                tipo,
-                indices,
-                predefined_indices,
-                subject_name,
-                count,
-                complex_clause,
-            } => {
-                if tipo.is_generic() {
-                    let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
-
-                    new_air[index] = Air::TupleClause {
-                        scope,
-                        tipo,
-                        indices,
-                        predefined_indices,
-                        subject_name,
-                        count,
-                        complex_clause,
-                    };
                     needs_variant = true;
                 }
             }
@@ -1515,24 +1549,34 @@ pub fn check_replaceable_opaque_type(
     data_types: &HashMap<DataTypeKey, &TypedDataType>,
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types.clone(), t);
-    let args = t.arg_types();
-    if let Some(args) = args {
-        if let Some(data_type) = data_type {
-            args.len() == 1 && data_type.opaque && data_type.constructors.len() == 1
-        } else {
-            false
-        }
+
+    if let Some(data_type) = data_type {
+        let data_type_args = data_type.constructors[0].arguments.clone();
+        data_type_args.len() == 1 && data_type.opaque && data_type.constructors.len() == 1
     } else {
         false
     }
 }
 
 pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: HashMap<DataTypeKey, &TypedDataType>) {
-    if check_replaceable_opaque_type(t, &data_types) {
-        let new_args = t.arg_types();
-        let mut new_type = new_args.unwrap()[0].clone();
-        replace_opaque_type(&mut new_type, data_types.clone());
-        *t = new_type;
+    if check_replaceable_opaque_type(t, &data_types) && matches!(&**t, Type::App { .. }) {
+        let data_type = lookup_data_type_by_tipo(data_types.clone(), t).unwrap();
+        let new_type_fields = data_type.typed_parameters.clone();
+
+        let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
+
+        for (tipo, param) in new_type_fields.iter().zip(t.arg_types().unwrap()) {
+            let mut map = generics_type_map.into_iter().collect_vec();
+            map.append(&mut get_generics_and_type(tipo, &param));
+            generics_type_map = map.into_iter().collect();
+        }
+
+        let mut generic_type = data_type.constructors[0].arguments[0].tipo.clone();
+
+        find_generics_to_replace(&mut generic_type, &generics_type_map);
+
+        replace_opaque_type(&mut generic_type, data_types.clone());
+        *t = generic_type;
     } else {
         match (**t).clone() {
             Type::App {
