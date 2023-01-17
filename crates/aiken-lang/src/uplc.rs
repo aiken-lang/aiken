@@ -444,7 +444,7 @@ impl<'a> CodeGenerator<'a> {
 
                 ir_stack.push(Air::RecordAccess {
                     scope: scope.clone(),
-                    index: *index,
+                    record_index: *index,
                     tipo: tipo.clone(),
                 });
 
@@ -583,7 +583,7 @@ impl<'a> CodeGenerator<'a> {
                 ir_stack.push(Air::TupleIndex {
                     scope: scope.clone(),
                     tipo: tuple.tipo(),
-                    index: *index,
+                    tuple_index: *index,
                 });
 
                 self.build_ir(tuple, ir_stack, scope);
@@ -1884,6 +1884,9 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut final_zero_arg_ir = dep_ir;
                 final_zero_arg_ir.extend(funt_comp.ir.clone());
+
+                self.convert_opaque_type_to_inner_ir(&mut final_zero_arg_ir);
+
                 self.zero_arg_functions.insert(func, final_zero_arg_ir);
 
                 for (key, val) in defined_functions.into_iter() {
@@ -2270,7 +2273,8 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn convert_opaque_type_to_inner_ir(&mut self, ir_stack: &mut Vec<Air>) {
-        for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
+        let mut indices_to_remove = vec![];
+        for (index, ir) in ir_stack.clone().into_iter().enumerate() {
             match ir {
                 Air::Var {
                     scope,
@@ -2478,14 +2482,18 @@ impl<'a> CodeGenerator<'a> {
                         count,
                     };
                 }
-                Air::TupleIndex { tipo, scope, index } => {
+                Air::TupleIndex {
+                    tipo,
+                    scope,
+                    tuple_index,
+                } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
                     ir_stack[index] = Air::TupleIndex {
                         scope,
                         tipo: replaced_type,
-                        index,
+                        tuple_index,
                     };
                 }
                 Air::Todo { tipo, scope, label } => {
@@ -2528,6 +2536,24 @@ impl<'a> CodeGenerator<'a> {
                         tipo: replaced_type,
                     };
                 }
+                Air::RecordUpdate {
+                    highest_index,
+                    indices,
+                    scope,
+                } => {
+                    let mut new_indices = vec![];
+                    for (ind, tipo) in indices {
+                        let mut replaced_type = tipo.clone();
+                        replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                        new_indices.push((ind, replaced_type));
+                    }
+
+                    ir_stack[index] = Air::RecordUpdate {
+                        scope,
+                        indices: new_indices,
+                        highest_index,
+                    };
+                }
                 Air::Record {
                     constr_index,
                     tipo,
@@ -2535,7 +2561,7 @@ impl<'a> CodeGenerator<'a> {
                     scope,
                 } => {
                     if check_replaceable_opaque_type(&tipo, self.data_types) {
-                        ir_stack.remove(index);
+                        indices_to_remove.push(index);
                     } else {
                         let mut replaced_type = tipo.clone();
                         replace_opaque_type(&mut replaced_type, self.data_types.clone());
@@ -2549,7 +2575,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 Air::RecordAccess {
-                    index: record_field_index,
+                    record_index,
                     tipo,
                     scope,
                 } => {
@@ -2557,14 +2583,14 @@ impl<'a> CodeGenerator<'a> {
                     let record_type = record.tipo();
                     if let Some(record_type) = record_type {
                         if check_replaceable_opaque_type(&record_type, self.data_types) {
-                            ir_stack.remove(index);
+                            indices_to_remove.push(index);
                         } else {
                             let mut replaced_type = tipo.clone();
                             replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
                             ir_stack[index] = Air::RecordAccess {
                                 scope,
-                                index: record_field_index,
+                                record_index,
                                 tipo: replaced_type,
                             };
                         }
@@ -2574,7 +2600,7 @@ impl<'a> CodeGenerator<'a> {
 
                         ir_stack[index] = Air::RecordAccess {
                             scope,
-                            index: record_field_index,
+                            record_index,
                             tipo: replaced_type,
                         };
                     }
@@ -2621,26 +2647,12 @@ impl<'a> CodeGenerator<'a> {
                         };
                     }
                 }
-                Air::RecordUpdate {
-                    highest_index,
-                    indices,
-                    scope,
-                } => {
-                    let mut new_indices = vec![];
-                    for (ind, tipo) in indices {
-                        let mut replaced_type = tipo.clone();
-                        replace_opaque_type(&mut replaced_type, self.data_types.clone());
-                        new_indices.push((ind, replaced_type));
-                    }
-
-                    ir_stack[index] = Air::RecordUpdate {
-                        scope,
-                        indices: new_indices,
-                        highest_index,
-                    };
-                }
                 _ => {}
             }
+        }
+
+        for index in indices_to_remove.into_iter().rev() {
+            ir_stack.remove(index);
         }
     }
 
@@ -3931,7 +3943,9 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::RecordAccess { index, tipo, .. } => {
+            Air::RecordAccess {
+                record_index, tipo, ..
+            } => {
                 let constr = arg_stack.pop().unwrap();
 
                 let mut term = apply_wrap(
@@ -3948,7 +3962,7 @@ impl<'a> CodeGenerator<'a> {
                             constr,
                         ),
                     ),
-                    Term::Constant(UplcConstant::Integer(index.into())),
+                    Term::Constant(UplcConstant::Integer(record_index.into())),
                 );
 
                 term = convert_data_to_type(term, &tipo);
@@ -4352,11 +4366,13 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::TupleIndex { tipo, index, .. } => {
+            Air::TupleIndex {
+                tipo, tuple_index, ..
+            } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) {
-                    if index == 0 {
+                    if tuple_index == 0 {
                         term = convert_data_to_type(
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::FstPair)
@@ -4387,7 +4403,7 @@ impl<'a> CodeGenerator<'a> {
                             }),
                             term,
                         ),
-                        Term::Constant(UplcConstant::Integer(index as i128)),
+                        Term::Constant(UplcConstant::Integer(tuple_index as i128)),
                     );
                 }
 

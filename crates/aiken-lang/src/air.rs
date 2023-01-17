@@ -164,7 +164,7 @@ pub enum Air {
 
     RecordAccess {
         scope: Vec<u64>,
-        index: u64,
+        record_index: u64,
         tipo: Arc<Type>,
     },
 
@@ -183,7 +183,7 @@ pub enum Air {
     TupleIndex {
         scope: Vec<u64>,
         tipo: Arc<Type>,
-        index: usize,
+        tuple_index: usize,
     },
 
     Todo {
@@ -283,7 +283,11 @@ impl Air {
             | Air::Todo { tipo, .. }
             | Air::ErrorTerm { tipo, .. }
             | Air::Trace { tipo, .. }
-            | Air::TupleAccessor { tipo, .. } => Some(tipo.clone()),
+            | Air::TupleAccessor { tipo, .. }
+            | Air::Var {
+                constructor: ValueConstructor { tipo, .. },
+                ..
+            } => Some(tipo.clone()),
             _ => None,
         }
     }
