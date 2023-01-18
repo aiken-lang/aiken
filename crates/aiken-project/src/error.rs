@@ -323,7 +323,7 @@ impl Diagnostic for Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
-            Error::UnknownPackageVersion{..} => None,
+            Error::UnknownPackageVersion{..} => Some(Box::new("Perhaps, double-check the package repository and version?")),
         }
     }
 

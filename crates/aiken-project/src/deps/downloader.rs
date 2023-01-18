@@ -78,13 +78,19 @@ impl<'a> Downloader<'a> {
             .get(url)
             .header("User-Agent", "aiken-lang")
             .send()
-            .await?
-            .bytes()
             .await?;
+
+        if response.status().as_u16() >= 400 {
+            return Err(Error::UnknownPackageVersion {
+                package: package.clone(),
+            });
+        }
+
+        let bytes = response.bytes().await?;
 
         // let PackageSource::Github { url } = &package.source;
 
-        tokio::fs::write(&zipball_path, response).await?;
+        tokio::fs::write(&zipball_path, bytes).await?;
 
         Ok(true)
     }

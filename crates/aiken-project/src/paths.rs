@@ -37,6 +37,7 @@ pub fn default_aiken_cache() -> PathBuf {
         .join("aiken")
 }
 
+#[derive(Debug)]
 pub struct CacheKey {
     key: String,
 }
