@@ -20,7 +20,7 @@ jobs:
       run: cargo test --verbose --workspace
     - name: Run acceptance tests
       working-directory: examples/acceptance_tests
-      run: for scenario in $(find . -maxdepth 1 -mindepth 1 -type d); bash run -- $scenario;
+      run: bash ci
       shell: bash
     - name: Format
       run: cargo fmt --all -- --check
