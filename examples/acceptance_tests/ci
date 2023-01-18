@@ -1,5 +1,5 @@
 for scenario in $(find . -maxdepth 1 -mindepth 1 -type d)
 do
-	./run -- $scenario
+	./run $scenario
 done
 
