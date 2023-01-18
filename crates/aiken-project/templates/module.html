@@ -46,7 +46,7 @@
     <div class="member-name">
       <h2 id="{{ type_info.name }}">
         <a href="#{{ type_info.name }}">
-          {{ type_info.name }}
+	  {{ type_info.name }}{% if !type_info.parameters.is_empty() %}&lt;{{ type_info.parameters.join(", ") }}&gt;{% endif %}
         </a>
       </h2>
       {% if !type_info.source_url.is_empty() %}
@@ -59,46 +59,29 @@
     </div>
     <div class="custom-type-constructors">
       <div class="rendered-markdown">{{ type_info.documentation|safe }}</div>
-      <pre><code class="hljs aiken">{{ type_info.definition }}</code></pre>
       {% if !type_info.constructors.is_empty() %}
-      <h3>
-        Constructors
-      </h3>
+      <h3>Constructors</h3>
       <ul class="constructor-list">
         {% for constructor in type_info.constructors %}
         <li class="constructor-item">
           <div class="constructor-row">
-            <svg class="icon icon-star"><use xlink:href="#icon-star"></use></svg>
+            <svg class="icon icon-box"><use xlink:href="#icon-box"></use></svg>
             <pre class="constructor-name"><code class="hljs aiken">{{ constructor.definition }}</code></pre>
           </div>
-
+	  {% if !constructor.documentation.is_empty() %}
           <div class="constructor-item-docs">
             {{ constructor.documentation|safe }}
-
-            {% if !constructor.arguments.is_empty() %}
-            <h4>
-              Arguments
-            </h4>
-
-            <ul class="constructor-argument-list">
-            {% for argument in constructor.arguments %}
-              <li>
-                <div class="constructor-argument-item">
-                  <p class="constructor-argument-label">
-                    <i>{{ argument.label }}</i>
-                  </p>
-                  <div class="constructor-argument-doc">
-                    {{ argument.documentation|safe }}
-                  </div>
-                </div>
-              </li>
-            {% endfor %}
-            </ul>
-            {% endif %}
           </div>
+	  {% endif %}
         </li>
         {% endfor %}
       </ul>
+      {% else if !type_info.opaque %}
+      <h3>Alias</h3>
+      <div class="constructor-row">
+        <svg class="icon icon-at"><use xlink:href="#icon-at"></use></svg>
+        <pre class="constructor-name"><code class="hljs aiken">{{ type_info.definition }}</code></pre>
+      </div>
       {% endif %}
     </div>
   </div>
@@ -115,11 +98,7 @@
   {% for constant in constants %}
   <div class="member">
     <div class="member-name">
-      <h2 id="{{ constant.name }}">
-        <a href="#{{ constant.name }}">
-          {{ constant.name }}
-        </a>
-      </h2>
+      <h2 id="{{ constant.name }}"><pre class="hljs language-aiken">{{ constant.definition }}</pre></h2>
       {% if !constant.source_url.is_empty() %}
       <!-- TODO: support source linking
       <a class="member-source" alt="View Source" title="View Source" href="{{ constant.source_url|safe }}">
@@ -128,7 +107,6 @@
       -->
       {% endif %}
     </div>
-    <pre><code class="hljs aiken">{{ constant.definition }}</code></pre>
     <div class="rendered-markdown">{{ constant.documentation|safe }}</div>
   </div>
   {% endfor %}
@@ -143,11 +121,7 @@
   {% for function in functions %}
   <div class="member">
     <div class="member-name">
-      <h2 id="{{ function.name }}">
-        <a href="#{{ function.name }}">
-          {{ function.name }}
-        </a>
-      </h2>
+      <h2 id="{{ function.name }}"><pre class="hljs language-aiken">{{ function.signature }}</pre></h2>
       {% if !function.source_url.is_empty() %}
       <!-- TODO: support source linking
       <a class="member-source" alt="View Source" title="View Source" href="{{ function.source_url|safe }}">
@@ -156,7 +130,6 @@
       -->
       {% endif %}
     </div>
-    <pre><code class="hljs aiken">{{ function.signature }}</code></pre>
     <div class="rendered-markdown">{{ function.documentation|safe }}</div>
   </div>
   {% endfor %}

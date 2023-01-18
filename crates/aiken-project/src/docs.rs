@@ -3,7 +3,7 @@ use crate::{
     module::CheckedModule,
 };
 use aiken_lang::{
-    ast::{Definition, RecordConstructor, RecordConstructorArg, TypedDefinition},
+    ast::{Definition, RecordConstructor, TypedDefinition},
     format,
     tipo::Type,
 };
@@ -336,7 +336,7 @@ impl SearchIndex {
         SearchIndex {
             doc: module.name.to_string(),
             title: function.name.to_string(),
-            content: format!("{}\n{}", function.signature, function.documentation),
+            content: format!("{}\n{}", function.signature, function.raw_documentation),
             url: format!("{}.html#{}", module.name, function.name),
         }
     }
@@ -346,14 +346,9 @@ impl SearchIndex {
             .constructors
             .iter()
             .map(|constructor| {
-                let arguments = constructor
-                    .arguments
-                    .iter()
-                    .map(|argument| format!("{}\n{}", argument.label, argument.documentation))
-                    .join("\n");
                 format!(
-                    "{}\n{}\n{}",
-                    constructor.definition, constructor.documentation, arguments
+                    "{}\n{}",
+                    constructor.definition, constructor.raw_documentation
                 )
             })
             .join("\n");
@@ -363,7 +358,7 @@ impl SearchIndex {
             title: type_info.name.to_string(),
             content: format!(
                 "{}\n{}\n{}",
-                type_info.definition, type_info.documentation, constructors,
+                type_info.definition, type_info.raw_documentation, constructors,
             ),
             url: format!("{}.html#{}", module.name, type_info.name),
         }
@@ -373,7 +368,7 @@ impl SearchIndex {
         SearchIndex {
             doc: module.name.to_string(),
             title: constant.name.to_string(),
-            content: format!("{}\n{}", constant.definition, constant.documentation),
+            content: format!("{}\n{}", constant.definition, constant.raw_documentation),
             url: format!("{}.html#{}", module.name, constant.name),
         }
     }
@@ -393,6 +388,7 @@ struct DocFunction {
     name: String,
     signature: String,
     documentation: String,
+    raw_documentation: String,
     source_url: String,
 }
 
@@ -406,6 +402,7 @@ impl DocFunction {
                     .as_deref()
                     .map(render_markdown)
                     .unwrap_or_default(),
+                raw_documentation: func_def.doc.as_deref().unwrap_or_default().to_string(),
                 signature: format::Formatter::new()
                     .docs_fn_signature(
                         &func_def.name,
@@ -426,6 +423,7 @@ struct DocConstant {
     name: String,
     definition: String,
     documentation: String,
+    raw_documentation: String,
     source_url: String,
 }
 
@@ -439,6 +437,7 @@ impl DocConstant {
                     .as_deref()
                     .map(render_markdown)
                     .unwrap_or_default(),
+                raw_documentation: const_def.doc.as_deref().unwrap_or_default().to_string(),
                 definition: format::Formatter::new()
                     .docs_const_expr(&const_def.name, &const_def.value)
                     .to_pretty_string(MAX_COLUMNS),
@@ -454,7 +453,10 @@ struct DocType {
     name: String,
     definition: String,
     documentation: String,
+    raw_documentation: String,
     constructors: Vec<DocTypeConstructor>,
+    parameters: Vec<String>,
+    opaque: bool,
     source_url: String,
 }
 
@@ -467,7 +469,10 @@ impl DocType {
                     .docs_type_alias(&info.alias, &info.parameters, &info.annotation)
                     .to_pretty_string(MAX_COLUMNS),
                 documentation: info.doc.as_deref().map(render_markdown).unwrap_or_default(),
+                raw_documentation: info.doc.as_deref().unwrap_or_default().to_string(),
                 constructors: vec![],
+                parameters: info.parameters.clone(),
+                opaque: false,
                 source_url: "#todo".to_string(),
             }),
 
@@ -482,11 +487,14 @@ impl DocType {
                     )
                     .to_pretty_string(MAX_COLUMNS),
                 documentation: info.doc.as_deref().map(render_markdown).unwrap_or_default(),
+                raw_documentation: info.doc.as_deref().unwrap_or_default().to_string(),
                 constructors: info
                     .constructors
                     .iter()
                     .map(DocTypeConstructor::from_record_constructor)
                     .collect(),
+                parameters: info.parameters.clone(),
+                opaque: info.opaque,
                 source_url: "#todo".to_string(),
             }),
 
@@ -496,7 +504,10 @@ impl DocType {
                     .docs_opaque_data_type(&info.name, &info.parameters, &info.location)
                     .to_pretty_string(MAX_COLUMNS),
                 documentation: info.doc.as_deref().map(render_markdown).unwrap_or_default(),
+                raw_documentation: info.doc.as_deref().unwrap_or_default().to_string(),
                 constructors: vec![],
+                parameters: info.parameters.clone(),
+                opaque: info.opaque,
                 source_url: "#todo".to_string(),
             }),
 
@@ -509,7 +520,7 @@ impl DocType {
 struct DocTypeConstructor {
     definition: String,
     documentation: String,
-    arguments: Vec<DocTypeConstructorArg>,
+    raw_documentation: String,
 }
 
 impl DocTypeConstructor {
@@ -517,33 +528,14 @@ impl DocTypeConstructor {
         DocTypeConstructor {
             definition: format::Formatter::new()
                 .docs_record_constructor(constructor)
-                .to_pretty_string(MAX_COLUMNS),
+                .to_pretty_string(80),
             documentation: constructor
                 .doc
                 .as_deref()
                 .map(render_markdown)
                 .unwrap_or_default(),
-            arguments: constructor
-                .arguments
-                .iter()
-                .filter_map(DocTypeConstructorArg::from_record_constructor_arg)
-                .collect(),
+            raw_documentation: constructor.doc.as_deref().unwrap_or_default().to_string(),
         }
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-struct DocTypeConstructorArg {
-    label: String,
-    documentation: String,
-}
-
-impl DocTypeConstructorArg {
-    fn from_record_constructor_arg(arg: &RecordConstructorArg<Arc<Type>>) -> Option<Self> {
-        arg.label.as_ref().map(|label| DocTypeConstructorArg {
-            label: label.clone(),
-            documentation: arg.doc.as_deref().map(render_markdown).unwrap_or_default(),
-        })
     }
 }
 

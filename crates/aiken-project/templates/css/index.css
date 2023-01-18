@@ -17,8 +17,8 @@
   --color-text: #4c4f69;
   --color-text-accent: #e6e9ef;
   --color-inline-code: #ea76cb;
-  --color-link: #dc8a78;
-  --color-link-accent: #dd7878;
+  --color-link: #ea76cb;
+  --color-link-accent: #e660c2;
   --color-background: #eff1f5;
   --color-background-sidebar: #e6e9ef;
   --color-background-accent: #8839ef;
@@ -409,8 +409,17 @@ body.drawer-open .label-closed {
 
 .member-name h2 {
   display: flex;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   margin: 0;
+}
+
+.member-name > h2 > pre {
+  background: none;
+  font-family: 'Ubuntu Mono';
+  box-shadow: unset;
+  border-radius: unset;
+  margin: 0;
+
 }
 
 .member-name h2 a {
@@ -436,6 +445,12 @@ body.drawer-open .label-closed {
   display: flex;
 }
 
+.constructor-row .icon {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  margin: 0 0.88rem;
+}
+
 .constructor-item {
   margin-bottom: var(--small-gap);
 }
@@ -459,12 +474,20 @@ body.drawer-open .label-closed {
 .constructor-item-docs {
   margin-left: var(--large-gap);
   margin-bottom: var(--gap);
+  padding-left: 1.5rem;
+  margin-top: -1em;
 }
 
-.constructor-item .icon {
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  margin: 0 0.88rem;
+.constructor-item-docs::before {
+  content: '↳';
+  position: relative;
+  margin-left: -1.5rem;
+  top: 1.5em;
+  color: var(--color-background-accent);
+}
+
+.constructor-item-docs p {
+  margin: 0;
 }
 
 .constructor-name {

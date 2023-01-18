@@ -63,7 +63,7 @@ hljs.registerLanguage("aiken", function (hljs) {
   };
   const LABEL = {
     begin: [/\b[a-z][a-z0-9_]*/, ":"],
-    beginScope: { 1: "symbol", 2: "operator" },
+    beginScope: { 1: "symbol", 2: "ponctuation" },
     relevance: 1,
   };
   const DISCARD_NAME = {
@@ -93,8 +93,8 @@ hljs.registerLanguage("aiken", function (hljs) {
         ],
       },
       {
-	begin: [/[a-z][a-z0-9_]*/, /[ ]*\(/],
-	beginScope: { 1: "title.function.invoke", 2: "ponctuation" },
+	begin: [/[a-z][a-z0-9_]*/, /[\n ]*\(/],
+	beginScope: { 1: "title.function.invoke" },
       },
       {
         scope: "keyword",
@@ -109,7 +109,7 @@ hljs.registerLanguage("aiken", function (hljs) {
       },
       {
         scope: "title",
-        begin: "\\b[A-Z][A-Za-z0-9]*\\b",
+        begin: "\\b[A-Z][A-Za-z0-9_]*\\b",
         relevance: 0,
       },
       {
