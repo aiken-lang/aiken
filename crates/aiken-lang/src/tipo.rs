@@ -486,14 +486,12 @@ impl TypeVar {
     pub fn get_inner_type(&self) -> Vec<Arc<Type>> {
         match self {
             Self::Link { tipo } => tipo.get_inner_types(),
-            var @ Self::Generic { .. } => {
-                let tipos = vec![Type::Var {
+            var => {
+                vec![Type::Var {
                     tipo: RefCell::new(var.clone()).into(),
                 }
-                .into()];
-                tipos
+                .into()]
             }
-            _ => vec![],
         }
     }
 

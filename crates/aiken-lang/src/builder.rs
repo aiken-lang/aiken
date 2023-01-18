@@ -850,59 +850,49 @@ pub fn get_generics_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)>
 }
 
 pub fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
-    new_name.push_str(&format!(
-        "_{}",
-        if t.is_string() {
-            "string".to_string()
-        } else if t.is_int() {
-            "int".to_string()
-        } else if t.is_bool() {
-            "bool".to_string()
-        } else if t.is_bytearray() {
-            "bytearray".to_string()
-        } else if t.is_map() {
-            let mut full_type = "map".to_string();
-            let pair_type = &t.get_inner_types()[0];
-            let fst_type = &pair_type.get_inner_types()[0];
-            let snd_type = &pair_type.get_inner_types()[1];
+    new_name.push_str(&if t.is_string() {
+        "_string".to_string()
+    } else if t.is_int() {
+        "_int".to_string()
+    } else if t.is_bool() {
+        "_bool".to_string()
+    } else if t.is_bytearray() {
+        "_bytearray".to_string()
+    } else if t.is_map() {
+        let mut full_type = "_map".to_string();
+        let pair_type = &t.get_inner_types()[0];
+        let fst_type = &pair_type.get_inner_types()[0];
+        let snd_type = &pair_type.get_inner_types()[1];
 
-            get_variant_name(&mut full_type, fst_type);
-            get_variant_name(&mut full_type, snd_type);
-            full_type
-        } else if t.is_list() {
-            let mut full_type = "list".to_string();
-            let list_type = &t.get_inner_types()[0];
-            get_variant_name(&mut full_type, list_type);
-            full_type
-        } else if t.is_tuple() {
-            let mut full_type = "tuple".to_string();
-            match &**t {
-                Type::App { .. } => {}
-                Type::Fn { .. } => {}
-                Type::Var { .. } => {}
-                Type::Tuple { elems } => {
-                    for elem in elems {
-                        get_variant_name(&mut full_type, elem);
-                    }
-                }
-            };
-            full_type
-        } else {
-            let mut full_type = "data".to_string();
-            match &**t {
-                Type::App { args, .. } => {
-                    for arg in args {
-                        get_variant_name(&mut full_type, arg);
-                    }
-                }
-                Type::Fn { .. } => {}
-                Type::Var { .. } => {}
-                Type::Tuple { .. } => {}
-            };
+        get_variant_name(&mut full_type, fst_type);
+        get_variant_name(&mut full_type, snd_type);
+        full_type
+    } else if t.is_list() {
+        let mut full_type = "_list".to_string();
+        let list_type = &t.get_inner_types()[0];
+        get_variant_name(&mut full_type, list_type);
+        full_type
+    } else if t.is_tuple() {
+        let mut full_type = "_tuple".to_string();
 
-            full_type
+        let inner_types = t.get_inner_types();
+
+        for arg_type in inner_types {
+            get_variant_name(&mut full_type, &arg_type);
         }
-    ));
+        full_type
+    } else if t.is_unbound() {
+        "_unbound".to_string()
+    } else {
+        let mut full_type = "_data".to_string();
+
+        let inner_types = t.get_inner_types();
+
+        for arg_type in inner_types {
+            get_variant_name(&mut full_type, &arg_type);
+        }
+        full_type
+    });
 }
 
 pub fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConstant> {
