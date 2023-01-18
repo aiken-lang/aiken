@@ -3596,6 +3596,7 @@ impl<'a> CodeGenerator<'a> {
                     || tipo.is_string()
                     || tipo.is_list()
                     || tipo.is_tuple()
+                    || tipo.is_bool()
                 {
                     apply_wrap(
                         Term::Lambda {
