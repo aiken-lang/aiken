@@ -246,7 +246,6 @@ where
     fn compile_deps(&mut self) -> Result<(), Error> {
         let manifest = deps::download(
             &self.event_listener,
-            None,
             UseManifest::Yes,
             &self.root,
             &self.config,
