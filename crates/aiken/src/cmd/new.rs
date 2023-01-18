@@ -105,10 +105,10 @@ fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
 
                 Validators are named after their purpose, so one of:
 
-                - `script`
+                - `spent`
                 - `mint`
                 - `withdraw`
-                - `certify`
+                - `publish`
 
                 ## Building
 

@@ -17,7 +17,7 @@ use aiken_lang::{
     builtins::{self, generic_var},
     tipo::TypeInfo,
     uplc::CodeGenerator,
-    IdGenerator, CERT, MINT, SPEND, VALIDATOR_NAMES, WITHDRAW,
+    IdGenerator, MINT, PUBLISH, SPEND, VALIDATOR_NAMES, WITHDRAW,
 };
 use deps::UseManifest;
 use miette::NamedSource;
@@ -430,7 +430,7 @@ where
 
                         // depending on name, validate the minimum number of arguments
                         // if too low, push a new error on to errors
-                        if [MINT, CERT, WITHDRAW].contains(&func_def.name.as_str())
+                        if [MINT, WITHDRAW, PUBLISH].contains(&func_def.name.as_str())
                             && func_def.arguments.len() < 2
                         {
                             errors.push(Error::WrongValidatorArity {
