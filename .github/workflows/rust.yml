@@ -20,9 +20,9 @@ jobs:
       run: cargo test --verbose --workspace
     - name: Run acceptance tests
       working-directory: examples/acceptance_tests
-      run: for scenario in $(find . -maxdepth 1 -mindepth 1 -type d); "./run" $scenario;
+      run: bash run-all;
       shell: bash
-    - name: Lint
+    - name: Format
       run: cargo fmt --all -- --check
     - name: Clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
