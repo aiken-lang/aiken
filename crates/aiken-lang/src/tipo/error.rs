@@ -494,7 +494,12 @@ impl Diagnostic for Error {
 
             Self::FunctionTypeInData { .. } => Some(Box::new("Data types can't have functions in them due to how Plutus Data works.")),
 
-            Self::ImplicityDiscardedExpression { .. } => Some(Box::new("Everything is an expression and returns a value.\nTry assigning this expression to a variable.")),
+            Self::ImplicityDiscardedExpression { .. } => Some(Box::new(formatdoc! {
+                r#"A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {let_keyword} keyword. If you really wish to discard an expression that is unused, you can prefix its name with '{discard}'.
+                "#
+                , let_keyword = "let".yellow()
+                , discard = "_".yellow()
+            })),
             Self::IncorrectFieldsArity { .. } => None,
 
             Self::IncorrectFunctionCallArity { expected, .. } => Some(Box::new(formatdoc! {
