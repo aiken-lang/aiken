@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use vec1::Vec1;
 
@@ -191,13 +191,23 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .field_map())
     }
 
-    fn assert_assignment(&self, expr: &TypedExpr) -> Result<(), Error> {
-        if !matches!(*expr, TypedExpr::Assignment { .. }) {
+    fn assert_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
+        if !matches!(*expr, UntypedExpr::Assignment { .. }) {
             return Err(Error::ImplicitlyDiscardedExpression {
                 location: expr.location(),
             });
         }
         Ok(())
+    }
+
+    fn assert_no_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
+        match expr {
+            UntypedExpr::Assignment { value, .. } => Err(Error::LastExpressionIsAssignment {
+                location: expr.location(),
+                expr: *value.clone(),
+            }),
+            _ => Ok(()),
+        }
     }
 
     pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
@@ -1671,15 +1681,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut expressions = Vec::with_capacity(count);
 
         for (i, expression) in untyped.into_iter().enumerate() {
-            let expression = self.infer(expression)?;
+            match i.cmp(&(count - 1)) {
+                // When the expression is the last in a sequence, we enforce it is NOT
+                // an assignment (kind of treat assignments like statements).
+                Ordering::Equal => self.assert_no_assignment(&expression)?,
 
-            // This isn't the final expression in the sequence, so it *must*
-            // be a let-binding; we do not allow anything else.
-            if i < count - 1 {
-                self.assert_assignment(&expression)?;
+                // This isn't the final expression in the sequence, so it *must*
+                // be a let-binding; we do not allow anything else.
+                Ordering::Less => self.assert_assignment(&expression)?,
+
+                // Can't actually happen
+                Ordering::Greater => (),
             }
 
-            expressions.push(expression);
+            expressions.push(self.infer(expression)?);
         }
 
         Ok(TypedExpr::Sequence {

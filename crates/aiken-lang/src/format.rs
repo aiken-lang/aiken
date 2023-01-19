@@ -647,7 +647,7 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
+    pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
