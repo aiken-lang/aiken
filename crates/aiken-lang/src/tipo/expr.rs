@@ -193,7 +193,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn assert_assignment(&self, expr: &TypedExpr) -> Result<(), Error> {
         if !matches!(*expr, TypedExpr::Assignment { .. }) {
-            return Err(Error::ImplicityDiscardedExpression {
+            return Err(Error::ImplicitlyDiscardedExpression {
                 location: expr.location(),
             });
         }

@@ -51,7 +51,7 @@ pub enum Error {
     FunctionTypeInData { location: Span },
 
     #[error("I found a discarded expression not bound to a variable.")]
-    ImplicityDiscardedExpression { location: Span },
+    ImplicitlyDiscardedExpression { location: Span },
 
     #[error("I saw a {} fields in a context where there should be {}.\n", given.purple(), expected.purple())]
     IncorrectFieldsArity {
@@ -375,7 +375,7 @@ impl Diagnostic for Error {
             Self::DuplicateName { .. } => Some(Box::new("duplicate_name")),
             Self::DuplicateTypeName { .. } => Some(Box::new("duplicate_type_name")),
             Self::FunctionTypeInData { .. } => Some(Box::new("function_type_in_data")),
-            Self::ImplicityDiscardedExpression { .. } => {
+            Self::ImplicitlyDiscardedExpression { .. } => {
                 Some(Box::new("implicitly_discarded_expr"))
             }
             Self::IncorrectFieldsArity { .. } => Some(Box::new("incorrect_fields_arity")),
@@ -494,7 +494,7 @@ impl Diagnostic for Error {
 
             Self::FunctionTypeInData { .. } => Some(Box::new("Data types can't have functions in them due to how Plutus Data works.")),
 
-            Self::ImplicityDiscardedExpression { .. } => Some(Box::new(formatdoc! {
+            Self::ImplicitlyDiscardedExpression { .. } => Some(Box::new(formatdoc! {
                 r#"A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {let_keyword} keyword. If you really wish to discard an expression that is unused, you can prefix its name with '{discard}'.
                 "#
                 , let_keyword = "let".yellow()
@@ -1162,7 +1162,7 @@ impl Diagnostic for Error {
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
 
-            Self::ImplicityDiscardedExpression { location, .. } => Some(Box::new(
+            Self::ImplicitlyDiscardedExpression { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
             Self::IncorrectFieldsArity { location, .. } => Some(Box::new(
@@ -1298,7 +1298,7 @@ impl Diagnostic for Error {
             Self::DuplicateName { .. } => None,
             Self::DuplicateTypeName { .. } => None,
             Self::FunctionTypeInData { .. } => None,
-            Self::ImplicityDiscardedExpression { .. } => None,
+            Self::ImplicitlyDiscardedExpression { .. } => None,
             Self::IncorrectFieldsArity { .. } => Some(Box::new(
                 "https://aiken-lang.org/language-tour/custom-types",
             )),
