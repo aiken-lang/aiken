@@ -3111,8 +3111,9 @@ impl<'a> CodeGenerator<'a> {
                     let term = arg_stack.pop().unwrap();
 
                     let zero_arg_functions = self.zero_arg_functions.clone();
+                    let mut anon_func = true;
 
-                    if let Term::Var(Name { text, .. }) = term {
+                    if let Term::Var(Name { text, .. }) = term.clone() {
                         for (
                             FunctionAccessKey {
                                 module_name,
@@ -3146,8 +3147,12 @@ impl<'a> CodeGenerator<'a> {
                                     eval_program.eval(ExBudget::default()).0.unwrap();
 
                                 arg_stack.push(evaluated_term.try_into().unwrap());
+                                anon_func = false;
                             }
                         }
+                    }
+                    if anon_func {
+                        arg_stack.push(term);
                     }
                 }
             }
