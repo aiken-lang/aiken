@@ -168,25 +168,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.infer_fn_with_known_types(arguments, body, return_type)
     }
 
-    /// Emit a warning if the given expressions should not be discarded.
-    /// e.g. because it's a literal (why was it made in the first place?)
-    /// e.g. because it's of the `Result` type (errors should be handled)
-    fn _expression_discarded(&mut self, discarded: &TypedExpr) {
-        if discarded.is_literal() {
-            self.environment.warnings.push(Warning::UnusedLiteral {
-                location: discarded.location(),
-            });
-        }
-
-        if discarded.tipo().is_result() && !discarded.is_assignment() {
-            self.environment
-                .warnings
-                .push(Warning::ImplicitlyDiscardedResult {
-                    location: discarded.location(),
-                });
-        }
-    }
-
     fn get_field_map(
         &mut self,
         constructor: &TypedExpr,
@@ -208,6 +189,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .environment
             .get_value_constructor(module, name, location)?
             .field_map())
+    }
+
+    fn assert_assignment(&self, expr: &TypedExpr) -> Result<(), Error> {
+        if !matches!(*expr, TypedExpr::Assignment { .. }) {
+            return Err(Error::ImplicityDiscardedExpression {
+                location: expr.location(),
+            });
+        }
+        Ok(())
     }
 
     pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
@@ -1682,18 +1672,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         for (i, expression) in untyped.into_iter().enumerate() {
             let expression = self.infer(expression)?;
-            // This isn't the final expression in the sequence, so call the
-            // `expression_discarded` function to see if anything is being
-            // discarded that we think shouldn't be. We also want to make sure
-            // that there are no implicitly discarded expressions
-            if i < count - 1 {
-                // self.expression_discarded(&expression);
 
-                if !matches!(expression, TypedExpr::Assignment { .. }) {
-                    return Err(Error::ImplicityDiscardedExpression {
-                        location: expression.location(),
-                    });
-                }
+            // This isn't the final expression in the sequence, so it *must*
+            // be a let-binding; we do not allow anything else.
+            if i < count - 1 {
+                self.assert_assignment(&expression)?;
             }
 
             expressions.push(expression);
