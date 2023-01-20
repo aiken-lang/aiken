@@ -300,7 +300,7 @@ pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
                 location: span_end,
                 end_position: span.end - 1,
                 name,
-                public: true,
+                public: false,
                 return_annotation: None,
                 return_type: (),
             })
