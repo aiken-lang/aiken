@@ -254,7 +254,7 @@ impl Diagnostic for Error {
             Error::List(_) => None,
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::Type { error, .. } => Some(Box::new(format!(
-                "err::aiken::check{}",
+                "aiken::check{}",
                 error.code().map(|s| format!("::{s}")).unwrap_or_default()
             ))),
             Error::StandardIo(_) => None,
@@ -445,7 +445,10 @@ impl Diagnostic for Warning {
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Warning::Type { .. } => Some(Box::new("aiken::check")),
+            Warning::Type { warning, .. } => Some(Box::new(format!(
+                "aiken::check{}",
+                warning.code().map(|s| format!("::{s}")).unwrap_or_default()
+            ))),
             Warning::NoValidators => Some(Box::new("aiken::check")),
             Warning::DependencyAlreadyExists { .. } => {
                 Some(Box::new("aiken::packages::already_exists"))

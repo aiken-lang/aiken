@@ -1424,6 +1424,7 @@ impl Diagnostic for Error {
 pub enum Warning {
     #[error("I found a todo left in the code.\n")]
     #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
+    #[diagnostic(code("todo"))]
     Todo {
         kind: TodoKind,
         #[label]
@@ -1437,18 +1438,21 @@ pub enum Warning {
     #[diagnostic(help(
         "You can use the '_' symbol should you want to explicitly discard a result."
     ))]
+    #[diagnostic(code("implicit_discard"))]
     ImplicitlyDiscardedResult {
         #[label]
         location: Span,
     },
 
     #[error("I found a literal that is unused.\n")]
+    #[diagnostic(code("unused::literal"))]
     UnusedLiteral {
         #[label]
         location: Span,
     },
 
     #[error("I found a public definition in a validator module.\nDefinitions in validator modules do not need to be public.\n")]
+    #[diagnostic(code("redundant::pub"))]
     PubInValidatorModule {
         #[label]
         location: Span,
@@ -1456,6 +1460,7 @@ pub enum Warning {
 
     #[error("I found a record update with no fields; effectively updating nothing.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
+    #[diagnostic(code("record_update::no_fields"))]
     NoFieldsRecordUpdate {
         #[label]
         location: Span,
@@ -1463,12 +1468,14 @@ pub enum Warning {
 
     #[error("I found a record update using all fields; thus redundant.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
+    #[diagnostic(code("record_update::all_fields"))]
     AllFieldsRecordUpdate {
         #[label]
         location: Span,
     },
 
     #[error("I discovered an unused type: '{}'.\n", name.purple())]
+    #[diagnostic(code("unused::type"))]
     UnusedType {
         #[label]
         location: Span,
@@ -1480,6 +1487,7 @@ pub enum Warning {
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
+    #[diagnostic(code("unused::constructor"))]
     UnusedConstructor {
         #[label]
         location: Span,
@@ -1491,6 +1499,7 @@ pub enum Warning {
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
+    #[diagnostic(code("unused:import::value"))]
     UnusedImportedValue {
         #[label]
         location: Span,
@@ -1501,6 +1510,7 @@ pub enum Warning {
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
+    #[diagnostic(code("unused::import::module"))]
     UnusedImportedModule {
         #[label]
         location: Span,
@@ -1513,6 +1523,7 @@ pub enum Warning {
          Otherwise, you might want to get rid of it altogether."
         , keyword_pub = "pub".bright_blue()
     ))]
+    #[diagnostic(code("unused::constant"))]
     UnusedPrivateModuleConstant {
         #[label]
         location: Span,
@@ -1525,6 +1536,7 @@ pub enum Warning {
          Otherwise, you might want to get rid of it altogether."
          , keyword_pub = "pub".bright_blue()
     ))]
+    #[diagnostic(code("unused::function"))]
     UnusedPrivateFunction {
         #[label]
         location: Span,
@@ -1535,6 +1547,7 @@ pub enum Warning {
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
+    #[diagnostic(code("unused::variable"))]
     UnusedVariable {
         #[label]
         location: Span,
