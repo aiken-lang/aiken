@@ -1,6 +1,7 @@
 use super::Type;
 use crate::{
     ast::{Annotation, BinOp, CallArg, Span, TodoKind, UntypedPattern},
+    expr,
     format::Formatter,
     levenshtein,
     pretty::Documentable,
@@ -51,7 +52,13 @@ pub enum Error {
     FunctionTypeInData { location: Span },
 
     #[error("I found a discarded expression not bound to a variable.")]
-    ImplicityDiscardedExpression { location: Span },
+    ImplicitlyDiscardedExpression { location: Span },
+
+    #[error("I discovered a function who's ending with an assignment.")]
+    LastExpressionIsAssignment {
+        location: Span,
+        expr: expr::UntypedExpr,
+    },
 
     #[error("I saw a {} fields in a context where there should be {}.\n", given.purple(), expected.purple())]
     IncorrectFieldsArity {
@@ -375,9 +382,10 @@ impl Diagnostic for Error {
             Self::DuplicateName { .. } => Some(Box::new("duplicate_name")),
             Self::DuplicateTypeName { .. } => Some(Box::new("duplicate_type_name")),
             Self::FunctionTypeInData { .. } => Some(Box::new("function_type_in_data")),
-            Self::ImplicityDiscardedExpression { .. } => {
+            Self::ImplicitlyDiscardedExpression { .. } => {
                 Some(Box::new("implicitly_discarded_expr"))
             }
+            Self::LastExpressionIsAssignment { .. } => Some(Box::new("last_expr_is_assignment")),
             Self::IncorrectFieldsArity { .. } => Some(Box::new("incorrect_fields_arity")),
             Self::IncorrectFunctionCallArity { .. } => Some(Box::new("incorrect_fn_arity")),
             Self::IncorrectPatternArity { .. } => Some(Box::new("incorrect_pattern_arity")),
@@ -494,7 +502,30 @@ impl Diagnostic for Error {
 
             Self::FunctionTypeInData { .. } => Some(Box::new("Data types can't have functions in them due to how Plutus Data works.")),
 
-            Self::ImplicityDiscardedExpression { .. } => Some(Box::new("Everything is an expression and returns a value.\nTry assigning this expression to a variable.")),
+            Self::ImplicitlyDiscardedExpression { .. } => Some(Box::new(formatdoc! {
+                r#"A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'.
+                "#
+                , keyword_let = "let".yellow()
+                , discard = "_".yellow()
+            })),
+
+            Self::LastExpressionIsAssignment { expr, .. } => Some(Box::new(formatdoc! {
+                r#"In Aiken, functions must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
+
+                   If you really meant to return that last expression, try to replace it with the following:
+
+                   {sample}
+                "#
+                , sample = Formatter::new()
+                    .expr(expr)
+                    .to_pretty_string(70)
+                    .lines()
+                    .enumerate()
+                    .map(|(ix, line)| if ix == 0 { format!("╰─▶ {}", line.yellow()) } else { format!("    {line}").yellow().to_string() })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })),
+
             Self::IncorrectFieldsArity { .. } => None,
 
             Self::IncorrectFunctionCallArity { expected, .. } => Some(Box::new(formatdoc! {
@@ -1156,8 +1187,10 @@ impl Diagnostic for Error {
             Self::FunctionTypeInData { location } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
-
-            Self::ImplicityDiscardedExpression { location, .. } => Some(Box::new(
+            Self::ImplicitlyDiscardedExpression { location, .. } => Some(Box::new(
+                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
+            )),
+            Self::LastExpressionIsAssignment { location, .. } => Some(Box::new(
                 vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
             )),
             Self::IncorrectFieldsArity { location, .. } => Some(Box::new(
@@ -1293,7 +1326,10 @@ impl Diagnostic for Error {
             Self::DuplicateName { .. } => None,
             Self::DuplicateTypeName { .. } => None,
             Self::FunctionTypeInData { .. } => None,
-            Self::ImplicityDiscardedExpression { .. } => None,
+            Self::ImplicitlyDiscardedExpression { .. } => None,
+            Self::LastExpressionIsAssignment { .. } => Some(Box::new(
+                "https://aiken-lang.org/language-tour/functions#named-functions"
+            )),
             Self::IncorrectFieldsArity { .. } => Some(Box::new(
                 "https://aiken-lang.org/language-tour/custom-types",
             )),

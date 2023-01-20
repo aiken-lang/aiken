@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use vec1::Vec1;
 
@@ -168,25 +168,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.infer_fn_with_known_types(arguments, body, return_type)
     }
 
-    /// Emit a warning if the given expressions should not be discarded.
-    /// e.g. because it's a literal (why was it made in the first place?)
-    /// e.g. because it's of the `Result` type (errors should be handled)
-    fn _expression_discarded(&mut self, discarded: &TypedExpr) {
-        if discarded.is_literal() {
-            self.environment.warnings.push(Warning::UnusedLiteral {
-                location: discarded.location(),
-            });
-        }
-
-        if discarded.tipo().is_result() && !discarded.is_assignment() {
-            self.environment
-                .warnings
-                .push(Warning::ImplicitlyDiscardedResult {
-                    location: discarded.location(),
-                });
-        }
-    }
-
     fn get_field_map(
         &mut self,
         constructor: &TypedExpr,
@@ -208,6 +189,25 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .environment
             .get_value_constructor(module, name, location)?
             .field_map())
+    }
+
+    fn assert_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
+        if !matches!(*expr, UntypedExpr::Assignment { .. }) {
+            return Err(Error::ImplicitlyDiscardedExpression {
+                location: expr.location(),
+            });
+        }
+        Ok(())
+    }
+
+    fn assert_no_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
+        match expr {
+            UntypedExpr::Assignment { value, .. } => Err(Error::LastExpressionIsAssignment {
+                location: expr.location(),
+                expr: *value.clone(),
+            }),
+            _ => Ok(()),
+        }
     }
 
     pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
@@ -1681,22 +1681,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut expressions = Vec::with_capacity(count);
 
         for (i, expression) in untyped.into_iter().enumerate() {
-            let expression = self.infer(expression)?;
-            // This isn't the final expression in the sequence, so call the
-            // `expression_discarded` function to see if anything is being
-            // discarded that we think shouldn't be. We also want to make sure
-            // that there are no implicitly discarded expressions
-            if i < count - 1 {
-                // self.expression_discarded(&expression);
+            match i.cmp(&(count - 1)) {
+                // When the expression is the last in a sequence, we enforce it is NOT
+                // an assignment (kind of treat assignments like statements).
+                Ordering::Equal => self.assert_no_assignment(&expression)?,
 
-                if !matches!(expression, TypedExpr::Assignment { .. }) {
-                    return Err(Error::ImplicityDiscardedExpression {
-                        location: expression.location(),
-                    });
-                }
+                // This isn't the final expression in the sequence, so it *must*
+                // be a let-binding; we do not allow anything else.
+                Ordering::Less => self.assert_assignment(&expression)?,
+
+                // Can't actually happen
+                Ordering::Greater => (),
             }
 
-            expressions.push(expression);
+            expressions.push(self.infer(expression)?);
         }
 
         Ok(TypedExpr::Sequence {
