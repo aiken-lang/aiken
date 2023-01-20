@@ -27,12 +27,14 @@ impl FieldMap {
                 if self.is_function {
                     Err(Error::DuplicateArgument {
                         label,
-                        locations: vec![*location, location_other],
+                        location: *location,
+                        duplicate_location: location_other,
                     })
                 } else {
                     Err(Error::DuplicateField {
                         label,
-                        locations: vec![*location, location_other],
+                        location: *location,
+                        duplicate_location: location_other,
                     })
                 }
             }
@@ -102,7 +104,7 @@ impl FieldMap {
                 }
             };
 
-            let (position, other_location) = match self.fields.get(label) {
+            let (position, duplicate_location) = match self.fields.get(label) {
                 None => {
                     unknown_labels.push((label.clone(), location));
 
@@ -122,7 +124,8 @@ impl FieldMap {
             } else {
                 if seen_labels.contains(label) {
                     return Err(Error::DuplicateArgument {
-                        locations: vec![location, other_location],
+                        location,
+                        duplicate_location,
                         label: label.to_string(),
                     });
                 }

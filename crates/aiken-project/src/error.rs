@@ -404,6 +404,28 @@ impl Diagnostic for Error {
             Error::UnknownPackageVersion { .. } => None,
         }
     }
+
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::ImportCycle { .. } => None,
+            Error::List { .. } => None,
+            Error::Parse { .. } => None,
+            Error::Type { error, .. } => error.related(),
+            Error::StandardIo(_) => None,
+            Error::MissingManifest { .. } => None,
+            Error::TomlLoading { .. } => None,
+            Error::Format { .. } => None,
+            Error::ValidatorMustReturnBool { .. } => None,
+            Error::WrongValidatorArity { .. } => None,
+            Error::TestFailure { .. } => None,
+            Error::Http { .. } => None,
+            Error::ZipExtract { .. } => None,
+            Error::JoinError { .. } => None,
+            Error::UnknownPackageVersion { .. } => None,
+        }
+    }
 }
 
 #[derive(thiserror::Error)]
