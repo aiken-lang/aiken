@@ -7,13 +7,7 @@ use ordinal::Ordinal;
 use super::{error::ParseError, token::Token};
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
-    let int = choice((
-        text::int(10),
-        just("-")
-            .ignore_then(text::int(10))
-            .map(|value: String| format!("-{}", &value)),
-    ))
-    .map(|value| Token::Int { value });
+    let int = text::int(10).map(|value| Token::Int { value });
 
     let ordinal = text::int(10)
         .from_str()

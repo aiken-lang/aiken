@@ -2002,3 +2002,113 @@ fn tuple_pattern() {
         })],
     );
 }
+
+#[test]
+fn subtraction_vs_negate() {
+    let code = indoc! {r#"
+          fn foo() {
+            (1-1) == 0
+            let x = -2
+            bar()-4
+            bar(-1) - 42
+          }
+        "#};
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 14..61),
+                expressions: vec![
+                    expr::UntypedExpr::BinOp {
+                        location: Span::new((), 14..23),
+                        name: ast::BinOp::Eq,
+                        left: Box::new(expr::UntypedExpr::BinOp {
+                            location: Span::new((), 14..17),
+                            name: ast::BinOp::SubInt,
+                            left: Box::new(expr::UntypedExpr::Int {
+                                location: Span::new((), 14..15),
+                                value: "1".to_string(),
+                            }),
+                            right: Box::new(expr::UntypedExpr::Int {
+                                location: Span::new((), 16..17),
+                                value: "1".to_string(),
+                            }),
+                        }),
+                        right: Box::new(expr::UntypedExpr::Int {
+                            location: Span::new((), 22..23),
+                            value: "0".to_string(),
+                        }),
+                    },
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 26..36),
+                        value: Box::new(expr::UntypedExpr::UnOp {
+                            op: ast::UnOp::Negate,
+                            location: Span::new((), 34..36),
+                            value: Box::new(expr::UntypedExpr::Int {
+                                location: Span::new((), 35..36),
+                                value: "2".to_string(),
+                            }),
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 30..31),
+                            name: "x".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::BinOp {
+                        location: Span::new((), 39..46),
+                        name: ast::BinOp::SubInt,
+                        left: Box::new(expr::UntypedExpr::Call {
+                            arguments: vec![],
+                            fun: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new((), 39..42),
+                                name: "bar".to_string(),
+                            }),
+                            location: Span::new((), 39..44),
+                        }),
+                        right: Box::new(expr::UntypedExpr::Int {
+                            location: Span::new((), 45..46),
+                            value: "4".to_string(),
+                        }),
+                    },
+                    expr::UntypedExpr::BinOp {
+                        location: Span::new((), 49..61),
+                        name: ast::BinOp::SubInt,
+                        left: Box::new(expr::UntypedExpr::Call {
+                            arguments: vec![ast::CallArg {
+                                label: None,
+                                location: Span::new((), 53..55),
+                                value: expr::UntypedExpr::UnOp {
+                                    op: ast::UnOp::Negate,
+                                    location: Span::new((), 53..55),
+                                    value: Box::new(expr::UntypedExpr::Int {
+                                        location: Span::new((), 54..55),
+                                        value: "1".to_string(),
+                                    }),
+                                },
+                            }],
+                            fun: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new((), 49..52),
+                                name: "bar".to_string(),
+                            }),
+                            location: Span::new((), 49..56),
+                        }),
+                        right: Box::new(expr::UntypedExpr::Int {
+                            location: Span::new((), 59..61),
+                            value: "42".to_string(),
+                        }),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 62,
+        })],
+    );
+}
