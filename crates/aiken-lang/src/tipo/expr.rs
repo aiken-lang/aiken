@@ -200,13 +200,33 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn assert_no_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
         match expr {
             UntypedExpr::Assignment { value, .. } => Err(Error::LastExpressionIsAssignment {
                 location: expr.location(),
                 expr: *value.clone(),
             }),
-            _ => Ok(()),
+            UntypedExpr::Trace { then, .. } => self.assert_no_assignment(then),
+            UntypedExpr::Fn { .. }
+            | UntypedExpr::BinOp { .. }
+            | UntypedExpr::ByteArray { .. }
+            | UntypedExpr::Call { .. }
+            | UntypedExpr::ErrorTerm { .. }
+            | UntypedExpr::FieldAccess { .. }
+            | UntypedExpr::If { .. }
+            | UntypedExpr::Int { .. }
+            | UntypedExpr::List { .. }
+            | UntypedExpr::PipeLine { .. }
+            | UntypedExpr::RecordUpdate { .. }
+            | UntypedExpr::Sequence { .. }
+            | UntypedExpr::String { .. }
+            | UntypedExpr::Todo { .. }
+            | UntypedExpr::Tuple { .. }
+            | UntypedExpr::TupleIndex { .. }
+            | UntypedExpr::UnOp { .. }
+            | UntypedExpr::Var { .. }
+            | UntypedExpr::When { .. } => Ok(()),
         }
     }
 
@@ -1563,6 +1583,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         body: UntypedExpr,
         return_type: Option<Arc<Type>>,
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
+        self.assert_no_assignment(&body)?;
+
         let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
             for (arg, t) in args.iter().zip(args.iter().map(|arg| arg.tipo.clone())) {
                 match &arg.arg_name {

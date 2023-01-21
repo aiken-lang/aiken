@@ -133,7 +133,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
         location: Span,
     },
 
-    #[error("I discovered a function who's ending with an assignment.")]
+    #[error("I discovered a function which is ending with an assignment.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
     #[diagnostic(code("illegal::return"))]
     #[diagnostic(help(r#"In Aiken, functions must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
