@@ -1,10 +1,6 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{cell::RefCell, sync::Arc};
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
@@ -72,7 +68,7 @@ pub enum ClauseProperties {
         needs_constr_var: bool,
         is_complex_clause: bool,
         original_subject_name: String,
-        defined_tuple_indices: HashSet<(usize, String)>,
+        defined_tuple_indices: IndexSet<(usize, String)>,
     },
 }
 
@@ -92,7 +88,7 @@ impl ClauseProperties {
                 needs_constr_var: false,
                 is_complex_clause: false,
                 original_subject_name: subject_name,
-                defined_tuple_indices: HashSet::new(),
+                defined_tuple_indices: IndexSet::new(),
             }
         } else {
             ClauseProperties::ConstrClause {
@@ -542,6 +538,32 @@ pub fn list_access_to_uplc(
             .into(),
         }
     } else if names.is_empty() {
+        // Maybe check list is actually empty or should we leave that to when .. is only
+        // this would replace term.into() if we decide to
+        // body: choose_list(
+        //     apply_wrap(
+        //         Term::Builtin(DefaultFunction::TailList).force_wrap(),
+        //         Term::Var(Name {
+        //             text: format!(
+        //                 "tail_index_{}_{}",
+        //                 current_index, id_list[current_index]
+        //             ),
+        //             unique: 0.into(),
+        //         }),
+        //     ),
+        //     term,
+        //     apply_wrap(
+        //         apply_wrap(
+        //             Term::Builtin(DefaultFunction::Trace).force_wrap(),
+        //             Term::Constant(UplcConstant::String(
+        //                 "List contains more items".to_string(),
+        //             )),
+        //         ),
+        //         Term::Delay(Term::Error.into()),
+        //     )
+        //     .force_wrap(),
+        // )
+        // .into(),
         Term::Lambda {
             parameter_name: Name {
                 text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
@@ -757,7 +779,7 @@ pub fn match_ir_for_recursion(
     }
 }
 
-pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &HashMap<u64, Arc<Type>>) {
+pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &IndexMap<u64, Arc<Type>>) {
     if let Some(id) = tipo.get_generic() {
         //If generic does not have a type we know of like a None in option then just use same type
         *tipo = generic_types.get(&id).unwrap_or(tipo).clone();
@@ -983,7 +1005,7 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: Vec<TypedArg>) -> Term<N
 
 pub fn monomorphize(
     ir: Vec<Air>,
-    generic_types: HashMap<u64, Arc<Type>>,
+    generic_types: IndexMap<u64, Arc<Type>>,
     full_type: &Arc<Type>,
 ) -> (String, Vec<Air>) {
     let mut new_air = ir.clone();
@@ -1390,14 +1412,14 @@ pub fn monomorphize(
     (new_name, new_air)
 }
 
-pub fn handle_func_deps_ir(
-    dep_ir: &mut Vec<Air>,
+pub fn handle_func_dependencies_ir(
+    dependencies_ir: &mut Vec<Air>,
     funt_comp: &FuncComponents,
     func_components: &IndexMap<FunctionAccessKey, FuncComponents>,
-    defined_functions: &mut HashMap<FunctionAccessKey, ()>,
+    defined_functions: &mut IndexMap<FunctionAccessKey, ()>,
     func_index_map: &IndexMap<FunctionAccessKey, Vec<u64>>,
     func_scope: &[u64],
-    to_be_defined: &mut HashMap<FunctionAccessKey, ()>,
+    to_be_defined: &mut IndexMap<FunctionAccessKey, ()>,
 ) {
     let mut funt_comp = funt_comp.clone();
 
@@ -1448,9 +1470,9 @@ pub fn handle_func_deps_ir(
 
                 temp_ir.append(&mut recursion_ir);
 
-                temp_ir.append(dep_ir);
+                temp_ir.append(dependencies_ir);
 
-                *dep_ir = temp_ir;
+                *dependencies_ir = temp_ir;
                 if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
                     defined_functions.insert(dependency, ());
                 }
@@ -1501,7 +1523,7 @@ pub fn handle_recursion_ir(
 }
 
 pub fn lookup_data_type_by_tipo(
-    data_types: HashMap<DataTypeKey, &TypedDataType>,
+    data_types: IndexMap<DataTypeKey, &TypedDataType>,
     tipo: &Type,
 ) -> Option<DataType<Arc<Type>>> {
     match tipo {
@@ -1536,7 +1558,7 @@ pub fn lookup_data_type_by_tipo(
 
 pub fn check_replaceable_opaque_type(
     t: &Arc<Type>,
-    data_types: &HashMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types.clone(), t);
 
@@ -1548,12 +1570,12 @@ pub fn check_replaceable_opaque_type(
     }
 }
 
-pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: HashMap<DataTypeKey, &TypedDataType>) {
+pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, &TypedDataType>) {
     if check_replaceable_opaque_type(t, &data_types) && matches!(&**t, Type::App { .. }) {
         let data_type = lookup_data_type_by_tipo(data_types.clone(), t).unwrap();
         let new_type_fields = data_type.typed_parameters.clone();
 
-        let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
+        let mut generics_type_map: IndexMap<u64, Arc<Type>> = IndexMap::new();
 
         for (tipo, param) in new_type_fields.iter().zip(t.arg_types().unwrap()) {
             let mut map = generics_type_map.into_iter().collect_vec();
