@@ -20,6 +20,7 @@ use aiken_lang::{
     IdGenerator, MINT, PUBLISH, SPEND, VALIDATOR_NAMES, WITHDRAW,
 };
 use deps::UseManifest;
+use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
@@ -482,9 +483,9 @@ where
         validators: Vec<(PathBuf, String, TypedFunction)>,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
-        let mut functions = HashMap::new();
-        let mut type_aliases = HashMap::new();
-        let mut data_types = HashMap::new();
+        let mut functions = IndexMap::new();
+        let mut type_aliases = IndexMap::new();
+        let mut data_types = IndexMap::new();
 
         let prelude_functions = builtins::prelude_functions(&self.id_gen);
         for (access_key, func) in prelude_functions.iter() {
@@ -539,11 +540,15 @@ where
                 ..
             } = func_def;
 
+            let mut modules_map = IndexMap::new();
+
+            modules_map.extend(self.module_types.clone());
+
             let mut generator = CodeGenerator::new(
                 &functions,
                 // &type_aliases,
                 &data_types,
-                &self.module_types,
+                &modules_map,
             );
 
             self.event_listener.handle_event(Event::GeneratingUPLC {
@@ -573,9 +578,9 @@ where
         should_collect: fn(&TypedDefinition) -> bool,
     ) -> Result<Vec<Script>, Error> {
         let mut programs = Vec::new();
-        let mut functions = HashMap::new();
-        let mut type_aliases = HashMap::new();
-        let mut data_types = HashMap::new();
+        let mut functions = IndexMap::new();
+        let mut type_aliases = IndexMap::new();
+        let mut data_types = IndexMap::new();
 
         let prelude_functions = builtins::prelude_functions(&self.id_gen);
         for (access_key, func) in prelude_functions.iter() {
@@ -648,21 +653,25 @@ where
                 })
             }
 
+            let mut modules_map = IndexMap::new();
+
+            modules_map.extend(self.module_types.clone());
+
             let mut generator = CodeGenerator::new(
                 &functions,
                 // &type_aliases,
                 &data_types,
-                &self.module_types,
+                &modules_map,
             );
 
             let evaluation_hint = if let Some((bin_op, left_src, right_src)) = func_def.test_hint()
             {
-                let left = CodeGenerator::new(&functions, &data_types, &self.module_types)
+                let left = CodeGenerator::new(&functions, &data_types, &modules_map)
                     .generate(*left_src, vec![], false)
                     .try_into()
                     .unwrap();
 
-                let right = CodeGenerator::new(&functions, &data_types, &self.module_types)
+                let right = CodeGenerator::new(&functions, &data_types, &modules_map)
                     .generate(*right_src, vec![], false)
                     .try_into()
                     .unwrap();

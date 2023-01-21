@@ -1,10 +1,6 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    vec,
-};
+use std::{sync::Arc, vec};
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
@@ -28,9 +24,10 @@ use crate::{
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
         convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
-        get_generics_and_type, handle_func_deps_ir, handle_recursion_ir, list_access_to_uplc,
-        lookup_data_type_by_tipo, monomorphize, rearrange_clauses, replace_opaque_type,
-        wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
+        get_generics_and_type, handle_func_dependencies_ir, handle_recursion_ir,
+        list_access_to_uplc, lookup_data_type_by_tipo, monomorphize, rearrange_clauses,
+        replace_opaque_type, wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents,
+        FunctionAccessKey,
     },
     expr::TypedExpr,
     tipo::{
@@ -41,32 +38,32 @@ use crate::{
 };
 
 pub struct CodeGenerator<'a> {
-    defined_functions: HashMap<FunctionAccessKey, ()>,
-    functions: &'a HashMap<FunctionAccessKey, &'a TypedFunction>,
-    // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
-    data_types: &'a HashMap<DataTypeKey, &'a TypedDataType>,
-    module_types: &'a HashMap<String, TypeInfo>,
+    defined_functions: IndexMap<FunctionAccessKey, ()>,
+    functions: &'a IndexMap<FunctionAccessKey, &'a TypedFunction>,
+    // type_aliases: &'a IndexMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
+    data_types: &'a IndexMap<DataTypeKey, &'a TypedDataType>,
+    module_types: &'a IndexMap<String, TypeInfo>,
     id_gen: IdGenerator,
     needs_field_access: bool,
-    zero_arg_functions: HashMap<FunctionAccessKey, Vec<Air>>,
+    zero_arg_functions: IndexMap<FunctionAccessKey, Vec<Air>>,
 }
 
 impl<'a> CodeGenerator<'a> {
     pub fn new(
-        functions: &'a HashMap<FunctionAccessKey, &'a TypedFunction>,
-        // type_aliases: &'a HashMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
-        data_types: &'a HashMap<DataTypeKey, &'a TypedDataType>,
-        module_types: &'a HashMap<String, TypeInfo>,
+        functions: &'a IndexMap<FunctionAccessKey, &'a TypedFunction>,
+        // type_aliases: &'a IndexMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
+        data_types: &'a IndexMap<DataTypeKey, &'a TypedDataType>,
+        module_types: &'a IndexMap<String, TypeInfo>,
     ) -> Self {
         CodeGenerator {
-            defined_functions: HashMap::new(),
+            defined_functions: IndexMap::new(),
             functions,
             // type_aliases,
             data_types,
             module_types,
             id_gen: IdGenerator::new(),
             needs_field_access: false,
-            zero_arg_functions: HashMap::new(),
+            zero_arg_functions: IndexMap::new(),
         }
     }
 
@@ -1040,7 +1037,7 @@ impl<'a> CodeGenerator<'a> {
                         PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
                     };
 
-                    let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
+                    let mut type_map: IndexMap<String, Arc<Type>> = IndexMap::new();
 
                     for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
                         let label = constructor_type.arguments[index].label.clone().unwrap();
@@ -1092,7 +1089,7 @@ impl<'a> CodeGenerator<'a> {
                         });
                     }
                 } else {
-                    let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
+                    let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
                     for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
                         let field_type = arg.clone();
@@ -1380,7 +1377,7 @@ impl<'a> CodeGenerator<'a> {
                     needs_constr_var: false,
                     is_complex_clause: false,
                     original_subject_name: item_name.clone(),
-                    defined_tuple_indices: HashSet::new(),
+                    defined_tuple_indices: IndexSet::new(),
                 };
 
                 let mut inner_pattern_vec = vec![];
@@ -1406,7 +1403,7 @@ impl<'a> CodeGenerator<'a> {
                     scope,
                     tipo: pattern_type.clone(),
                     indices: defined_indices,
-                    predefined_indices: HashSet::new(),
+                    predefined_indices: IndexSet::new(),
                     subject_name: clause_properties.original_subject_name().to_string(),
                     count: elems.len(),
                     complex_clause: false,
@@ -1625,7 +1622,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     };
 
-                    let mut type_map: HashMap<String, Arc<Type>> = HashMap::new();
+                    let mut type_map: IndexMap<String, Arc<Type>> = IndexMap::new();
 
                     for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
                         let label = constructor_type.arguments[index].label.clone().unwrap();
@@ -1694,7 +1691,7 @@ impl<'a> CodeGenerator<'a> {
                         });
                     }
                 } else {
-                    let mut type_map: HashMap<usize, Arc<Type>> = HashMap::new();
+                    let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
                     for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
                         let field_type = arg.clone();
@@ -1834,8 +1831,8 @@ impl<'a> CodeGenerator<'a> {
         );
 
         let mut final_func_dep_ir = IndexMap::new();
-        let mut zero_arg_defined_functions = HashMap::new();
-        let mut to_be_defined = HashMap::new();
+        let mut zero_arg_defined_functions = IndexMap::new();
+        let mut to_be_defined = IndexMap::new();
 
         let mut dependency_map = IndexMap::new();
         let mut dependency_vec = vec![];
@@ -1865,7 +1862,7 @@ impl<'a> CodeGenerator<'a> {
 
             if !funt_comp.args.is_empty() {
                 // deal with function dependencies
-                handle_func_deps_ir(
+                handle_func_dependencies_ir(
                     &mut dep_ir,
                     funt_comp,
                     &func_components,
@@ -1877,16 +1874,17 @@ impl<'a> CodeGenerator<'a> {
                 final_func_dep_ir.insert(func, dep_ir);
             } else {
                 // since zero arg functions are run at compile time we need to pull all deps
-                let mut defined_functions = HashMap::new();
+                // note anon functions are not included in the above. They exist in a function anyway
+                let mut defined_functions = IndexMap::new();
                 // deal with function dependencies in zero arg functions
-                handle_func_deps_ir(
+                handle_func_dependencies_ir(
                     &mut dep_ir,
                     funt_comp,
                     &func_components,
                     &mut defined_functions,
                     &func_index_map,
                     func_scope,
-                    &mut HashMap::new(),
+                    &mut IndexMap::new(),
                 );
 
                 let mut final_zero_arg_ir = dep_ir;
@@ -1895,7 +1893,8 @@ impl<'a> CodeGenerator<'a> {
                 self.convert_opaque_type_to_inner_ir(&mut final_zero_arg_ir);
 
                 self.zero_arg_functions.insert(func, final_zero_arg_ir);
-
+                // zero arg functions don't contain the dependencies since they are pre-evaluated
+                // As such we add functions to defined only after dependencies for all other functions are calculated
                 for (key, val) in defined_functions.into_iter() {
                     zero_arg_defined_functions.insert(key, val);
                 }
@@ -2095,7 +2094,7 @@ impl<'a> CodeGenerator<'a> {
 
                             let param_types = constructor.tipo.arg_types().unwrap();
 
-                            let mut generics_type_map: HashMap<u64, Arc<Type>> = HashMap::new();
+                            let mut generics_type_map: IndexMap<u64, Arc<Type>> = IndexMap::new();
 
                             for (index, arg) in function.arguments.iter().enumerate() {
                                 if arg.tipo.is_generic() {
@@ -2133,7 +2132,7 @@ impl<'a> CodeGenerator<'a> {
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
                             } else {
                                 to_be_defined_map.insert(function_key.clone(), scope.to_vec());
-                                let mut func_calls = HashMap::new();
+                                let mut func_calls = IndexMap::new();
 
                                 for ir in func_ir.clone().into_iter() {
                                     if let Air::Var {
@@ -2169,8 +2168,8 @@ impl<'a> CodeGenerator<'a> {
                                         } else if let (Some(function), Type::Fn { .. }) =
                                             (function, &*tipo)
                                         {
-                                            let mut generics_type_map: HashMap<u64, Arc<Type>> =
-                                                HashMap::new();
+                                            let mut generics_type_map: IndexMap<u64, Arc<Type>> =
+                                                IndexMap::new();
 
                                             let param_types = tipo.arg_types().unwrap();
 
@@ -4267,7 +4266,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let record = arg_stack.pop().unwrap();
 
-                let mut args = HashMap::new();
+                let mut args = IndexMap::new();
                 let mut unchanged_field_indices = vec![];
                 let mut prev_index = 0;
                 for (index, tipo) in indices

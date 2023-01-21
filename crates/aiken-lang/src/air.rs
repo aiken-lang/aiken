@@ -1,5 +1,6 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
+use indexmap::IndexSet;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
@@ -127,8 +128,8 @@ pub enum Air {
     TupleClause {
         scope: Vec<u64>,
         tipo: Arc<Type>,
-        indices: HashSet<(usize, String)>,
-        predefined_indices: HashSet<(usize, String)>,
+        indices: IndexSet<(usize, String)>,
+        predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
         count: usize,
         complex_clause: bool,
