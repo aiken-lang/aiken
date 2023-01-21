@@ -1539,6 +1539,9 @@ impl<'comments> Formatter<'comments> {
 
     fn clause_guard<'a>(&mut self, clause_guard: &'a UntypedClauseGuard) -> Document<'a> {
         match clause_guard {
+            ClauseGuard::Not { value, .. } => {
+                docvec!["!", self.clause_guard(value)]
+            }
             ClauseGuard::And { left, right, .. } => {
                 self.clause_guard_bin_op(" && ", clause_guard.precedence(), left, right)
             }

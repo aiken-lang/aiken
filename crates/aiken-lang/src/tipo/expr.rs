@@ -993,41 +993,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 })
             }
 
-            // ClauseGuard::TupleIndex {
-            //     location,
-            //     tuple,
-            //     index,
-            //     ..
-            // } => {
-            //     let tuple = self.infer_clause_guard(*tuple)?;
-            //     match tuple.type_().as_ref() {
-            //         Type::Tuple { elems } => {
-            //             let type_ = elems
-            //                 .get(index as usize)
-            //                 .ok_or(Error::OutOfBoundsTupleIndex {
-            //                     location,
-            //                     index,
-            //                     size: elems.len(),
-            //                 })?
-            //                 .clone();
-            //             Ok(ClauseGuard::TupleIndex {
-            //                 location,
-            //                 index,
-            //                 type_,
-            //                 tuple: Box::new(tuple),
-            //             })
-            //         }
+            ClauseGuard::Not {
+                location, value, ..
+            } => {
+                let value = self.infer_clause_guard(*value)?;
+                self.unify(bool(), value.tipo(), value.location())?;
+                Ok(ClauseGuard::Not {
+                    location,
+                    value: Box::new(value),
+                })
+            }
 
-            //         typ if typ.is_unbound() => Err(Error::NotATupleUnbound {
-            //             location: tuple.location(),
-            //         }),
-
-            //         _ => Err(Error::NotATuple {
-            //             location: tuple.location(),
-            //             given: tuple.type_(),
-            //         }),
-            //     }
-            // }
             ClauseGuard::And {
                 location,
                 left,
