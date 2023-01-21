@@ -7,16 +7,47 @@ use crate::{
     pretty::Documentable,
 };
 use indoc::formatdoc;
-use miette::Diagnostic;
+use miette::{Diagnostic, LabeledSpan};
 use ordinal::Ordinal;
 use owo_colors::OwoColorize;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
-#[error("Something is wrong around here...")]
+#[error("Something is possibly wrong here...")]
 pub struct Snippet {
     #[label]
     pub location: Span,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "I don't know some of the labels used in this expression. I've highlighted them just below."
+)]
+pub struct UnknownLabels {
+    pub unknown: Vec<Span>,
+    pub valid: Vec<String>,
+    pub supplied: Vec<String>,
+}
+
+impl Diagnostic for UnknownLabels {
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        Some(Box::new(formatdoc! {
+            r#"Here's a list of all the (valid) labels that I know of:
+
+               {known_labels}"#
+            , known_labels = self.valid
+                .iter()
+                .map(|s| format!("─▶ {}", s.yellow()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        }))
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        Some(Box::new(self.unknown.iter().map(|l| {
+            LabeledSpan::new_with_span(Some("?".to_string()), *l)
+        })))
+    }
 }
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
@@ -114,7 +145,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
-    #[error("I found a data type that has a function type in it. This is not allowed.")]
+    #[error("I found a data type that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
     #[diagnostic(help("Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."))]
     FunctionTypeInData {
@@ -122,7 +153,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
         location: Span,
     },
 
-    #[error("I found a discarded expression not bound to a variable.")]
+    #[error("I found a discarded expression not bound to a variable.\n")]
     #[diagnostic(code("implicit_discard"))]
     #[diagnostic(help("A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'."
         , keyword_let = "let".yellow()
@@ -133,7 +164,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
         location: Span,
     },
 
-    #[error("I discovered a function which is ending with an assignment.")]
+    #[error("I discovered a function which is ending with an assignment.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
     #[diagnostic(code("illegal::return"))]
     #[diagnostic(help(r#"In Aiken, functions must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
@@ -267,7 +298,7 @@ Perhaps, try the following:
         given: usize,
     },
 
-    #[error("I realized that a given 'when/is' expression is non-exhaustive.")]
+    #[error("I realized that a given 'when/is' expression is non-exhaustive.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
     #[diagnostic(code("non_exhaustive_pattern_match"))]
     #[diagnostic(help(r#"When clauses must be exhaustive -- that is, they must cover all possible cases of the type they match. While it is recommended to have an explicit branch for each constructor, you can also use the wildcard '{discard}' as a last branch to match any remaining result.
@@ -288,7 +319,7 @@ In this particular instance, the following cases are missing:
         unmatched: Vec<String>,
     },
 
-    #[error("I tripped over a call attempt on something that isn't a function.")]
+    #[error("I tripped over a call attempt on something that isn't a function.\n")]
     #[diagnostic(code("illegal::invoke"))]
     #[diagnostic(help(r#"It seems like you're trying to call something that isn't a function. I am inferring the following type:
 
@@ -302,7 +333,7 @@ In this particular instance, the following cases are missing:
     },
 
     #[error(
-      "I realized the module '{}' contains the keyword '{}', which is forbidden.",
+      "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
       name.purple(),
       keyword.purple()
     )]
@@ -323,7 +354,7 @@ In this particular instance, the following cases are missing:
         name: String,
     },
 
-    #[error("I discovered a positional argument after a label argument.")]
+    #[error("I discovered a positional argument after a label argument.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#labeled-arguments"))]
     #[diagnostic(code("unexpected::positional_argument"))]
     #[diagnostic(help(r#"You can mix positional and labeled arguments, but you must put all positional arguments (i.e. without label) at the front.
@@ -335,7 +366,7 @@ To fix this, you'll need to either turn that argument as a labeled argument, or 
         labeled_arg_location: Span,
     },
 
-    #[error("I caught a private value trying to escape.")]
+    #[error("I caught a private value trying to escape.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
     #[diagnostic(code("private_leak"))]
     #[diagnostic(help(r#"I found a public value that is making use of a private type. This would prevent other modules from actually using that value because they wouldn't know what this type refer to.
@@ -354,7 +385,7 @@ Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
         leaked: Type,
     },
 
-    #[error("I couldn't figure out the type of a record you're trying to access.")]
+    #[error("I couldn't figure out the type of a record you're trying to access.\n")]
     #[diagnostic(url(
         "https://aiken-lang.org/language-tour/variables-and-constants#type-annotations"
     ))]
@@ -381,7 +412,7 @@ You can help me by providing a type-annotation for 'x', as such:
         location: Span,
     },
 
-    #[error("I tripped over an invalid constructor in a record update.")]
+    #[error("I tripped over an invalid constructor in a record update.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("illegal::record_update"))]
     RecordUpdateInvalidConstructor {
@@ -433,31 +464,16 @@ Perhaps, try the following:
 
     // TODO: Seems like we can't really trigger this error because we allow type holes everywhere
     // anyway. We need to revise that perhaps.
-    #[error("I stumbled upon an unexpected type hole.")]
+    #[error("I stumbled upon an unexpected type hole.\n")]
     #[diagnostic(code("unexpected::type_hole"))]
     UnexpectedTypeHole {
         #[label]
         location: Span,
     },
 
-    #[error("I tripped over some unknown labels in a pattern or function.")]
+    #[error("I tripped over some unknown labels in a pattern or function.\n")]
     #[diagnostic(code("unknown::labels"))]
-    #[diagnostic(help(r#"I don't know some of the labels used in this expression. I've highlighted them just above.
-
-Here's a list of all the (valid) labels that I know of:
-
-{known_labels}"#
-        , known_labels = valid
-            .iter()
-            .map(|s| format!("─▶ {s}"))
-            .collect::<Vec<_>>()
-            .join("")
-    ))]
-    UnknownLabels {
-        unknown: Vec<(String, Span)>,
-        valid: Vec<String>,
-        supplied: Vec<String>,
-    },
+    UnknownLabels(#[related] Vec<UnknownLabels>),
 
     #[error("I stumbled upon a reference to an unknown module: '{}'\n", name.purple())]
     #[diagnostic(code("unknown::module"))]
@@ -473,7 +489,7 @@ Here's a list of all the (valid) labels that I know of:
     },
 
     #[error(
-        "I found an unknown import '{}' from module '{}'",
+        "I found an unknown import '{}' from module '{}'.\n",
         name.purple(),
         module_name.purple()
     )]
@@ -532,7 +548,7 @@ Here's a list of all the (valid) labels that I know of:
     },
 
     #[error(
-      "I looked for the field '{}' in a record of type '{}' couldn't find it.",
+      "I looked for the field '{}' in a record of type '{}' couldn't find it.\n",
       label.purple(),
       typ.to_pretty(4).purple()
     )]
@@ -597,7 +613,7 @@ Here's a list of all the (valid) labels that I know of:
         constructors: Vec<String>,
     },
 
-    #[error("I discovered a redundant spread operator.")]
+    #[error("I discovered a redundant spread operator.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#destructuring"))]
     #[diagnostic(code("unexpected::spread_operator"))]
     #[diagnostic(help(r#"The spread operator comes in handy when matching on some fields of a constructor. However, here you've matched all {arity} fields of the constructor which makes the spread operator redundant.
@@ -609,7 +625,7 @@ The best thing to do from here is to remove it."#))]
         arity: usize,
     },
 
-    #[error("I tripped over a record-update on a data-type with more than one constructor.")]
+    #[error("I tripped over a record-update on a data-type with more than one constructor.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("illegal::record_update"))]
     UpdateMultiConstructorType {
@@ -617,7 +633,7 @@ The best thing to do from here is to remove it."#))]
         location: Span,
     },
 
-    #[error("I struggled to unify the types of two expressions.")]
+    #[error("I struggled to unify the types of two expressions.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types"))]
     #[diagnostic(code("type_mismatch"))]
     #[diagnostic(help("{}", suggest_unify(expected, given, situation, rigid_type_names)))]
@@ -652,7 +668,7 @@ The best thing to do from here is to remove it."#))]
         name: String,
     },
 
-    #[error("I realized the variable '{}' was mentioned more than once in an alternative pattern.\n \n", name.purple())]
+    #[error("I realized the variable '{}' was mentioned more than once in an alternative pattern.\n", name.purple())]
     #[diagnostic(url(
         "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
     ))]
@@ -663,7 +679,7 @@ The best thing to do from here is to remove it."#))]
         name: String,
     },
 
-    #[error("I almost got caught in an infinite cycle of type definitions.")]
+    #[error("I almost got caught in an infinite cycle of type definitions.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-aliases"))]
     #[diagnostic(code("cycle"))]
     CyclicTypeDefinitions {
@@ -671,7 +687,7 @@ The best thing to do from here is to remove it."#))]
         errors: Vec<Snippet>,
     },
 
-    #[error("I almost got caught in an endless loop while inferring a recursive type.")]
+    #[error("I almost got caught in an endless loop while inferring a recursive type.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-annotations"))]
     #[diagnostic(code("missing::type_annotation"))]
     #[diagnostic(help("I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."))]
@@ -680,7 +696,9 @@ The best thing to do from here is to remove it."#))]
         location: Span,
     },
 
-    #[error("I tripped over an attempt to access tuple elements on something else than a tuple.")]
+    #[error(
+        "I tripped over an attempt to access tuple elements on something else than a tuple.\n"
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("illegal::tuple_index"))]
     #[diagnostic(help(r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
@@ -695,7 +713,7 @@ The best thing to do from here is to remove it."#))]
     },
 
     #[error(
-        "I discovered an attempt to access the {} element of a {}-tuple.",
+        "I discovered an attempt to access the {} element of a {}-tuple.\n",
         Ordinal(*index + 1).to_string().purple(),
         size.purple()
     )]
@@ -1013,7 +1031,7 @@ fn suggest_import_constructor() -> String {
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error, Diagnostic)]
 pub enum Warning {
-    #[error("I found a todo left in the code.")]
+    #[error("I found a todo left in the code.\n")]
     #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
     #[diagnostic(code("todo"))]
     Todo {
@@ -1023,7 +1041,9 @@ pub enum Warning {
         tipo: Arc<Type>,
     },
 
-    #[error("I realized the following expression returned a result that is implicitly discarded.")]
+    #[error(
+        "I realized the following expression returned a result that is implicitly discarded.\n"
+    )]
     #[diagnostic(help(
         "You can use the '_' symbol should you want to explicitly discard a result."
     ))]
@@ -1033,21 +1053,21 @@ pub enum Warning {
         location: Span,
     },
 
-    #[error("I found a literal that is unused.")]
+    #[error("I found a literal that is unused.\n")]
     #[diagnostic(code("unused::literal"))]
     UnusedLiteral {
         #[label]
         location: Span,
     },
 
-    #[error("I found a public definition in a validator module.\nDefinitions in validator modules do not need to be public.")]
+    #[error("I found a public definition in a validator module.\nDefinitions in validator modules do not need to be public.\n")]
     #[diagnostic(code("redundant::pub"))]
     PubInValidatorModule {
         #[label]
         location: Span,
     },
 
-    #[error("I found a record update with no fields; effectively updating nothing.")]
+    #[error("I found a record update with no fields; effectively updating nothing.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("record_update::no_fields"))]
     NoFieldsRecordUpdate {
@@ -1055,7 +1075,7 @@ pub enum Warning {
         location: Span,
     },
 
-    #[error("I found a record update using all fields; thus redundant.")]
+    #[error("I found a record update using all fields; thus redundant.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("record_update::all_fields"))]
     AllFieldsRecordUpdate {

@@ -531,7 +531,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                                     let value = self.unify(value, typ.clone(), None)?;
 
-                                    Ok(CallArg {
+                                    Ok::<_, Error>(CallArg {
                                         value,
                                         location,
                                         label,

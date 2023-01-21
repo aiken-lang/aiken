@@ -955,7 +955,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
                 let then = clause_typer.infer(then)?;
 
-                Ok((guard, then, typed_pattern, typed_alternatives))
+                Ok::<_, Error>((guard, then, typed_pattern, typed_alternatives))
             })?;
 
         Ok(Clause {
@@ -1942,7 +1942,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let subject = self.in_new_scope(|subject_typer| {
                 let subject = subject_typer.infer(subject)?;
 
-                Ok(subject)
+                Ok::<_, Error>(subject)
             })?;
 
             subject_types.push(subject.tipo());

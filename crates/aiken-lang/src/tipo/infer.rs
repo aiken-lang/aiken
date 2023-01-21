@@ -204,7 +204,7 @@ fn infer_definition(
 
                     let safe_to_generalise = !expr_typer.ungeneralised_function_used;
 
-                    Ok((tipo, args, body, safe_to_generalise))
+                    Ok::<_, Error>((tipo, args, body, safe_to_generalise))
                 })?;
 
             // Assert that the inferred type matches the type of any recursive call
