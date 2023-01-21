@@ -645,7 +645,14 @@ impl<'a> CodeGenerator<'a> {
                     current_index,
                     ..
                 } => {
-                    let current_clause_index = *current_index;
+                    let current_clause_index =
+                        if let Pattern::List { elements, .. } = &clause.pattern[0] {
+                            elements.len()
+                        } else {
+                            unreachable!()
+                        };
+
+                    let prev_index = *current_index;
 
                     let subject_name = if current_clause_index == 0 {
                         original_subject_name.clone()
@@ -665,20 +672,36 @@ impl<'a> CodeGenerator<'a> {
                     let next_tail = if index == clauses.len() - 1 {
                         None
                     } else {
-                        Some(format!("__tail_{}", current_clause_index))
+                        let next_list_size = if let Pattern::List { elements, .. } =
+                            &clauses[index + 1].pattern[0]
+                        {
+                            elements.len()
+                        } else {
+                            unreachable!()
+                        };
+
+                        if next_list_size == current_clause_index {
+                            None
+                        } else {
+                            Some(format!("__tail_{}", current_clause_index))
+                        }
                     };
 
-                    ir_stack.push(Air::ListClause {
-                        scope,
-                        tipo: subject_type.clone(),
-                        tail_name: subject_name,
-                        next_tail_name: next_tail,
-                        complex_clause: *clause_properties.is_complex_clause(),
-                    });
+                    if current_clause_index as i64 == prev_index {
+                        ir_stack.push(Air::WrapClause { scope });
+                    } else {
+                        ir_stack.push(Air::ListClause {
+                            scope,
+                            tipo: subject_type.clone(),
+                            tail_name: subject_name,
+                            next_tail_name: next_tail,
+                            complex_clause: *clause_properties.is_complex_clause(),
+                        });
+                    }
 
                     match clause_properties {
                         ClauseProperties::ListClause { current_index, .. } => {
-                            *current_index += 1;
+                            *current_index = current_clause_index as i64;
                         }
                         _ => unreachable!(),
                     }
@@ -1245,24 +1268,18 @@ impl<'a> CodeGenerator<'a> {
                             needs_constr_var: false,
                             is_complex_clause: false,
                             original_subject_name: item_name.clone(),
-                            current_index: index,
+                            current_index: index as i64,
                         };
 
                         let tail_name = format!("{}_{}", new_tail_name, index);
 
                         if elements.len() - 1 == index {
                             if tail.is_some() {
-                                let tail_name = match *tail.clone().unwrap() {
-                                    Pattern::Var { name, .. } => name,
-                                    Pattern::Discard { .. } => "_".to_string(),
-                                    _ => unreachable!(),
-                                };
-
                                 pattern_vec.push(Air::ListClauseGuard {
                                     scope: scope.clone(),
                                     tipo: pattern_type.clone(),
                                     tail_name: prev_tail_name,
-                                    next_tail_name: Some(tail_name),
+                                    next_tail_name: None,
                                     inverse: true,
                                 });
 
@@ -1331,7 +1348,6 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                // self.when_recursive_ir(a);
                 Some(item_name)
             }
             a @ Pattern::Constructor {
@@ -3794,6 +3810,25 @@ impl<'a> CodeGenerator<'a> {
                     );
                 }
 
+                arg_stack.push(term);
+            }
+
+            Air::WrapClause { .. } => {
+                let _ = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+                let arg = arg_stack.pop().unwrap();
+
+                term = apply_wrap(
+                    Term::Lambda {
+                        parameter_name: Name {
+                            text: "__other_clauses_delayed".into(),
+                            unique: 0.into(),
+                        },
+                        body: term.into(),
+                    },
+                    Term::Delay(arg.into()),
+                );
                 arg_stack.push(term);
             }
             Air::ClauseGuard {

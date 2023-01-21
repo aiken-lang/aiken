@@ -125,6 +125,10 @@ pub enum Air {
         complex_clause: bool,
     },
 
+    WrapClause {
+        scope: Vec<u64>,
+    },
+
     TupleClause {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -250,6 +254,8 @@ impl Air {
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
             | Air::ListClause { scope, .. }
+            | Air::TupleClause { scope, .. }
+            | Air::WrapClause { scope }
             | Air::ClauseGuard { scope, .. }
             | Air::ListClauseGuard { scope, .. }
             | Air::Discard { scope }
@@ -265,8 +271,7 @@ impl Air {
             | Air::UnOp { scope, .. }
             | Air::Trace { scope, .. }
             | Air::TupleAccessor { scope, .. }
-            | Air::TupleIndex { scope, .. }
-            | Air::TupleClause { scope, .. } => scope.to_vec(),
+            | Air::TupleIndex { scope, .. } => scope.to_vec(),
         }
     }
 
