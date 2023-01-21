@@ -61,7 +61,7 @@ pub enum ClauseProperties {
         needs_constr_var: bool,
         is_complex_clause: bool,
         original_subject_name: String,
-        current_index: usize,
+        current_index: i64,
     },
     TupleClause {
         clause_var_name: String,
@@ -80,7 +80,7 @@ impl ClauseProperties {
                 needs_constr_var: false,
                 is_complex_clause: false,
                 original_subject_name: subject_name,
-                current_index: 0,
+                current_index: -1,
             }
         } else if t.is_tuple() {
             ClauseProperties::TupleClause {
