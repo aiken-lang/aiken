@@ -1615,7 +1615,10 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
             r.clone()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
-                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                .delimited_by(
+                    choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
+                    just(Token::RightParen),
+                )
                 .map_with_span(|elems, span| ast::UntypedPattern::Tuple {
                     location: span,
                     elems,

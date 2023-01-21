@@ -1948,3 +1948,57 @@ fn tuple_type_alias() {
         })],
     )
 }
+
+#[test]
+fn tuple_pattern() {
+    let code = indoc! {r#"
+          fn foo() {
+            when a is {
+              (u, dic) -> True
+            }
+          }
+        "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::When {
+                location: Span::new((), 13..49),
+                subjects: vec![expr::UntypedExpr::Var {
+                    location: Span::new((), 18..19),
+                    name: "a".to_string(),
+                }],
+                clauses: vec![ast::Clause {
+                    location: Span::new((), 29..45),
+                    pattern: vec![ast::Pattern::Tuple {
+                        location: Span::new((), 29..37),
+                        elems: vec![
+                            ast::Pattern::Var {
+                                location: Span::new((), 30..31),
+                                name: "u".to_string(),
+                            },
+                            ast::Pattern::Var {
+                                location: Span::new((), 33..36),
+                                name: "dic".to_string(),
+                            },
+                        ],
+                    }],
+                    alternative_patterns: vec![],
+                    guard: None,
+                    then: expr::UntypedExpr::Var {
+                        location: Span::new((), 41..45),
+                        name: "True".to_string(),
+                    },
+                }],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 50,
+        })],
+    );
+}
