@@ -480,7 +480,7 @@ impl Diagnostic for Warning {
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
-            Warning::Type { .. } => None,
+            Warning::Type { warning, .. } => warning.help(),
             Warning::NoValidators => None,
             Warning::DependencyAlreadyExists { .. } => Some(Box::new(
                 "If you need to change the version, try 'aiken packages upgrade' instead.",

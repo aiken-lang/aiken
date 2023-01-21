@@ -638,7 +638,10 @@ The best thing to do from here is to remove it."#))]
     #[diagnostic(code("type_mismatch"))]
     #[diagnostic(help("{}", suggest_unify(expected, given, situation, rigid_type_names)))]
     CouldNotUnify {
-        #[label]
+        #[label(
+            "expected type '{}'",
+            expected.to_pretty_with_names(rigid_type_names.clone(), 0),
+        )]
         location: Span,
         expected: Arc<Type>,
         given: Arc<Type>,
@@ -1152,13 +1155,13 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I came across an unused variable: '{}'.\n", name.purple())]
+    #[error("I came across an unused variable.\n")]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
     #[diagnostic(code("unused::variable"))]
     UnusedVariable {
-        #[label]
+        #[label("unused")]
         location: Span,
         name: String,
     },
