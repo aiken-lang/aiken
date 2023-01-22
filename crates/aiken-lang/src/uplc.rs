@@ -307,6 +307,10 @@ impl<'a> CodeGenerator<'a> {
                 // assuming one subject at the moment
                 let subject = subjects[0].clone();
 
+                if clauses.len() <= 1 {
+                    todo!("Single clause cases not implemented")
+                }
+
                 let clauses = if matches!(clauses[0].pattern[0], Pattern::List { .. }) {
                     rearrange_clauses(clauses.clone())
                 } else {
