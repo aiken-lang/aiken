@@ -242,6 +242,7 @@ impl<'a> CodeGenerator<'a> {
                 ir_stack.push(Air::Call {
                     scope: scope.clone(),
                     count: args.len(),
+                    tipo: tipo.clone(),
                 });
                 let mut scope_fun = scope.clone();
                 scope_fun.push(self.id_gen.next());
@@ -357,7 +358,7 @@ impl<'a> CodeGenerator<'a> {
                     );
 
                     if *clause_properties.needs_constr_var() {
-                        ir_stack.push(Air::Lam {
+                        ir_stack.push(Air::Let {
                             scope: scope.clone(),
                             name: constr_var.clone(),
                         });
@@ -403,6 +404,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::If {
                 branches,
                 final_else,
+                tipo,
                 ..
             } => {
                 let mut if_ir = vec![];
@@ -414,10 +416,12 @@ impl<'a> CodeGenerator<'a> {
                     if index == 0 {
                         if_ir.push(Air::If {
                             scope: scope.clone(),
+                            tipo: tipo.clone(),
                         });
                     } else {
                         if_ir.push(Air::If {
                             scope: branch_scope.clone(),
+                            tipo: tipo.clone(),
                         });
                     }
                     self.build_ir(&branch.condition, &mut if_ir, branch_scope.clone());
@@ -506,7 +510,9 @@ impl<'a> CodeGenerator<'a> {
                     tipo: tipo.clone(),
                 });
             }
-            TypedExpr::RecordUpdate { spread, args, .. } => {
+            TypedExpr::RecordUpdate {
+                spread, args, tipo, ..
+            } => {
                 let mut update_ir = vec![];
                 let mut spread_scope = scope.clone();
                 let mut index_types = vec![];
@@ -531,6 +537,7 @@ impl<'a> CodeGenerator<'a> {
                     scope,
                     highest_index,
                     indices: index_types,
+                    tipo: tipo.clone(),
                 });
 
                 ir_stack.append(&mut update_ir);
@@ -771,10 +778,10 @@ impl<'a> CodeGenerator<'a> {
             }
             Pattern::String { .. } => todo!(),
             Pattern::Var { name, .. } => {
-                pattern_vec.push(Air::Discard {
+                pattern_vec.push(Air::Void {
                     scope: scope.clone(),
                 });
-                pattern_vec.push(Air::Lam {
+                pattern_vec.push(Air::Let {
                     scope: scope.clone(),
                     name: name.clone(),
                 });
@@ -795,7 +802,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { name, pattern, .. } => {
                 let mut new_vec = vec![];
-                new_vec.push(Air::Lam {
+                new_vec.push(Air::Let {
                     scope: scope.clone(),
                     name: name.clone(),
                 });
@@ -824,7 +831,7 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
             Pattern::Discard { .. } => {
-                pattern_vec.push(Air::Discard { scope });
+                pattern_vec.push(Air::Void { scope });
                 pattern_vec.append(values);
             }
             Pattern::List { elements, tail, .. } => {
@@ -837,7 +844,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 *clause_properties.needs_constr_var() = false;
 
-                pattern_vec.push(Air::Discard {
+                pattern_vec.push(Air::Void {
                     scope: scope.clone(),
                 });
 
@@ -965,7 +972,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => {
-                pattern_vec.push(Air::Discard { scope });
+                pattern_vec.push(Air::Void { scope });
 
                 pattern_vec.append(values);
             }
@@ -1198,7 +1205,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let pattern_type = &tipo.get_inner_types()[index];
 
-                    pattern_vec.push(Air::Lam {
+                    pattern_vec.push(Air::Let {
                         scope: scope.clone(),
                         name: new_name.clone(),
                     });
@@ -1254,7 +1261,7 @@ impl<'a> CodeGenerator<'a> {
                         inverse: false,
                     });
 
-                    pattern_vec.push(Air::Discard { scope });
+                    pattern_vec.push(Air::Void { scope });
                 } else {
                     for (index, _) in elements.iter().enumerate() {
                         let prev_tail_name = if index == 0 {
@@ -1300,7 +1307,7 @@ impl<'a> CodeGenerator<'a> {
                                     inverse: true,
                                 });
 
-                                pattern_vec.push(Air::Discard {
+                                pattern_vec.push(Air::Void {
                                     scope: scope.clone(),
                                 });
 
@@ -1445,7 +1452,7 @@ impl<'a> CodeGenerator<'a> {
         match pattern {
             Pattern::Int { .. } | Pattern::String { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
-                pattern_vec.push(Air::Assignment {
+                pattern_vec.push(Air::Let {
                     name: name.clone(),
                     scope,
                 });
@@ -1455,7 +1462,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => {
-                pattern_vec.push(Air::Assignment {
+                pattern_vec.push(Air::Let {
                     name: "_".to_string(),
                     scope,
                 });
@@ -1485,7 +1492,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                     AssignmentKind::Assert => {
                         let name_id = self.id_gen.next();
-                        pattern_vec.push(Air::Lam {
+                        pattern_vec.push(Air::Let {
                             scope: scope.clone(),
                             name: format!("__constr_{}", name_id),
                         });
@@ -1551,7 +1558,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => {
-                pattern_vec.push(Air::Discard { scope });
+                pattern_vec.push(Air::Void { scope });
 
                 pattern_vec.append(values);
             }
@@ -2562,6 +2569,7 @@ impl<'a> CodeGenerator<'a> {
                     highest_index,
                     indices,
                     scope,
+                    tipo,
                 } => {
                     let mut new_indices = vec![];
                     for (ind, tipo) in indices {
@@ -2574,6 +2582,7 @@ impl<'a> CodeGenerator<'a> {
                         scope,
                         indices: new_indices,
                         highest_index,
+                        tipo,
                     };
                 }
                 Air::Record {
@@ -2636,7 +2645,7 @@ impl<'a> CodeGenerator<'a> {
                     let record_type = record.tipo();
                     if let Some(record_type) = record_type {
                         if check_replaceable_opaque_type(&record_type, self.data_types) {
-                            ir_stack[index] = Air::Lam {
+                            ir_stack[index] = Air::Let {
                                 scope,
                                 name: indices[0].1.clone(),
                             };
@@ -2668,6 +2677,25 @@ impl<'a> CodeGenerator<'a> {
                             count,
                         };
                     }
+                }
+                Air::Call { scope, count, tipo } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::Call {
+                        scope,
+                        tipo: replaced_type,
+                        count,
+                    };
+                }
+                Air::If { scope, tipo } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::If {
+                        scope,
+                        tipo: replaced_type,
+                    };
                 }
                 _ => {}
             }
@@ -2868,7 +2896,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 };
             }
-            Air::Discard { .. } => {
+            Air::Void { .. } => {
                 arg_stack.push(Term::Constant(UplcConstant::Unit));
             }
             Air::List {
@@ -3461,23 +3489,6 @@ impl<'a> CodeGenerator<'a> {
                 };
                 arg_stack.push(term);
             }
-            Air::Assignment { name, .. } => {
-                let right_hand = arg_stack.pop().unwrap();
-                let lam_body = arg_stack.pop().unwrap();
-
-                let term = apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: name,
-                            unique: 0.into(),
-                        },
-                        body: lam_body.into(),
-                    },
-                    right_hand,
-                );
-
-                arg_stack.push(term);
-            }
             Air::Assert { constr_index, .. } => {
                 let constr = arg_stack.pop().unwrap();
 
@@ -3586,7 +3597,7 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(term);
                 }
             }
-            Air::Lam { name, .. } => {
+            Air::Let { name, .. } => {
                 let arg = arg_stack.pop().unwrap();
 
                 let mut term = arg_stack.pop().unwrap();
