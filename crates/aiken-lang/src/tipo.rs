@@ -173,6 +173,14 @@ impl Type {
         }
     }
 
+    pub fn is_data(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } => "Data" == name && module.is_empty(),
+            Self::Var { tipo } => tipo.borrow().is_data(),
+            _ => false,
+        }
+    }
+
     pub fn is_generic(&self) -> bool {
         match self {
             Type::App { args, .. } => {
@@ -463,6 +471,13 @@ impl TypeVar {
     pub fn is_tuple(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_tuple(),
+            _ => false,
+        }
+    }
+
+    pub fn is_data(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_data(),
             _ => false,
         }
     }

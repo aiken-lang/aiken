@@ -1673,3 +1673,5 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
         }
     }
 }
+
+pub fn recursive_assert(tipo: &Type, assert_vec: &mut Vec<Air>) {}

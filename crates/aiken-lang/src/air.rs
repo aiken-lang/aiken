@@ -98,12 +98,21 @@ pub enum Air {
     // Assignment
     Assert {
         scope: Vec<u64>,
-        constr_index: usize,
+        tipo: Arc<Type>,
+        value_is_data: bool,
     },
 
     Let {
         scope: Vec<u64>,
         name: String,
+    },
+
+    ListAssert {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+        names: Vec<String>,
+        tail: bool,
+        value_is_data: bool,
     },
 
     // When
@@ -260,6 +269,7 @@ impl Air {
             | Air::BinOp { scope, .. }
             | Air::UnOp { scope, .. }
             | Air::Assert { scope, .. }
+            | Air::ListAssert { scope, .. }
             | Air::Let { scope, .. }
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
@@ -338,6 +348,8 @@ impl Air {
             | Air::Call { tipo, .. }
             | Air::Builtin { tipo, .. }
             | Air::BinOp { tipo, .. }
+            | Air::Assert { tipo, .. }
+            | Air::ListAssert { tipo, .. }
             | Air::When { tipo, .. }
             | Air::Clause { tipo, .. }
             | Air::ListClause { tipo, .. }
@@ -358,7 +370,6 @@ impl Air {
 
             Air::DefineFunc { .. }
             | Air::Fn { .. }
-            | Air::Assert { .. }
             | Air::Let { .. }
             | Air::WrapClause { .. }
             | Air::Finally { .. }
