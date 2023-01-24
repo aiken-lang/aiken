@@ -1062,7 +1062,7 @@ pub enum Warning {
         help("Prefer using a {} binding like so...\n\n{}", "let".purple(), format_suggestion(sample))
     )]
     SingleWhenClause {
-        #[label]
+        #[label("use let")]
         location: Span,
         sample: UntypedExpr,
     },
