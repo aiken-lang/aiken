@@ -1934,7 +1934,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // that suggests that a `let` binding should be used instead.
         if clauses.len() == 1 {
             self.environment.warnings.push(Warning::SingleWhenClause {
-                location: clauses[0].location,
+                location: clauses[0].pattern[0].location(),
                 sample: UntypedExpr::Assignment {
                     location: Span::empty(),
                     value: Box::new(subjects[0].clone()),
