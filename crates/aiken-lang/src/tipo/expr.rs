@@ -1930,6 +1930,21 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         clauses: Vec<UntypedClause>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
+        // if there is only one clause we want to present a warning
+        // that suggests that a `let` binding should be used instead.
+        if clauses.len() == 1 {
+            self.environment.warnings.push(Warning::SingleWhenClause {
+                location: clauses[0].location,
+                sample: UntypedExpr::Assignment {
+                    location: Span::empty(),
+                    value: Box::new(subjects[0].clone()),
+                    pattern: clauses[0].pattern[0].clone(),
+                    kind: AssignmentKind::Let,
+                    annotation: None,
+                },
+            });
+        }
+
         let subjects_count = subjects.len();
 
         let mut typed_subjects = Vec::with_capacity(subjects_count);
