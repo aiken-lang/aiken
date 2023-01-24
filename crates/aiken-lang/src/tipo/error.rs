@@ -1186,7 +1186,7 @@ pub enum UnknownRecordFieldSituation {
     FunctionCall,
 }
 
-fn format_suggestion<'a>(sample: &'a UntypedExpr) -> String {
+fn format_suggestion(sample: &UntypedExpr) -> String {
     Formatter::new()
         .expr(sample)
         .to_pretty_string(70)
