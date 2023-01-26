@@ -23,6 +23,22 @@ fn assert_definitions(code: &str, definitions: Vec<ast::UntypedDefinition>) {
 }
 
 #[test]
+fn windows_newline() {
+    let code = "use aiken/list\r\n";
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Use(Use {
+            location: Span::new((), 0..14),
+            module: vec!["aiken".to_string(), "list".to_string()],
+            as_name: None,
+            unqualified: vec![],
+            package: (),
+        })],
+    )
+}
+
+#[test]
 fn import() {
     let code = indoc! {r#"
         use std/list
