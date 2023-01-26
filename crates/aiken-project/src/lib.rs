@@ -1,3 +1,4 @@
+pub mod blueprint;
 pub mod config;
 pub mod deps;
 pub mod docs;
