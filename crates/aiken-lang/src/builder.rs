@@ -14,7 +14,7 @@ use uplc::{
 
 use crate::{
     air::Air,
-    ast::{Clause, Constant, DataType, Pattern, Span, TypedArg, TypedDataType},
+    ast::{AssignmentKind, Clause, Constant, DataType, Pattern, Span, TypedArg, TypedDataType},
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
 };
@@ -46,6 +46,12 @@ pub struct FunctionAccessKey {
     pub module_name: String,
     pub function_name: String,
     pub variant_name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct AssignmentProperties {
+    pub value_is_data: bool,
+    pub kind: AssignmentKind,
 }
 
 #[derive(Clone, Debug)]
@@ -1133,8 +1139,15 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            // TODO check on assignment if type is needed
-            Air::Let { .. } => {}
+            Air::UnWrapData { scope, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::UnWrapData { scope, tipo };
+                    needs_variant = true;
+                }
+            }
             Air::When {
                 scope,
                 tipo,
@@ -1673,5 +1686,3 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
         }
     }
 }
-
-pub fn recursive_assert(tipo: &Type, assert_vec: &mut Vec<Air>) {}

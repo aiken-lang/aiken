@@ -107,6 +107,11 @@ pub enum Air {
         name: String,
     },
 
+    UnWrapData {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+    },
+
     ListAssert {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -271,6 +276,7 @@ impl Air {
             | Air::Assert { scope, .. }
             | Air::ListAssert { scope, .. }
             | Air::Let { scope, .. }
+            | Air::UnWrapData { scope, .. }
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
             | Air::ListClause { scope, .. }
@@ -350,6 +356,7 @@ impl Air {
             | Air::BinOp { tipo, .. }
             | Air::Assert { tipo, .. }
             | Air::ListAssert { tipo, .. }
+            | Air::UnWrapData { tipo, .. }
             | Air::When { tipo, .. }
             | Air::Clause { tipo, .. }
             | Air::ListClause { tipo, .. }
