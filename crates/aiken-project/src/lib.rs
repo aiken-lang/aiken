@@ -135,11 +135,7 @@ where
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
-        let mut parsed_modules = self.parse_sources(self.config.name.clone())?;
-
-        for (_, module) in parsed_modules.iter_mut() {
-            module.attach_doc_and_module_comments();
-        }
+        let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
         self.type_check(parsed_modules)?;
 
@@ -349,7 +345,7 @@ where
                     // Store the name
                     ast.name = name.clone();
 
-                    let module = ParsedModule {
+                    let mut module = ParsedModule {
                         kind,
                         ast,
                         code,
@@ -369,6 +365,8 @@ where
                             second: module.path,
                         });
                     }
+
+                    module.attach_doc_and_module_comments();
 
                     parsed_modules.insert(module.name.clone(), module);
                 }

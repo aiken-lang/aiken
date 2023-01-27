@@ -4,13 +4,25 @@ use aiken_lang::{
     tipo::Type,
 };
 use miette::Diagnostic;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::{
+    self,
+    ser::{Serialize, SerializeStruct, Serializer},
+};
 use serde_json;
 use std::{
     collections::HashMap,
     fmt::{self, Display},
     sync::Arc,
 };
+
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize)]
+pub struct NamedSchema {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(flatten)]
+    pub schema: Schema,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Schema {
@@ -24,10 +36,10 @@ pub enum Schema {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Constructor {
     pub index: usize,
-    pub fields: Vec<Schema>,
+    pub fields: Vec<NamedSchema>,
 }
 
-impl Schema {
+impl NamedSchema {
     pub fn from_type(
         modules: &HashMap<String, CheckedModule>,
         name: &str,
@@ -39,8 +51,16 @@ impl Schema {
                 name: type_name,
                 ..
             } if module_name.is_empty() => match &type_name[..] {
-                "ByteArray" => Ok(Schema::Bytes),
-                "Integer" => Ok(Schema::Integer),
+                "ByteArray" => Ok(NamedSchema {
+                    title: name.to_string(),
+                    description: None,
+                    schema: Schema::Bytes,
+                }),
+                "Integer" => Ok(NamedSchema {
+                    title: name.to_string(),
+                    description: None,
+                    schema: Schema::Bytes,
+                }),
                 _ => Err(Error::UnsupportedPrimitiveType {
                     type_name: type_name.clone(),
                 }),
@@ -52,7 +72,12 @@ impl Schema {
             } => {
                 let module = modules.get(module_name).unwrap();
                 let constructor = find_definition(type_name, &module.ast.definitions).unwrap();
-                Self::from_data_type(modules, constructor)
+                let schema = Schema::from_data_type(modules, constructor)?;
+                Ok(NamedSchema {
+                    title: constructor.name.clone(),
+                    description: constructor.doc.clone().map(|s| s.trim().to_string()),
+                    schema,
+                })
             }
             Type::Fn { .. } | Type::Var { .. } | Type::Tuple { .. } => {
                 Err(Error::UnsupportedKind {
@@ -62,7 +87,9 @@ impl Schema {
             }
         }
     }
+}
 
+impl Schema {
     pub fn from_data_type(
         modules: &HashMap<String, CheckedModule>,
         data_type: &DataType<Arc<Type>>,
@@ -71,11 +98,13 @@ impl Schema {
         for (index, constructor) in data_type.constructors.iter().enumerate() {
             let mut fields = vec![];
             for field in constructor.arguments.iter() {
-                fields.push(Schema::from_type(
+                let mut schema = NamedSchema::from_type(
                     modules,
                     &field.label.clone().unwrap_or_default(),
                     &field.tipo,
-                )?);
+                )?;
+                schema.description = field.doc.clone().map(|s| s.trim().to_string());
+                fields.push(schema);
             }
             variants.push(Constructor { index, fields });
         }
@@ -187,7 +216,7 @@ pub mod test {
     use super::*;
     use serde_json::{self, json, Value};
 
-    pub fn assert_json(schema: &Schema, expected: Value) {
+    pub fn assert_json(schema: &impl Serialize, expected: Value) {
         assert_eq!(serde_json::to_value(schema).unwrap(), expected);
     }
 
@@ -347,6 +376,39 @@ pub mod test {
                         "fields": [{ "dataType": "bytes" }]
                     }
                 ]
+            }),
+        )
+    }
+
+    #[test]
+    fn serialize_named_no_description() {
+        let schema = NamedSchema {
+            title: "foo".to_string(),
+            description: None,
+            schema: Schema::Integer,
+        };
+        assert_json(
+            &schema,
+            json!({
+                "title": "foo",
+                "dataType": "integer"
+            }),
+        )
+    }
+
+    #[test]
+    fn serialize_named_description() {
+        let schema = NamedSchema {
+            title: "foo".to_string(),
+            description: Some("Lorem Ipsum".to_string()),
+            schema: Schema::Integer,
+        };
+        assert_json(
+            &schema,
+            json!({
+                "title": "foo",
+                "description": "Lorem Ipsum",
+                "dataType": "integer"
             }),
         )
     }

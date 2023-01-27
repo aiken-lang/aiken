@@ -5,7 +5,7 @@ pub mod validator;
 use crate::{config::Config, module::CheckedModules};
 use aiken_lang::uplc::CodeGenerator;
 use error::*;
-use schema::Schema;
+use schema::NamedSchema;
 use std::fmt::Debug;
 use validator::{Purpose, Validator};
 
@@ -38,11 +38,15 @@ impl Blueprint {
                 purpose,
                 datum: datum
                     .map(|datum| {
-                        Schema::from_type(modules.into(), &datum.arg_name.get_label(), &datum.tipo)
-                            .map_err(Error::Schema)
+                        NamedSchema::from_type(
+                            modules.into(),
+                            &datum.arg_name.get_label(),
+                            &datum.tipo,
+                        )
+                        .map_err(Error::Schema)
                     })
                     .transpose()?,
-                redeemer: Schema::from_type(
+                redeemer: NamedSchema::from_type(
                     modules.into(),
                     &redeemer.arg_name.get_label(),
                     &redeemer.tipo,

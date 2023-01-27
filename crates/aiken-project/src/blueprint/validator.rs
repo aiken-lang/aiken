@@ -1,4 +1,4 @@
-use super::schema::Schema;
+use super::schema::NamedSchema;
 use pallas::ledger::primitives::babbage as cardano;
 use pallas_traverse::ComputeHash;
 use serde::{
@@ -13,8 +13,8 @@ pub struct Validator {
     pub title: String,
     pub purpose: Purpose,
     pub description: Option<String>,
-    pub datum: Option<Schema>,
-    pub redeemer: Schema,
+    pub datum: Option<NamedSchema>,
+    pub redeemer: NamedSchema,
     pub program: Program<NamedDeBruijn>,
 }
 
@@ -82,7 +82,7 @@ impl Display for Purpose {
 
 #[cfg(test)]
 mod test {
-    use super::super::schema::Constructor;
+    use super::super::schema::{Constructor, Schema};
     use super::*;
     use serde_json::{self, json};
     use uplc::parser;
@@ -98,10 +98,14 @@ mod test {
             description: Some("Lorem ipsum".to_string()),
             purpose: Purpose::Spend,
             datum: None,
-            redeemer: Schema::AnyOf(vec![Constructor {
-                index: 0,
-                fields: vec![Schema::Bytes],
-            }]),
+            redeemer: NamedSchema {
+                title: "Bar".to_string(),
+                description: None,
+                schema: Schema::AnyOf(vec![Constructor {
+                    index: 0,
+                    fields: vec![Schema::Bytes],
+                }]),
+            },
             program,
         };
         assert_eq!(
@@ -111,6 +115,7 @@ mod test {
                 "description": "Lorem ipsum",
                 "purpose": "spend",
                 "redeemer": {
+                    "title": "Bar",
                     "dataType": "constructor",
                     "index": 0,
                     "fields": [{
