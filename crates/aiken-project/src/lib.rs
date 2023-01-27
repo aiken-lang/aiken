@@ -14,11 +14,10 @@ pub mod telemetry;
 
 use crate::blueprint::Blueprint;
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedDataType, TypedDefinition, TypedFunction},
+    ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
     builtins::{self, generic_var},
     tipo::TypeInfo,
-    uplc::CodeGenerator,
     IdGenerator,
 };
 use deps::UseManifest;
@@ -244,8 +243,7 @@ where
                 verbose,
                 exact_match,
             } => {
-                let tests =
-                    self.collect_scripts(verbose, |def| matches!(def, Definition::Test(..)))?;
+                let tests = self.collect_tests(verbose)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -447,72 +445,20 @@ where
         Ok(())
     }
 
-    fn collect_scripts(
-        &mut self,
-        verbose: bool,
-        should_collect: fn(&TypedDefinition) -> bool,
-    ) -> Result<Vec<Script>, Error> {
-        let mut programs = Vec::new();
-        let mut functions = IndexMap::new();
-        let mut type_aliases = IndexMap::new();
-        let mut data_types = IndexMap::new();
-
-        let prelude_functions = builtins::prelude_functions(&self.id_gen);
-        for (access_key, func) in prelude_functions.iter() {
-            functions.insert(access_key.clone(), func);
-        }
-
-        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
-
-        data_types.insert(
-            DataTypeKey {
-                module_name: "".to_string(),
-                defined_type: "Option".to_string(),
-            },
-            &option_data_type,
-        );
-
+    fn collect_tests(&mut self, verbose: bool) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
-
         for module in self.checked_modules.values() {
+            if module.package != self.config.name.to_string() {
+                continue;
+            }
             for def in module.ast.definitions() {
-                match def {
-                    Definition::Fn(func) => {
-                        functions.insert(
-                            FunctionAccessKey {
-                                module_name: module.name.clone(),
-                                function_name: func.name.clone(),
-                                variant_name: String::new(),
-                            },
-                            func,
-                        );
-
-                        if should_collect(def) && module.package == self.config.name.to_string() {
-                            scripts.push((module.input_path.clone(), module.name.clone(), func));
-                        }
-                    }
-                    Definition::Test(func) => {
-                        if should_collect(def) && module.package == self.config.name.to_string() {
-                            scripts.push((module.input_path.clone(), module.name.clone(), func));
-                        }
-                    }
-                    Definition::TypeAlias(ta) => {
-                        type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
-                    }
-                    Definition::DataType(dt) => {
-                        data_types.insert(
-                            DataTypeKey {
-                                module_name: module.name.clone(),
-                                defined_type: dt.name.clone(),
-                            },
-                            dt,
-                        );
-                    }
-                    Definition::Use(_) | Definition::ModuleConstant(_) => (),
+                if let Definition::Test(func) = def {
+                    scripts.push((module.input_path.clone(), module.name.clone(), func))
                 }
             }
         }
 
+        let mut programs = Vec::new();
         for (input_path, module_name, func_def) in scripts {
             let Function {
                 arguments,
@@ -528,8 +474,11 @@ where
                 })
             }
 
-            let mut generator =
-                CodeGenerator::new(functions.clone(), data_types.clone(), &self.module_types);
+            let mut generator = self.checked_modules.new_generator(
+                &self.functions,
+                &self.data_types,
+                &self.module_types,
+            );
 
             let evaluation_hint = if let Some((bin_op, left_src, right_src)) = func_def.test_hint()
             {
@@ -591,7 +540,7 @@ where
                 .map(|match_test| {
                     let mut match_split_dot = match_test.split('.');
 
-                    let match_module = if match_test.contains('.') {
+                    let match_module = if match_test.contains('.') || match_test.contains('/') {
                         match_split_dot.next().unwrap_or("")
                     } else {
                         ""
@@ -615,14 +564,16 @@ where
                     match_tests.iter().any(|(module, names)| {
                         let matched_module = module == &"" || script.module.contains(module);
 
-                        let matched_name = matches!(names, Some(names) if names
-                            .iter()
-                            .any(|name| if exact_match {
-                                name == &script.name
-                            } else {
-                                script.name.contains(name)
-                            }
-                        ));
+                        let matched_name = match names {
+                            None => true,
+                            Some(names) => names.iter().any(|name| {
+                                if exact_match {
+                                    name == &script.name
+                                } else {
+                                    script.name.contains(name)
+                                }
+                            }),
+                        };
 
                         matched_module && matched_name
                     })
