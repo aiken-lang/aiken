@@ -94,12 +94,12 @@ impl telemetry::EventListener for Terminal {
             telemetry::Event::WaitingForBuildDirLock => {
                 println!("{}", "Waiting for build directory lock ...".bold().purple());
             }
-            telemetry::Event::GeneratingUPLC { output_path, name } => {
+            telemetry::Event::GeneratingBlueprint { path } => {
                 println!(
-                    "{} {} in {}",
+                    "{} {} ({})",
                     "   Generating".bold().purple(),
-                    name.bold(),
-                    output_path.display().bright_blue()
+                    "contract blueprint".bold(),
+                    path.display().bright_blue()
                 );
             }
             telemetry::Event::GeneratingDocFiles { output_path } => {

@@ -39,11 +39,11 @@ use crate::{
     IdGenerator,
 };
 
+#[derive(Clone)]
 pub struct CodeGenerator<'a> {
     defined_functions: IndexMap<FunctionAccessKey, ()>,
-    functions: &'a IndexMap<FunctionAccessKey, &'a TypedFunction>,
-    // type_aliases: &'a IndexMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
-    data_types: &'a IndexMap<DataTypeKey, &'a TypedDataType>,
+    functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
+    data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
     module_types: &'a IndexMap<String, TypeInfo>,
     id_gen: IdGenerator,
     needs_field_access: bool,
@@ -53,15 +53,13 @@ pub struct CodeGenerator<'a> {
 
 impl<'a> CodeGenerator<'a> {
     pub fn new(
-        functions: &'a IndexMap<FunctionAccessKey, &'a TypedFunction>,
-        // type_aliases: &'a IndexMap<(String, String), &'a TypeAlias<Arc<tipo::Type>>>,
-        data_types: &'a IndexMap<DataTypeKey, &'a TypedDataType>,
+        functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
+        data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
         module_types: &'a IndexMap<String, TypeInfo>,
     ) -> Self {
         CodeGenerator {
             defined_functions: IndexMap::new(),
             functions,
-            // type_aliases,
             data_types,
             module_types,
             id_gen: IdGenerator::new(),
@@ -73,14 +71,14 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn generate(
         &mut self,
-        body: TypedExpr,
-        arguments: Vec<TypedArg>,
+        body: &TypedExpr,
+        arguments: &[TypedArg],
         wrap_as_validator: bool,
     ) -> Program<Name> {
         let mut ir_stack = vec![];
         let scope = vec![self.id_gen.next()];
 
-        self.build_ir(&body, &mut ir_stack, scope);
+        self.build_ir(body, &mut ir_stack, scope);
 
         self.define_ir(&mut ir_stack);
 
@@ -2865,7 +2863,7 @@ impl<'a> CodeGenerator<'a> {
                                 variant_name: String::new(),
                             };
 
-                            let function = self.functions.get(&non_variant_function_key).unwrap();
+                            let function = *self.functions.get(&non_variant_function_key).unwrap();
 
                             let mut func_ir = vec![];
 
@@ -3355,7 +3353,7 @@ impl<'a> CodeGenerator<'a> {
                     count,
                     scope,
                 } => {
-                    if check_replaceable_opaque_type(&tipo, self.data_types) {
+                    if check_replaceable_opaque_type(&tipo, &self.data_types) {
                         indices_to_remove.push(index);
                     } else {
                         let mut replaced_type = tipo.clone();
@@ -3377,7 +3375,7 @@ impl<'a> CodeGenerator<'a> {
                     let record = ir_stack[index + 1].clone();
                     let record_type = record.tipo();
                     if let Some(record_type) = record_type {
-                        if check_replaceable_opaque_type(&record_type, self.data_types) {
+                        if check_replaceable_opaque_type(&record_type, &self.data_types) {
                             indices_to_remove.push(index);
                         } else {
                             let mut replaced_type = tipo.clone();
@@ -3408,7 +3406,7 @@ impl<'a> CodeGenerator<'a> {
                     let record = ir_stack[index + 1].clone();
                     let record_type = record.tipo();
                     if let Some(record_type) = record_type {
-                        if check_replaceable_opaque_type(&record_type, self.data_types) {
+                        if check_replaceable_opaque_type(&record_type, &self.data_types) {
                             ir_stack[index] = Air::Let {
                                 scope,
                                 name: indices[0].1.clone(),

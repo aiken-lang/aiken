@@ -988,7 +988,7 @@ pub fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConsta
     new_constants
 }
 
-pub fn wrap_validator_args(term: Term<Name>, arguments: Vec<TypedArg>) -> Term<Name> {
+pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Name> {
     let mut term = term;
     for arg in arguments.iter().rev() {
         if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
