@@ -165,7 +165,7 @@ fn gitignore(root: &Path) -> miette::Result<()> {
         indoc! {
             r#"
                 # Aiken compilation artifacts
-                assets/
+                artifacts/
                 # Aiken's project working directory
                 build/
                 # Aiken's default documentation export

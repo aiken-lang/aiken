@@ -184,6 +184,20 @@ where
         self.compile(options)
     }
 
+    pub fn dump_uplc(&self, blueprint: &Blueprint) -> Result<(), Error> {
+        let dir = self.root.join("artifacts");
+        self.event_listener
+            .handle_event(Event::DumpingUPLC { path: dir.clone() });
+        fs::create_dir_all(&dir)?;
+        for validator in &blueprint.validators {
+            // TODO: Also include validator name.
+            let path = dir.clone().join(format!("{}.uplc", validator.purpose));
+            fs::write(&path, validator.program.to_pretty())
+                .map_err(|error| Error::FileIo { error, path })?;
+        }
+        Ok(())
+    }
+
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
         self.compile_deps()?;
 
@@ -222,14 +236,7 @@ where
                 }
 
                 if uplc_dump {
-                    let dir = self.root.join("artifacts");
-                    fs::create_dir_all(&dir)?;
-                    for validator in &blueprint.validators {
-                        // TODO: Also include validator name.
-                        let path = dir.clone().join(format!("{}.uplc", validator.purpose));
-                        fs::write(&path, validator.program.to_pretty())
-                            .map_err(|error| Error::FileIo { error, path })?;
-                    }
+                    self.dump_uplc(&blueprint)?;
                 }
 
                 let json = serde_json::to_string_pretty(&blueprint).unwrap();

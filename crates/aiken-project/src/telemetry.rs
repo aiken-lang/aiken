@@ -22,6 +22,9 @@ pub enum Event {
     GeneratingBlueprint {
         path: PathBuf,
     },
+    DumpingUPLC {
+        path: PathBuf,
+    },
     GeneratingUPLCFor {
         name: String,
         path: PathBuf,
