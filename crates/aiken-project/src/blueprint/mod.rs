@@ -33,6 +33,7 @@ impl Blueprint {
             let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
             validators.push(Validator {
+                title: validator.name.clone(),
                 description: None,
                 purpose,
                 datum: datum

@@ -10,6 +10,7 @@ use uplc::ast::{NamedDeBruijn, Program};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Validator {
+    pub title: String,
     pub purpose: Purpose,
     pub description: Option<String>,
     pub datum: Option<Schema>,
@@ -22,6 +23,7 @@ impl Serialize for Validator {
         let cbor = self.program.to_cbor().unwrap();
         let source_code = hex::encode(&cbor);
         let mut s = serializer.serialize_struct("Validator", 5)?;
+        s.serialize_field("title", &self.title)?;
         s.serialize_field("purpose", &self.purpose)?;
         let hash = cardano::PlutusV2Script(cbor.into()).compute_hash();
         s.serialize_field("hash", &hash)?;
@@ -92,6 +94,7 @@ mod test {
             .try_into()
             .unwrap();
         let validator = Validator {
+            title: "foo".to_string(),
             description: Some("Lorem ipsum".to_string()),
             purpose: Purpose::Spend,
             datum: None,
@@ -104,6 +107,7 @@ mod test {
         assert_eq!(
             serde_json::to_value(&validator).unwrap(),
             json!({
+                "title": "foo",
                 "description": "Lorem ipsum",
                 "purpose": "spend",
                 "redeemer": {

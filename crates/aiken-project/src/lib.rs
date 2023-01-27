@@ -190,8 +190,9 @@ where
             .handle_event(Event::DumpingUPLC { path: dir.clone() });
         fs::create_dir_all(&dir)?;
         for validator in &blueprint.validators {
-            // TODO: Also include validator name.
-            let path = dir.clone().join(format!("{}.uplc", validator.purpose));
+            let path = dir
+                .clone()
+                .join(format!("{}::{}>.uplc", validator.title, validator.purpose));
             fs::write(&path, validator.program.to_pretty())
                 .map_err(|error| Error::FileIo { error, path })?;
         }
