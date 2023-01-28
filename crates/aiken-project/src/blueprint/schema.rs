@@ -35,8 +35,8 @@ pub enum Schema {
     Integer,
     Bytes,
     String,
-    Pair(Box<Data>, Box<Data>),
-    List(Box<Data>),
+    Pair(Data, Data),
+    List(Vec<Data>),
     Data(Option<Data>),
 }
 
@@ -84,16 +84,13 @@ impl Annotated<Schema> {
                     description: Some("Any Plutus data.".to_string()),
                     annotated: Schema::Data(None),
                 }),
-                "ByteArray" => Ok(Annotated {
-                    title: None,
-                    description: None,
-                    annotated: Schema::Data(Some(Data::Bytes)),
-                }),
-                "Int" => Ok(Annotated {
-                    title: None,
-                    description: None,
-                    annotated: Schema::Data(Some(Data::Integer)),
-                }),
+
+                "ByteArray" => Ok(Schema::Data(Some(Data::Bytes)).into()),
+
+                "Int" => Ok(Schema::Data(Some(Data::Integer)).into()),
+
+                "String" => Ok(Schema::String.into()),
+
                 // TODO: Check whether this matches with the UPLC code generation as there are two
                 // options here since there's technically speaking a `unit` constant constructor in
                 // the UPLC primitives.
@@ -109,6 +106,7 @@ impl Annotated<Schema> {
                         },
                     }]))),
                 }),
+
                 // TODO: Also check here whether this matches with the UPLC code generation.
                 "Bool" => Ok(Annotated {
                     title: Some("Bool".to_string()),
@@ -132,6 +130,7 @@ impl Annotated<Schema> {
                         },
                     ]))),
                 }),
+
                 "Option" => {
                     let generic = Annotated::from_type(modules, args.get(0).unwrap())
                         .and_then(|s| s.into_data(type_info))?;
@@ -158,15 +157,13 @@ impl Annotated<Schema> {
                         ]))),
                     })
                 }
+
                 "List" => {
                     let generic = Annotated::from_type(modules, args.get(0).unwrap())
                         .and_then(|s| s.into_data(type_info))?;
-                    Ok(Annotated {
-                        title: None,
-                        description: None,
-                        annotated: Schema::Data(Some(Data::List(Box::new(generic.annotated)))),
-                    })
+                    Ok(Schema::Data(Some(Data::List(Box::new(generic.annotated)))).into())
                 }
+
                 _ => Err(Error::UnsupportedType {
                     type_info: type_info.clone(),
                 }),
@@ -193,7 +190,27 @@ impl Annotated<Schema> {
                     type_info: type_info.clone(),
                 }),
             },
-            Type::Tuple { .. } => todo!(),
+            Type::Tuple { elems } => match &elems[..] {
+                [left, right] => {
+                    let left = Annotated::from_type(modules, left)?.into_data(left)?;
+                    let right = Annotated::from_type(modules, right)?.into_data(right)?;
+                    Ok(Schema::Pair(left.annotated, right.annotated).into())
+                }
+                _ => {
+                    let elems: Result<Vec<Data>, _> = elems
+                        .iter()
+                        .map(|e| {
+                            Annotated::from_type(modules, e)
+                                .and_then(|s| s.into_data(e).map(|s| s.annotated))
+                        })
+                        .collect();
+                    Ok(Annotated {
+                        title: Some("Tuple".to_owned()),
+                        description: None,
+                        annotated: Schema::List(elems?),
+                    })
+                }
+            },
             Type::Fn { .. } => Err(Error::UnsupportedType {
                 type_info: type_info.clone(),
             }),
@@ -211,8 +228,8 @@ impl Annotated<Schema> {
                 description,
                 annotated: data,
             }),
-            _ => Err(Error::UnsupportedType {
-                type_info: type_info.to_owned(),
+            _ => Err(Error::ExpectedData {
+                got: type_info.to_owned(),
             }),
         }
     }
@@ -243,7 +260,7 @@ impl Data {
 
             let variant = Annotated {
                 title: Some(constructor.name.clone()),
-                description: constructor.doc.clone(),
+                description: constructor.doc.clone().map(|s| s.trim().to_string()),
                 annotated: Constructor { index, fields },
             };
 
@@ -370,6 +387,8 @@ pub enum Error {
         , type_signature = pretty::Printer::new().print(type_info).to_pretty_string(70).bright_blue()
     ))]
     UnsupportedType { type_info: Type },
+    #[error("I had the misfortune to find an invalid type in an interface boundary.")]
+    ExpectedData { got: Type },
 }
 
 fn find_definition<'a>(

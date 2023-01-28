@@ -187,12 +187,15 @@ mod test {
 
         fn parse(&self, source_code: &str) -> ParsedModule {
             let kind = ModuleKind::Validator;
-            let (ast, extra) = parser::module(source_code, kind).unwrap();
+            let name = "test_module".to_owned();
+            let (mut ast, extra) =
+                parser::module(source_code, kind).expect("Failed to parse module");
+            ast.name = name.clone();
             let mut module = ParsedModule {
                 kind,
                 ast,
                 code: source_code.to_string(),
-                name: "test".to_owned(),
+                name,
                 path: PathBuf::new(),
                 extra,
                 package: self.package.to_string(),
@@ -201,7 +204,7 @@ mod test {
             module
         }
 
-        fn check(&self, module: ParsedModule) -> CheckedModule {
+        fn check(&mut self, module: ParsedModule) -> CheckedModule {
             let mut warnings = vec![];
 
             let ast = module
@@ -213,7 +216,10 @@ mod test {
                     &self.module_types,
                     &mut warnings,
                 )
-                .unwrap();
+                .expect("Failed to type-check module");
+
+            self.module_types
+                .insert(module.name.clone(), ast.type_info.clone());
 
             CheckedModule {
                 kind: module.kind,
@@ -228,7 +234,7 @@ mod test {
     }
 
     fn assert_validator(source_code: &str, json: serde_json::Value) {
-        let project = TestProject::new();
+        let mut project = TestProject::new();
 
         let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
         let mut generator = modules.new_generator(
@@ -242,35 +248,209 @@ mod test {
             .next()
             .expect("source code did no yield any validator");
 
-        let validator =
-            Validator::from_checked_module(&modules, &mut generator, validator, def).unwrap();
+        let validator = Validator::from_checked_module(&modules, &mut generator, validator, def)
+            .expect("Failed to create validator blueprint");
 
         println!("{}", validator);
         assert_json_eq!(serde_json::to_value(&validator).unwrap(), json);
     }
 
     #[test]
-    fn validator_1() {
+    fn validator_mint_basic() {
         assert_validator(
             r#"
-            fn spend(datum: Data, redeemer: Data, ctx: Data) {
+            fn mint(redeemer: Data, ctx: Data) {
                 True
             }
             "#,
             json!({
-              "title": "test",
+              "title": "test_module",
+              "purpose": "mint",
+              "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+              "redeemer": {
+                "title": "Data",
+                "description": "Any Plutus data."
+              },
+              "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+            }),
+        );
+    }
+
+    #[test]
+    fn validator_spend() {
+        assert_validator(
+            r#"
+            /// On-chain state
+            type State {
+                /// The contestation period as a number of seconds
+                contestationPeriod: ContestationPeriod,
+                /// List of public key hashes of all participants
+                parties: List<Party>,
+                utxoHash: Hash<Blake2b_256>,
+            }
+
+            /// A Hash digest for a given algorithm.
+            type Hash<alg> = ByteArray
+
+            type Blake2b_256 { Blake2b_256 }
+
+            /// Whatever
+            type ContestationPeriod {
+              /// A positive, non-zero number of seconds.
+              ContestationPeriod(Int)
+            }
+
+            type Party =
+              ByteArray
+
+            type Input {
+                CollectCom
+                Close
+                /// Abort a transaction
+                Abort
+            }
+
+            fn spend(datum: State, redeemer: Input, ctx: Data) {
+                True
+            }
+            "#,
+            json!({
+              "title": "test_module",
               "purpose": "spend",
               "hash": "cf2cd3bed32615bfecbd280618c1c1bec2198fc0f72b04f323a8a0d2",
               "datum": {
-                "title": "Data",
-                "description": "Any Plutus data."
+                "title": "State",
+                "description": "On-chain state",
+                "anyOf": [
+                  {
+                    "title": "State",
+                    "dataType": "constructor",
+                    "index": 0,
+                    "fields": [
+                      {
+                        "title": "contestationPeriod",
+                        "description": "The contestation period as a number of seconds",
+                        "anyOf": [
+                          {
+                            "title": "ContestationPeriod",
+                            "description": "A positive, non-zero number of seconds.",
+                            "dataType": "constructor",
+                            "index": 0,
+                            "fields": [
+                              {
+                                "dataType": "integer"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "title": "parties",
+                        "description": "List of public key hashes of all participants",
+                        "dataType": "list",
+                        "items": {
+                          "dataType": "bytes"
+                        }
+                      },
+                      {
+                        "title": "utxoHash",
+                        "dataType": "bytes"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "redeemer": {
+                "title": "Input",
+                "anyOf": [
+                  {
+                    "title": "CollectCom",
+                    "dataType": "constructor",
+                    "index": 0,
+                    "fields": []
+                  },
+                  {
+                    "title": "Close",
+                    "dataType": "constructor",
+                    "index": 1,
+                    "fields": []
+                  },
+                  {
+                    "title": "Abort",
+                    "description": "Abort a transaction",
+                    "dataType": "constructor",
+                    "index": 2,
+                    "fields": []
+                  }
+                ]
+              },
+              "compiledCode": "58250100002105646174756d00210872656465656d657200210363747800533357349445261601"
+            }),
+        );
+    }
+
+    #[test]
+    fn validator_spend_2tuple() {
+        assert_validator(
+            r#"
+            fn spend(datum: (Int, ByteArray), redeemer: String, ctx: Void) {
+                True
+            }
+            "#,
+            json!({
+              "title": "test_module",
+              "purpose": "spend",
+              "hash": "12065ad2edb75b9e497e50c4f8130b90c9108f8ae0991abc5442e074",
+              "datum": {
+                "dataType": "#pair",
+                "left": {
+                  "dataType": "integer"
+                },
+                "right": {
+                  "dataType": "bytes"
+                }
+              },
+              "redeemer": {
+                "dataType": "#string"
+              },
+              "compiledCode": "589f0100002105646174756d00320105646174756d00210872656465656d65720032010872656465656d657200210363747800533357349445261637326eb8010872656465656d6572000132010b5f5f6c6973745f64617461003201065f5f7461696c00337606ae84010b5f5f6c6973745f646174610002357421065f5f7461696c00013574410b5f5f6c6973745f64617461000137580105646174756d000101"
+            }),
+        )
+    }
+
+    #[test]
+    fn validator_spend_tuples() {
+        assert_validator(
+            r#"
+            fn spend(datum: (Int, Int, Int), redeemer: Data, ctx: Void) {
+                True
+            }
+            "#,
+            json!({
+              "title": "test_module",
+              "purpose": "spend",
+              "hash": "5c470f297728051a920bd9e70e14197c8fb0eaf4413e419827b0ec38",
+              "datum": {
+                "title": "Tuple",
+                "dataType": "#list",
+                "elements": [
+                  {
+                    "dataType": "integer"
+                  },
+                  {
+                    "dataType": "integer"
+                  },
+                  {
+                    "dataType": "integer"
+                  }
+                ]
               },
               "redeemer": {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "58250100002105646174756d00210872656465656d657200210363747800533357349445261601"
+              "compiledCode": "58390100002105646174756d00320105646174756d00210872656465656d657200210363747800533357349445261637580105646174756d000101"
             }),
-        );
+        )
     }
 }
