@@ -11,6 +11,7 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 [dependencies]
 aiken-lang = { path = "../aiken-lang", version = "0.0.28" }
 askama = "0.10.5"
+assert-json-diff = "2.0.2"
 dirs = "4.0.0"
 fslock = "0.2.1"
 futures = "0.3.25"

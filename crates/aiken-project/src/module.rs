@@ -244,6 +244,12 @@ impl<'a> From<&'a CheckedModules> for &'a HashMap<String, CheckedModule> {
 }
 
 impl CheckedModules {
+    pub fn singleton(module: CheckedModule) -> Self {
+        let mut modules = Self::default();
+        modules.insert(module.name.clone(), module);
+        modules
+    }
+
     pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedFunction)> {
         let mut items = vec![];
         for validator in self.0.values().filter(|module| module.kind.is_validator()) {

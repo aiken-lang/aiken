@@ -60,6 +60,13 @@ impl Serialize for Validator {
     }
 }
 
+impl Display for Validator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
+        f.write_str(&s)
+    }
+}
+
 impl Validator {
     pub fn from_checked_module(
         modules: &CheckedModules,
@@ -128,51 +135,141 @@ impl From<String> for Purpose {
 
 #[cfg(test)]
 mod test {
-    use super::super::schema::{Constructor, Data, Schema};
     use super::*;
+    use crate::{module::ParsedModule, PackageName};
+    use aiken_lang::{
+        self,
+        ast::{ModuleKind, TypedDataType, TypedFunction},
+        builder::{DataTypeKey, FunctionAccessKey},
+        builtins, parser,
+        tipo::TypeInfo,
+        IdGenerator,
+    };
+    use assert_json_diff::assert_json_eq;
     use serde_json::{self, json};
-    use uplc::parser;
+    use std::{collections::HashMap, path::PathBuf};
+
+    // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
+    // be to make this struct below the actual project, and wrap it in another metadata struct
+    // which contains all the config and I/O stuff regarding the project.
+    struct TestProject {
+        package: PackageName,
+        id_gen: IdGenerator,
+        module_types: HashMap<String, TypeInfo>,
+        functions: HashMap<FunctionAccessKey, TypedFunction>,
+        data_types: HashMap<DataTypeKey, TypedDataType>,
+    }
+
+    impl TestProject {
+        fn new() -> Self {
+            let id_gen = IdGenerator::new();
+
+            let package = PackageName {
+                owner: "test".to_owned(),
+                repo: "project".to_owned(),
+            };
+
+            let mut module_types = HashMap::new();
+            module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
+            module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
+
+            let functions = builtins::prelude_functions(&id_gen);
+            let data_types = builtins::prelude_data_types(&id_gen);
+
+            TestProject {
+                package,
+                id_gen,
+                module_types,
+                functions,
+                data_types,
+            }
+        }
+
+        fn parse(&self, source_code: &str) -> ParsedModule {
+            let kind = ModuleKind::Validator;
+            let (ast, extra) = parser::module(source_code, kind).unwrap();
+            let mut module = ParsedModule {
+                kind,
+                ast,
+                code: source_code.to_string(),
+                name: "test".to_owned(),
+                path: PathBuf::new(),
+                extra,
+                package: self.package.to_string(),
+            };
+            module.attach_doc_and_module_comments();
+            module
+        }
+
+        fn check(&self, module: ParsedModule) -> CheckedModule {
+            let mut warnings = vec![];
+
+            let ast = module
+                .ast
+                .infer(
+                    &self.id_gen,
+                    module.kind,
+                    &self.package.to_string(),
+                    &self.module_types,
+                    &mut warnings,
+                )
+                .unwrap();
+
+            CheckedModule {
+                kind: module.kind,
+                extra: module.extra,
+                name: module.name,
+                code: module.code,
+                package: module.package,
+                input_path: module.path,
+                ast,
+            }
+        }
+    }
+
+    fn assert_validator(source_code: &str, json: serde_json::Value) {
+        let project = TestProject::new();
+
+        let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
+        let mut generator = modules.new_generator(
+            &project.functions,
+            &project.data_types,
+            &project.module_types,
+        );
+
+        let (validator, def) = modules
+            .validators()
+            .next()
+            .expect("source code did no yield any validator");
+
+        let validator =
+            Validator::from_checked_module(&modules, &mut generator, validator, def).unwrap();
+
+        println!("{}", validator);
+        assert_json_eq!(serde_json::to_value(&validator).unwrap(), json);
+    }
 
     #[test]
-    fn serialize() {
-        let program = parser::program("(program 1.0.0 (con integer 42))")
-            .unwrap()
-            .try_into()
-            .unwrap();
-        let validator = Validator {
-            title: "foo".to_string(),
-            description: Some("Lorem ipsum".to_string()),
-            purpose: Purpose::Spend,
-            datum: None,
-            redeemer: Annotated {
-                title: Some("Bar".to_string()),
-                description: None,
-                annotated: Schema::Data(Some(Data::AnyOf(vec![Constructor {
-                    index: 0,
-                    fields: vec![Data::Bytes.into()],
-                }
-                .into()]))),
-            },
-            program,
-        };
-        assert_eq!(
-            serde_json::to_value(&validator).unwrap(),
+    fn validator_1() {
+        assert_validator(
+            r#"
+            fn spend(datum: Data, redeemer: Data, ctx: Data) {
+                True
+            }
+            "#,
             json!({
-                "title": "foo",
-                "purpose": "spend",
-                "hash": "27dc8e44c17b4ae5f4b9286ab599fffe70e61b49dec61eaca1fc5898",
-                "description": "Lorem ipsum",
-                "redeemer": {
-                    "title": "Bar",
-                    "anyOf": [{
-                        "dataType": "constructor",
-                        "index": 0,
-                        "fields": [{
-                            "dataType": "bytes"
-                        }]
-                    }],
-                },
-                "compiledCode": "46010000481501"
+              "title": "test",
+              "purpose": "spend",
+              "hash": "cf2cd3bed32615bfecbd280618c1c1bec2198fc0f72b04f323a8a0d2",
+              "datum": {
+                "title": "Data",
+                "description": "Any Plutus data."
+              },
+              "redeemer": {
+                "title": "Data",
+                "description": "Any Plutus data."
+              },
+              "compiledCode": "58250100002105646174756d00210872656465656d657200210363747800533357349445261601"
             }),
         );
     }

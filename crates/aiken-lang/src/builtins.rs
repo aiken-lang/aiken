@@ -5,8 +5,8 @@ use strum::IntoEnumIterator;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedFunction, UnOp},
-    builder::FunctionAccessKey,
+    ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedDataType, TypedFunction, UnOp},
+    builder::{DataTypeKey, FunctionAccessKey},
     expr::TypedExpr,
     tipo::{
         fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
@@ -798,6 +798,22 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> HashMap<FunctionAccessKey, Typ
     );
 
     functions
+}
+
+pub fn prelude_data_types(id_gen: &IdGenerator) -> HashMap<DataTypeKey, TypedDataType> {
+    let mut data_types = HashMap::new();
+
+    // Option
+    let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "Option".to_string(),
+        },
+        option_data_type,
+    );
+
+    data_types
 }
 
 pub fn int() -> Arc<Type> {

@@ -5,13 +5,23 @@ pub mod validator;
 use crate::{config::Config, module::CheckedModules};
 use aiken_lang::uplc::CodeGenerator;
 use error::Error;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display};
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Blueprint {
     pub preamble: Preamble,
     pub validators: Vec<validator::Validator>,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize)]
+pub struct Preamble {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
 }
 
 impl Blueprint {
@@ -36,14 +46,11 @@ impl Blueprint {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize)]
-pub struct Preamble {
-    pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub license: Option<String>,
+impl Display for Blueprint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
+        f.write_str(&s)
+    }
 }
 
 impl Preamble {

@@ -16,7 +16,7 @@ use crate::blueprint::Blueprint;
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
-    builtins::{self, generic_var},
+    builtins,
     tipo::TypeInfo,
     IdGenerator,
 };
@@ -81,20 +81,9 @@ where
         module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
         module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-        let mut functions = HashMap::new();
-        for (access_key, func) in builtins::prelude_functions(&id_gen).into_iter() {
-            functions.insert(access_key.to_owned(), func);
-        }
+        let functions = builtins::prelude_functions(&id_gen);
 
-        let mut data_types = HashMap::new();
-        let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
-        data_types.insert(
-            DataTypeKey {
-                module_name: "".to_string(),
-                defined_type: "Option".to_string(),
-            },
-            option_data_type,
-        );
+        let data_types = builtins::prelude_data_types(&id_gen);
 
         let config = Config::load(&root)?;
 
