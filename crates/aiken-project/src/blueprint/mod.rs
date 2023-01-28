@@ -4,10 +4,9 @@ pub mod validator;
 
 use crate::{config::Config, module::CheckedModules};
 use aiken_lang::uplc::CodeGenerator;
-use error::*;
-use schema::NamedSchema;
+use error::Error;
 use std::fmt::Debug;
-use validator::{Purpose, Validator};
+use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Blueprint {
@@ -21,47 +20,18 @@ impl Blueprint {
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
     ) -> Result<Self, Error> {
-        let mut validators = Vec::new();
+        let preamble = Preamble::from_config(config);
 
-        for (validator, def) in modules.validators() {
-            let purpose: Purpose = def.name.clone().into();
-
-            assert_return_bool(validator, def)?;
-            assert_min_arity(validator, def, purpose.min_arity())?;
-
-            let mut args = def.arguments.iter().rev();
-            let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
-
-            validators.push(Validator {
-                title: validator.name.clone(),
-                description: None,
-                purpose,
-                datum: datum
-                    .map(|datum| {
-                        NamedSchema::from_type(
-                            modules.into(),
-                            &datum.arg_name.get_label(),
-                            &datum.tipo,
-                        )
-                        .map_err(Error::Schema)
-                    })
-                    .transpose()?,
-                redeemer: NamedSchema::from_type(
-                    modules.into(),
-                    &redeemer.arg_name.get_label(),
-                    &redeemer.tipo,
-                )
-                .map_err(Error::Schema)?,
-                program: generator
-                    .generate(&def.body, &def.arguments, true)
-                    .try_into()
-                    .unwrap(),
-            });
-        }
+        let validators: Result<Vec<_>, Error> = modules
+            .validators()
+            .map(|(validator, def)| {
+                Validator::from_checked_module(modules, generator, validator, def)
+            })
+            .collect();
 
         Ok(Blueprint {
-            preamble: Preamble::from_config(config),
-            validators,
+            preamble,
+            validators: validators?,
         })
     }
 }
