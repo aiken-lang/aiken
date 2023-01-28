@@ -4,7 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{apply_wrap, choose_list, if_else},
+        builder::{apply_wrap, choose_list, delayed_choose_list, if_else},
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -481,12 +481,13 @@ pub fn list_access_to_uplc(
     tail: bool,
     current_index: usize,
     term: Term<Name>,
-    tipo: &Type,
+    tipos: Vec<Arc<Type>>,
     check_last_item: bool,
 ) -> Term<Name> {
     let (first, names) = names.split_first().unwrap();
+    let (current_tipo, tipos) = tipos.split_first().unwrap();
 
-    let head_list = if tipo.is_map() {
+    let head_list = if current_tipo.is_map() {
         apply_wrap(
             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
             Term::Var(Name {
@@ -503,7 +504,7 @@ pub fn list_access_to_uplc(
                     unique: 0.into(),
                 }),
             ),
-            &tipo.clone().get_inner_types()[0],
+            &current_tipo.to_owned(),
         )
     };
 
@@ -559,7 +560,7 @@ pub fn list_access_to_uplc(
                         unique: 0.into(),
                     },
                     body: if check_last_item {
-                        choose_list(
+                        delayed_choose_list(
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::TailList).force_wrap(),
                                 Term::Var(Name {
@@ -587,13 +588,7 @@ pub fn list_access_to_uplc(
                         term.into()
                     },
                 },
-                apply_wrap(
-                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                    Term::Var(Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }),
-                ),
+                head_list,
             )
             .into(),
         }
@@ -616,7 +611,7 @@ pub fn list_access_to_uplc(
                             tail,
                             current_index + 1,
                             term,
-                            tipo,
+                            tipos.to_owned(),
                             check_last_item,
                         ),
                         apply_wrap(

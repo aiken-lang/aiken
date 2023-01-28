@@ -1,4 +1,4 @@
-use std::{sync::Arc, vec};
+use std::{clone, sync::Arc, vec};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -1541,13 +1541,10 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             constr @ Pattern::Constructor { .. } => {
-                println!("ASSIGNMENT PROPERTIES {:#?}", assignment_properties);
-                println!("CURRENT TYPE IS {:#?}", tipo);
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
                     && assignment_properties.value_is_data
                     && !tipo.is_data()
                 {
-                    println!("GOT HERE FOR SURE");
                     self.recursive_assert_pattern(
                         constr,
                         pattern_vec,
@@ -1928,14 +1925,15 @@ impl<'a> CodeGenerator<'a> {
                     if arguments_index.get(current_index).is_some()
                         && arguments_index[current_index].1 == index
                     {
-                        final_args.push(arguments_index.get(index).unwrap().clone());
+                        final_args.push(arguments_index.get(current_index).unwrap().clone());
                         current_index += 1;
                     } else {
-                        final_args.push((format!("__field_{index}_{}", self.id_gen.next()), index));
+                        let id_next = self.id_gen.next();
+                        final_args.push((format!("__field_{index}_{}", id_next), index));
                         self.recursive_assert_tipo(
                             type_map.get(&index).unwrap(),
                             &mut nested_pattern,
-                            &format!("__field_{index}_{}", self.id_gen.next()),
+                            &format!("__field_{index}_{}", id_next),
                             scope.clone(),
                         )
                     }
@@ -1994,11 +1992,12 @@ impl<'a> CodeGenerator<'a> {
                         final_args.push(arguments_index.get(index).unwrap().clone());
                         current_index += 1;
                     } else {
-                        final_args.push((format!("__field_{index}_{}", self.id_gen.next()), index));
+                        let id_next = self.id_gen.next();
+                        final_args.push((format!("__tuple_{index}_{}", id_next), index));
                         self.recursive_assert_tipo(
                             type_map.get(&index).unwrap(),
                             &mut nested_pattern,
-                            &format!("__field_{index}_{}", self.id_gen.next()),
+                            &format!("__tuple_{index}_{}", id_next),
                             scope.clone(),
                         )
                     }
@@ -2006,7 +2005,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if !arguments_index.is_empty() {
                     pattern_vec.push(Air::TupleAccessor {
-                        scope: scope.clone(),
+                        scope,
                         names: final_args.into_iter().map(|(item, _)| item).collect_vec(),
                         tipo: tipo.clone().into(),
                         check_last_item: true,
@@ -2055,7 +2054,7 @@ impl<'a> CodeGenerator<'a> {
 
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
-                count: 3,
+                count: 2,
                 tipo: tipo.clone().into(),
             });
 
@@ -2144,7 +2143,7 @@ impl<'a> CodeGenerator<'a> {
 
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
-                count: 3,
+                count: 2,
                 tipo: tipo.clone().into(),
             });
 
@@ -3621,6 +3620,13 @@ impl<'a> CodeGenerator<'a> {
                     )
                 };
 
+                let inner_types = tipo
+                    .get_inner_types()
+                    .into_iter()
+                    .cycle()
+                    .take(names.len())
+                    .collect_vec();
+
                 term = apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
@@ -3640,7 +3646,7 @@ impl<'a> CodeGenerator<'a> {
                                         tail,
                                         current_index,
                                         term,
-                                        &tipo,
+                                        inner_types,
                                         check_last_item,
                                     ),
                                     apply_wrap(
@@ -4228,7 +4234,13 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::UnWrapData { scope, tipo } => todo!(),
+            Air::UnWrapData { tipo, .. } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                term = convert_data_to_type(term, &tipo);
+
+                arg_stack.push(term);
+            }
             Air::When {
                 subject_name, tipo, ..
             } => {
@@ -4691,220 +4703,84 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::FieldsExpose { indices, .. } => {
-                // let mut id_list = vec![];
-
-                //     for _ in 0..names.len() {
-                //         id_list.push(self.id_gen.next());
-                //     }
-
-                //     let current_index = 0;
-                //     let (first_name, names) = names.split_first().unwrap();
-
-                //     let head_list = convert_data_to_type(
-                //         apply_wrap(
-                //             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                //             Term::Var(Name {
-                //                 text: format!("__tuple_{}", list_id),
-                //                 unique: 0.into(),
-                //             }),
-                //         ),
-                //         &tipo.get_inner_types()[0],
-                //     );
-
-                //     term = apply_wrap(
-                //         Term::Lambda {
-                //             parameter_name: Name {
-                //                 text: format!("__tuple_{}", list_id),
-                //                 unique: 0.into(),
-                //             },
-                //             body: apply_wrap(
-                //                 Term::Lambda {
-                //                     parameter_name: Name {
-                //                         text: first_name.clone(),
-                //                         unique: 0.into(),
-                //                     },
-                //                     body: apply_wrap(
-                //                         list_access_to_uplc(
-                //                             names,
-                //                             &id_list,
-                //                             false,
-                //                             current_index,
-                //                             term,
-                //                             &tipo,
-                //                             check_last_item,
-                //                         ),
-                //                         apply_wrap(
-                //                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                //                             Term::Var(Name {
-                //                                 text: format!("__tuple_{}", list_id),
-                //                                 unique: 0.into(),
-                //                             }),
-                //                         ),
-                //                     )
-                //                     .into(),
-                //                 },
-                //                 head_list,
-                //             )
-                //             .into(),
-                //         },
-                //         value,
-                //     );
+            Air::FieldsExpose {
+                indices,
+                check_last_item,
+                ..
+            } => {
                 self.needs_field_access = true;
-
-                let constr_var = arg_stack.pop().unwrap();
-                let mut body = arg_stack.pop().unwrap();
-
-                let mut indices = indices.into_iter().rev();
-                let highest = indices.next().unwrap();
                 let mut id_list = vec![];
+                let value = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+                let list_id = self.id_gen.next();
 
-                for _ in 0..highest.0 {
+                for _ in 0..indices.len() {
                     id_list.push(self.id_gen.next());
                 }
 
-                let constr_name_lam = format!("__constr_fields_{}", self.id_gen.next());
-                let highest_loop_index = highest.0 as i32 - 1;
-                let last_prev_tail = Term::Var(Name {
-                    text: if highest_loop_index == -1 {
-                        constr_name_lam.clone()
-                    } else {
-                        format!(
-                            "__tail_{}_{}",
-                            highest_loop_index, id_list[highest_loop_index as usize]
-                        )
-                    },
-                    unique: 0.into(),
-                });
+                let current_index = 0;
+                let (first_name, indices) = indices.split_first().unwrap();
 
-                body = apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: highest.1,
+                let head_list = convert_data_to_type(
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                        Term::Var(Name {
+                            text: format!("__constr_fields_{}", list_id),
                             unique: 0.into(),
-                        },
-                        body: body.into(),
-                    },
-                    convert_data_to_type(
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                            last_prev_tail,
-                        ),
-                        &highest.2,
+                        }),
                     ),
+                    &first_name.2,
                 );
 
-                let mut current_field = None;
-                for index in (0..highest.0).rev() {
-                    let current_tail_index = index;
-                    let previous_tail_index = if index == 0 { 0 } else { index - 1 };
-                    let current_tail_id = id_list[index];
-                    let previous_tail_id = if index == 0 { 0 } else { id_list[index - 1] };
-                    if current_field.is_none() {
-                        current_field = indices.next();
-                    }
+                let names = indices.iter().cloned().map(|item| item.1).collect_vec();
+                let inner_types = indices.iter().cloned().map(|item| item.2).collect_vec();
 
-                    let prev_tail = if index == 0 {
-                        Term::Var(Name {
-                            text: constr_name_lam.clone(),
-                            unique: 0.into(),
-                        })
-                    } else {
-                        Term::Var(Name {
-                            text: format!("__tail_{previous_tail_index}_{previous_tail_id}"),
-                            unique: 0.into(),
-                        })
-                    };
-
-                    if let Some(ref field) = current_field {
-                        if field.0 == index {
-                            let unwrapper = convert_data_to_type(
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                                    prev_tail.clone(),
-                                ),
-                                &field.2,
-                            );
-
-                            body = apply_wrap(
-                                Term::Lambda {
-                                    parameter_name: Name {
-                                        text: field.1.clone(),
-                                        unique: 0.into(),
-                                    },
-                                    body: apply_wrap(
-                                        Term::Lambda {
-                                            parameter_name: Name {
-                                                text: format!(
-                                                    "__tail_{current_tail_index}_{current_tail_id}"
-                                                ),
-                                                unique: 0.into(),
-                                            },
-                                            body: body.into(),
-                                        },
-                                        apply_wrap(
-                                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                            prev_tail,
-                                        ),
-                                    )
-                                    .into(),
-                                },
-                                unwrapper,
-                            );
-
-                            current_field = None;
-                        } else {
-                            body = apply_wrap(
-                                Term::Lambda {
-                                    parameter_name: Name {
-                                        text: format!(
-                                            "__tail_{current_tail_index}_{current_tail_id}"
-                                        ),
-                                        unique: 0.into(),
-                                    },
-                                    body: body.into(),
-                                },
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                    prev_tail,
-                                ),
-                            );
-                        }
-                    } else {
-                        body = apply_wrap(
-                            Term::Lambda {
-                                parameter_name: Name {
-                                    text: format!("__tail_{current_tail_index}_{current_tail_id}"),
-                                    unique: 0.into(),
-                                },
-                                body: body.into(),
-                            },
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                prev_tail,
-                            ),
-                        );
-                    }
-                }
-
-                body = apply_wrap(
+                term = apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
-                            text: constr_name_lam,
+                            text: format!("__constr_fields_{}", list_id),
                             unique: 0.into(),
                         },
-                        body: body.into(),
+                        body: apply_wrap(
+                            Term::Lambda {
+                                parameter_name: Name {
+                                    text: first_name.1.clone(),
+                                    unique: 0.into(),
+                                },
+                                body: apply_wrap(
+                                    list_access_to_uplc(
+                                        &names,
+                                        &id_list,
+                                        false,
+                                        current_index,
+                                        term,
+                                        inner_types,
+                                        check_last_item,
+                                    ),
+                                    apply_wrap(
+                                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                        Term::Var(Name {
+                                            text: format!("__constr_fields_{}", list_id),
+                                            unique: 0.into(),
+                                        }),
+                                    ),
+                                )
+                                .into(),
+                            },
+                            head_list,
+                        )
+                        .into(),
                     },
                     apply_wrap(
                         Term::Var(Name {
                             text: CONSTR_FIELDS_EXPOSER.to_string(),
                             unique: 0.into(),
                         }),
-                        constr_var,
+                        value,
                     ),
                 );
 
-                arg_stack.push(body);
+                arg_stack.push(term);
             }
             Air::Tuple { tipo, count, .. } => {
                 let mut args = vec![];
@@ -5293,7 +5169,7 @@ impl<'a> CodeGenerator<'a> {
                                             false,
                                             current_index,
                                             term,
-                                            &tipo,
+                                            tipo.get_inner_types(),
                                             check_last_item,
                                         ),
                                         apply_wrap(
