@@ -32,6 +32,11 @@ impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
     }
 }
 
+enum DischargeStep {
+    DischargeValue(Value),
+    DischargeValueEnv(usize, Rc<Vec<Value>>, Rc<Term<NamedDeBruijn>>),
+}
+
 pub struct Machine {
     costs: CostModel,
     pub ex_budget: ExBudget,
@@ -205,69 +210,84 @@ impl Machine {
     }
 
     fn discharge_value(&mut self, value: Value) -> Rc<Term<NamedDeBruijn>> {
-        match value {
-            Value::Con(x) => Rc::new(Term::Constant(x)),
-            Value::Builtin { term, .. } => term,
-            Value::Delay(body, env) => self.discharge_value_env(env, Rc::new(Term::Delay(body))),
-            Value::Lambda {
-                parameter_name,
-                body,
-                env,
-            } => self.discharge_value_env(
-                env,
-                Rc::new(Term::Lambda {
-                    parameter_name: NamedDeBruijn {
-                        text: parameter_name.text,
-                        index: 0.into(),
-                    },
-                    body,
-                }),
-            ),
-        }
-    }
+        let mut stack = vec![DischargeStep::DischargeValue(value)];
 
-    fn discharge_value_env(
-        &mut self,
-        env: Rc<Vec<Value>>,
-        term: Rc<Term<NamedDeBruijn>>,
-    ) -> Rc<Term<NamedDeBruijn>> {
-        fn rec(
-            lam_cnt: usize,
-            t: Rc<Term<NamedDeBruijn>>,
-            this: &mut Machine,
-            env: Rc<Vec<Value>>,
-        ) -> Rc<Term<NamedDeBruijn>> {
-            match t.as_ref() {
-                Term::Var(name) => {
-                    let index: usize = name.index.into();
-                    if lam_cnt >= index {
-                        Rc::new(Term::Var(name.clone()))
-                    } else {
-                        env.get::<usize>(env.len() - (index - lam_cnt))
-                            .cloned()
-                            .map_or(Rc::new(Term::Var(name.clone())), |v| {
-                                this.discharge_value(v)
-                            })
+        while let Some(stack_frame) = stack.pop() {
+            match stack_frame {
+                DischargeStep::DischargeValue(value) => match value {
+                    Value::Con(x) => Rc::new(Term::Constant(x)),
+                    Value::Builtin { term, .. } => term,
+                    Value::Delay(body, env) => {
+                        stack.push(DischargeStep::DischargeValueEnv(
+                            0,
+                            env,
+                            Rc::new(Term::Delay(body)),
+                        ));
                     }
-                }
-                Term::Lambda {
-                    parameter_name,
-                    body,
-                } => Rc::new(Term::Lambda {
-                    parameter_name: parameter_name.clone(),
-                    body: rec(lam_cnt + 1, Rc::clone(body), this, env),
-                }),
-                Term::Apply { function, argument } => Rc::new(Term::Apply {
-                    function: rec(lam_cnt, Rc::clone(function), this, Rc::clone(&env)),
-                    argument: rec(lam_cnt, Rc::clone(argument), this, env),
-                }),
+                    Value::Lambda {
+                        parameter_name,
+                        body,
+                        env,
+                    } => {
+                        stack.push(DischargeStep::DischargeValueEnv(
+                            0,
+                            env,
+                            Rc::new(Term::Lambda {
+                                parameter_name: NamedDeBruijn {
+                                    text: parameter_name.text,
+                                    index: 0.into(),
+                                },
+                                body,
+                            }),
+                        ));
+                    }
+                },
+                DischargeStep::DischargeValueEnv(lam_cnt, env, term) => match term.as_ref() {
+                    Term::Var(name) => {
+                        let index: usize = name.index.into();
 
-                Term::Delay(x) => Rc::new(Term::Delay(rec(lam_cnt, Rc::clone(x), this, env))),
-                Term::Force(x) => Rc::new(Term::Force(rec(lam_cnt, Rc::clone(x), this, env))),
-                rest => Rc::new(rest.clone()),
+                        if lam_cnt >= index {
+                            Rc::new(Term::Var(name.clone()))
+                        } else {
+                            env.get::<usize>(env.len() - (index - lam_cnt))
+                                .cloned()
+                                .map_or(Rc::new(Term::Var(name.clone())), |v| {
+                                    self.discharge_value(v)
+                                })
+                        }
+                    }
+                    Term::Lambda {
+                        parameter_name,
+                        body,
+                    } => Rc::new(Term::Lambda {
+                        parameter_name: parameter_name.clone(),
+                        body: self.discharge_value_env(lam_cnt + 1, env, Rc::clone(body)),
+                    }),
+                    Term::Apply { function, argument } => Rc::new(Term::Apply {
+                        function: self.discharge_value_env(
+                            lam_cnt,
+                            Rc::clone(&env),
+                            Rc::clone(function),
+                        ),
+                        argument: self.discharge_value_env(lam_cnt, env, Rc::clone(argument)),
+                    }),
+
+                    Term::Delay(x) => Rc::new(Term::Delay(self.discharge_value_env(
+                        lam_cnt,
+                        env,
+                        Rc::clone(x),
+                    ))),
+                    Term::Force(x) => Rc::new(Term::Force(self.discharge_value_env(
+                        lam_cnt,
+                        env,
+                        Rc::clone(x),
+                    ))),
+                    rest => Rc::new(rest.clone()),
+                },
             }
         }
-        rec(0, term, self, env)
+
+        todo!()
     }
 
     fn force_evaluate(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
