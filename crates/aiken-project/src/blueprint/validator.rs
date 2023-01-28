@@ -10,7 +10,10 @@ use serde::{
     self,
     ser::{Serialize, SerializeStruct, Serializer},
 };
-use std::fmt::{self, Display};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+};
 use uplc::ast::{NamedDeBruijn, Program};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -88,10 +91,11 @@ impl Validator {
             purpose,
             datum: datum
                 .map(|datum| {
-                    Annotated::from_type(modules.into(), &datum.tipo).map_err(Error::Schema)
+                    Annotated::from_type(modules.into(), &datum.tipo, &HashMap::new())
+                        .map_err(Error::Schema)
                 })
                 .transpose()?,
-            redeemer: Annotated::from_type(modules.into(), &redeemer.tipo)
+            redeemer: Annotated::from_type(modules.into(), &redeemer.tipo, &HashMap::new())
                 .map_err(Error::Schema)?,
             program: generator
                 .generate(&def.body, &def.arguments, true)
@@ -451,6 +455,78 @@ mod test {
               },
               "compiledCode": "58390100002105646174756d00320105646174756d00210872656465656d657200210363747800533357349445261637580105646174756d000101"
             }),
+        )
+    }
+
+    #[test]
+    fn validator_generics() {
+        assert_validator(
+            r#"
+            type Either<left, right> {
+                Left(left)
+                Right(right)
+            }
+
+            type Interval<a> {
+                Finite(a)
+                Infinite
+            }
+
+            fn withdraw(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+                True
+            }
+            "#,
+            json!(
+                {
+                  "title": "test_module",
+                  "purpose": "withdraw",
+                  "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+                  "redeemer": {
+                    "title": "Either",
+                    "anyOf": [
+                      {
+                        "title": "Left",
+                        "dataType": "constructor",
+                        "index": 0,
+                        "fields": [
+                          {
+                            "dataType": "bytes"
+                          }
+                        ]
+                      },
+                      {
+                        "title": "Right",
+                        "dataType": "constructor",
+                        "index": 1,
+                        "fields": [
+                          {
+                            "title": "Interval",
+                            "anyOf": [
+                              {
+                                "title": "Finite",
+                                "dataType": "constructor",
+                                "index": 0,
+                                "fields": [
+                                  {
+                                    "dataType": "integer"
+                                  }
+                                ]
+                              },
+                              {
+                                "title": "Infinite",
+                                "dataType": "constructor",
+                                "index": 1,
+                                "fields": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+                }
+            ),
         )
     }
 }

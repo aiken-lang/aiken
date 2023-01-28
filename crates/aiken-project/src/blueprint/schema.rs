@@ -71,6 +71,7 @@ impl Annotated<Schema> {
     pub fn from_type(
         modules: &HashMap<String, CheckedModule>,
         type_info: &Type,
+        type_parameters: &HashMap<u64, &Arc<Type>>,
     ) -> Result<Self, Error> {
         match type_info {
             Type::App {
@@ -91,9 +92,6 @@ impl Annotated<Schema> {
 
                 "String" => Ok(Schema::String.into()),
 
-                // TODO: Check whether this matches with the UPLC code generation as there are two
-                // options here since there's technically speaking a `unit` constant constructor in
-                // the UPLC primitives.
                 "Void" => Ok(Annotated {
                     title: Some("Unit".to_string()),
                     description: Some("The nullary constructor.".to_string()),
@@ -107,7 +105,6 @@ impl Annotated<Schema> {
                     }]))),
                 }),
 
-                // TODO: Also check here whether this matches with the UPLC code generation.
                 "Bool" => Ok(Annotated {
                     title: Some("Bool".to_string()),
                     description: None,
@@ -132,8 +129,9 @@ impl Annotated<Schema> {
                 }),
 
                 "Option" => {
-                    let generic = Annotated::from_type(modules, args.get(0).unwrap())
-                        .and_then(|s| s.into_data(type_info))?;
+                    let generic =
+                        Annotated::from_type(modules, args.get(0).unwrap(), &HashMap::new())
+                            .and_then(|s| s.into_data(type_info))?;
                     Ok(Annotated {
                         title: Some("Optional".to_string()),
                         description: None,
@@ -159,8 +157,9 @@ impl Annotated<Schema> {
                 }
 
                 "List" => {
-                    let generic = Annotated::from_type(modules, args.get(0).unwrap())
-                        .and_then(|s| s.into_data(type_info))?;
+                    let generic =
+                        Annotated::from_type(modules, args.get(0).unwrap(), &HashMap::new())
+                            .and_then(|s| s.into_data(type_info))?;
                     Ok(Schema::Data(Some(Data::List(Box::new(generic.annotated)))).into())
                 }
 
@@ -171,11 +170,17 @@ impl Annotated<Schema> {
             Type::App {
                 module: module_name,
                 name: type_name,
+                args,
                 ..
             } => {
                 let module = modules.get(module_name).unwrap();
                 let constructor = find_definition(type_name, &module.ast.definitions).unwrap();
-                let annotated = Schema::Data(Some(Data::from_data_type(modules, constructor)?));
+                let type_parameters = collect_type_parameters(&constructor.typed_parameters, args);
+                let annotated = Schema::Data(Some(Data::from_data_type(
+                    modules,
+                    constructor,
+                    &type_parameters,
+                )?));
 
                 Ok(Annotated {
                     title: Some(constructor.name.clone()),
@@ -184,23 +189,28 @@ impl Annotated<Schema> {
                 })
             }
             Type::Var { tipo } => match tipo.borrow().deref() {
-                TypeVar::Link { tipo } => Annotated::from_type(modules, tipo),
-                TypeVar::Generic { .. } => todo!(),
+                TypeVar::Link { tipo } => Annotated::from_type(modules, tipo, type_parameters),
+                TypeVar::Generic { id } => {
+                    let tipo = type_parameters.get(id).ok_or(Error::FreeParameter)?;
+                    Annotated::from_type(modules, tipo, &HashMap::new())
+                }
                 TypeVar::Unbound { .. } => Err(Error::UnsupportedType {
                     type_info: type_info.clone(),
                 }),
             },
             Type::Tuple { elems } => match &elems[..] {
                 [left, right] => {
-                    let left = Annotated::from_type(modules, left)?.into_data(left)?;
-                    let right = Annotated::from_type(modules, right)?.into_data(right)?;
+                    let left =
+                        Annotated::from_type(modules, left, &HashMap::new())?.into_data(left)?;
+                    let right =
+                        Annotated::from_type(modules, right, &HashMap::new())?.into_data(right)?;
                     Ok(Schema::Pair(left.annotated, right.annotated).into())
                 }
                 _ => {
                     let elems: Result<Vec<Data>, _> = elems
                         .iter()
                         .map(|e| {
-                            Annotated::from_type(modules, e)
+                            Annotated::from_type(modules, e, &HashMap::new())
                                 .and_then(|s| s.into_data(e).map(|s| s.annotated))
                         })
                         .collect();
@@ -239,12 +249,14 @@ impl Data {
     pub fn from_data_type(
         modules: &HashMap<String, CheckedModule>,
         data_type: &DataType<Arc<Type>>,
+        type_parameters: &HashMap<u64, &Arc<Type>>,
     ) -> Result<Self, Error> {
         let mut variants = vec![];
+
         for (index, constructor) in data_type.constructors.iter().enumerate() {
             let mut fields = vec![];
             for field in constructor.arguments.iter() {
-                let mut schema = Annotated::from_type(modules, &field.tipo)
+                let mut schema = Annotated::from_type(modules, &field.tipo, type_parameters)
                     .and_then(|t| t.into_data(&field.tipo))?;
 
                 if field.label.is_some() {
@@ -389,6 +401,30 @@ pub enum Error {
     UnsupportedType { type_info: Type },
     #[error("I had the misfortune to find an invalid type in an interface boundary.")]
     ExpectedData { got: Type },
+
+    #[error("I caught a free type-parameter in an interface boundary.")]
+    FreeParameter,
+}
+
+fn collect_type_parameters<'a>(
+    generics: &'a [Arc<Type>],
+    applications: &'a [Arc<Type>],
+) -> HashMap<u64, &'a Arc<Type>> {
+    let mut type_parameters = HashMap::new();
+
+    for (index, generic) in generics.iter().enumerate() {
+        match &**generic {
+            Type::Var { tipo } => match *tipo.borrow() {
+                TypeVar::Generic { id } => {
+                    type_parameters.insert(id, applications.get(index).unwrap());
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    type_parameters
 }
 
 fn find_definition<'a>(
