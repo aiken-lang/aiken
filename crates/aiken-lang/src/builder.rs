@@ -4,7 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{apply_wrap, if_else},
+        builder::{apply_wrap, choose_list, if_else},
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -482,6 +482,7 @@ pub fn list_access_to_uplc(
     current_index: usize,
     term: Term<Name>,
     tipo: &Type,
+    check_last_item: bool,
 ) -> Term<Name> {
     let (first, names) = names.split_first().unwrap();
 
@@ -546,30 +547,6 @@ pub fn list_access_to_uplc(
     } else if names.is_empty() {
         // Maybe check list is actually empty or should we leave that to when .. is only
         // this would replace term.into() if we decide to
-        // body: choose_list(
-        //     apply_wrap(
-        //         Term::Builtin(DefaultFunction::TailList).force_wrap(),
-        //         Term::Var(Name {
-        //             text: format!(
-        //                 "tail_index_{}_{}",
-        //                 current_index, id_list[current_index]
-        //             ),
-        //             unique: 0.into(),
-        //         }),
-        //     ),
-        //     term,
-        //     apply_wrap(
-        //         apply_wrap(
-        //             Term::Builtin(DefaultFunction::Trace).force_wrap(),
-        //             Term::Constant(UplcConstant::String(
-        //                 "List contains more items".to_string(),
-        //             )),
-        //         ),
-        //         Term::Delay(Term::Error.into()),
-        //     )
-        //     .force_wrap(),
-        // )
-        // .into(),
         Term::Lambda {
             parameter_name: Name {
                 text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
@@ -581,7 +558,34 @@ pub fn list_access_to_uplc(
                         text: first.clone(),
                         unique: 0.into(),
                     },
-                    body: term.into(),
+                    body: if check_last_item {
+                        choose_list(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                Term::Var(Name {
+                                    text: format!(
+                                        "tail_index_{}_{}",
+                                        current_index, id_list[current_index]
+                                    ),
+                                    unique: 0.into(),
+                                }),
+                            ),
+                            term,
+                            apply_wrap(
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                                    Term::Constant(UplcConstant::String(
+                                        "List/Tuple contains more items than it should".to_string(),
+                                    )),
+                                ),
+                                Term::Delay(Term::Error.into()),
+                            )
+                            .force_wrap(),
+                        )
+                        .into()
+                    } else {
+                        term.into()
+                    },
                 },
                 apply_wrap(
                     Term::Builtin(DefaultFunction::HeadList).force_wrap(),
@@ -606,7 +610,15 @@ pub fn list_access_to_uplc(
                         unique: 0.into(),
                     },
                     body: apply_wrap(
-                        list_access_to_uplc(names, id_list, tail, current_index + 1, term, tipo),
+                        list_access_to_uplc(
+                            names,
+                            id_list,
+                            tail,
+                            current_index + 1,
+                            term,
+                            tipo,
+                            check_last_item,
+                        ),
                         apply_wrap(
                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
                             Term::Var(Name {
@@ -1078,6 +1090,7 @@ pub fn monomorphize(
                 tipo,
                 names,
                 tail,
+                check_last_item,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1088,6 +1101,7 @@ pub fn monomorphize(
                         names,
                         tipo,
                         tail,
+                        check_last_item,
                     };
                     needs_variant = true;
                 }
@@ -1359,8 +1373,8 @@ pub fn monomorphize(
             }
             Air::FieldsExpose {
                 scope,
-                count,
                 indices,
+                check_last_item,
             } => {
                 let mut new_indices = vec![];
                 for (ind, name, tipo) in indices {
@@ -1375,8 +1389,8 @@ pub fn monomorphize(
                 }
                 new_air[index] = Air::FieldsExpose {
                     scope,
-                    count,
                     indices: new_indices,
+                    check_last_item,
                 };
             }
             Air::RecordUpdate {
@@ -1407,12 +1421,22 @@ pub fn monomorphize(
                     tipo,
                 };
             }
-            Air::TupleAccessor { scope, names, tipo } => {
+            Air::TupleAccessor {
+                scope,
+                names,
+                tipo,
+                check_last_item,
+            } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::TupleAccessor { scope, names, tipo };
+                    new_air[index] = Air::TupleAccessor {
+                        scope,
+                        names,
+                        tipo,
+                        check_last_item,
+                    };
                     needs_variant = true;
                 }
             }

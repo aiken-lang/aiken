@@ -5,9 +5,9 @@ use itertools::Itertools;
 use uplc::{
     ast::{
         builder::{
-            self, apply_wrap, choose_list, constr_index_exposer, delayed_choose_list,
-            delayed_if_else, if_else, repeat_tail_list, ASSERT_ON_LIST, CONSTR_FIELDS_EXPOSER,
-            CONSTR_GET_FIELD,
+            self, apply_wrap, assert_on_list, choose_list, constr_index_exposer,
+            delayed_choose_list, delayed_if_else, final_wrapper, if_else, repeat_tail_list,
+            ASSERT_ON_LIST, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD,
         },
         Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType,
     },
@@ -19,7 +19,7 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Clause, Pattern, Span, TypedArg, TypedDataType,
+        ArgName, AssignmentKind, BinOp, CallArg, Clause, Pattern, Span, TypedArg, TypedDataType,
         TypedFunction, UnOp,
     },
     builder::{
@@ -32,8 +32,8 @@ use crate::{
     },
     expr::TypedExpr,
     tipo::{
-        self, ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
-        ValueConstructorVariant,
+        fields::FieldMap, ModuleValueConstructor, PatternConstructor, Type, TypeInfo, TypeVar,
+        ValueConstructor, ValueConstructorVariant,
     },
     IdGenerator,
 };
@@ -79,8 +79,6 @@ impl<'a> CodeGenerator<'a> {
         let mut ir_stack = vec![];
         let scope = vec![self.id_gen.next()];
 
-        println!("{:#?}", body);
-
         self.build_ir(&body, &mut ir_stack, scope);
         println!("{:#?}", ir_stack);
 
@@ -100,7 +98,7 @@ impl<'a> CodeGenerator<'a> {
 
         // Wrap the validator body if ifThenElse term unit error
         term = if wrap_as_validator {
-            builder::final_wrapper(term)
+            final_wrapper(term)
         } else {
             term
         };
@@ -108,7 +106,7 @@ impl<'a> CodeGenerator<'a> {
         term = wrap_validator_args(term, arguments);
 
         term = if wrap_as_validator || self.used_data_assert_on_list {
-            builder::assert_on_list(term)
+            assert_on_list(term)
         } else {
             term
         };
@@ -1131,7 +1129,6 @@ impl<'a> CodeGenerator<'a> {
 
                     if !arguments_index.is_empty() {
                         pattern_vec.push(Air::FieldsExpose {
-                            count: arguments_index.len() + 2,
                             indices: arguments_index
                                 .iter()
                                 .map(|(label, var_name, index)| {
@@ -1140,6 +1137,7 @@ impl<'a> CodeGenerator<'a> {
                                 })
                                 .collect_vec(),
                             scope,
+                            check_last_item: false,
                         });
                     }
                 } else {
@@ -1168,7 +1166,6 @@ impl<'a> CodeGenerator<'a> {
 
                     if !arguments_index.is_empty() {
                         pattern_vec.push(Air::FieldsExpose {
-                            count: arguments_index.len() + 2,
                             indices: arguments_index
                                 .iter()
                                 .map(|(name, index)| {
@@ -1178,6 +1175,7 @@ impl<'a> CodeGenerator<'a> {
                                 })
                                 .collect_vec(),
                             scope,
+                            check_last_item: false,
                         });
                     }
                 }
@@ -1473,7 +1471,7 @@ impl<'a> CodeGenerator<'a> {
         assignment_properties: AssignmentProperties,
         scope: Vec<u64>,
     ) {
-        if assignment_properties.value_is_data && !tipo.is_data() {
+        if assignment_properties.value_is_data && !tipo.is_data() && !pattern.is_discard() {
             value_vec.insert(
                 0,
                 Air::UnWrapData {
@@ -1513,26 +1511,10 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Discard { .. } => {
                 pattern_vec.push(Air::Let {
                     name: "_".to_string(),
-                    scope: scope.clone(),
+                    scope,
                 });
 
                 pattern_vec.append(value_vec);
-
-                if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                    && assignment_properties.value_is_data
-                    && !tipo.is_data()
-                {
-                    let mut assert_vec = vec![];
-                    self.recursive_assert_pattern(
-                        pattern,
-                        &mut assert_vec,
-                        value_vec,
-                        tipo,
-                        assignment_properties,
-                        scope,
-                    );
-                    pattern_vec.append(&mut assert_vec);
-                }
             }
             list @ Pattern::List { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
@@ -1559,10 +1541,13 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             constr @ Pattern::Constructor { .. } => {
+                println!("ASSIGNMENT PROPERTIES {:#?}", assignment_properties);
+                println!("CURRENT TYPE IS {:#?}", tipo);
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
                     && assignment_properties.value_is_data
                     && !tipo.is_data()
                 {
+                    println!("GOT HERE FOR SURE");
                     self.recursive_assert_pattern(
                         constr,
                         pattern_vec,
@@ -1683,6 +1668,7 @@ impl<'a> CodeGenerator<'a> {
                         tail: tail.is_some(),
                         scope,
                         tipo: tipo.clone().into(),
+                        check_last_item: false,
                     });
                 }
 
@@ -1690,162 +1676,53 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(&mut elements_vec);
             }
             Pattern::Constructor {
-                is_record,
-                name: constr_name,
                 arguments,
                 constructor,
                 tipo,
                 ..
             } => {
-                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
-                let (_, constructor_type) = data_type
-                    .constructors
-                    .iter()
-                    .enumerate()
-                    .find(|(_, dt)| &dt.name == constr_name)
-                    .unwrap();
                 let mut nested_pattern = vec![];
-                if *is_record {
-                    let field_map = match constructor {
-                        PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
-                    };
 
-                    let mut type_map: IndexMap<String, Arc<Type>> = IndexMap::new();
+                let field_map = match constructor {
+                    PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
+                };
 
-                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
-                        let label = constructor_type.arguments[index].label.clone().unwrap();
-                        let field_type = arg.clone();
+                let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
-                        type_map.insert(label, field_type);
-                    }
+                for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                    let field_type = arg.clone();
+                    type_map.insert(index, field_type);
+                }
 
-                    let arguments_index = arguments
-                        .iter()
-                        .map(|item| {
-                            let label = item.label.clone().unwrap_or_default();
-                            let field_index =
-                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
-                            let (discard, var_name) = match &item.value {
-                                Pattern::Var { name, .. } => (false, name.clone()),
-                                Pattern::Discard { .. } => (true, "".to_string()),
-                                Pattern::List { .. } => todo!(),
-                                a @ Pattern::Constructor {
-                                    tipo,
-                                    name: constr_name,
-                                    ..
-                                } => {
-                                    let id = self.id_gen.next();
-                                    let constr_name = format!("{constr_name}_{id}");
-                                    self.pattern_ir(
-                                        a,
-                                        &mut nested_pattern,
-                                        &mut vec![Air::Var {
-                                            scope: scope.clone(),
-                                            constructor: ValueConstructor::public(
-                                                tipo.clone(),
-                                                ValueConstructorVariant::LocalVariable {
-                                                    location: Span::empty(),
-                                                },
-                                            ),
-                                            name: constr_name.clone(),
-                                            variant_name: String::new(),
-                                        }],
-                                        tipo,
-                                        assignment_properties.clone(),
-                                        scope.clone(),
-                                    );
+                let arguments_index = arguments
+                    .iter()
+                    .filter_map(|item| {
+                        let label = item.label.clone().unwrap_or_default();
+                        let field_index = field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+                        self.extract_arg_and_index(
+                            &item.value,
+                            *field_index,
+                            &mut nested_pattern,
+                            &assignment_properties,
+                            &scope,
+                            false,
+                        )
+                    })
+                    .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
+                    .collect::<Vec<(String, usize)>>();
 
-                                    (false, constr_name)
-                                }
-                                _ => todo!(),
-                            };
-
-                            (label, var_name, *field_index, discard)
-                        })
-                        .filter(|(_, _, _, discard)| !discard)
-                        .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
-                        .collect::<Vec<(String, String, usize, bool)>>();
-
-                    if !arguments_index.is_empty() {
-                        pattern_vec.push(Air::FieldsExpose {
-                            count: arguments_index.len() + 2,
-                            indices: arguments_index
-                                .iter()
-                                .map(|(label, var_name, index, _)| {
-                                    let field_type = type_map.get(label).unwrap();
-                                    (*index, var_name.clone(), field_type.clone())
-                                })
-                                .collect_vec(),
-                            scope,
-                        });
-                    }
-                } else {
-                    let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
-
-                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
-                        let field_type = arg.clone();
-
-                        type_map.insert(index, field_type);
-                    }
-
-                    let arguments_index = arguments
-                        .iter()
-                        .enumerate()
-                        .map(|(index, item)| {
-                            let (discard, var_name) = match &item.value {
-                                Pattern::Var { name, .. } => (false, name.clone()),
-                                Pattern::Discard { .. } => (true, "".to_string()),
-                                Pattern::List { .. } => todo!(),
-                                a @ Pattern::Constructor {
-                                    tipo,
-                                    name: constr_name,
-                                    ..
-                                } => {
-                                    let id = self.id_gen.next();
-                                    let constr_name = format!("{constr_name}_{id}");
-                                    self.pattern_ir(
-                                        a,
-                                        &mut nested_pattern,
-                                        &mut vec![Air::Var {
-                                            scope: scope.clone(),
-                                            constructor: ValueConstructor::public(
-                                                tipo.clone(),
-                                                ValueConstructorVariant::LocalVariable {
-                                                    location: Span::empty(),
-                                                },
-                                            ),
-                                            name: constr_name.clone(),
-                                            variant_name: String::new(),
-                                        }],
-                                        tipo,
-                                        assignment_properties.clone(),
-                                        scope.clone(),
-                                    );
-
-                                    (false, constr_name)
-                                }
-                                _ => todo!(),
-                            };
-
-                            (var_name, index, discard)
-                        })
-                        .filter(|(_, _, discard)| !discard)
-                        .collect::<Vec<(String, usize, bool)>>();
-
-                    if !arguments_index.is_empty() {
-                        pattern_vec.push(Air::FieldsExpose {
-                            count: arguments_index.len() + 2,
-                            indices: arguments_index
-                                .iter()
-                                .map(|(name, index, _)| {
-                                    let field_type = type_map.get(index).unwrap();
-
-                                    (*index, name.clone(), field_type.clone())
-                                })
-                                .collect_vec(),
-                            scope,
-                        });
-                    }
+                if !arguments_index.is_empty() {
+                    pattern_vec.push(Air::FieldsExpose {
+                        indices: arguments_index
+                            .iter()
+                            .map(|(var_name, index)| {
+                                let field_type = type_map.get(index).unwrap();
+                                (*index, var_name.clone(), field_type.clone())
+                            })
+                            .collect_vec(),
+                        scope,
+                        check_last_item: false,
+                    });
                 }
 
                 pattern_vec.append(values);
@@ -1900,6 +1777,7 @@ impl<'a> CodeGenerator<'a> {
                     names,
                     scope,
                     tipo: tipo.clone().into(),
+                    check_last_item: false,
                 });
 
                 pattern_vec.append(values);
@@ -1921,35 +1799,224 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Int { .. } => unreachable!(),
             Pattern::String { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
+                pattern_vec.push(Air::Let {
+                    scope: scope.clone(),
+                    name: name.clone(),
+                });
+
+                pattern_vec.append(value_vec);
+
                 self.recursive_assert_tipo(tipo, pattern_vec, name, scope);
             }
-            Pattern::VarUsage {
-                location,
-                name,
-                tipo,
-            } => todo!(),
-            Pattern::Assign {
-                name,
-                location,
-                pattern,
-            } => todo!(),
-            Pattern::Discard { name, location } => todo!(),
-            Pattern::List {
-                location,
-                elements,
-                tail,
-            } => todo!(),
+            Pattern::VarUsage { .. } => todo!(),
+            Pattern::Assign { .. } => todo!(),
+            Pattern::Discard { .. } => unreachable!(),
+            Pattern::List { elements, tail, .. } => {
+                let mut assert_list_vec = vec![];
+                let inner_list_type = &tipo.get_inner_types()[0];
+                let mut names = vec![];
+                for element in elements {
+                    match element {
+                        Pattern::Var { name, .. } => {
+                            names.push(name.clone());
+                        }
+                        Pattern::VarUsage { .. } => todo!(),
+                        Pattern::Assign { .. } => todo!(),
+                        l @ Pattern::List { .. } => {
+                            let name = format!("list_item_id_{}", self.id_gen.next());
+                            names.push(name.clone());
+
+                            self.recursive_assert_pattern(
+                                l,
+                                &mut assert_list_vec,
+                                &mut vec![Air::Var {
+                                    scope: scope.clone(),
+                                    constructor: ValueConstructor::public(
+                                        tipo.clone().into(),
+                                        ValueConstructorVariant::LocalVariable {
+                                            location: Span::empty(),
+                                        },
+                                    ),
+                                    name,
+                                    variant_name: String::new(),
+                                }],
+                                inner_list_type,
+                                assignment_properties.clone(),
+                                scope.clone(),
+                            );
+                        }
+                        Pattern::Constructor { .. } => todo!(),
+                        Pattern::Tuple { elems, .. } => todo!(),
+                        _ => {}
+                    }
+                }
+
+                let name = if let Some(tail) = tail {
+                    match &**tail {
+                        Pattern::Var { name, .. } => name.clone(),
+                        _ => format!("__tail_{}", self.id_gen.next()),
+                    }
+                } else {
+                    format!("__tail_{}", self.id_gen.next())
+                };
+
+                self.recursive_assert_tipo(tipo, &mut assert_list_vec, &name, scope.clone());
+
+                pattern_vec.push(Air::ListAccessor {
+                    scope,
+                    tipo: tipo.clone().into(),
+                    names,
+                    tail: true,
+                    check_last_item: false,
+                });
+
+                pattern_vec.append(value_vec);
+
+                pattern_vec.append(&mut assert_list_vec);
+            }
             Pattern::Constructor {
-                is_record,
-                location,
-                name,
                 arguments,
-                module,
                 constructor,
-                with_spread,
+                name: constr_name,
                 tipo,
-            } => todo!(),
-            Pattern::Tuple { location, elems } => todo!(),
+                ..
+            } => {
+                let mut nested_pattern = vec![];
+
+                let field_map = match constructor {
+                    PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
+                };
+
+                let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+
+                let data_type_constr = data_type
+                    .constructors
+                    .iter()
+                    .find(|constr| &constr.name == constr_name)
+                    .unwrap();
+
+                let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
+
+                for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                    let field_type = arg.clone();
+                    type_map.insert(index, field_type);
+                }
+
+                println!("TYPE IS {:#?}", type_map);
+
+                let arguments_index = arguments
+                    .iter()
+                    .filter_map(|item| {
+                        let label = item.label.clone().unwrap_or_default();
+                        let field_index = field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+                        self.extract_arg_and_index(
+                            &item.value,
+                            *field_index,
+                            &mut nested_pattern,
+                            &assignment_properties,
+                            &scope,
+                            true,
+                        )
+                    })
+                    .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
+                    .collect::<Vec<(String, usize)>>();
+
+                let total_fields = data_type_constr.arguments.len();
+                let mut final_args = vec![];
+                let mut current_index = 0;
+                for index in 0..total_fields {
+                    if arguments_index.get(current_index).is_some()
+                        && arguments_index[current_index].1 == index
+                    {
+                        final_args.push(arguments_index.get(index).unwrap().clone());
+                        current_index += 1;
+                    } else {
+                        final_args.push((format!("__field_{index}_{}", self.id_gen.next()), index));
+                        self.recursive_assert_tipo(
+                            type_map.get(&index).unwrap(),
+                            &mut nested_pattern,
+                            &format!("__field_{index}_{}", self.id_gen.next()),
+                            scope.clone(),
+                        )
+                    }
+                }
+
+                if !arguments_index.is_empty() {
+                    pattern_vec.push(Air::FieldsExpose {
+                        indices: final_args
+                            .iter()
+                            .map(|(var_name, index)| {
+                                let field_type = type_map.get(index).unwrap();
+                                (*index, var_name.clone(), field_type.clone())
+                            })
+                            .collect_vec(),
+                        scope,
+                        check_last_item: true,
+                    });
+                }
+
+                pattern_vec.append(value_vec);
+
+                pattern_vec.append(&mut nested_pattern);
+            }
+            Pattern::Tuple { elems, .. } => {
+                let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
+
+                for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                    let field_type = arg.clone();
+                    type_map.insert(index, field_type);
+                }
+                let mut nested_pattern = vec![];
+                let arguments_index = elems
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        let field_index = index;
+                        self.extract_arg_and_index(
+                            item,
+                            field_index,
+                            &mut nested_pattern,
+                            &assignment_properties,
+                            &scope,
+                            true,
+                        )
+                    })
+                    .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
+                    .collect::<Vec<(String, usize)>>();
+
+                let total_fields = type_map.len();
+                let mut final_args = vec![];
+                let mut current_index = 0;
+                for index in 0..total_fields {
+                    if arguments_index.get(current_index).is_some()
+                        && arguments_index[current_index].1 == index
+                    {
+                        final_args.push(arguments_index.get(index).unwrap().clone());
+                        current_index += 1;
+                    } else {
+                        final_args.push((format!("__field_{index}_{}", self.id_gen.next()), index));
+                        self.recursive_assert_tipo(
+                            type_map.get(&index).unwrap(),
+                            &mut nested_pattern,
+                            &format!("__field_{index}_{}", self.id_gen.next()),
+                            scope.clone(),
+                        )
+                    }
+                }
+
+                if !arguments_index.is_empty() {
+                    pattern_vec.push(Air::TupleAccessor {
+                        scope: scope.clone(),
+                        names: final_args.into_iter().map(|(item, _)| item).collect_vec(),
+                        tipo: tipo.clone().into(),
+                        check_last_item: true,
+                    });
+                }
+
+                pattern_vec.append(value_vec);
+
+                pattern_vec.append(&mut nested_pattern);
+            }
         }
     }
 
@@ -1965,6 +2032,7 @@ impl<'a> CodeGenerator<'a> {
             || tipo.is_int()
             || tipo.is_string()
             || tipo.is_void()
+            || tipo.get_generic().is_some()
         {
         } else if tipo.is_map() {
             self.used_data_assert_on_list = true;
@@ -2027,6 +2095,19 @@ impl<'a> CodeGenerator<'a> {
                     format!("__pair_snd_{}", id_pair.1),
                 ],
                 tipo: inner_list_type.clone(),
+                check_last_item: false,
+            });
+
+            assert_vec.push(Air::Var {
+                scope: scope.clone(),
+                constructor: ValueConstructor::public(
+                    tipo.clone().into(),
+                    ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                ),
+                name: format!("__pair_{}", new_id),
+                variant_name: String::new(),
             });
 
             self.recursive_assert_tipo(
@@ -2040,14 +2121,14 @@ impl<'a> CodeGenerator<'a> {
                 &inner_pair_types[1],
                 assert_vec,
                 &format!("__pair_snd_{}", id_pair.1),
-                scope,
+                scope.clone(),
             );
+
+            assert_vec.push(Air::Void { scope });
         } else if tipo.is_list() {
             self.used_data_assert_on_list = true;
             let new_id = self.id_gen.next();
-            let id_pair = (self.id_gen.next(), self.id_gen.next());
             let inner_list_type = &tipo.get_inner_types()[0];
-            let inner_pair_types = inner_list_type.get_inner_types();
 
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
@@ -2096,28 +2177,243 @@ impl<'a> CodeGenerator<'a> {
                 params: vec![format!("__list_item_{}", new_id)],
             });
 
-            assert_vec.push(Air::TupleAccessor {
+            assert_vec.push(Air::Let {
                 scope: scope.clone(),
-                names: vec![
-                    format!("__pair_fst_{}", id_pair.0),
-                    format!("__pair_snd_{}", id_pair.1),
-                ],
+                name: format!("__list_item_{}", new_id),
+            });
+
+            assert_vec.push(Air::UnWrapData {
+                scope: scope.clone(),
                 tipo: inner_list_type.clone(),
             });
 
+            assert_vec.push(Air::Var {
+                scope: scope.clone(),
+                constructor: ValueConstructor::public(
+                    tipo.clone().into(),
+                    ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                ),
+                name: format!("__list_item_{}", new_id),
+                variant_name: String::new(),
+            });
+
             self.recursive_assert_tipo(
-                &inner_pair_types[0],
+                inner_list_type,
                 assert_vec,
-                &format!("__pair_fst_{}", id_pair.0),
+                &format!("__list_item_{}", new_id),
                 scope.clone(),
             );
 
-            self.recursive_assert_tipo(
-                &inner_pair_types[1],
-                assert_vec,
-                &format!("__pair_snd_{}", id_pair.1),
+            assert_vec.push(Air::Void { scope });
+        } else if tipo.is_tuple() {
+            let tuple_inner_types = tipo.get_inner_types();
+            let mut new_id_list = vec![];
+            for (index, _) in tuple_inner_types.iter().enumerate() {
+                new_id_list.push((index, self.id_gen.next()));
+            }
+
+            assert_vec.push(Air::TupleAccessor {
+                scope: scope.clone(),
+                names: new_id_list
+                    .iter()
+                    .map(|(index, id)| format!("__tuple_index_{}_{}", index, id))
+                    .collect_vec(),
+                tipo: tipo.clone().into(),
+                check_last_item: true,
+            });
+
+            assert_vec.push(Air::Var {
+                scope: scope.clone(),
+                constructor: ValueConstructor::public(
+                    tipo.clone().into(),
+                    ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                ),
+                name: name.to_owned(),
+                variant_name: String::new(),
+            });
+
+            for (index, name) in new_id_list
+                .into_iter()
+                .map(|(index, id)| (index, format!("__tuple_index_{}_{}", index, id)))
+            {
+                self.recursive_assert_tipo(
+                    &tuple_inner_types[index],
+                    assert_vec,
+                    &name,
+                    scope.clone(),
+                );
+            }
+        } else {
+            let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+            let new_id = self.id_gen.next();
+
+            assert_vec.push(Air::Call {
+                scope: scope.clone(),
+                count: 2,
+                tipo: tipo.clone().into(),
+            });
+
+            assert_vec.push(Air::Builtin {
+                scope: scope.clone(),
+                func: DefaultFunction::ChooseUnit,
+                tipo: tipo.clone().into(),
+            });
+
+            assert_vec.push(Air::When {
+                scope: scope.clone(),
+                tipo: tipo.clone().into(),
+                subject_name: format!("__subject_{}", new_id),
+            });
+
+            assert_vec.push(Air::Var {
+                scope: scope.clone(),
+                constructor: ValueConstructor::public(
+                    tipo.clone().into(),
+                    ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                ),
+                name: name.to_owned(),
+                variant_name: String::new(),
+            });
+
+            for (index, constr) in data_type.constructors.iter().enumerate() {
+                let arg_indices = constr
+                    .arguments
+                    .iter()
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        let arg_name = arg
+                            .label
+                            .clone()
+                            .unwrap_or(format!("__field_{}_{}", index, new_id));
+                        (index, arg_name, arg.tipo.clone())
+                    })
+                    .collect_vec();
+
+                assert_vec.push(Air::Clause {
+                    scope: scope.clone(),
+                    tipo: tipo.clone().into(),
+                    subject_name: format!("__subject_{}", new_id),
+                    complex_clause: false,
+                });
+
+                assert_vec.push(Air::Int {
+                    scope: scope.clone(),
+                    value: index.to_string(),
+                });
+
+                assert_vec.push(Air::FieldsExpose {
+                    scope: scope.clone(),
+                    indices: arg_indices.clone(),
+                    check_last_item: true,
+                });
+
+                assert_vec.push(Air::Var {
+                    scope: scope.clone(),
+                    constructor: ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: name.to_owned(),
+                    variant_name: String::new(),
+                });
+
+                for (_, name, tipo) in arg_indices {
+                    self.recursive_assert_tipo(&tipo, assert_vec, &name, scope.clone());
+                }
+
+                assert_vec.push(Air::Void {
+                    scope: scope.clone(),
+                });
+            }
+
+            assert_vec.push(Air::ErrorTerm {
                 scope,
-            )
+                tipo: tipo.clone().into(),
+                label: None,
+            });
+        }
+    }
+
+    fn extract_arg_and_index(
+        &mut self,
+        item: &Pattern<PatternConstructor, Arc<Type>>,
+        field_index: usize,
+        nested_pattern: &mut Vec<Air>,
+        assignment_properties: &AssignmentProperties,
+        scope: &[u64],
+        assert: bool,
+    ) -> Option<(String, usize)> {
+        {
+            let (discard, var_name) = match item {
+                Pattern::Var { name, .. } => (false, name.clone()),
+                Pattern::Discard { .. } => (true, "".to_string()),
+                Pattern::List { .. } => todo!(),
+                a @ Pattern::Constructor {
+                    tipo,
+                    name: constr_name,
+                    ..
+                } => {
+                    let id = self.id_gen.next();
+                    let constr_name = format!("{constr_name}_{id}");
+
+                    if assert {
+                        self.recursive_assert_pattern(
+                            a,
+                            nested_pattern,
+                            &mut vec![Air::Var {
+                                scope: scope.to_owned(),
+                                constructor: ValueConstructor::public(
+                                    tipo.clone(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: constr_name.clone(),
+                                variant_name: String::new(),
+                            }],
+                            tipo,
+                            assignment_properties.clone(),
+                            scope.to_owned(),
+                        );
+                    } else {
+                        self.pattern_ir(
+                            a,
+                            nested_pattern,
+                            &mut vec![Air::Var {
+                                scope: scope.to_owned(),
+                                constructor: ValueConstructor::public(
+                                    tipo.clone(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: constr_name.clone(),
+                                variant_name: String::new(),
+                            }],
+                            tipo,
+                            assignment_properties.clone(),
+                            scope.to_owned(),
+                        );
+                    }
+
+                    (false, constr_name)
+                }
+                _ => todo!(),
+            };
+
+            if discard {
+                None
+            } else {
+                Some((var_name, field_index))
+            }
         }
     }
 
@@ -2627,6 +2923,7 @@ impl<'a> CodeGenerator<'a> {
                     scope,
                     names,
                     tail,
+                    check_last_item,
                 } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
@@ -2636,6 +2933,7 @@ impl<'a> CodeGenerator<'a> {
                         tipo: replaced_type,
                         names,
                         tail,
+                        check_last_item,
                     };
                 }
                 Air::ListExpose {
@@ -2836,7 +3134,12 @@ impl<'a> CodeGenerator<'a> {
                         tipo: replaced_type,
                     };
                 }
-                Air::TupleAccessor { tipo, scope, names } => {
+                Air::TupleAccessor {
+                    tipo,
+                    scope,
+                    names,
+                    check_last_item,
+                } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
@@ -2844,6 +3147,7 @@ impl<'a> CodeGenerator<'a> {
                         scope,
                         names,
                         tipo: replaced_type,
+                        check_last_item,
                     };
                 }
                 Air::RecordUpdate {
@@ -2918,9 +3222,9 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 Air::FieldsExpose {
-                    count,
                     indices,
                     scope,
+                    check_last_item,
                 } => {
                     let record = ir_stack[index + 1].clone();
                     let record_type = record.tipo();
@@ -2941,7 +3245,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack[index] = Air::FieldsExpose {
                                 scope,
                                 indices: new_indices,
-                                count,
+                                check_last_item,
                             };
                         }
                     } else {
@@ -2955,7 +3259,7 @@ impl<'a> CodeGenerator<'a> {
                         ir_stack[index] = Air::FieldsExpose {
                             scope,
                             indices: new_indices,
-                            count,
+                            check_last_item,
                         };
                     }
                 }
@@ -3276,7 +3580,11 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             Air::ListAccessor {
-                names, tail, tipo, ..
+                names,
+                tail,
+                tipo,
+                check_last_item,
+                ..
             } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
@@ -3333,6 +3641,7 @@ impl<'a> CodeGenerator<'a> {
                                         current_index,
                                         term,
                                         &tipo,
+                                        check_last_item,
                                     ),
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::TailList).force_wrap(),
@@ -4383,6 +4692,64 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::FieldsExpose { indices, .. } => {
+                // let mut id_list = vec![];
+
+                //     for _ in 0..names.len() {
+                //         id_list.push(self.id_gen.next());
+                //     }
+
+                //     let current_index = 0;
+                //     let (first_name, names) = names.split_first().unwrap();
+
+                //     let head_list = convert_data_to_type(
+                //         apply_wrap(
+                //             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                //             Term::Var(Name {
+                //                 text: format!("__tuple_{}", list_id),
+                //                 unique: 0.into(),
+                //             }),
+                //         ),
+                //         &tipo.get_inner_types()[0],
+                //     );
+
+                //     term = apply_wrap(
+                //         Term::Lambda {
+                //             parameter_name: Name {
+                //                 text: format!("__tuple_{}", list_id),
+                //                 unique: 0.into(),
+                //             },
+                //             body: apply_wrap(
+                //                 Term::Lambda {
+                //                     parameter_name: Name {
+                //                         text: first_name.clone(),
+                //                         unique: 0.into(),
+                //                     },
+                //                     body: apply_wrap(
+                //                         list_access_to_uplc(
+                //                             names,
+                //                             &id_list,
+                //                             false,
+                //                             current_index,
+                //                             term,
+                //                             &tipo,
+                //                             check_last_item,
+                //                         ),
+                //                         apply_wrap(
+                //                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                //                             Term::Var(Name {
+                //                                 text: format!("__tuple_{}", list_id),
+                //                                 unique: 0.into(),
+                //                             }),
+                //                         ),
+                //                     )
+                //                     .into(),
+                //                 },
+                //                 head_list,
+                //             )
+                //             .into(),
+                //         },
+                //         value,
+                //     );
                 self.needs_field_access = true;
 
                 let constr_var = arg_stack.pop().unwrap();
@@ -4822,7 +5189,12 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::TupleAccessor { tipo, names, .. } => {
+            Air::TupleAccessor {
+                tipo,
+                names,
+                check_last_item,
+                ..
+            } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
@@ -4922,6 +5294,7 @@ impl<'a> CodeGenerator<'a> {
                                             current_index,
                                             term,
                                             &tipo,
+                                            check_last_item,
                                         ),
                                         apply_wrap(
                                             Term::Builtin(DefaultFunction::TailList).force_wrap(),

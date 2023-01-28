@@ -204,8 +204,8 @@ pub enum Air {
 
     FieldsExpose {
         scope: Vec<u64>,
-        count: usize,
         indices: Vec<(usize, String, Arc<Type>)>,
+        check_last_item: bool,
     },
 
     // ListAccess
@@ -214,6 +214,7 @@ pub enum Air {
         tipo: Arc<Type>,
         names: Vec<String>,
         tail: bool,
+        check_last_item: bool,
     },
 
     ListExpose {
@@ -228,6 +229,7 @@ pub enum Air {
         scope: Vec<u64>,
         names: Vec<String>,
         tipo: Arc<Type>,
+        check_last_item: bool,
     },
 
     TupleIndex {
