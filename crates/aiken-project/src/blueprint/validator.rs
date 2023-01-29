@@ -531,7 +531,7 @@ mod test {
     }
 
     #[test]
-    fn validator_phantom_and_opaque_types() {
+    fn validator_phantom_types() {
         assert_validator(
             r#"
             type Dict<key, value> {
@@ -559,20 +559,52 @@ mod test {
                         "fields": [
                           {
                             "title": "inner",
-                            "dataType": "list",
-                            "items": {
-                              "dataType": "map",
-                              "keys": {
-                                "dataType": "bytes"
-                              },
-                              "values": {
-                                "dataType": "integer"
-                              }
+                            "dataType": "map",
+                            "keys": {
+                              "dataType": "bytes"
+                            },
+                            "values": {
+                              "dataType": "integer"
                             }
                           }
                         ]
                       }
                     ]
+                  },
+                  "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+                }
+            ),
+        );
+    }
+
+    #[test]
+    fn validator_opaque_types() {
+        assert_validator(
+            r#"
+            pub opaque type Dict<key, value> {
+                inner: List<(ByteArray, value)>
+            }
+
+            type UUID { UUID }
+
+            fn mint(redeemer: Dict<UUID, Int>, ctx: Void) {
+                True
+            }
+            "#,
+            json!(
+                {
+                  "title": "test_module",
+                  "purpose": "mint",
+                  "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+                  "redeemer": {
+                    "title": "Dict",
+                    "dataType": "map",
+                    "keys": {
+                      "dataType": "bytes"
+                    },
+                    "values": {
+                      "dataType": "integer"
+                    }
                   },
                   "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
                 }

@@ -160,12 +160,19 @@ impl Annotated<Schema> {
                     let generic =
                         Annotated::from_type(modules, args.get(0).unwrap(), type_parameters)?;
 
-                    let generic = match generic.annotated {
+                    // NOTE: Lists of 2-tuples are treated as Maps. This is an oddity we inherit
+                    // from the PlutusTx / LedgerApi Haskell codebase, which encodes some elements
+                    // as such. We don't have a concept of language maps in Aiken, so we simply
+                    // make all types abide by this convention.
+                    let data = match generic.annotated {
                         Schema::Pair(left, right) => Data::Map(Box::new(left), Box::new(right)),
-                        _ => generic.into_data(type_info)?.annotated,
+                        _ => {
+                            let inner = generic.into_data(type_info)?.annotated;
+                            Data::List(Box::new(inner))
+                        }
                     };
 
-                    Ok(Schema::Data(Some(Data::List(Box::new(generic)))).into())
+                    Ok(Schema::Data(Some(data)).into())
                 }
 
                 _ => Err(Error::UnsupportedType {
@@ -284,6 +291,17 @@ impl Data {
 
             variants.push(variant);
         }
+
+        // NOTE: Opaque data-types with a single variant and a single field are transparent, they
+        // are erased completely at compilation time.
+        if data_type.opaque {
+            if let [variant] = &variants[..] {
+                if let [field] = &variant.annotated.fields[..] {
+                    return Ok(field.annotated.clone());
+                }
+            }
+        }
+
         Ok(Data::AnyOf(variants))
     }
 }
