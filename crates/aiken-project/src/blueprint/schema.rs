@@ -130,7 +130,7 @@ impl Annotated<Schema> {
 
                 "Option" => {
                     let generic =
-                        Annotated::from_type(modules, args.get(0).unwrap(), &HashMap::new())
+                        Annotated::from_type(modules, args.get(0).unwrap(), type_parameters)
                             .and_then(|s| s.into_data(type_info))?;
                     Ok(Annotated {
                         title: Some("Optional".to_string()),
@@ -158,9 +158,14 @@ impl Annotated<Schema> {
 
                 "List" => {
                     let generic =
-                        Annotated::from_type(modules, args.get(0).unwrap(), &HashMap::new())
-                            .and_then(|s| s.into_data(type_info))?;
-                    Ok(Schema::Data(Some(Data::List(Box::new(generic.annotated)))).into())
+                        Annotated::from_type(modules, args.get(0).unwrap(), type_parameters)?;
+
+                    let generic = match generic.annotated {
+                        Schema::Pair(left, right) => Data::Map(Box::new(left), Box::new(right)),
+                        _ => generic.into_data(type_info)?.annotated,
+                    };
+
+                    Ok(Schema::Data(Some(Data::List(Box::new(generic)))).into())
                 }
 
                 _ => Err(Error::UnsupportedType {
@@ -176,11 +181,10 @@ impl Annotated<Schema> {
                 let module = modules.get(module_name).unwrap();
                 let constructor = find_definition(type_name, &module.ast.definitions).unwrap();
                 let type_parameters = collect_type_parameters(&constructor.typed_parameters, args);
-                let annotated = Schema::Data(Some(Data::from_data_type(
-                    modules,
-                    constructor,
-                    &type_parameters,
-                )?));
+                let annotated = Schema::Data(Some(
+                    Data::from_data_type(modules, constructor, &type_parameters)
+                        .map_err(|e| e.add_crumb(type_info))?,
+                ));
 
                 Ok(Annotated {
                     title: Some(constructor.name.clone()),
@@ -191,8 +195,10 @@ impl Annotated<Schema> {
             Type::Var { tipo } => match tipo.borrow().deref() {
                 TypeVar::Link { tipo } => Annotated::from_type(modules, tipo, type_parameters),
                 TypeVar::Generic { id } => {
-                    let tipo = type_parameters.get(id).ok_or(Error::FreeParameter)?;
-                    Annotated::from_type(modules, tipo, &HashMap::new())
+                    let tipo = type_parameters.get(id).ok_or(Error::FreeParameter {
+                        breadcrumbs: vec![type_info.clone()],
+                    })?;
+                    Annotated::from_type(modules, tipo, type_parameters)
                 }
                 TypeVar::Unbound { .. } => Err(Error::UnsupportedType {
                     type_info: type_info.clone(),
@@ -201,16 +207,16 @@ impl Annotated<Schema> {
             Type::Tuple { elems } => match &elems[..] {
                 [left, right] => {
                     let left =
-                        Annotated::from_type(modules, left, &HashMap::new())?.into_data(left)?;
+                        Annotated::from_type(modules, left, type_parameters)?.into_data(left)?;
                     let right =
-                        Annotated::from_type(modules, right, &HashMap::new())?.into_data(right)?;
+                        Annotated::from_type(modules, right, type_parameters)?.into_data(right)?;
                     Ok(Schema::Pair(left.annotated, right.annotated).into())
                 }
                 _ => {
                     let elems: Result<Vec<Data>, _> = elems
                         .iter()
                         .map(|e| {
-                            Annotated::from_type(modules, e, &HashMap::new())
+                            Annotated::from_type(modules, e, type_parameters)
                                 .and_then(|s| s.into_data(e).map(|s| s.annotated))
                         })
                         .collect();
@@ -403,7 +409,38 @@ pub enum Error {
     ExpectedData { got: Type },
 
     #[error("I caught a free type-parameter in an interface boundary.")]
-    FreeParameter,
+    #[diagnostic(help(
+        r#"There can't be any free type-parameter at the contract boundary (i.e. in types used as datum and/or redeemer).
+Indeed, the validator can only be invoked with (very) concrete types. Since there's no reflexion possible inside a validator,
+it simply isn't possible to have any remaining free type variable in any of the datum or redeemer.
+
+I got there when trying to generate a blueprint specification of the following type:
+
+╰─▶ {type_signature}
+        "#
+        , type_signature =
+            breadcrumbs
+                .iter()
+                .map(|type_info| pretty::Printer::new().print(type_info).to_pretty_string(70))
+                .collect::<Vec<String>>()
+                .join(" → ")
+                .bright_blue()
+
+    ))]
+    FreeParameter { breadcrumbs: Vec<Type> },
+}
+
+impl Error {
+    fn add_crumb(self, type_info: &Type) -> Self {
+        match self {
+            Error::FreeParameter { breadcrumbs: tail } => {
+                let mut breadcrumbs = vec![type_info.clone()];
+                breadcrumbs.extend(tail);
+                Error::FreeParameter { breadcrumbs }
+            }
+            _ => self,
+        }
+    }
 }
 
 fn collect_type_parameters<'a>(
