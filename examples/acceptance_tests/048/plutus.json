@@ -1,0 +1,22 @@
+{
+  "preamble": {
+    "title": "aiken-lang/acceptance_test_048",
+    "version": "0.0.0"
+  },
+  "validators": [
+    {
+      "title": "foo",
+      "purpose": "spend",
+      "datum": {
+        "title": "Data",
+        "description": "Any Plutus data."
+      },
+      "redeemer": {
+        "title": "Data",
+        "description": "Any Plutus data."
+      },
+      "compiledCode": "585301000032322225333573466e1cc8c0052f7b6301010400010101002323232002375a6aae78008dd69aab9d0010014802052616300100122253335573e004293099ab9b3001357420046660060066ae88008005",
+      "hash": "5aabec7481e45c0a8640a429c603827b2c3a521647ceca9bbc6c1e03"
+    }
+  ]
+}

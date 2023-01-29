@@ -12,7 +12,7 @@ pub fn has_policy_id(self: Output, policy_id: PolicyId) -> Bool {
   |> not
 }
 
-pub fn spend(_datum, _redeemer, ctx: ScriptContext) -> Bool {
+pub fn spend(_datum: Data, _redeemer: Data, ctx: ScriptContext) -> Bool {
   ctx.transaction.outputs
   |> list.any(has_policy_id(_, my_policy_id))
 }
