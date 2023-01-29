@@ -1,21 +1,31 @@
 use super::schema;
 use crate::module::CheckedModule;
-use aiken_lang::ast::{Span, TypedFunction};
+use aiken_lang::{
+    ast::{Span, TypedFunction},
+    tipo::Type,
+};
 use miette::{Diagnostic, NamedSource};
 use owo_colors::OwoColorize;
-use std::{fmt::Debug, path::PathBuf};
+use std::{fmt::Debug, sync::Arc};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
-    #[error("A validator functions must return Bool")]
+    #[error("A validator must return {}", "Bool".bright_blue().bold())]
     #[diagnostic(code("aiken::blueprint::invalid::return_type"))]
+    #[diagnostic(help(r#"While analyzing the return type of your validator, I found it to be:
+
+╰─▶ {signature}
+
+...but I expected this to be a {type_Bool}. If I am inferring the wrong type, you may want to add a type annotation to the function."#
+        , type_Bool = "Bool".bright_blue().bold()
+        , signature = return_type.to_pretty(0).red()
+    ))]
     ValidatorMustReturnBool {
-        path: PathBuf,
-        src: String,
-        #[source_code]
-        named: NamedSource,
         #[label("invalid return type")]
         location: Span,
+        #[source_code]
+        source_code: NamedSource,
+        return_type: Arc<Type>,
     },
     #[error("A {} validator requires at least {at_least} arguments", name.purple().bold())]
     #[diagnostic(code("aiken::blueprint::invalid::arity"))]
@@ -24,23 +34,30 @@ pub enum Error {
         at_least: u8,
         #[label("not enough arguments")]
         location: Span,
-        path: PathBuf,
-        src: String,
         #[source_code]
-        named: NamedSource,
+        source_code: NamedSource,
     },
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    Schema(#[diagnostic_source] schema::Error),
+    #[error("{}", error)]
+    #[diagnostic(help("{}", error.help()))]
+    #[diagnostic(code("aiken::blueprint::interface"))]
+    Schema {
+        error: schema::Error,
+        #[label("invalid contract's boundary")]
+        location: Span,
+        #[source_code]
+        source_code: NamedSource,
+    },
 }
 
 pub fn assert_return_bool(module: &CheckedModule, def: &TypedFunction) -> Result<(), Error> {
     if !def.return_type.is_bool() {
         Err(Error::ValidatorMustReturnBool {
+            return_type: def.return_type.clone(),
             location: def.location,
-            src: module.code.clone(),
-            path: module.input_path.clone(),
-            named: NamedSource::new(module.input_path.display().to_string(), module.code.clone()),
+            source_code: NamedSource::new(
+                module.input_path.display().to_string(),
+                module.code.clone(),
+            ),
         })
     } else {
         Ok(())
@@ -54,12 +71,13 @@ pub fn assert_min_arity(
 ) -> Result<(), Error> {
     if def.arguments.len() < at_least as usize {
         Err(Error::WrongValidatorArity {
-            location: def.location,
-            src: module.code.clone(),
-            path: module.input_path.clone(),
-            named: NamedSource::new(module.input_path.display().to_string(), module.code.clone()),
             name: def.name.clone(),
             at_least,
+            location: def.location,
+            source_code: NamedSource::new(
+                module.input_path.display().to_string(),
+                module.code.clone(),
+            ),
         })
     } else {
         Ok(())

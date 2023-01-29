@@ -4,6 +4,7 @@ use super::{
 };
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{ast::TypedFunction, uplc::CodeGenerator};
+use miette::NamedSource;
 use pallas::ledger::primitives::babbage as cardano;
 use pallas_traverse::ComputeHash;
 use serde::{
@@ -91,12 +92,27 @@ impl Validator {
             purpose,
             datum: datum
                 .map(|datum| {
-                    Annotated::from_type(modules.into(), &datum.tipo, &HashMap::new())
-                        .map_err(Error::Schema)
+                    Annotated::from_type(modules.into(), &datum.tipo, &HashMap::new()).map_err(
+                        |error| Error::Schema {
+                            error,
+                            location: datum.location,
+                            source_code: NamedSource::new(
+                                validator.input_path.display().to_string(),
+                                validator.code.clone(),
+                            ),
+                        },
+                    )
                 })
                 .transpose()?,
             redeemer: Annotated::from_type(modules.into(), &redeemer.tipo, &HashMap::new())
-                .map_err(Error::Schema)?,
+                .map_err(|error| Error::Schema {
+                    error,
+                    location: redeemer.location,
+                    source_code: NamedSource::new(
+                        validator.input_path.display().to_string(),
+                        validator.code.clone(),
+                    ),
+                })?,
             program: generator
                 .generate(&def.body, &def.arguments, true)
                 .try_into()

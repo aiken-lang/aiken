@@ -3,7 +3,6 @@ use aiken_lang::{
     ast::{DataType, Definition, TypedDefinition},
     tipo::{pretty, Type, TypeVar},
 };
-use miette::Diagnostic;
 use owo_colors::OwoColorize;
 use serde::{
     self,
@@ -175,9 +174,7 @@ impl Annotated<Schema> {
                     Ok(Schema::Data(Some(data)).into())
                 }
 
-                _ => Err(Error::UnsupportedType {
-                    type_info: type_info.clone(),
-                }),
+                _ => Err(Error::new(ErrorContext::UnsupportedType, type_info)),
             },
             Type::App {
                 module: module_name,
@@ -190,7 +187,7 @@ impl Annotated<Schema> {
                 let type_parameters = collect_type_parameters(&constructor.typed_parameters, args);
                 let annotated = Schema::Data(Some(
                     Data::from_data_type(modules, constructor, &type_parameters)
-                        .map_err(|e| e.add_crumb(type_info))?,
+                        .map_err(|e| e.backtrack(type_info))?,
                 ));
 
                 Ok(Annotated {
@@ -202,41 +199,42 @@ impl Annotated<Schema> {
             Type::Var { tipo } => match tipo.borrow().deref() {
                 TypeVar::Link { tipo } => Annotated::from_type(modules, tipo, type_parameters),
                 TypeVar::Generic { id } => {
-                    let tipo = type_parameters.get(id).ok_or(Error::FreeParameter {
-                        breadcrumbs: vec![type_info.clone()],
-                    })?;
+                    let tipo = type_parameters
+                        .get(id)
+                        .ok_or_else(|| Error::new(ErrorContext::FreeTypeVariable, type_info))?;
                     Annotated::from_type(modules, tipo, type_parameters)
                 }
-                TypeVar::Unbound { .. } => Err(Error::UnsupportedType {
-                    type_info: type_info.clone(),
-                }),
+                TypeVar::Unbound { .. } => {
+                    Err(Error::new(ErrorContext::UnboundTypeVariable, type_info))
+                }
             },
             Type::Tuple { elems } => match &elems[..] {
                 [left, right] => {
-                    let left =
-                        Annotated::from_type(modules, left, type_parameters)?.into_data(left)?;
-                    let right =
-                        Annotated::from_type(modules, right, type_parameters)?.into_data(right)?;
+                    let left = Annotated::from_type(modules, left, type_parameters)?
+                        .into_data(left)
+                        .map_err(|e| e.backtrack(type_info))?;
+                    let right = Annotated::from_type(modules, right, type_parameters)?
+                        .into_data(right)
+                        .map_err(|e| e.backtrack(type_info))?;
                     Ok(Schema::Pair(left.annotated, right.annotated).into())
                 }
                 _ => {
-                    let elems: Result<Vec<Data>, _> = elems
+                    let elems = elems
                         .iter()
                         .map(|e| {
                             Annotated::from_type(modules, e, type_parameters)
                                 .and_then(|s| s.into_data(e).map(|s| s.annotated))
                         })
-                        .collect();
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| e.backtrack(type_info))?;
                     Ok(Annotated {
                         title: Some("Tuple".to_owned()),
                         description: None,
-                        annotated: Schema::List(elems?),
+                        annotated: Schema::List(elems),
                     })
                 }
             },
-            Type::Fn { .. } => Err(Error::UnsupportedType {
-                type_info: type_info.clone(),
-            }),
+            Type::Fn { .. } => Err(Error::new(ErrorContext::UnexpectedFunction, type_info)),
         }
     }
 
@@ -251,9 +249,7 @@ impl Annotated<Schema> {
                 description,
                 annotated: data,
             }),
-            _ => Err(Error::ExpectedData {
-                got: type_info.to_owned(),
-            }),
+            _ => Err(Error::new(ErrorContext::ExpectedData, type_info)),
         }
     }
 }
@@ -412,52 +408,109 @@ impl Serialize for Constructor {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, thiserror::Error, Diagnostic)]
-pub enum Error {
-    #[error("I stumbled upon an unsupported type in a datum or redeemer definition.")]
-    #[diagnostic(help(
-        r#"I do not know how to generate a portable Plutus specification for the following type:
+#[derive(Debug, PartialEq, Clone, thiserror::Error)]
+#[error("{}", context)]
+pub struct Error {
+    context: ErrorContext,
+    breadcrumbs: Vec<Type>,
+}
 
-╰─▶ {type_signature}
-        "#
-        , type_signature = pretty::Printer::new().print(type_info).to_pretty_string(70).bright_blue()
-    ))]
-    UnsupportedType { type_info: Type },
+#[derive(Debug, PartialEq, Clone, thiserror::Error)]
+pub enum ErrorContext {
+    #[error("I failed at my own job and couldn't figure out how to generate a specification for a type.")]
+    UnsupportedType,
+
+    #[error("I discovered a type hole where I would expect a concrete type.")]
+    UnboundTypeVariable,
+
+    #[error("I caught a free variable in the contract's interface boundary.")]
+    FreeTypeVariable,
+
     #[error("I had the misfortune to find an invalid type in an interface boundary.")]
-    ExpectedData { got: Type },
+    ExpectedData,
 
-    #[error("I caught a free type-parameter in an interface boundary.")]
-    #[diagnostic(help(
-        r#"There can't be any free type-parameter at the contract boundary (i.e. in types used as datum and/or redeemer).
-Indeed, the validator can only be invoked with (very) concrete types. Since there's no reflexion possible inside a validator,
-it simply isn't possible to have any remaining free type variable in any of the datum or redeemer.
-
-I got there when trying to generate a blueprint specification of the following type:
-
-╰─▶ {type_signature}
-        "#
-        , type_signature =
-            breadcrumbs
-                .iter()
-                .map(|type_info| pretty::Printer::new().print(type_info).to_pretty_string(70))
-                .collect::<Vec<String>>()
-                .join(" → ")
-                .bright_blue()
-
-    ))]
-    FreeParameter { breadcrumbs: Vec<Type> },
+    #[error("I figured you tried to export a function in your contract's binary interface.")]
+    UnexpectedFunction,
 }
 
 impl Error {
-    fn add_crumb(self, type_info: &Type) -> Self {
-        match self {
-            Error::FreeParameter { breadcrumbs: tail } => {
-                let mut breadcrumbs = vec![type_info.clone()];
-                breadcrumbs.extend(tail);
-                Error::FreeParameter { breadcrumbs }
-            }
-            _ => self,
+    pub fn new(context: ErrorContext, type_info: &Type) -> Self {
+        Error {
+            context,
+            breadcrumbs: vec![type_info.clone()],
         }
+    }
+
+    pub fn backtrack(self, type_info: &Type) -> Self {
+        let mut breadcrumbs = vec![type_info.clone()];
+        breadcrumbs.extend(self.breadcrumbs);
+        Error {
+            context: self.context,
+            breadcrumbs,
+        }
+    }
+
+    pub fn help(&self) -> String {
+        match self.context {
+            ErrorContext::UnsupportedType => format!(
+                r#"I do not know how to generate a portable Plutus specification for the following type:
+
+╰─▶ {signature}
+
+This is likely a bug. I should know. May you be kind enough and report this on <https://github.com/aiken-lang/aiken>."#,
+                signature = Error::fmt_breadcrumbs(&[self.breadcrumbs.last().unwrap().to_owned()]),
+            ),
+
+            ErrorContext::FreeTypeVariable => format!(
+                r#"There can't be any free type variable at the contract's boundary (i.e. in types used as datum and/or redeemer). Indeed, the validator can only be invoked with (very) concrete types. Since there's no reflexion possible inside a validator, it simply isn't possible to have any remaining free type variable in any of the datum or redeemer.
+
+I got there when trying to generate a blueprint specification of the following type:
+
+╰─▶ {breadcrumbs}"#,
+                breadcrumbs = Error::fmt_breadcrumbs(&self.breadcrumbs)
+            ),
+
+            ErrorContext::UnboundTypeVariable => format!(
+                r#"There cannot be any unbound type variable at the contract's boundary (i.e. in types used as datum and/or redeemer). Indeed, in order to generate an outward-facing specification of the contract's interface, I need to know what concrete representations will the datum and/or the redeemer have.
+
+If your contract doesn't need datum or redeemer, you can always give them the type {type_Void} to indicate this. It is very concrete and will help me progress forward."#,
+                type_Void = "Void".bright_blue().bold()
+            ),
+
+            ErrorContext::ExpectedData => format!(
+                r#"While figuring out the outward-facing specification for your contract, I found a type that cannot actually be represented as valid Untyped Plutus Core (the low-level language Cardano uses to execute smart-contracts. For example, it isn't possible to have a list or a tuple of {type_String} because the underlying execution engine doesn't allow it.
+
+There are few restrictions like this one. In this instance, here's the types I followed and that led me to this problem:
+
+╰─▶ {breadcrumbs}"#,
+                type_String = "String".bright_blue().bold(),
+                breadcrumbs = Error::fmt_breadcrumbs(&self.breadcrumbs)
+            ),
+
+            ErrorContext::UnexpectedFunction => format!(
+                r#"I can't allow that. Functions aren't serializable as data on-chain and thus cannot be used within your datum and/or redeemer types.
+
+Here's the types I followed and that led me to this problem:
+
+╰─▶ {breadcrumbs}"#,
+                breadcrumbs = Error::fmt_breadcrumbs(&self.breadcrumbs)
+            ),
+        }
+    }
+
+    fn fmt_breadcrumbs(breadcrumbs: &[Type]) -> String {
+        breadcrumbs
+            .iter()
+            .map(|type_info| {
+                pretty::Printer::new()
+                    .print(type_info)
+                    .to_pretty_string(70)
+                    .bright_blue()
+                    .bold()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(" → ")
     }
 }
 
