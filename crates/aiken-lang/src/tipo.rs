@@ -213,6 +213,7 @@ impl Type {
         match self {
             Self::Fn { args, .. } => Some(args.clone()),
             Self::App { args, .. } => Some(args.clone()),
+            Self::Var { tipo } => tipo.borrow().arg_types(),
             _ => None,
         }
     }
@@ -494,6 +495,13 @@ impl TypeVar {
         match self {
             TypeVar::Generic { id } => Some(*id),
             TypeVar::Link { tipo } => tipo.get_generic(),
+            _ => None,
+        }
+    }
+
+    pub fn arg_types(&self) -> Option<Vec<Arc<Type>>> {
+        match self {
+            Self::Link { tipo } => tipo.arg_types(),
             _ => None,
         }
     }
