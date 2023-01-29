@@ -166,6 +166,7 @@ mod test {
         IdGenerator,
     };
     use assert_json_diff::assert_json_eq;
+    use indexmap::IndexMap;
     use serde_json::{self, json};
     use std::{collections::HashMap, path::PathBuf};
 
@@ -176,8 +177,8 @@ mod test {
         package: PackageName,
         id_gen: IdGenerator,
         module_types: HashMap<String, TypeInfo>,
-        functions: HashMap<FunctionAccessKey, TypedFunction>,
-        data_types: HashMap<DataTypeKey, TypedDataType>,
+        functions: IndexMap<FunctionAccessKey, TypedFunction>,
+        data_types: IndexMap<DataTypeKey, TypedDataType>,
     }
 
     impl TestProject {

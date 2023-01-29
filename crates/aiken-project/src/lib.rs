@@ -65,8 +65,8 @@ where
     sources: Vec<Source>,
     pub warnings: Vec<Warning>,
     event_listener: T,
-    functions: HashMap<FunctionAccessKey, TypedFunction>,
-    data_types: HashMap<DataTypeKey, TypedDataType>,
+    functions: IndexMap<FunctionAccessKey, TypedFunction>,
+    data_types: IndexMap<DataTypeKey, TypedDataType>,
 }
 
 impl<T> Project<T>

@@ -44,7 +44,7 @@ pub struct CodeGenerator<'a> {
     defined_functions: IndexMap<FunctionAccessKey, ()>,
     functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
     data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
-    module_types: &'a IndexMap<String, TypeInfo>,
+    module_types: IndexMap<&'a String, &'a TypeInfo>,
     id_gen: IdGenerator,
     needs_field_access: bool,
     used_data_assert_on_list: bool,
@@ -55,7 +55,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn new(
         functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
         data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
-        module_types: &'a IndexMap<String, TypeInfo>,
+        module_types: IndexMap<&'a String, &'a TypeInfo>,
     ) -> Self {
         CodeGenerator {
             defined_functions: IndexMap::new(),

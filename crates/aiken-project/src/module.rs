@@ -9,6 +9,7 @@ use aiken_lang::{
     uplc::CodeGenerator,
     VALIDATOR_NAMES,
 };
+use indexmap::IndexMap;
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 use std::{
     collections::{HashMap, HashSet},
@@ -272,16 +273,16 @@ impl CheckedModules {
 
     pub fn new_generator<'a>(
         &'a self,
-        builtin_functions: &'a HashMap<FunctionAccessKey, TypedFunction>,
-        builtin_data_types: &'a HashMap<DataTypeKey, TypedDataType>,
+        builtin_functions: &'a IndexMap<FunctionAccessKey, TypedFunction>,
+        builtin_data_types: &'a IndexMap<DataTypeKey, TypedDataType>,
         module_types: &'a HashMap<String, TypeInfo>,
     ) -> CodeGenerator<'a> {
-        let mut functions = HashMap::new();
+        let mut functions = IndexMap::new();
         for (k, v) in builtin_functions {
             functions.insert(k.clone(), v);
         }
 
-        let mut data_types = HashMap::new();
+        let mut data_types = IndexMap::new();
         for (k, v) in builtin_data_types {
             data_types.insert(k.clone(), v);
         }
@@ -316,7 +317,11 @@ impl CheckedModules {
                 }
             }
         }
-        CodeGenerator::new(functions, data_types, module_types)
+
+        let mut module_types_index = IndexMap::new();
+        module_types_index.extend(module_types);
+
+        CodeGenerator::new(functions, data_types, module_types_index)
     }
 }
 
