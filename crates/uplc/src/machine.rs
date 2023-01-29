@@ -32,9 +32,31 @@ impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
     }
 }
 
+#[derive(Clone)]
+enum PartialTerm {
+    // tag: 0
+    // Var(NamedDeBruijn),
+    // tag: 1
+    Delay,
+    // tag: 2
+    Lambda(NamedDeBruijn),
+    // tag: 3
+    Apply,
+    // tag: 4
+    // Constant(Constant),
+    // tag: 5
+    Force,
+    // tag: 6
+    // Error,
+    // tag: 7
+    // Builtin(DefaultFunction),
+}
+
+#[derive(Clone)]
 enum DischargeStep {
     DischargeValue(Value),
     DischargeValueEnv(usize, Rc<Vec<Value>>, Rc<Term<NamedDeBruijn>>),
+    PopArgStack(PartialTerm),
 }
 
 pub struct Machine {
@@ -200,94 +222,13 @@ impl Machine {
                     self.spend_unbudgeted_steps()?;
                 }
 
-                let term = self.discharge_value(value);
+                let term = discharge_value(value);
 
                 self.stack.push(MachineStep::Done(term));
             }
         };
 
         Ok(())
-    }
-
-    fn discharge_value(&mut self, value: Value) -> Rc<Term<NamedDeBruijn>> {
-        let mut stack = vec![DischargeStep::DischargeValue(value)];
-
-        while let Some(stack_frame) = stack.pop() {
-            match stack_frame {
-                DischargeStep::DischargeValue(value) => match value {
-                    Value::Con(x) => Rc::new(Term::Constant(x)),
-                    Value::Builtin { term, .. } => term,
-                    Value::Delay(body, env) => {
-                        stack.push(DischargeStep::DischargeValueEnv(
-                            0,
-                            env,
-                            Rc::new(Term::Delay(body)),
-                        ));
-                    }
-                    Value::Lambda {
-                        parameter_name,
-                        body,
-                        env,
-                    } => {
-                        stack.push(DischargeStep::DischargeValueEnv(
-                            0,
-                            env,
-                            Rc::new(Term::Lambda {
-                                parameter_name: NamedDeBruijn {
-                                    text: parameter_name.text,
-                                    index: 0.into(),
-                                },
-                                body,
-                            }),
-                        ));
-                    }
-                },
-                DischargeStep::DischargeValueEnv(lam_cnt, env, term) => match term.as_ref() {
-                    Term::Var(name) => {
-                        let index: usize = name.index.into();
-
-                        if lam_cnt >= index {
-                            Rc::new(Term::Var(name.clone()))
-                        } else {
-                            env.get::<usize>(env.len() - (index - lam_cnt))
-                                .cloned()
-                                .map_or(Rc::new(Term::Var(name.clone())), |v| {
-                                    self.discharge_value(v)
-                                })
-                        }
-                    }
-                    Term::Lambda {
-                        parameter_name,
-                        body,
-                    } => Rc::new(Term::Lambda {
-                        parameter_name: parameter_name.clone(),
-                        body: self.discharge_value_env(lam_cnt + 1, env, Rc::clone(body)),
-                    }),
-                    Term::Apply { function, argument } => Rc::new(Term::Apply {
-                        function: self.discharge_value_env(
-                            lam_cnt,
-                            Rc::clone(&env),
-                            Rc::clone(function),
-                        ),
-                        argument: self.discharge_value_env(lam_cnt, env, Rc::clone(argument)),
-                    }),
-
-                    Term::Delay(x) => Rc::new(Term::Delay(self.discharge_value_env(
-                        lam_cnt,
-                        env,
-                        Rc::clone(x),
-                    ))),
-                    Term::Force(x) => Rc::new(Term::Force(self.discharge_value_env(
-                        lam_cnt,
-                        env,
-                        Rc::clone(x),
-                    ))),
-                    rest => Rc::new(rest.clone()),
-                },
-            }
-        }
-
-        todo!()
     }
 
     fn force_evaluate(&mut self, context: Rc<Context>, value: Value) -> Result<(), Error> {
@@ -344,7 +285,7 @@ impl Machine {
                 term,
                 mut runtime,
             } => {
-                let arg_term = self.discharge_value(argument.clone());
+                let arg_term = discharge_value(argument.clone());
 
                 let t = Rc::new(Term::<NamedDeBruijn>::Apply {
                     function: term,
@@ -431,6 +372,133 @@ impl Machine {
             Ok(())
         }
     }
+}
+
+fn discharge_value(value: Value) -> Rc<Term<NamedDeBruijn>> {
+    let mut stack = vec![DischargeStep::DischargeValue(value)];
+    let mut arg_stack = vec![];
+    while let Some(stack_frame) = stack.pop() {
+        match stack_frame {
+            DischargeStep::DischargeValue(value) => match value {
+                Value::Con(x) => arg_stack.push(Term::Constant(x).into()),
+                Value::Builtin { term, .. } => arg_stack.push(term.clone()),
+                Value::Delay(body, env) => {
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        0,
+                        env,
+                        Term::Delay(body).into(),
+                    ));
+                }
+                Value::Lambda {
+                    parameter_name,
+                    body,
+                    env,
+                } => {
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        0,
+                        env,
+                        Term::Lambda {
+                            parameter_name: NamedDeBruijn {
+                                text: parameter_name.text,
+                                index: 0.into(),
+                            },
+                            body,
+                        }
+                        .into(),
+                    ));
+                }
+            },
+            DischargeStep::DischargeValueEnv(lam_cnt, env, term) => match term.as_ref() {
+                Term::Var(name) => {
+                    let index: usize = name.index.into();
+
+                    if lam_cnt >= index {
+                        arg_stack.push(Rc::new(Term::Var(name.clone())));
+                    } else {
+                        let env = env.get::<usize>(env.len() - (index - lam_cnt)).cloned();
+                        if let Some(v) = env {
+                            stack.push(DischargeStep::DischargeValue(v));
+                        } else {
+                            arg_stack.push(Rc::new(Term::Var(name.clone())));
+                        }
+                    }
+                }
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    stack.push(DischargeStep::PopArgStack(PartialTerm::Lambda(
+                        parameter_name.to_owned(),
+                    )));
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        lam_cnt + 1,
+                        env,
+                        body.to_owned(),
+                    ));
+                }
+                Term::Apply { function, argument } => {
+                    stack.push(DischargeStep::PopArgStack(PartialTerm::Apply));
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        lam_cnt,
+                        env.clone(),
+                        function.to_owned(),
+                    ));
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        lam_cnt,
+                        env,
+                        argument.to_owned(),
+                    ));
+                }
+                Term::Delay(body) => {
+                    stack.push(DischargeStep::PopArgStack(PartialTerm::Delay));
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        lam_cnt,
+                        env.clone(),
+                        body.to_owned(),
+                    ));
+                }
+
+                Term::Force(body) => {
+                    stack.push(DischargeStep::PopArgStack(PartialTerm::Force));
+                    stack.push(DischargeStep::DischargeValueEnv(
+                        lam_cnt,
+                        env.clone(),
+                        body.to_owned(),
+                    ));
+                }
+                rest => {
+                    arg_stack.push(rest.to_owned().into());
+                }
+            },
+            DischargeStep::PopArgStack(term) => match term {
+                PartialTerm::Delay => {
+                    let body = arg_stack.pop().unwrap();
+                    arg_stack.push(Term::Delay(body).into())
+                }
+                PartialTerm::Lambda(parameter_name) => {
+                    let body = arg_stack.pop().unwrap();
+                    arg_stack.push(
+                        Term::Lambda {
+                            parameter_name,
+                            body,
+                        }
+                        .into(),
+                    )
+                }
+                PartialTerm::Apply => {
+                    let argument = arg_stack.pop().unwrap();
+                    let function = arg_stack.pop().unwrap();
+                    arg_stack.push(Term::Apply { function, argument }.into());
+                }
+                PartialTerm::Force => {
+                    let body = arg_stack.pop().unwrap();
+                    arg_stack.push(Term::Force(body).into())
+                }
+            },
+        }
+    }
+
+    arg_stack.pop().unwrap()
 }
 
 #[derive(Clone)]
