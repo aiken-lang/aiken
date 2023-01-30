@@ -18,9 +18,12 @@ use uplc::{
 
 use crate::{
     air::Air,
-    ast::{Clause, Constant, DataType, Pattern, Span, TypedArg, TypedDataType},
+    ast::{
+        BinOp, Clause, ClauseGuard, Constant, DataType, Pattern, Span, TypedArg, TypedDataType,
+        UnOp,
+    },
     expr::TypedExpr,
-    tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
+    tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
 
 #[derive(Clone, Debug)]
@@ -1622,6 +1625,119 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: HashMap<DataTypeKey, &
                 }
                 *t = Type::Tuple { elems: new_elems }.into();
             }
+        }
+    }
+}
+
+pub fn handle_clause_guard(
+    clause_guard: &ClauseGuard<Arc<Type>, String>,
+    clause_guard_vec: &mut Vec<Air>,
+    scope: Vec<u64>,
+) {
+    match clause_guard {
+        ClauseGuard::Not { value, .. } => {
+            clause_guard_vec.push(Air::UnOp {
+                scope: scope.clone(),
+                op: UnOp::Not,
+            });
+
+            handle_clause_guard(value, clause_guard_vec, scope);
+        }
+        ClauseGuard::Equals { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::Eq,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::NotEquals { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::NotEq,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::GtInt { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::GtInt,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::GtEqInt { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::GtEqInt,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::LtInt { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::LtInt,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::LtEqInt { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::LtEqInt,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::Or { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::Or,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::And { left, right, .. } => {
+            clause_guard_vec.push(Air::BinOp {
+                scope: scope.clone(),
+                name: BinOp::And,
+                count: 2,
+                tipo: left.tipo(),
+            });
+            handle_clause_guard(left, clause_guard_vec, scope.clone());
+            handle_clause_guard(right, clause_guard_vec, scope);
+        }
+        ClauseGuard::Var { tipo, name, .. } => {
+            clause_guard_vec.push(Air::Var {
+                scope,
+                constructor: ValueConstructor::public(
+                    tipo.clone(),
+                    ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                ),
+                name: name.clone(),
+                variant_name: String::new(),
+            });
+        }
+        ClauseGuard::Constant(constant) => {
+            constants_ir(constant, clause_guard_vec, scope);
         }
     }
 }

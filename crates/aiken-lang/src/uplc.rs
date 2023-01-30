@@ -28,10 +28,12 @@ use crate::{
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
         convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
-        get_generics_and_type, handle_func_deps_ir, handle_recursion_ir, list_access_to_uplc,
-        lookup_data_type_by_tipo, monomorphize, rearrange_clauses, replace_opaque_type,
-        wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
+        get_generics_and_type, handle_clause_guard, handle_func_deps_ir, handle_recursion_ir,
+        list_access_to_uplc, lookup_data_type_by_tipo, monomorphize, rearrange_clauses,
+        replace_opaque_type, wrap_validator_args, ClauseProperties, DataTypeKey, FuncComponents,
+        FunctionAccessKey,
     },
+    builtins::bool,
     expr::TypedExpr,
     tipo::{
         self, ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -620,6 +622,33 @@ impl<'a> CodeGenerator<'a> {
             *clause_properties.is_complex_clause() = false;
 
             self.build_ir(&clause.then, &mut clause_then_vec, scope.clone());
+
+            if let Some(clause_guard) = &clause.guard {
+                let mut clause_guard_vec = vec![];
+                *clause_properties.is_complex_clause() = true;
+                let clause_guard_name = format!("__clause_guard_{}", self.id_gen.next());
+
+                clause_guard_vec.push(Air::Lam {
+                    scope: scope.clone(),
+                    name: clause_guard_name.clone(),
+                });
+
+                handle_clause_guard(clause_guard, &mut clause_guard_vec, scope.clone());
+
+                clause_guard_vec.push(Air::ClauseGuard {
+                    scope: scope.clone(),
+                    subject_name: clause_guard_name,
+                    tipo: bool(),
+                });
+
+                clause_guard_vec.push(Air::Bool {
+                    scope: scope.clone(),
+                    value: true,
+                });
+
+                clause_guard_vec.append(&mut clause_then_vec);
+                clause_then_vec = clause_guard_vec;
+            }
 
             match clause_properties {
                 ClauseProperties::ConstrClause {
@@ -3644,7 +3673,47 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 if tipo.is_bool() {
-                    if matches!(clause, Term::Constant(UplcConstant::Bool(true))) {
+                    if complex_clause {
+                        let other_clauses = term;
+                        if matches!(clause, Term::Constant(UplcConstant::Bool(true))) {
+                            term = if_else(
+                                Term::Var(Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }),
+                                Term::Delay(body.into()),
+                                Term::Var(Name {
+                                    text: "__other_clauses_delayed".to_string(),
+                                    unique: 0.into(),
+                                }),
+                            )
+                            .force_wrap();
+                        } else {
+                            term = if_else(
+                                Term::Var(Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }),
+                                Term::Var(Name {
+                                    text: "__other_clauses_delayed".to_string(),
+                                    unique: 0.into(),
+                                }),
+                                Term::Delay(body.into()),
+                            )
+                            .force_wrap();
+                        }
+
+                        term = apply_wrap(
+                            Term::Lambda {
+                                parameter_name: Name {
+                                    text: "__other_clauses_delayed".to_string(),
+                                    unique: 0.into(),
+                                },
+                                body: term.into(),
+                            },
+                            Term::Delay(other_clauses.into()),
+                        );
+                    } else if matches!(clause, Term::Constant(UplcConstant::Bool(true))) {
                         term = delayed_if_else(
                             Term::Var(Name {
                                 text: subject_name,
@@ -4635,6 +4704,21 @@ impl<'a> CodeGenerator<'a> {
 
                 let tuple_types = tipo.get_inner_types();
 
+                if complex_clause {
+                    let next_clause = arg_stack.pop().unwrap();
+
+                    term = apply_wrap(
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            },
+                            body: term.into(),
+                        },
+                        Term::Delay(next_clause.into()),
+                    )
+                }
+
                 if tuple_types.len() == 2 {
                     for (index, name) in indices.iter() {
                         if *index == 0 {
@@ -4708,21 +4792,6 @@ impl<'a> CodeGenerator<'a> {
                             ),
                         );
                     }
-                }
-
-                if complex_clause {
-                    let next_clause = arg_stack.pop().unwrap();
-
-                    term = apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: "__other_clauses_delayed".to_string(),
-                                unique: 0.into(),
-                            },
-                            body: term.into(),
-                        },
-                        Term::Delay(next_clause.into()),
-                    )
                 }
                 arg_stack.push(term);
             }
