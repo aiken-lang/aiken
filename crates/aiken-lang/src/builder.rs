@@ -15,8 +15,8 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        AssignmentKind, BinOp, Clause, ClauseGuard, Constant, DataType, Pattern, Span, TypedArg, TypedDataType,
-        UnOp,
+        AssignmentKind, BinOp, Clause, ClauseGuard, Constant, DataType, Pattern, Span, TypedArg,
+        TypedDataType, UnOp,
     },
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
