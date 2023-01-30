@@ -25,10 +25,10 @@ use crate::{
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
         convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
-        get_generics_and_type, handle_clause_guard, handle_func_dependencies_ir, handle_recursion_ir,
-        list_access_to_uplc, lookup_data_type_by_tipo, monomorphize, rearrange_clauses,
-        replace_opaque_type, wrap_validator_args, AssignmentProperties, ClauseProperties, DataTypeKey, FuncComponents,
-        FunctionAccessKey,
+        get_generics_and_type, handle_clause_guard, handle_func_dependencies_ir,
+        handle_recursion_ir, list_access_to_uplc, lookup_data_type_by_tipo, monomorphize,
+        rearrange_clauses, replace_opaque_type, wrap_validator_args, AssignmentProperties,
+        ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     builtins::bool,
     expr::TypedExpr,
@@ -671,7 +671,7 @@ impl<'a> CodeGenerator<'a> {
                 *clause_properties.is_complex_clause() = true;
                 let clause_guard_name = format!("__clause_guard_{}", self.id_gen.next());
 
-                clause_guard_vec.push(Air::Lam {
+                clause_guard_vec.push(Air::Let {
                     scope: scope.clone(),
                     name: clause_guard_name.clone(),
                 });
