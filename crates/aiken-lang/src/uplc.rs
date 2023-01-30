@@ -1901,10 +1901,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                let data_type_constr = data_type
+                let (index, data_type_constr) = data_type
                     .constructors
                     .iter()
-                    .find(|constr| &constr.name == constr_name)
+                    .enumerate()
+                    .find(|(_, constr)| &constr.name == constr_name)
                     .unwrap();
 
                 let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
@@ -1952,6 +1953,31 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
+                let constr_var = format!("__constr_{}", self.id_gen.next());
+                pattern_vec.push(Air::Let {
+                    scope: scope.clone(),
+                    name: constr_var.clone(),
+                });
+
+                pattern_vec.append(value_vec);
+
+                pattern_vec.push(Air::AssertConstr {
+                    scope: scope.clone(),
+                    constr_index: index,
+                });
+
+                pattern_vec.push(Air::Var {
+                    scope: scope.clone(),
+                    constructor: ValueConstructor::public(
+                        tipo.clone(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: constr_var.clone(),
+                    variant_name: String::new(),
+                });
+
                 if !arguments_index.is_empty() {
                     pattern_vec.push(Air::FieldsExpose {
                         indices: final_args
@@ -1961,12 +1987,22 @@ impl<'a> CodeGenerator<'a> {
                                 (*index, var_name.clone(), field_type.clone())
                             })
                             .collect_vec(),
-                        scope,
+                        scope: scope.clone(),
                         check_last_item: true,
                     });
-                }
 
-                pattern_vec.append(value_vec);
+                    pattern_vec.push(Air::Var {
+                        scope,
+                        constructor: ValueConstructor::public(
+                            tipo.clone(),
+                            ValueConstructorVariant::LocalVariable {
+                                location: Span::empty(),
+                            },
+                        ),
+                        name: constr_var,
+                        variant_name: String::new(),
+                    });
+                }
 
                 pattern_vec.append(&mut nested_pattern);
             }
@@ -4231,6 +4267,36 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = convert_data_to_type(term, &tipo);
+
+                arg_stack.push(term);
+            }
+            Air::AssertConstr { constr_index, .. } => {
+                let constr = arg_stack.pop().unwrap();
+
+                let mut term = arg_stack.pop().unwrap();
+
+                let error_term = apply_wrap(
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                        Term::Constant(UplcConstant::String(
+                            "Asserted on incorrect constructor variant.".to_string(),
+                        )),
+                    ),
+                    Term::Delay(Term::Error.into()),
+                )
+                .force_wrap();
+
+                term = delayed_if_else(
+                    apply_wrap(
+                        apply_wrap(
+                            DefaultFunction::EqualsInteger.into(),
+                            Term::Constant(UplcConstant::Integer(constr_index as i128)),
+                        ),
+                        constr_index_exposer(constr),
+                    ),
+                    term,
+                    error_term,
+                );
 
                 arg_stack.push(term);
             }

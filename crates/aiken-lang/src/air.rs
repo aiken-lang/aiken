@@ -106,6 +106,11 @@ pub enum Air {
         tipo: Arc<Type>,
     },
 
+    AssertConstr {
+        scope: Vec<u64>,
+        constr_index: usize,
+    },
+
     // When
     When {
         scope: Vec<u64>,
@@ -263,6 +268,7 @@ impl Air {
             | Air::UnOp { scope, .. }
             | Air::Let { scope, .. }
             | Air::UnWrapData { scope, .. }
+            | Air::AssertConstr { scope, .. }
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
             | Air::ListClause { scope, .. }
@@ -362,6 +368,7 @@ impl Air {
             | Air::Fn { .. }
             | Air::Let { .. }
             | Air::WrapClause { .. }
+            | Air::AssertConstr { .. }
             | Air::Finally { .. }
             | Air::FieldsExpose { .. } => None,
 
