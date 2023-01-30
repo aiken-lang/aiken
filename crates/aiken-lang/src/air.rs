@@ -334,7 +334,6 @@ impl Air {
                 .into(),
             ),
             Air::Var { constructor, .. } => Some(constructor.tipo.clone()),
-
             Air::List { tipo, .. }
             | Air::Tuple { tipo, .. }
             | Air::Call { tipo, .. }
