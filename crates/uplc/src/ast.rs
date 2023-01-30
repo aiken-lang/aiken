@@ -176,12 +176,12 @@ impl Program<DeBruijn> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term<T> {
     // tag: 0
-    Var(T),
+    Var(Rc<T>),
     // tag: 1
     Delay(Rc<Term<T>>),
     // tag: 2
     Lambda {
-        parameter_name: T,
+        parameter_name: Rc<T>,
         body: Rc<Term<T>>,
     },
     // tag: 3
@@ -190,7 +190,7 @@ pub enum Term<T> {
         argument: Rc<Term<T>>,
     },
     // tag: 4
-    Constant(Constant),
+    Constant(Rc<Constant>),
     // tag: 5
     Force(Rc<Term<T>>),
     // tag: 6
@@ -201,7 +201,7 @@ pub enum Term<T> {
 
 impl<T> Term<T> {
     pub fn is_unit(&self) -> bool {
-        matches!(self, Term::Constant(Constant::Unit))
+        matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Unit)
     }
 
     pub fn force_wrap(self) -> Self {
