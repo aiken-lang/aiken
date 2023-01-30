@@ -5,6 +5,7 @@ use super::{Constant, Name, Term};
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
+pub const ASSERT_ON_LIST: &str = "__assert_on_list";
 
 pub fn apply_wrap(function: Term<Name>, arg: Term<Name>) -> Term<Name> {
     Term::Apply {
@@ -28,6 +29,108 @@ pub fn final_wrapper(term: Term<Name>) -> Term<Name> {
             argument: Term::Delay(Term::Error.into()).into(),
         }
         .into(),
+    )
+}
+
+pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
+    apply_wrap(
+        Term::Lambda {
+            parameter_name: Name {
+                text: ASSERT_ON_LIST.to_string(),
+                unique: 0.into(),
+            },
+            body: apply_wrap(
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: ASSERT_ON_LIST.to_string(),
+                        unique: 0.into(),
+                    },
+                    body: term.into(),
+                },
+                apply_wrap(
+                    Term::Var(Name {
+                        text: ASSERT_ON_LIST.to_string(),
+                        unique: 0.into(),
+                    }),
+                    Term::Var(Name {
+                        text: ASSERT_ON_LIST.to_string(),
+                        unique: 0.into(),
+                    }),
+                ),
+            )
+            .into(),
+        },
+        Term::Lambda {
+            parameter_name: Name {
+                text: ASSERT_ON_LIST.to_string(),
+                unique: 0.into(),
+            },
+            body: Term::Lambda {
+                parameter_name: Name {
+                    text: "list_to_check".to_string(),
+                    unique: 0.into(),
+                },
+                body: Term::Lambda {
+                    parameter_name: Name {
+                        text: "check_with".to_string(),
+                        unique: 0.into(),
+                    },
+                    body: delayed_choose_list(
+                        Term::Var(Name {
+                            text: "list_to_check".to_string(),
+                            unique: 0.into(),
+                        }),
+                        Term::Constant(Constant::Unit),
+                        apply_wrap(
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(),
+                                apply_wrap(
+                                    Term::Var(Name {
+                                        text: "check_with".to_string(),
+                                        unique: 0.into(),
+                                    }),
+                                    apply_wrap(
+                                        Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                        Term::Var(Name {
+                                            text: "list_to_check".to_string(),
+                                            unique: 0.into(),
+                                        }),
+                                    ),
+                                ),
+                            ),
+                            apply_wrap(
+                                apply_wrap(
+                                    apply_wrap(
+                                        Term::Var(Name {
+                                            text: ASSERT_ON_LIST.to_string(),
+                                            unique: 0.into(),
+                                        }),
+                                        Term::Var(Name {
+                                            text: ASSERT_ON_LIST.to_string(),
+                                            unique: 0.into(),
+                                        }),
+                                    ),
+                                    apply_wrap(
+                                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                        Term::Var(Name {
+                                            text: "list_to_check".to_string(),
+                                            unique: 0.into(),
+                                        }),
+                                    ),
+                                ),
+                                Term::Var(Name {
+                                    text: "check_with".to_string(),
+                                    unique: 0.into(),
+                                }),
+                            ),
+                        ),
+                    )
+                    .into(),
+                }
+                .into(),
+            }
+            .into(),
+        },
     )
 }
 

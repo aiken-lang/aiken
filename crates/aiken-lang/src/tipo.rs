@@ -173,6 +173,14 @@ impl Type {
         }
     }
 
+    pub fn is_data(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } => "Data" == name && module.is_empty(),
+            Self::Var { tipo } => tipo.borrow().is_data(),
+            _ => false,
+        }
+    }
+
     pub fn is_generic(&self) -> bool {
         match self {
             Type::App { args, .. } => {
@@ -205,6 +213,7 @@ impl Type {
         match self {
             Self::Fn { args, .. } => Some(args.clone()),
             Self::App { args, .. } => Some(args.clone()),
+            Self::Var { tipo } => tipo.borrow().arg_types(),
             _ => None,
         }
     }
@@ -467,6 +476,13 @@ impl TypeVar {
         }
     }
 
+    pub fn is_data(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_data(),
+            _ => false,
+        }
+    }
+
     pub fn is_generic(&self) -> bool {
         match self {
             TypeVar::Generic { .. } => true,
@@ -479,6 +495,13 @@ impl TypeVar {
         match self {
             TypeVar::Generic { id } => Some(*id),
             TypeVar::Link { tipo } => tipo.get_generic(),
+            _ => None,
+        }
+    }
+
+    pub fn arg_types(&self) -> Option<Vec<Arc<Type>>> {
+        match self {
+            Self::Link { tipo } => tipo.arg_types(),
             _ => None,
         }
     }

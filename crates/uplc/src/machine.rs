@@ -343,7 +343,7 @@ impl Machine {
                     Err(Error::UnexpectedBuiltinTermArgument(t.as_ref().clone()))
                 }
             }
-            rest => Err(Error::NonFunctionalApplication(rest)),
+            rest => Err(Error::NonFunctionalApplication(rest, argument)),
         }
     }
 

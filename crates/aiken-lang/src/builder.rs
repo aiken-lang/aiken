@@ -4,7 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{apply_wrap, if_else},
+        builder::{apply_wrap, delayed_choose_list, if_else},
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -14,7 +14,7 @@ use uplc::{
 
 use crate::{
     air::Air,
-    ast::{Clause, Constant, DataType, Pattern, Span, TypedArg, TypedDataType},
+    ast::{AssignmentKind, Clause, Constant, DataType, Pattern, Span, TypedArg, TypedDataType},
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
 };
@@ -46,6 +46,12 @@ pub struct FunctionAccessKey {
     pub module_name: String,
     pub function_name: String,
     pub variant_name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct AssignmentProperties {
+    pub value_is_data: bool,
+    pub kind: AssignmentKind,
 }
 
 #[derive(Clone, Debug)]
@@ -475,108 +481,22 @@ pub fn list_access_to_uplc(
     tail: bool,
     current_index: usize,
     term: Term<Name>,
-    tipo: &Type,
+    tipos: Vec<Arc<Type>>,
+    check_last_item: bool,
 ) -> Term<Name> {
-    let (first, names) = names.split_first().unwrap();
+    if let Some((first, names)) = names.split_first() {
+        let (current_tipo, tipos) = tipos.split_first().unwrap();
 
-    let head_list = if tipo.is_map() {
-        apply_wrap(
-            Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-            Term::Var(Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            }),
-        )
-    } else {
-        convert_data_to_type(
+        let head_list = if current_tipo.is_map() {
             apply_wrap(
                 Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                 Term::Var(Name {
                     text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                     unique: 0.into(),
                 }),
-            ),
-            &tipo.clone().get_inner_types()[0],
-        )
-    };
-
-    if names.len() == 1 && tail {
-        Term::Lambda {
-            parameter_name: Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            },
-            body: apply_wrap(
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: first.clone(),
-                        unique: 0.into(),
-                    },
-                    body: apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: names[0].clone(),
-                                unique: 0.into(),
-                            },
-                            body: term.into(),
-                        },
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            }),
-                        ),
-                    )
-                    .into(),
-                },
-                head_list,
             )
-            .into(),
-        }
-    } else if names.is_empty() {
-        // Maybe check list is actually empty or should we leave that to when .. is only
-        // this would replace term.into() if we decide to
-        // body: choose_list(
-        //     apply_wrap(
-        //         Term::Builtin(DefaultFunction::TailList).force_wrap(),
-        //         Term::Var(Name {
-        //             text: format!(
-        //                 "tail_index_{}_{}",
-        //                 current_index, id_list[current_index]
-        //             ),
-        //             unique: 0.into(),
-        //         }),
-        //     ),
-        //     term,
-        //     apply_wrap(
-        //         apply_wrap(
-        //             Term::Builtin(DefaultFunction::Trace).force_wrap(),
-        //             Term::Constant(UplcConstant::String(
-        //                 "List contains more items".to_string(),
-        //             )),
-        //         ),
-        //         Term::Delay(Term::Error.into()),
-        //     )
-        //     .force_wrap(),
-        // )
-        // .into(),
-        Term::Lambda {
-            parameter_name: Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            },
-            body: apply_wrap(
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: first.clone(),
-                        unique: 0.into(),
-                    },
-                    body: term.into(),
-                },
+        } else {
+            convert_data_to_type(
                 apply_wrap(
                     Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                     Term::Var(Name {
@@ -584,40 +504,135 @@ pub fn list_access_to_uplc(
                         unique: 0.into(),
                     }),
                 ),
+                &current_tipo.to_owned(),
             )
-            .into(),
+        };
+
+        if names.len() == 1 && tail {
+            Term::Lambda {
+                parameter_name: Name {
+                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                    unique: 0.into(),
+                },
+                body: apply_wrap(
+                    Term::Lambda {
+                        parameter_name: Name {
+                            text: first.clone(),
+                            unique: 0.into(),
+                        },
+                        body: apply_wrap(
+                            Term::Lambda {
+                                parameter_name: Name {
+                                    text: names[0].clone(),
+                                    unique: 0.into(),
+                                },
+                                body: term.into(),
+                            },
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                Term::Var(Name {
+                                    text: format!(
+                                        "tail_index_{}_{}",
+                                        current_index, id_list[current_index]
+                                    ),
+                                    unique: 0.into(),
+                                }),
+                            ),
+                        )
+                        .into(),
+                    },
+                    head_list,
+                )
+                .into(),
+            }
+        } else if names.is_empty() {
+            Term::Lambda {
+                parameter_name: Name {
+                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                    unique: 0.into(),
+                },
+                body: apply_wrap(
+                    Term::Lambda {
+                        parameter_name: Name {
+                            text: first.clone(),
+                            unique: 0.into(),
+                        },
+                        body: if check_last_item {
+                            delayed_choose_list(
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Var(Name {
+                                        text: format!(
+                                            "tail_index_{}_{}",
+                                            current_index, id_list[current_index]
+                                        ),
+                                        unique: 0.into(),
+                                    }),
+                                ),
+                                term,
+                                apply_wrap(
+                                    apply_wrap(
+                                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                                        Term::Constant(UplcConstant::String(
+                                            "List/Tuple contains more items than it should"
+                                                .to_string(),
+                                        )),
+                                    ),
+                                    Term::Delay(Term::Error.into()),
+                                )
+                                .force_wrap(),
+                            )
+                            .into()
+                        } else {
+                            term.into()
+                        },
+                    },
+                    head_list,
+                )
+                .into(),
+            }
+        } else {
+            Term::Lambda {
+                parameter_name: Name {
+                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                    unique: 0.into(),
+                },
+                body: apply_wrap(
+                    Term::Lambda {
+                        parameter_name: Name {
+                            text: first.clone(),
+                            unique: 0.into(),
+                        },
+                        body: apply_wrap(
+                            list_access_to_uplc(
+                                names,
+                                id_list,
+                                tail,
+                                current_index + 1,
+                                term,
+                                tipos.to_owned(),
+                                check_last_item,
+                            ),
+                            apply_wrap(
+                                Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                Term::Var(Name {
+                                    text: format!(
+                                        "tail_index_{}_{}",
+                                        current_index, id_list[current_index]
+                                    ),
+                                    unique: 0.into(),
+                                }),
+                            ),
+                        )
+                        .into(),
+                    },
+                    head_list,
+                )
+                .into(),
+            }
         }
     } else {
-        Term::Lambda {
-            parameter_name: Name {
-                text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                unique: 0.into(),
-            },
-            body: apply_wrap(
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: first.clone(),
-                        unique: 0.into(),
-                    },
-                    body: apply_wrap(
-                        list_access_to_uplc(names, id_list, tail, current_index + 1, term, tipo),
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            }),
-                        ),
-                    )
-                    .into(),
-                },
-                head_list,
-            )
-            .into(),
-        }
+        term
     }
 }
 
@@ -1072,6 +1087,7 @@ pub fn monomorphize(
                 tipo,
                 names,
                 tail,
+                check_last_item,
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
@@ -1082,6 +1098,7 @@ pub fn monomorphize(
                         names,
                         tipo,
                         tail,
+                        check_last_item,
                     };
                     needs_variant = true;
                 }
@@ -1133,8 +1150,15 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            // TODO check on assignment if type is needed
-            Air::Assignment { .. } => {}
+            Air::UnWrapData { scope, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::UnWrapData { scope, tipo };
+                    needs_variant = true;
+                }
+            }
             Air::When {
                 scope,
                 tipo,
@@ -1346,8 +1370,8 @@ pub fn monomorphize(
             }
             Air::FieldsExpose {
                 scope,
-                count,
                 indices,
+                check_last_item,
             } => {
                 let mut new_indices = vec![];
                 for (ind, name, tipo) in indices {
@@ -1362,16 +1386,18 @@ pub fn monomorphize(
                 }
                 new_air[index] = Air::FieldsExpose {
                     scope,
-                    count,
                     indices: new_indices,
+                    check_last_item,
                 };
             }
             Air::RecordUpdate {
                 scope,
                 highest_index,
                 indices,
+                tipo,
             } => {
                 let mut new_indices = vec![];
+                let mut tipo = tipo.clone();
                 for (ind, tipo) in indices {
                     if tipo.is_generic() {
                         let mut tipo = tipo.clone();
@@ -1382,18 +1408,51 @@ pub fn monomorphize(
                         new_indices.push((ind, tipo));
                     }
                 }
+                if tipo.is_generic() {
+                    find_generics_to_replace(&mut tipo, &generic_types);
+                }
                 new_air[index] = Air::RecordUpdate {
                     scope,
                     highest_index,
                     indices: new_indices,
+                    tipo,
                 };
             }
-            Air::TupleAccessor { scope, names, tipo } => {
+            Air::TupleAccessor {
+                scope,
+                names,
+                tipo,
+                check_last_item,
+            } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::TupleAccessor { scope, names, tipo };
+                    new_air[index] = Air::TupleAccessor {
+                        scope,
+                        names,
+                        tipo,
+                        check_last_item,
+                    };
+                    needs_variant = true;
+                }
+            }
+
+            Air::Call { scope, count, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::Call { scope, count, tipo };
+                    needs_variant = true;
+                }
+            }
+            Air::If { scope, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::If { scope, tipo };
                     needs_variant = true;
                 }
             }
@@ -1511,10 +1570,11 @@ pub fn handle_recursion_ir(
         let current_call = recursion_ir[index - 1].clone();
 
         match current_call {
-            Air::Call { scope, count } => {
+            Air::Call { scope, count, tipo } => {
                 recursion_ir[index - 1] = Air::Call {
                     scope,
                     count: count + 1,
+                    tipo,
                 }
             }
             _ => unreachable!(),

@@ -724,6 +724,15 @@ The best thing to do from here is to remove it."#))]
         location: Span,
         name: String,
     },
+
+    #[error("I discovered a type cast from Data without an annotation")]
+    #[diagnostic(code("illegal::type_cast"))]
+    #[diagnostic(help("Try adding an annotation...\n\n{}", format_suggestion(value)))]
+    CastDataNoAnn {
+        #[label]
+        location: Span,
+        value: UntypedExpr,
+    },
 }
 
 impl Error {
