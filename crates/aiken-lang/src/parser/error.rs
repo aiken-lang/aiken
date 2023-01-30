@@ -36,6 +36,16 @@ impl ParseError {
         }
     }
 
+    pub fn invalid_when_clause_guard(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::InvalidWhenClause,
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: Some("invalid clause guard"),
+        }
+    }
+
     pub fn malformed_base16_string_literal(span: Span) -> Self {
         Self {
             kind: ErrorKind::MalformedBase16StringLiteral,
@@ -101,7 +111,7 @@ pub enum ErrorKind {
         #[help]
         hint: Option<String>,
     },
-    #[error("I tripped over a malformed base16-encoded string literal")]
+    #[error("I tripped over a malformed base16-encoded string literal.")]
     #[diagnostic(help("{}", formatdoc! {
         r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal) string literals.
 
@@ -113,6 +123,28 @@ pub enum ErrorKind {
         "#
     , "pub const".bright_blue(), "=".yellow(), "\"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50\"".bright_purple()}))]
     MalformedBase16StringLiteral,
+    #[error("I failed to understand a when clause guard.")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"Clause guards are not as capable as standard expressions. While you can combine multiple clauses using '{operator_or}' and '{operator_and}', you can't do any arithmetic in there. They are mainly meant to compare pattern variables to some known constants using simple binary operators.
+
+           For example, the following clauses are well-formed:
+
+           {good}   (x, _) if x == 10 -> ...
+           {good}   (_, y) if y > 0 && y < 10 -> ...
+           {good}   (x, y) if x && (y > 0 || y < 10) -> ...
+
+           However, those aren't:
+
+           {bad}   (x, _) if x % 3 == 0 -> ...
+           {bad}   (x, y) if x + y > 42 -> ...
+        "#
+        , operator_or = "||".yellow()
+        , operator_and = "&&".yellow()
+        , good = "✔️".green()
+        , bad = "✖️".red()
+    }))]
+    InvalidWhenClause,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]

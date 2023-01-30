@@ -989,9 +989,6 @@ pub fn expr_parser(
                 },
             );
 
-        // TODO: do guards later
-        // let when_clause_guard_parser = just(Token::If);
-
         let when_clause_parser = pattern_parser()
             .separated_by(just(Token::Comma))
             .at_least(1)
@@ -1005,20 +1002,29 @@ pub fn expr_parser(
                     .repeated()
                     .or_not(),
             )
-            // TODO: do guards later
-            // .then(when_clause_guard_parser)
+            .then(choice((
+                just(Token::If)
+                    .ignore_then(when_clause_guard_parser())
+                    .or_not()
+                    .then_ignore(just(Token::RArrow)),
+                just(Token::If)
+                    .ignore_then(take_until(just(Token::RArrow)))
+                    .validate(|_value, span, emit| {
+                        emit(ParseError::invalid_when_clause_guard(span));
+                        None
+                    }),
+            )))
             // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
-            .then_ignore(just(Token::RArrow))
             .then(r.clone())
-            .map_with_span(|((patterns, alternative_patterns_opt), then), span| {
-                ast::UntypedClause {
+            .map_with_span(
+                |(((patterns, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
                     location: span,
                     pattern: patterns,
                     alternative_patterns: alternative_patterns_opt.unwrap_or_default(),
-                    guard: None,
+                    guard,
                     then,
-                }
-            });
+                },
+            );
 
         let when_parser = just(Token::When)
             // TODO: If subject is empty we should return ParseErrorType::ExpectedExpr,
@@ -1369,6 +1375,120 @@ pub fn expr_parser(
                     expressions
                 };
                 expr::UntypedExpr::PipeLine { expressions }
+            })
+    })
+}
+
+pub fn when_clause_guard_parser() -> impl Parser<Token, ast::ClauseGuard<(), ()>, Error = ParseError>
+{
+    recursive(|r| {
+        let var_parser = select! {
+            Token::Name { name } => name,
+            Token::UpName { name } => name,
+        }
+        .map_with_span(|name, span| ast::ClauseGuard::Var {
+            name,
+            tipo: (),
+            location: span,
+        });
+
+        let constant_parser = constant_value_parser().map(ast::ClauseGuard::Constant);
+
+        let block_parser = r
+            .clone()
+            .delimited_by(just(Token::LeftParen), just(Token::RightParen));
+
+        let leaf_parser = choice((var_parser, constant_parser, block_parser)).boxed();
+
+        let unary_op = just(Token::Bang);
+
+        let unary = unary_op
+            .map_with_span(|op, span| (op, span))
+            .repeated()
+            .then(leaf_parser)
+            .foldr(|(_, span), value| ast::ClauseGuard::Not {
+                location: span.union(value.location()),
+                value: Box::new(value),
+            })
+            .boxed();
+
+        let comparison_op = choice((
+            just(Token::EqualEqual).to(BinOp::Eq),
+            just(Token::NotEqual).to(BinOp::NotEq),
+            just(Token::Less).to(BinOp::LtInt),
+            just(Token::Greater).to(BinOp::GtInt),
+            just(Token::LessEqual).to(BinOp::LtEqInt),
+            just(Token::GreaterEqual).to(BinOp::GtEqInt),
+        ));
+
+        let comparison = unary
+            .clone()
+            .then(comparison_op.then(unary).repeated())
+            .foldl(|left, (op, right)| {
+                let location = left.location().union(right.location());
+                let left = Box::new(left);
+                let right = Box::new(right);
+                match op {
+                    BinOp::Eq => ast::ClauseGuard::Equals {
+                        location,
+                        left,
+                        right,
+                    },
+                    BinOp::NotEq => ast::ClauseGuard::NotEquals {
+                        location,
+                        left,
+                        right,
+                    },
+                    BinOp::LtInt => ast::ClauseGuard::LtInt {
+                        location,
+                        left,
+                        right,
+                    },
+                    BinOp::GtInt => ast::ClauseGuard::GtInt {
+                        location,
+                        left,
+                        right,
+                    },
+                    BinOp::LtEqInt => ast::ClauseGuard::LtEqInt {
+                        location,
+                        left,
+                        right,
+                    },
+                    BinOp::GtEqInt => ast::ClauseGuard::GtEqInt {
+                        location,
+                        left,
+                        right,
+                    },
+                    _ => unreachable!(),
+                }
+            })
+            .boxed();
+
+        let logical_op = choice((
+            just(Token::AmperAmper).to(BinOp::And),
+            just(Token::VbarVbar).to(BinOp::Or),
+        ));
+
+        comparison
+            .clone()
+            .then(logical_op.then(comparison).repeated())
+            .foldl(|left, (op, right)| {
+                let location = left.location().union(right.location());
+                let left = Box::new(left);
+                let right = Box::new(right);
+                match op {
+                    BinOp::And => ast::ClauseGuard::And {
+                        location,
+                        left,
+                        right,
+                    },
+                    BinOp::Or => ast::ClauseGuard::Or {
+                        location,
+                        left,
+                        right,
+                    },
+                    _ => unreachable!(),
+                }
             })
     })
 }

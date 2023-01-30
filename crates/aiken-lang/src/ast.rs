@@ -807,6 +807,11 @@ pub type TypedClauseGuard = ClauseGuard<Arc<Type>, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClauseGuard<Type, RecordTag> {
+    Not {
+        location: Span,
+        value: Box<Self>,
+    },
+
     Equals {
         location: Span,
         left: Box<Self>,
@@ -861,12 +866,6 @@ pub enum ClauseGuard<Type, RecordTag> {
         name: String,
     },
 
-    // TupleIndex {
-    //     location: Span,
-    //     index: u64,
-    //     tipo: Type,
-    //     tuple: Box<Self>,
-    // },
     Constant(Constant<Type, RecordTag>),
 }
 
@@ -874,10 +873,10 @@ impl<A, B> ClauseGuard<A, B> {
     pub fn location(&self) -> Span {
         match self {
             ClauseGuard::Constant(constant) => constant.location(),
-            ClauseGuard::Or { location, .. }
+            ClauseGuard::Not { location, .. }
+            | ClauseGuard::Or { location, .. }
             | ClauseGuard::And { location, .. }
             | ClauseGuard::Var { location, .. }
-            // | ClauseGuard::TupleIndex { location, .. }
             | ClauseGuard::Equals { location, .. }
             | ClauseGuard::NotEquals { location, .. }
             | ClauseGuard::GtInt { location, .. }
@@ -890,17 +889,15 @@ impl<A, B> ClauseGuard<A, B> {
     pub fn precedence(&self) -> u8 {
         // Ensure that this matches the other precedence function for guards
         match self {
-            ClauseGuard::Or { .. } => 1,
-            ClauseGuard::And { .. } => 2,
-
-            ClauseGuard::Equals { .. } | ClauseGuard::NotEquals { .. } => 3,
-
+            ClauseGuard::Not { .. } => 1,
+            ClauseGuard::Or { .. } => 2,
+            ClauseGuard::And { .. } => 3,
+            ClauseGuard::Equals { .. } | ClauseGuard::NotEquals { .. } => 4,
             ClauseGuard::GtInt { .. }
             | ClauseGuard::GtEqInt { .. }
             | ClauseGuard::LtInt { .. }
-            | ClauseGuard::LtEqInt { .. } => 4,
-
-            ClauseGuard::Constant(_) | ClauseGuard::Var { .. } => 5,
+            | ClauseGuard::LtEqInt { .. } => 5,
+            ClauseGuard::Constant(_) | ClauseGuard::Var { .. } => 6,
         }
     }
 }
@@ -909,10 +906,9 @@ impl TypedClauseGuard {
     pub fn tipo(&self) -> Arc<Type> {
         match self {
             ClauseGuard::Var { tipo, .. } => tipo.clone(),
-            // ClauseGuard::TupleIndex { type_, .. } => type_.clone(),
             ClauseGuard::Constant(constant) => constant.tipo(),
-
-            ClauseGuard::Or { .. }
+            ClauseGuard::Not { .. }
+            | ClauseGuard::Or { .. }
             | ClauseGuard::And { .. }
             | ClauseGuard::Equals { .. }
             | ClauseGuard::NotEquals { .. }
