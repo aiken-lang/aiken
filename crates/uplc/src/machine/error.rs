@@ -16,8 +16,8 @@ pub enum Error {
     EvaluationFailure,
     #[error("Attempted to instantiate a non-polymorphic term:\n\n{0:#?}")]
     NonPolymorphicInstantiation(Value),
-    #[error("Attempted to apply a non-function:\n\n{0:#?}")]
-    NonFunctionalApplication(Value),
+    #[error("Attempted to apply a non-function:\n\n{0:#?} to argument:\n\n{1:#?}")]
+    NonFunctionalApplication(Value, Value),
     #[error("Type mismatch expected '{0}' got '{1}'")]
     TypeMismatch(Type, Type),
     #[error("Type mismatch expected '(list a)' got '{0}'")]

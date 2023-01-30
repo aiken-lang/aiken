@@ -807,8 +807,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         annotation: &Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let value = self.in_new_scope(|value_typer| value_typer.infer(value))?;
-        let mut value_typ = value.tipo();
+        let typed_value = self.in_new_scope(|value_typer| value_typer.infer(value.clone()))?;
+        let mut value_typ = typed_value.tipo();
 
         // Check that any type annotation is accurate.
         let pattern = if let Some(ann) = annotation {
@@ -819,7 +819,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             self.unify(
                 ann_typ.clone(),
                 value_typ.clone(),
-                value.type_defining_location(),
+                typed_value.type_defining_location(),
             )?;
 
             value_typ = ann_typ.clone();
@@ -831,6 +831,24 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 Some(ann_typ),
             )?
         } else {
+            if value_typ.is_data() {
+                return Err(Error::CastDataNoAnn {
+                    location,
+                    value: UntypedExpr::Assignment {
+                        location,
+                        value: value.into(),
+                        pattern,
+                        kind,
+                        annotation: Some(Annotation::Constructor {
+                            location: Span::empty(),
+                            module: None,
+                            name: "Type".to_string(),
+                            arguments: vec![],
+                        }),
+                    },
+                });
+            }
+
             // Ensure the pattern matches the type of the value
             PatternTyper::new(self.environment, &self.hydrator).unify(
                 pattern,
@@ -860,7 +878,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             tipo: value_typ,
             kind,
             pattern,
-            value: Box::new(value),
+            value: Box::new(typed_value),
         })
     }
 
@@ -1906,6 +1924,21 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         clauses: Vec<UntypedClause>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
+        // if there is only one clause we want to present a warning
+        // that suggests that a `let` binding should be used instead.
+        if clauses.len() == 1 {
+            self.environment.warnings.push(Warning::SingleWhenClause {
+                location: clauses[0].pattern[0].location(),
+                sample: UntypedExpr::Assignment {
+                    location: Span::empty(),
+                    value: Box::new(subjects[0].clone()),
+                    pattern: clauses[0].pattern[0].clone(),
+                    kind: AssignmentKind::Let,
+                    annotation: None,
+                },
+            });
+        }
+
         let subjects_count = subjects.len();
 
         let mut typed_subjects = Vec::with_capacity(subjects_count);

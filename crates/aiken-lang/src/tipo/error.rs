@@ -1,7 +1,7 @@
 use super::Type;
 use crate::{
     ast::{Annotation, BinOp, CallArg, Span, TodoKind, UntypedPattern},
-    expr,
+    expr::{self, UntypedExpr},
     format::Formatter,
     levenshtein,
     pretty::Documentable,
@@ -172,20 +172,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
 If you really meant to return that last expression, try to replace it with the following:
 
 {sample}"#
-        , sample = Formatter::new()
-            .expr(expr)
-            .to_pretty_string(70)
-            .lines()
-            .enumerate()
-            .map(|(ix, line)| {
-                if ix == 0 {
-                    format!("╰─▶ {}", line.yellow())
-                } else {
-                    format!("    {line}").yellow().to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("")
+        , sample = format_suggestion(expr)
     ))]
     LastExpressionIsAssignment {
         #[label("let-binding as last expression")]
@@ -737,6 +724,15 @@ The best thing to do from here is to remove it."#))]
         location: Span,
         name: String,
     },
+
+    #[error("I discovered a type cast from Data without an annotation")]
+    #[diagnostic(code("illegal::type_cast"))]
+    #[diagnostic(help("Try adding an annotation...\n\n{}", format_suggestion(value)))]
+    CastDataNoAnn {
+        #[label]
+        location: Span,
+        value: UntypedExpr,
+    },
 }
 
 impl Error {
@@ -1034,14 +1030,12 @@ fn suggest_import_constructor() -> String {
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error, Diagnostic)]
 pub enum Warning {
-    #[error("I found a todo left in the code.\n")]
-    #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
-    #[diagnostic(code("todo"))]
-    Todo {
-        kind: TodoKind,
+    #[error("I found a record update using all fields; thus redundant.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
+    #[diagnostic(code("record_update::all_fields"))]
+    AllFieldsRecordUpdate {
         #[label]
         location: Span,
-        tipo: Arc<Type>,
     },
 
     #[error(
@@ -1056,9 +1050,10 @@ pub enum Warning {
         location: Span,
     },
 
-    #[error("I found a literal that is unused.\n")]
-    #[diagnostic(code("unused::literal"))]
-    UnusedLiteral {
+    #[error("I found a record update with no fields; effectively updating nothing.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
+    #[diagnostic(code("record_update::no_fields"))]
+    NoFieldsRecordUpdate {
         #[label]
         location: Span,
     },
@@ -1070,29 +1065,25 @@ pub enum Warning {
         location: Span,
     },
 
-    #[error("I found a record update with no fields; effectively updating nothing.\n")]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
-    #[diagnostic(code("record_update::no_fields"))]
-    NoFieldsRecordUpdate {
-        #[label]
+    #[error("I found a when expression with a single clause.")]
+    #[diagnostic(
+        code("single_when_clause"),
+        help("Prefer using a {} binding like so...\n\n{}", "let".purple(), format_suggestion(sample))
+    )]
+    SingleWhenClause {
+        #[label("use let")]
         location: Span,
+        sample: UntypedExpr,
     },
 
-    #[error("I found a record update using all fields; thus redundant.\n")]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
-    #[diagnostic(code("record_update::all_fields"))]
-    AllFieldsRecordUpdate {
+    #[error("I found a todo left in the code.\n")]
+    #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
+    #[diagnostic(code("todo"))]
+    Todo {
+        kind: TodoKind,
         #[label]
         location: Span,
-    },
-
-    #[error("I discovered an unused type: '{}'.\n", name.purple())]
-    #[diagnostic(code("unused::type"))]
-    UnusedType {
-        #[label]
-        location: Span,
-        imported: bool,
-        name: String,
+        tipo: Arc<Type>,
     },
 
     #[error("I discovered an unused constructor: '{}'.\n", name.purple())]
@@ -1107,6 +1098,17 @@ pub enum Warning {
         name: String,
     },
 
+    #[error("I discovered an unused imported module: '{}'.\n", name.purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to remove it to get rid of that warning."
+    ))]
+    #[diagnostic(code("unused::import::module"))]
+    UnusedImportedModule {
+        #[label]
+        location: Span,
+        name: String,
+    },
+
     #[error("I discovered an unused imported value: '{}'.\n", name.purple())]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
@@ -1118,12 +1120,21 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I discovered an unused imported module: '{}'.\n", name.purple())]
+    #[error("I found a literal that is unused.\n")]
+    #[diagnostic(code("unused::literal"))]
+    UnusedLiteral {
+        #[label]
+        location: Span,
+    },
+
+    #[error("I found an unused private function: '{}'.\n", name.purple())]
     #[diagnostic(help(
-        "No big deal, but you might want to remove it to get rid of that warning."
+        "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
+         Otherwise, you might want to get rid of it altogether."
+         , keyword_pub = "pub".bright_blue()
     ))]
-    #[diagnostic(code("unused::import::module"))]
-    UnusedImportedModule {
+    #[diagnostic(code("unused::function"))]
+    UnusedPrivateFunction {
         #[label]
         location: Span,
         name: String,
@@ -1142,16 +1153,12 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I found an unused private function: '{}'.\n", name.purple())]
-    #[diagnostic(help(
-        "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
-         Otherwise, you might want to get rid of it altogether."
-         , keyword_pub = "pub".bright_blue()
-    ))]
-    #[diagnostic(code("unused::function"))]
-    UnusedPrivateFunction {
+    #[error("I discovered an unused type: '{}'.\n", name.purple())]
+    #[diagnostic(code("unused::type"))]
+    UnusedType {
         #[label]
         location: Span,
+        imported: bool,
         name: String,
     },
 
@@ -1186,4 +1193,21 @@ pub enum UnifyErrorSituation {
 pub enum UnknownRecordFieldSituation {
     /// This unknown record field is being called as a function. i.e. `record.field()`
     FunctionCall,
+}
+
+fn format_suggestion(sample: &UntypedExpr) -> String {
+    Formatter::new()
+        .expr(sample)
+        .to_pretty_string(70)
+        .lines()
+        .enumerate()
+        .map(|(ix, line)| {
+            if ix == 0 {
+                format!("╰─▶ {}", line.yellow())
+            } else {
+                format!("    {line}").yellow().to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("")
 }
