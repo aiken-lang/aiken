@@ -66,6 +66,7 @@ dependencies = [
  "pallas-primitives",
  "pallas-traverse",
  "regex",
+ "serde_json",
  "thiserror",
  "uplc",
 ]

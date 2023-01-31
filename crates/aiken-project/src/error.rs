@@ -1,5 +1,8 @@
 use crate::{
-    blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName, pretty,
+    blueprint::{error as blueprint, validator},
+    deps::manifest::Package,
+    package_name::PackageName,
+    pretty,
     script::EvalHint,
 };
 use aiken_lang::{
@@ -10,6 +13,7 @@ use aiken_lang::{
 use miette::{
     Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
 };
+use owo_colors::OwoColorize;
 use std::{
     fmt::{Debug, Display},
     io,
@@ -48,6 +52,9 @@ pub enum Error {
 
     #[error(transparent)]
     JoinError(#[from] tokio::task::JoinError),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
 
     #[error("{help}")]
     TomlLoading {
@@ -120,6 +127,21 @@ pub enum Error {
         package.name.repo
     )]
     UnknownPackageVersion { package: Package },
+
+    #[error("I couldn't parse the provided stake address.")]
+    MalformedStakeAddress {
+        error: Option<pallas::ledger::addresses::Error>,
+    },
+
+    #[error("I didn't find any validator matching your criteria.")]
+    NoValidatorNotFound {
+        known_validators: Vec<(String, validator::Purpose)>,
+    },
+
+    #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
+    MoreThanOneValidatorFound {
+        known_validators: Vec<(String, validator::Purpose)>,
+    },
 }
 
 impl Error {
@@ -203,6 +225,10 @@ impl Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 
@@ -226,6 +252,10 @@ impl Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 }
@@ -277,6 +307,10 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::packages::resolve")),
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 
@@ -287,7 +321,7 @@ impl Diagnostic for Error {
                 first.display(),
                 second.display()
             ))),
-            Error::FileIo { .. } => None,
+            Error::FileIo { error, .. } => Some(Box::new(format!("{error}"))),
             Error::Blueprint(e) => e.help(),
             Error::ImportCycle { modules } => Some(Box::new(format!(
                 "Try moving the shared code to a separate module that the others can depend on\n- {}",
@@ -334,6 +368,23 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion{..} => Some(Box::new("Perhaps, double-check the package repository and version?")),
+            Error::Json(error) => Some(Box::new(format!("{error}"))),
+            Error::MalformedStakeAddress { error } => Some(Box::new(format!("A stake address must be provided either as a base16-encoded string, or as a bech32-encoded string with the 'stake' or 'stake_test' prefix.{hint}", hint = match error {
+                Some(error) => format!("\n\nHere's the error I encountered: {error}"),
+                None => String::new(),
+            }))),
+            Error::NoValidatorNotFound { known_validators } => {
+                Some(Box::new(format!(
+                    "Here's a list of all validators (and their purpose) I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
+                    known_validators.iter().map(|(name, purpose)| format!("→ {name} (purpose = {purpose})", name = name.purple().bold(), purpose = purpose.bright_blue())).collect::<Vec<String>>().join("\n")
+                )))
+            },
+            Error::MoreThanOneValidatorFound { known_validators } => {
+                Some(Box::new(format!(
+                    "Here's a list of all validators (and their purpose) I've found in your project. Select one of them using the appropriate options:\n\n{}",
+                    known_validators.iter().map(|(name, purpose)| format!("→ {name} (purpose = {purpose})", name = name.purple().bold(), purpose = purpose.bright_blue())).collect::<Vec<String>>().join("\n")
+                )))
+            },
         }
     }
 
@@ -369,6 +420,10 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 
@@ -392,6 +447,10 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 
@@ -415,6 +474,10 @@ impl Diagnostic for Error {
             Error::ZipExtract { .. } => None,
             Error::JoinError { .. } => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 
@@ -438,6 +501,10 @@ impl Diagnostic for Error {
             Error::ZipExtract { .. } => None,
             Error::JoinError { .. } => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
         }
     }
 }

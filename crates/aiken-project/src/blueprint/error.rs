@@ -27,7 +27,7 @@ pub enum Error {
         source_code: NamedSource,
         return_type: Arc<Type>,
     },
-    #[error("A {} validator requires at least {at_least} arguments", name.purple().bold())]
+    #[error("A {} validator requires at least {} arguments.", name.purple().bold(), at_least.to_string().purple().bold())]
     #[diagnostic(code("aiken::blueprint::invalid::arity"))]
     WrongValidatorArity {
         name: String,
@@ -47,6 +47,11 @@ pub enum Error {
         #[source_code]
         source_code: NamedSource,
     },
+
+    #[error("Invalid or missing project's blueprint file.")]
+    #[diagnostic(code("aiken::blueprint::missing"))]
+    #[diagnostic(help("Did you forget to {build} the project?", build = "build".purple().bold()))]
+    InvalidOrMissingFile,
 }
 
 pub fn assert_return_bool(module: &CheckedModule, def: &TypedFunction) -> Result<(), Error> {

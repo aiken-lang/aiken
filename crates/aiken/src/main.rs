@@ -1,5 +1,5 @@
 use aiken::cmd::{
-    build, check, docs, fmt, lsp, new,
+    address, build, check, docs, fmt, lsp, new,
     packages::{self, add},
     tx, uplc,
 };
@@ -14,6 +14,7 @@ pub enum Cmd {
     New(new::Args),
     Fmt(fmt::Args),
     Build(build::Args),
+    Address(address::Args),
     Check(check::Args),
     Docs(docs::Args),
     Add(add::Args),
@@ -43,6 +44,7 @@ fn main() -> miette::Result<()> {
         Cmd::New(args) => new::exec(args),
         Cmd::Fmt(args) => fmt::exec(args),
         Cmd::Build(args) => build::exec(args),
+        Cmd::Address(args) => address::exec(args),
         Cmd::Check(args) => check::exec(args),
         Cmd::Docs(args) => docs::exec(args),
         Cmd::Add(args) => add::exec(args),

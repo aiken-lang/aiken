@@ -28,3 +28,4 @@ aiken-lang = { path = "../aiken-lang", version = "0.0.28" }
 aiken-lsp = { path = "../aiken-lsp", version = "0.0.28" }
 aiken-project = { path = '../aiken-project', version = "0.0.28" }
 uplc = { path = '../uplc', version = "0.0.28" }
+serde_json = "1.0.91"

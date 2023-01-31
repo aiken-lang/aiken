@@ -12,7 +12,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::Blueprint;
+use crate::blueprint::{schema::Schema, validator, Blueprint};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -25,10 +25,14 @@ use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
+use pallas::ledger::addresses::{
+    Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload,
+};
 use script::{EvalHint, EvalInfo, Script};
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, File},
+    io::BufReader,
     path::{Path, PathBuf},
 };
 use telemetry::EventListener;
@@ -184,6 +188,10 @@ where
         Ok(())
     }
 
+    pub fn blueprint_path(&self) -> PathBuf {
+        self.root.join("plutus.json")
+    }
+
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
         self.compile_deps()?;
 
@@ -202,10 +210,9 @@ where
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
-                let blueprint_path = self.root.join("plutus.json");
                 self.event_listener
                     .handle_event(Event::GeneratingBlueprint {
-                        path: blueprint_path.clone(),
+                        path: self.blueprint_path(),
                     });
 
                 let mut generator = self.checked_modules.new_generator(
@@ -226,9 +233,9 @@ where
                 }
 
                 let json = serde_json::to_string_pretty(&blueprint).unwrap();
-                fs::write(&blueprint_path, json).map_err(|error| Error::FileIo {
+                fs::write(self.blueprint_path(), json).map_err(|error| Error::FileIo {
                     error,
-                    path: blueprint_path,
+                    path: self.blueprint_path(),
                 })
             }
             CodeGenMode::Test {
@@ -271,6 +278,71 @@ where
                 }
             }
             CodeGenMode::NoOp => Ok(()),
+        }
+    }
+
+    pub fn address(
+        &self,
+        with_title: Option<&String>,
+        with_purpose: Option<&validator::Purpose>,
+        stake_address: Option<&String>,
+    ) -> Result<ShelleyAddress, Error> {
+        // Parse stake address
+        let stake_address = stake_address
+            .map(|s| {
+                Address::from_hex(s)
+                    .or_else(|_| Address::from_bech32(s))
+                    .map_err(|error| Error::MalformedStakeAddress { error: Some(error) })
+                    .and_then(|addr| match addr {
+                        Address::Stake(addr) => Ok(addr),
+                        _ => Err(Error::MalformedStakeAddress { error: None }),
+                    })
+            })
+            .transpose()?;
+        let delegation_part = match stake_address.map(|addr| addr.payload().to_owned()) {
+            None => ShelleyDelegationPart::Null,
+            Some(StakePayload::Stake(key)) => ShelleyDelegationPart::Key(key),
+            Some(StakePayload::Script(script)) => ShelleyDelegationPart::Script(script),
+        };
+
+        // Read blueprint
+        let filepath = self.blueprint_path();
+        let blueprint =
+            File::open(filepath).map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint: Blueprint<serde_json::Value> =
+            serde_json::from_reader(BufReader::new(blueprint))?;
+
+        // Find validator's program
+        let mut program = None;
+        for v in blueprint.validators.iter() {
+            if Some(&v.title) == with_title.or(Some(&v.title))
+                && Some(&v.purpose) == with_purpose.or(Some(&v.purpose))
+            {
+                program = Some(if program.is_none() {
+                    Ok(v.program.clone())
+                } else {
+                    Err(Error::MoreThanOneValidatorFound {
+                        known_validators: blueprint
+                            .validators
+                            .iter()
+                            .map(|v| (v.title.clone(), v.purpose.clone()))
+                            .collect(),
+                    })
+                })
+            }
+        }
+
+        // Print the address
+        match program {
+            Some(Ok(program)) => Ok(program.address(Network::Testnet, delegation_part)),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::NoValidatorNotFound {
+                known_validators: blueprint
+                    .validators
+                    .iter()
+                    .map(|v| (v.title.clone(), v.purpose.clone()))
+                    .collect(),
+            }),
         }
     }
 
