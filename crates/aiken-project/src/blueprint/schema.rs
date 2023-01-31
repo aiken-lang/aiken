@@ -16,7 +16,7 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Annotated<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,

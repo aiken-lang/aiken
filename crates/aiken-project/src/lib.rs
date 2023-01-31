@@ -169,7 +169,7 @@ where
         self.compile(options)
     }
 
-    pub fn dump_uplc(&self, blueprint: &Blueprint) -> Result<(), Error> {
+    pub fn dump_uplc(&self, blueprint: &Blueprint<Schema>) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
         self.event_listener
             .handle_event(Event::DumpingUPLC { path: dir.clone() });

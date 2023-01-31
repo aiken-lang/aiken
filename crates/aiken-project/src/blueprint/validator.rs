@@ -5,29 +5,27 @@ use super::{
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{ast::TypedFunction, uplc::CodeGenerator};
 use miette::NamedSource;
-use pallas::ledger::primitives::babbage as cardano;
-use pallas_traverse::ComputeHash;
-use serde::{
-    self,
-    ser::{Serialize, SerializeStruct, Serializer},
-};
+use serde;
 use std::{
     collections::HashMap,
     fmt::{self, Display},
 };
-use uplc::ast::{NamedDeBruijn, Program};
+use uplc::ast::{DeBruijn, Program};
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Validator {
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Validator<T> {
     pub title: String,
     pub purpose: Purpose,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub datum: Option<Annotated<Schema>>,
-    pub redeemer: Annotated<Schema>,
-    pub program: Program<NamedDeBruijn>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datum: Option<Annotated<T>>,
+    pub redeemer: Annotated<T>,
+    #[serde(flatten)]
+    pub program: Program<DeBruijn>,
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Purpose {
     Spend,
@@ -36,48 +34,20 @@ pub enum Purpose {
     Publish,
 }
 
-impl Serialize for Validator {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let cbor = self.program.to_cbor().unwrap();
-
-        let source_code = hex::encode(&cbor);
-
-        let hash = cardano::PlutusV2Script(cbor.into()).compute_hash();
-
-        let fields = 5
-            + self.description.as_ref().map(|_| 1).unwrap_or_default()
-            + self.datum.as_ref().map(|_| 1).unwrap_or_default();
-
-        let mut s = serializer.serialize_struct("Validator", fields)?;
-        s.serialize_field("title", &self.title)?;
-        s.serialize_field("purpose", &self.purpose)?;
-        s.serialize_field("hash", &hash)?;
-        if let Some { .. } = self.description {
-            s.serialize_field("description", &self.description)?;
-        }
-        if let Some { .. } = self.datum {
-            s.serialize_field("datum", &self.datum)?;
-        }
-        s.serialize_field("redeemer", &self.redeemer)?;
-        s.serialize_field("compiledCode", &source_code)?;
-        s.end()
-    }
-}
-
-impl Display for Validator {
+impl Display for Validator<Schema> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
         f.write_str(&s)
     }
 }
 
-impl Validator {
+impl Validator<Schema> {
     pub fn from_checked_module(
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
         validator: &CheckedModule,
         def: &TypedFunction,
-    ) -> Result<Validator, Error> {
+    ) -> Result<Validator<Schema>, Error> {
         let purpose: Purpose = def
             .name
             .clone()
@@ -293,12 +263,12 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "mint",
-              "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+              "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
               "redeemer": {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+              "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
             }),
         );
     }
@@ -344,7 +314,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "cf2cd3bed32615bfecbd280618c1c1bec2198fc0f72b04f323a8a0d2",
+              "hash": "3b7ee6139deb59d892955ac3cad15d53e48dcb1643227256b29d2b6f",
               "datum": {
                 "title": "State",
                 "description": "On-chain state",
@@ -411,7 +381,7 @@ mod test {
                   }
                 ]
               },
-              "compiledCode": "58250100002105646174756d00210872656465656d657200210363747800533357349445261601"
+              "compiledCode": "582f01000032322225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae880080041"
             }),
         );
     }
@@ -427,7 +397,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "12065ad2edb75b9e497e50c4f8130b90c9108f8ae0991abc5442e074",
+              "hash": "4a0c0768ff3e8c8f9da5fc2c499e592ae37f676a11dbc6e9de958116",
               "datum": {
                 "dataType": "#pair",
                 "left": {
@@ -440,7 +410,7 @@ mod test {
               "redeemer": {
                 "dataType": "#string"
               },
-              "compiledCode": "589f0100002105646174756d00320105646174756d00210872656465656d65720032010872656465656d657200210363747800533357349445261637326eb8010872656465656d6572000132010b5f5f6c6973745f64617461003201065f5f7461696c00337606ae84010b5f5f6c6973745f646174610002357421065f5f7461696c00013574410b5f5f6c6973745f64617461000137580105646174756d000101"
+              "compiledCode": "584901000032322322322533357349445261637326eb8004c8c8cdd81aba1002357420026ae88004dd600098008009112999aab9f00214984cd5cd98009aba100233300300335744004003"
             }),
         )
     }
@@ -456,7 +426,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "5c470f297728051a920bd9e70e14197c8fb0eaf4413e419827b0ec38",
+              "hash": "5e7487927f32a4d6e8c3b462c8e0e0f685506621f5f2683807805d0e",
               "datum": {
                 "title": "Tuple",
                 "dataType": "#list",
@@ -476,7 +446,7 @@ mod test {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "58390100002105646174756d00320105646174756d00210872656465656d657200210363747800533357349445261637580105646174756d000101"
+              "compiledCode": "5833010000323223222533357349445261637580026002002444a666aae7c008526133573660026ae84008ccc00c00cd5d10010009"
             }),
         )
     }
@@ -503,7 +473,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "withdraw",
-                  "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+                  "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
                   "redeemer": {
                     "title": "Either",
                     "anyOf": [
@@ -547,7 +517,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+                  "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
                 }
             ),
         )
@@ -571,7 +541,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+                  "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
                   "redeemer": {
                     "title": "Dict",
                     "anyOf": [
@@ -594,7 +564,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+                  "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
                 }
             ),
         );
@@ -618,7 +588,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "da4a98cee05a17be402b07c414d59bf894c9ebd0487186417121de8f",
+                  "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
                   "redeemer": {
                     "title": "Dict",
                     "dataType": "map",
@@ -629,7 +599,7 @@ mod test {
                       "dataType": "integer"
                     }
                   },
-                  "compiledCode": "581d010000210872656465656d657200210363747800533357349445261601"
+                  "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
                 }
             ),
         );

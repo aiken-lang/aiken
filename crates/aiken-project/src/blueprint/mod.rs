@@ -5,16 +5,17 @@ pub mod validator;
 use crate::{config::Config, module::CheckedModules};
 use aiken_lang::uplc::CodeGenerator;
 use error::Error;
+use schema::Schema;
 use std::fmt::{self, Debug, Display};
 use validator::Validator;
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize)]
-pub struct Blueprint {
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Blueprint<T> {
     pub preamble: Preamble,
-    pub validators: Vec<validator::Validator>,
+    pub validators: Vec<validator::Validator<T>>,
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Preamble {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,7 +25,7 @@ pub struct Preamble {
     pub license: Option<String>,
 }
 
-impl Blueprint {
+impl Blueprint<Schema> {
     pub fn new(
         config: &Config,
         modules: &CheckedModules,
@@ -46,7 +47,7 @@ impl Blueprint {
     }
 }
 
-impl Display for Blueprint {
+impl Display for Blueprint<Schema> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
         f.write_str(&s)
@@ -75,7 +76,7 @@ mod test {
 
     #[test]
     fn serialize_no_description() {
-        let blueprint = Blueprint {
+        let blueprint: Blueprint<Schema> = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: None,
@@ -99,7 +100,7 @@ mod test {
 
     #[test]
     fn serialize_with_description() {
-        let blueprint = Blueprint {
+        let blueprint: Blueprint<Schema> = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: Some("Lorem ipsum".to_string()),
