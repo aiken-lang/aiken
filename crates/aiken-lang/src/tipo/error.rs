@@ -466,7 +466,7 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::module"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(name, imported_modules.iter(), "Did you forget to import it?")
+        suggest_neighbor(name, imported_modules.iter(), "Did you forget to add a package as dependency?")
     ))]
     UnknownModule {
         #[label]

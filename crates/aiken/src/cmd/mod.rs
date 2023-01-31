@@ -1,3 +1,4 @@
+pub mod address;
 pub mod build;
 pub mod check;
 pub mod docs;

@@ -1,6 +1,20 @@
-use std::{fmt::Display, rc::Rc};
+use std::{
+    fmt::{self, Display},
+    rc::Rc,
+};
 
-use pallas_primitives::{alonzo::PlutusData, babbage::Language};
+use serde::{
+    self,
+    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
+    ser::{Serialize, SerializeStruct, Serializer},
+};
+
+use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
+use pallas_primitives::{
+    alonzo::PlutusData,
+    babbage::{self as cardano, Language},
+};
+use pallas_traverse::ComputeHash;
 
 use crate::{
     builtins::DefaultFunction,
@@ -76,6 +90,81 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_pretty())
+    }
+}
+
+impl Serialize for Program<DeBruijn> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let cbor = self.to_cbor().unwrap();
+        let mut s = serializer.serialize_struct("Program<DeBruijn>", 2)?;
+        s.serialize_field("compiledCode", &hex::encode(&cbor))?;
+        s.serialize_field("hash", &cardano::PlutusV2Script(cbor.into()).compute_hash())?;
+        s.end()
+    }
+}
+
+impl<'a> Deserialize<'a> for Program<DeBruijn> {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(field_identifier, rename_all = "camelCase")]
+        enum Fields {
+            CompiledCode,
+        }
+
+        struct ProgramVisitor;
+
+        impl<'a> Visitor<'a> for ProgramVisitor {
+            type Value = Program<DeBruijn>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Program<Visitor>")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Program<DeBruijn>, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                let mut compiled_code: Option<String> = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Fields::CompiledCode => {
+                            if compiled_code.is_some() {
+                                return Err(de::Error::duplicate_field("compiledCode"));
+                            }
+                            compiled_code = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let compiled_code =
+                    compiled_code.ok_or_else(|| de::Error::missing_field("compiledCode"))?;
+
+                let mut cbor_buffer = Vec::new();
+                let mut flat_buffer = Vec::new();
+
+                Program::<DeBruijn>::from_hex(&compiled_code, &mut cbor_buffer, &mut flat_buffer)
+                    .map_err(|e| {
+                        de::Error::invalid_value(
+                            de::Unexpected::Other(&format!("{}", e)),
+                            &"a base16-encoded CBOR-serialized UPLC program",
+                        )
+                    })
+            }
+        }
+
+        const FIELDS: &[&str] = &["compiledCode"];
+        deserializer.deserialize_struct("Program<DeBruijn>", FIELDS, ProgramVisitor)
+    }
+}
+
+impl Program<DeBruijn> {
+    pub fn address(&self, network: Network, delegation: ShelleyDelegationPart) -> ShelleyAddress {
+        let cbor = self.to_cbor().unwrap();
+        let validator_hash = cardano::PlutusV2Script(cbor.into()).compute_hash();
+        ShelleyAddress::new(
+            network,
+            ShelleyPaymentPart::Script(validator_hash),
+            delegation,
+        )
     }
 }
 

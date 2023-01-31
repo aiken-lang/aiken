@@ -80,7 +80,6 @@ impl UntypedModule {
 
         for def in consts.into_iter().chain(not_consts) {
             let definition = infer_definition(def, &name, &mut hydrators, &mut environment, kind)?;
-
             definitions.push(definition);
         }
 
@@ -339,6 +338,7 @@ fn infer_definition(
                                             label,
                                             annotation,
                                             location,
+                                            doc,
                                             ..
                                         },
                                         t,
@@ -348,7 +348,7 @@ fn infer_definition(
                                             annotation,
                                             location,
                                             tipo: t.clone(),
-                                            doc: None,
+                                            doc,
                                         }
                                     },
                                 )

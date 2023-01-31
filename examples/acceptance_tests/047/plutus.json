@@ -1,0 +1,36 @@
+{
+  "preamble": {
+    "title": "aiken-lang/acceptance_test_047",
+    "version": "0.0.0"
+  },
+  "validators": [
+    {
+      "title": "foo",
+      "purpose": "spend",
+      "datum": {
+        "title": "Unit",
+        "description": "The nullary constructor.",
+        "anyOf": [
+          {
+            "dataType": "constructor",
+            "index": 0,
+            "fields": []
+          }
+        ]
+      },
+      "redeemer": {
+        "title": "Unit",
+        "description": "The nullary constructor.",
+        "anyOf": [
+          {
+            "dataType": "constructor",
+            "index": 0,
+            "fields": []
+          }
+        ]
+      },
+      "compiledCode": "582f01000032322225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae880080041",
+      "hash": "3b7ee6139deb59d892955ac3cad15d53e48dcb1643227256b29d2b6f"
+    }
+  ]
+}

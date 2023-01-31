@@ -1,12 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
-
-use strum::IntoEnumIterator;
-
-use uplc::builtins::DefaultFunction;
-
 use crate::{
-    ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedFunction, UnOp},
-    builder::FunctionAccessKey,
+    ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedDataType, TypedFunction, UnOp},
+    builder::{DataTypeKey, FunctionAccessKey},
     expr::TypedExpr,
     tipo::{
         fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
@@ -14,6 +8,10 @@ use crate::{
     },
     IdGenerator,
 };
+use indexmap::IndexMap;
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use strum::IntoEnumIterator;
+use uplc::builtins::DefaultFunction;
 
 pub const BYTE_ARRAY: &str = "ByteArray";
 pub const BOOL: &str = "Bool";
@@ -533,8 +531,8 @@ pub fn from_default_function(
     })
 }
 
-pub fn prelude_functions(id_gen: &IdGenerator) -> HashMap<FunctionAccessKey, TypedFunction> {
-    let mut functions = HashMap::new();
+pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, TypedFunction> {
+    let mut functions = IndexMap::new();
 
     // /// Negate the argument. Useful for map/fold and pipelines.
     // pub fn not(self: Bool) -> Bool {
@@ -798,6 +796,22 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> HashMap<FunctionAccessKey, Typ
     );
 
     functions
+}
+
+pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDataType> {
+    let mut data_types = IndexMap::new();
+
+    // Option
+    let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "Option".to_string(),
+        },
+        option_data_type,
+    );
+
+    data_types
 }
 
 pub fn int() -> Arc<Type> {

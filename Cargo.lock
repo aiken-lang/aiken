@@ -66,6 +66,7 @@ dependencies = [
  "pallas-primitives",
  "pallas-traverse",
  "regex",
+ "serde_json",
  "thiserror",
  "uplc",
 ]
@@ -112,6 +113,7 @@ version = "0.0.28"
 dependencies = [
  "aiken-lang",
  "askama",
+ "assert-json-diff",
  "dirs",
  "fslock",
  "futures",
@@ -195,6 +197,16 @@ dependencies = [
  "serde",
  "syn",
  "toml",
+]
+
+[[package]]
+name = "assert-json-diff"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

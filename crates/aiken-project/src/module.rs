@@ -1,16 +1,21 @@
+use crate::error::Error;
+use aiken_lang::{
+    ast::{
+        DataType, Definition, ModuleKind, TypedDataType, TypedFunction, TypedModule, UntypedModule,
+    },
+    builder::{DataTypeKey, FunctionAccessKey},
+    parser::extra::{comments_before, Comment, ModuleExtra},
+    tipo::TypeInfo,
+    uplc::CodeGenerator,
+    VALIDATOR_NAMES,
+};
+use indexmap::IndexMap;
+use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 use std::{
     collections::{HashMap, HashSet},
     ops::{Deref, DerefMut},
     path::PathBuf,
 };
-
-use aiken_lang::{
-    ast::{DataType, Definition, ModuleKind, TypedModule, UntypedModule},
-    parser::extra::{comments_before, Comment, ModuleExtra},
-};
-use petgraph::{algo, graph::NodeIndex, Direction, Graph};
-
-use crate::error::Error;
 
 #[derive(Debug)]
 pub struct ParsedModule {
@@ -233,15 +238,90 @@ impl From<CheckedModules> for HashMap<String, CheckedModule> {
     }
 }
 
+impl<'a> From<&'a CheckedModules> for &'a HashMap<String, CheckedModule> {
+    fn from(checked_modules: &'a CheckedModules) -> Self {
+        &checked_modules.0
+    }
+}
+
 impl CheckedModules {
-    pub fn validators(&self) -> impl Iterator<Item = &CheckedModule> {
-        self.0.values().filter(|module| module.kind.is_validator())
+    pub fn singleton(module: CheckedModule) -> Self {
+        let mut modules = Self::default();
+        modules.insert(module.name.clone(), module);
+        modules
+    }
+
+    pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedFunction)> {
+        let mut items = vec![];
+        for validator in self.0.values().filter(|module| module.kind.is_validator()) {
+            for some_definition in validator.ast.definitions() {
+                if let Definition::Fn(def) = some_definition {
+                    if VALIDATOR_NAMES.contains(&def.name.as_str()) {
+                        items.push((validator, def));
+                    }
+                }
+            }
+        }
+        items.into_iter()
     }
 
     pub fn into_validators(self) -> impl Iterator<Item = CheckedModule> {
         self.0
             .into_values()
             .filter(|module| module.kind.is_validator())
+    }
+
+    pub fn new_generator<'a>(
+        &'a self,
+        builtin_functions: &'a IndexMap<FunctionAccessKey, TypedFunction>,
+        builtin_data_types: &'a IndexMap<DataTypeKey, TypedDataType>,
+        module_types: &'a HashMap<String, TypeInfo>,
+    ) -> CodeGenerator<'a> {
+        let mut functions = IndexMap::new();
+        for (k, v) in builtin_functions {
+            functions.insert(k.clone(), v);
+        }
+
+        let mut data_types = IndexMap::new();
+        for (k, v) in builtin_data_types {
+            data_types.insert(k.clone(), v);
+        }
+
+        for module in self.values() {
+            for def in module.ast.definitions() {
+                match def {
+                    Definition::Fn(func) => {
+                        functions.insert(
+                            FunctionAccessKey {
+                                module_name: module.name.clone(),
+                                function_name: func.name.clone(),
+                                variant_name: String::new(),
+                            },
+                            func,
+                        );
+                    }
+                    Definition::DataType(dt) => {
+                        data_types.insert(
+                            DataTypeKey {
+                                module_name: module.name.clone(),
+                                defined_type: dt.name.clone(),
+                            },
+                            dt,
+                        );
+                    }
+
+                    Definition::TypeAlias(_)
+                    | Definition::ModuleConstant(_)
+                    | Definition::Test(_)
+                    | Definition::Use(_) => {}
+                }
+            }
+        }
+
+        let mut module_types_index = IndexMap::new();
+        module_types_index.extend(module_types);
+
+        CodeGenerator::new(functions, data_types, module_types_index)
     }
 }
 

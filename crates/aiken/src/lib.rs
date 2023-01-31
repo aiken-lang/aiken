@@ -94,12 +94,20 @@ impl telemetry::EventListener for Terminal {
             telemetry::Event::WaitingForBuildDirLock => {
                 println!("{}", "Waiting for build directory lock ...".bold().purple());
             }
-            telemetry::Event::GeneratingUPLC { output_path, name } => {
+            telemetry::Event::DumpingUPLC { path } => {
                 println!(
-                    "{} {} in {}",
+                    "{} {} ({})",
+                    "    Exporting".bold().purple(),
+                    "UPLC".bold(),
+                    path.display().bright_blue()
+                );
+            }
+            telemetry::Event::GeneratingBlueprint { path } => {
+                println!(
+                    "{} {} ({})",
                     "   Generating".bold().purple(),
-                    name.bold(),
-                    output_path.display().bright_blue()
+                    "project's blueprint".bold(),
+                    path.display().bright_blue()
                 );
             }
             telemetry::Event::GeneratingDocFiles { output_path } => {
@@ -112,7 +120,7 @@ impl telemetry::EventListener for Terminal {
             telemetry::Event::GeneratingUPLCFor { name, path } => {
                 println!(
                     "{} {}.{{{}}}",
-                    "   Generating Untyped Plutus Core for".bold().purple(),
+                    "   Generating UPLC for".bold().purple(),
                     path.to_str().unwrap_or("").blue(),
                     name.bright_blue(),
                 );

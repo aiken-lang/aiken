@@ -1,3 +1,4 @@
+pub mod blueprint;
 pub mod config;
 pub mod deps;
 pub mod docs;
@@ -11,34 +12,32 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
+use crate::blueprint::{schema::Schema, validator, Blueprint};
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedDataType, TypedDefinition, TypedFunction},
+    ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
-    builtins::{self, generic_var},
+    builtins,
     tipo::TypeInfo,
-    uplc::CodeGenerator,
-    IdGenerator, MINT, PUBLISH, SPEND, VALIDATOR_NAMES, WITHDRAW,
+    IdGenerator,
 };
 use deps::UseManifest;
 use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
-use pallas::{
-    codec::minicbor,
-    ledger::{addresses::Address, primitives::babbage},
+use pallas::ledger::addresses::{
+    Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload,
 };
-use pallas_traverse::ComputeHash;
 use script::{EvalHint, EvalInfo, Script};
-use serde_json::json;
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, File},
+    io::BufReader,
     path::{Path, PathBuf},
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{Constant, DeBruijn, Program, Term},
+    ast::{Constant, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -70,6 +69,8 @@ where
     sources: Vec<Source>,
     pub warnings: Vec<Warning>,
     event_listener: T,
+    functions: IndexMap<FunctionAccessKey, TypedFunction>,
+    data_types: IndexMap<DataTypeKey, TypedDataType>,
 }
 
 impl<T> Project<T>
@@ -84,6 +85,10 @@ where
         module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
         module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
+        let functions = builtins::prelude_functions(&id_gen);
+
+        let data_types = builtins::prelude_data_types(&id_gen);
+
         let config = Config::load(&root)?;
 
         Ok(Project {
@@ -96,6 +101,8 @@ where
             sources: vec![],
             warnings: vec![],
             event_listener,
+            functions,
+            data_types,
         })
     }
 
@@ -121,11 +128,7 @@ where
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
-        let mut parsed_modules = self.parse_sources(self.config.name.clone())?;
-
-        for (_, module) in parsed_modules.iter_mut() {
-            module.attach_doc_and_module_comments();
-        }
+        let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
         self.type_check(parsed_modules)?;
 
@@ -170,6 +173,25 @@ where
         self.compile(options)
     }
 
+    pub fn dump_uplc(&self, blueprint: &Blueprint<Schema>) -> Result<(), Error> {
+        let dir = self.root.join("artifacts");
+        self.event_listener
+            .handle_event(Event::DumpingUPLC { path: dir.clone() });
+        fs::create_dir_all(&dir)?;
+        for validator in &blueprint.validators {
+            let path = dir
+                .clone()
+                .join(format!("{}::{}>.uplc", validator.title, validator.purpose));
+            fs::write(&path, validator.program.to_pretty())
+                .map_err(|error| Error::FileIo { error, path })?;
+        }
+        Ok(())
+    }
+
+    pub fn blueprint_path(&self) -> PathBuf {
+        self.root.join("plutus.json")
+    }
+
     pub fn compile(&mut self, options: Options) -> Result<(), Error> {
         self.compile_deps()?;
 
@@ -186,27 +208,42 @@ where
 
         self.type_check(parsed_modules)?;
 
-        let validators = self.validate_validators()?;
-
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
-                if validators.is_empty() {
+                self.event_listener
+                    .handle_event(Event::GeneratingBlueprint {
+                        path: self.blueprint_path(),
+                    });
+
+                let mut generator = self.checked_modules.new_generator(
+                    &self.functions,
+                    &self.data_types,
+                    &self.module_types,
+                );
+
+                let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
+                    .map_err(Error::Blueprint)?;
+
+                if blueprint.validators.is_empty() {
                     self.warnings.push(Warning::NoValidators);
                 }
 
-                let programs = self.code_gen(validators)?;
+                if uplc_dump {
+                    self.dump_uplc(&blueprint)?;
+                }
 
-                self.write_build_outputs(programs, uplc_dump)?;
-
-                Ok(())
+                let json = serde_json::to_string_pretty(&blueprint).unwrap();
+                fs::write(self.blueprint_path(), json).map_err(|error| Error::FileIo {
+                    error,
+                    path: self.blueprint_path(),
+                })
             }
             CodeGenMode::Test {
                 match_tests,
                 verbose,
                 exact_match,
             } => {
-                let tests =
-                    self.collect_scripts(verbose, |def| matches!(def, Definition::Test(..)))?;
+                let tests = self.collect_tests(verbose)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -241,6 +278,71 @@ where
                 }
             }
             CodeGenMode::NoOp => Ok(()),
+        }
+    }
+
+    pub fn address(
+        &self,
+        with_title: Option<&String>,
+        with_purpose: Option<&validator::Purpose>,
+        stake_address: Option<&String>,
+    ) -> Result<ShelleyAddress, Error> {
+        // Parse stake address
+        let stake_address = stake_address
+            .map(|s| {
+                Address::from_hex(s)
+                    .or_else(|_| Address::from_bech32(s))
+                    .map_err(|error| Error::MalformedStakeAddress { error: Some(error) })
+                    .and_then(|addr| match addr {
+                        Address::Stake(addr) => Ok(addr),
+                        _ => Err(Error::MalformedStakeAddress { error: None }),
+                    })
+            })
+            .transpose()?;
+        let delegation_part = match stake_address.map(|addr| addr.payload().to_owned()) {
+            None => ShelleyDelegationPart::Null,
+            Some(StakePayload::Stake(key)) => ShelleyDelegationPart::Key(key),
+            Some(StakePayload::Script(script)) => ShelleyDelegationPart::Script(script),
+        };
+
+        // Read blueprint
+        let filepath = self.blueprint_path();
+        let blueprint =
+            File::open(filepath).map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint: Blueprint<serde_json::Value> =
+            serde_json::from_reader(BufReader::new(blueprint))?;
+
+        // Find validator's program
+        let mut program = None;
+        for v in blueprint.validators.iter() {
+            if Some(&v.title) == with_title.or(Some(&v.title))
+                && Some(&v.purpose) == with_purpose.or(Some(&v.purpose))
+            {
+                program = Some(if program.is_none() {
+                    Ok(v.program.clone())
+                } else {
+                    Err(Error::MoreThanOneValidatorFound {
+                        known_validators: blueprint
+                            .validators
+                            .iter()
+                            .map(|v| (v.title.clone(), v.purpose.clone()))
+                            .collect(),
+                    })
+                })
+            }
+        }
+
+        // Print the address
+        match program {
+            Some(Ok(program)) => Ok(program.address(Network::Testnet, delegation_part)),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::NoValidatorNotFound {
+                known_validators: blueprint
+                    .validators
+                    .iter()
+                    .map(|v| (v.title.clone(), v.purpose.clone()))
+                    .collect(),
+            }),
         }
     }
 
@@ -304,7 +406,7 @@ where
                     // Store the name
                     ast.name = name.clone();
 
-                    let module = ParsedModule {
+                    let mut module = ParsedModule {
                         kind,
                         ast,
                         code,
@@ -324,6 +426,8 @@ where
                             second: module.path,
                         });
                     }
+
+                    module.attach_doc_and_module_comments();
 
                     parsed_modules.insert(module.name.clone(), module);
                 }
@@ -408,236 +512,20 @@ where
         Ok(())
     }
 
-    fn validate_validators(&self) -> Result<Vec<(PathBuf, String, TypedFunction)>, Error> {
-        let mut errors = Vec::new();
-        let mut validators = Vec::new();
-
-        for module in self.checked_modules.validators() {
-            for def in module.ast.definitions() {
-                if let Definition::Fn(func_def) = def {
-                    if VALIDATOR_NAMES.contains(&func_def.name.as_str()) {
-                        // validators must return a Bool
-                        if !func_def.return_type.is_bool() {
-                            errors.push(Error::ValidatorMustReturnBool {
-                                location: func_def.location,
-                                src: module.code.clone(),
-                                path: module.input_path.clone(),
-                                named: NamedSource::new(
-                                    module.input_path.display().to_string(),
-                                    module.code.clone(),
-                                ),
-                            })
-                        }
-
-                        // depending on name, validate the minimum number of arguments
-                        // if too low, push a new error on to errors
-                        if [MINT, WITHDRAW, PUBLISH].contains(&func_def.name.as_str())
-                            && func_def.arguments.len() < 2
-                        {
-                            errors.push(Error::WrongValidatorArity {
-                                location: func_def.location,
-                                src: module.code.clone(),
-                                path: module.input_path.clone(),
-                                named: NamedSource::new(
-                                    module.input_path.display().to_string(),
-                                    module.code.clone(),
-                                ),
-                                name: func_def.name.clone(),
-                                at_least: 2,
-                            })
-                        }
-
-                        if SPEND == func_def.name && func_def.arguments.len() < 3 {
-                            errors.push(Error::WrongValidatorArity {
-                                location: func_def.location,
-                                src: module.code.clone(),
-                                path: module.input_path.clone(),
-                                named: NamedSource::new(
-                                    module.input_path.display().to_string(),
-                                    module.code.clone(),
-                                ),
-                                name: func_def.name.clone(),
-                                at_least: 3,
-                            })
-                        }
-
-                        validators.push((
-                            module.input_path.clone(),
-                            module.name.clone(),
-                            func_def.clone(),
-                        ));
-                    }
-                }
-            }
-        }
-
-        if errors.is_empty() {
-            Ok(validators)
-        } else {
-            Err(Error::List(errors))
-        }
-    }
-
-    fn code_gen(
-        &mut self,
-        validators: Vec<(PathBuf, String, TypedFunction)>,
-    ) -> Result<Vec<Script>, Error> {
-        let mut programs = Vec::new();
-        let mut functions = IndexMap::new();
-        let mut type_aliases = IndexMap::new();
-        let mut data_types = IndexMap::new();
-
-        let prelude_functions = builtins::prelude_functions(&self.id_gen);
-        for (access_key, func) in prelude_functions.iter() {
-            functions.insert(access_key.clone(), func);
-        }
-
-        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
-        data_types.insert(
-            DataTypeKey {
-                module_name: "".to_string(),
-                defined_type: "Option".to_string(),
-            },
-            &option_data_type,
-        );
-
-        for module in self.checked_modules.values() {
-            for def in module.ast.definitions() {
-                match def {
-                    Definition::Fn(func) => {
-                        functions.insert(
-                            FunctionAccessKey {
-                                module_name: module.name.clone(),
-                                function_name: func.name.clone(),
-                                variant_name: String::new(),
-                            },
-                            func,
-                        );
-                    }
-                    Definition::TypeAlias(ta) => {
-                        type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
-                    }
-                    Definition::DataType(dt) => {
-                        data_types.insert(
-                            DataTypeKey {
-                                module_name: module.name.clone(),
-                                defined_type: dt.name.clone(),
-                            },
-                            dt,
-                        );
-                    }
-
-                    Definition::ModuleConstant(_) | Definition::Test(_) | Definition::Use(_) => {}
-                }
-            }
-        }
-
-        for (input_path, module_name, func_def) in validators {
-            let Function {
-                arguments,
-                name,
-                body,
-                ..
-            } = func_def;
-
-            let mut modules_map = IndexMap::new();
-
-            modules_map.extend(self.module_types.clone());
-
-            let mut generator = CodeGenerator::new(
-                &functions,
-                // &type_aliases,
-                &data_types,
-                &modules_map,
-            );
-
-            self.event_listener.handle_event(Event::GeneratingUPLC {
-                output_path: self.output_path().join(&module_name).join(&name),
-                name: format!("{}.{}", module_name, name),
-            });
-
-            let program = generator.generate(body, arguments, true);
-
-            let script = Script::new(
-                input_path,
-                module_name,
-                name,
-                program.try_into().unwrap(),
-                None,
-            );
-
-            programs.push(script);
-        }
-
-        Ok(programs)
-    }
-
-    fn collect_scripts(
-        &mut self,
-        verbose: bool,
-        should_collect: fn(&TypedDefinition) -> bool,
-    ) -> Result<Vec<Script>, Error> {
-        let mut programs = Vec::new();
-        let mut functions = IndexMap::new();
-        let mut type_aliases = IndexMap::new();
-        let mut data_types = IndexMap::new();
-
-        let prelude_functions = builtins::prelude_functions(&self.id_gen);
-        for (access_key, func) in prelude_functions.iter() {
-            functions.insert(access_key.clone(), func);
-        }
-
-        let option_data_type = TypedDataType::option(generic_var(self.id_gen.next()));
-
-        data_types.insert(
-            DataTypeKey {
-                module_name: "".to_string(),
-                defined_type: "Option".to_string(),
-            },
-            &option_data_type,
-        );
-
+    fn collect_tests(&mut self, verbose: bool) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
-
         for module in self.checked_modules.values() {
+            if module.package != self.config.name.to_string() {
+                continue;
+            }
             for def in module.ast.definitions() {
-                match def {
-                    Definition::Fn(func) => {
-                        functions.insert(
-                            FunctionAccessKey {
-                                module_name: module.name.clone(),
-                                function_name: func.name.clone(),
-                                variant_name: String::new(),
-                            },
-                            func,
-                        );
-
-                        if should_collect(def) && module.package == self.config.name.to_string() {
-                            scripts.push((module.input_path.clone(), module.name.clone(), func));
-                        }
-                    }
-                    Definition::Test(func) => {
-                        if should_collect(def) && module.package == self.config.name.to_string() {
-                            scripts.push((module.input_path.clone(), module.name.clone(), func));
-                        }
-                    }
-                    Definition::TypeAlias(ta) => {
-                        type_aliases.insert((module.name.clone(), ta.alias.clone()), ta);
-                    }
-                    Definition::DataType(dt) => {
-                        data_types.insert(
-                            DataTypeKey {
-                                module_name: module.name.clone(),
-                                defined_type: dt.name.clone(),
-                            },
-                            dt,
-                        );
-                    }
-                    Definition::Use(_) | Definition::ModuleConstant(_) => (),
+                if let Definition::Test(func) = def {
+                    scripts.push((module.input_path.clone(), module.name.clone(), func))
                 }
             }
         }
 
+        let mut programs = Vec::new();
         for (input_path, module_name, func_def) in scripts {
             let Function {
                 arguments,
@@ -653,26 +541,23 @@ where
                 })
             }
 
-            let mut modules_map = IndexMap::new();
-
-            modules_map.extend(self.module_types.clone());
-
-            let mut generator = CodeGenerator::new(
-                &functions,
-                // &type_aliases,
-                &data_types,
-                &modules_map,
+            let mut generator = self.checked_modules.new_generator(
+                &self.functions,
+                &self.data_types,
+                &self.module_types,
             );
 
             let evaluation_hint = if let Some((bin_op, left_src, right_src)) = func_def.test_hint()
             {
-                let left = CodeGenerator::new(&functions, &data_types, &modules_map)
-                    .generate(*left_src, vec![], false)
+                let left = generator
+                    .clone()
+                    .generate(&left_src, &[], false)
                     .try_into()
                     .unwrap();
 
-                let right = CodeGenerator::new(&functions, &data_types, &modules_map)
-                    .generate(*right_src, vec![], false)
+                let right = generator
+                    .clone()
+                    .generate(&right_src, &[], false)
                     .try_into()
                     .unwrap();
 
@@ -685,7 +570,7 @@ where
                 None
             };
 
-            let program = generator.generate(body.clone(), arguments.clone(), false);
+            let program = generator.generate(body, arguments, false);
 
             let script = Script::new(
                 input_path,
@@ -722,7 +607,7 @@ where
                 .map(|match_test| {
                     let mut match_split_dot = match_test.split('.');
 
-                    let match_module = if match_test.contains('.') {
+                    let match_module = if match_test.contains('.') || match_test.contains('/') {
                         match_split_dot.next().unwrap_or("")
                     } else {
                         ""
@@ -746,14 +631,16 @@ where
                     match_tests.iter().any(|(module, names)| {
                         let matched_module = module == &"" || script.module.contains(module);
 
-                        let matched_name = matches!(names, Some(names) if names
-                            .iter()
-                            .any(|name| if exact_match {
-                                name == &script.name
-                            } else {
-                                script.name.contains(name)
-                            }
-                        ));
+                        let matched_name = match names {
+                            None => true,
+                            Some(names) => names.iter().any(|name| {
+                                if exact_match {
+                                    name == &script.name
+                                } else {
+                                    script.name.contains(name)
+                                }
+                            }),
+                        };
 
                         matched_module && matched_name
                     })
@@ -783,91 +670,6 @@ where
                 },
             })
             .collect()
-    }
-
-    fn output_path(&self) -> PathBuf {
-        self.root.join("assets")
-    }
-
-    fn write_build_outputs(&self, programs: Vec<Script>, uplc_dump: bool) -> Result<(), Error> {
-        for script in programs {
-            let script_output_dir = self.output_path().join(script.module).join(script.name);
-
-            fs::create_dir_all(&script_output_dir)?;
-
-            // dump textual uplc
-            if uplc_dump {
-                let uplc_path = script_output_dir.join("raw.uplc");
-
-                fs::write(uplc_path, script.program.to_pretty())?;
-            }
-
-            let program: Program<DeBruijn> = script.program.into();
-
-            let cbor = program.to_cbor().unwrap();
-
-            // Create file containing just the script cbor hex
-            let script_path = script_output_dir.join("script.cbor");
-
-            let cbor_hex = hex::encode(&cbor);
-
-            fs::write(script_path, cbor_hex)?;
-
-            // Create the payment script JSON file
-            let payment_script_path = script_output_dir.join("payment_script.json");
-
-            let mut bytes = Vec::new();
-
-            let mut encoder = minicbor::Encoder::new(&mut bytes);
-
-            encoder.bytes(&cbor).unwrap();
-
-            let prefixed_cbor_hex = hex::encode(&bytes);
-
-            let payment_script = json!({
-                "type": "PlutusScriptV2",
-                "description": "Generated by Aiken",
-                "cborHex": prefixed_cbor_hex
-            });
-
-            fs::write(
-                payment_script_path,
-                serde_json::to_string_pretty(&payment_script).unwrap(),
-            )?;
-
-            // Create mainnet and testnet addresses
-            let plutus_script = babbage::PlutusV2Script(cbor.into());
-
-            let hash = plutus_script.compute_hash();
-
-            // mainnet
-            let mainnet_path = script_output_dir.join("mainnet.addr");
-            let mut mainnet_bytes: Vec<u8> = vec![0b01110001];
-
-            mainnet_bytes.extend(hash.iter());
-
-            let mainnet_addr = Address::from_bytes(&mainnet_bytes)
-                .unwrap()
-                .to_bech32()
-                .unwrap();
-
-            fs::write(mainnet_path, mainnet_addr)?;
-
-            // testnet
-            let testnet_path = script_output_dir.join("testnet.addr");
-            let mut testnet_bytes: Vec<u8> = vec![0b01110000];
-
-            testnet_bytes.extend(hash.iter());
-
-            let testnet_addr = Address::from_bytes(&testnet_bytes)
-                .unwrap()
-                .to_bech32()
-                .unwrap();
-
-            fs::write(testnet_path, testnet_addr)?;
-        }
-
-        Ok(())
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {

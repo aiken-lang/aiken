@@ -19,9 +19,11 @@ pub enum Event {
     GeneratingDocFiles {
         output_path: PathBuf,
     },
-    GeneratingUPLC {
-        output_path: PathBuf,
-        name: String,
+    GeneratingBlueprint {
+        path: PathBuf,
+    },
+    DumpingUPLC {
+        path: PathBuf,
     },
     GeneratingUPLCFor {
         name: String,
