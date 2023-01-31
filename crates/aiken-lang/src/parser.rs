@@ -360,54 +360,11 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
                 elements,
             });
 
-        let constant_bytearray_list_parser = just(Token::Hash)
-            .ignore_then(
-                select! {Token::Int {value} => value}
-                    .validate(|value, span, emit| {
-                        let byte: u8 = match value.parse() {
-                            Ok(b) => b,
-                            Err(_) => {
-                                emit(ParseError::expected_input_found(
-                                    span,
-                                    None,
-                                    Some(error::Pattern::Byte),
-                                ));
-
-                                0
-                            }
-                        };
-
-                        byte
-                    })
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
-            )
-            .map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
+        let constant_bytearray_parser =
+            bytearray_parser().map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
                 location: span,
                 bytes,
             });
-
-        let constant_bytearray_hexstring_parser =
-            just(Token::Hash)
-                .ignore_then(select! {Token::String {value} => value}.validate(
-                    |value, span, emit| match hex::decode(value) {
-                        Ok(bytes) => bytes,
-                        Err(_) => {
-                            emit(ParseError::malformed_base16_string_literal(span));
-                            vec![]
-                        }
-                    },
-                ))
-                .map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
-                    location: span,
-                    bytes,
-                });
-
-        let constant_bytearray_parser = choice((
-            constant_bytearray_list_parser,
-            constant_bytearray_hexstring_parser,
-        ));
 
         let constant_list_parser = r
             .clone()
@@ -527,6 +484,44 @@ fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = P
             constant_var_parser,
         ))
     })
+}
+
+pub fn bytearray_parser() -> impl Parser<Token, Vec<u8>, Error = ParseError> {
+    let bytearray_list_parser = just(Token::Hash).ignore_then(
+        select! {Token::Int {value} => value}
+            .validate(|value, span, emit| {
+                let byte: u8 = match value.parse() {
+                    Ok(b) => b,
+                    Err(_) => {
+                        emit(ParseError::expected_input_found(
+                            span,
+                            None,
+                            Some(error::Pattern::Byte),
+                        ));
+
+                        0
+                    }
+                };
+
+                byte
+            })
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
+    );
+
+    let bytearray_hexstring_parser =
+        just(Token::Hash).ignore_then(select! {Token::String {value} => value}.validate(
+            |value, span, emit| match hex::decode(value) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    emit(ParseError::malformed_base16_string_literal(span));
+                    vec![]
+                }
+            },
+        ));
+
+    choice((bytearray_list_parser, bytearray_hexstring_parser))
 }
 
 pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
@@ -913,30 +908,8 @@ pub fn expr_parser(
                 elems,
             });
 
-        let bytearray = just(Token::Hash)
-            .ignore_then(
-                select! {Token::Int {value} => value}
-                    .validate(|value, span, emit| {
-                        let byte: u8 = match value.parse() {
-                            Ok(b) => b,
-                            Err(_) => {
-                                emit(ParseError::expected_input_found(
-                                    span,
-                                    None,
-                                    Some(error::Pattern::Byte),
-                                ));
-
-                                0
-                            }
-                        };
-
-                        byte
-                    })
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
-            )
-            .map_with_span(|bytes, span| expr::UntypedExpr::ByteArray {
+        let bytearray =
+            bytearray_parser().map_with_span(|bytes, span| expr::UntypedExpr::ByteArray {
                 location: span,
                 bytes,
             });

@@ -256,3 +256,19 @@ fn test_block_expr() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn test_format_bytearray_literals() {
+    let src = indoc! {r#"
+        const foo = #"ff00"
+        const bar = #[0, 255]
+    "#};
+
+    let expected = indoc! { r#"
+        const foo = #"ff00"
+
+        const bar = #"00ff"
+    "#};
+
+    assert_fmt(src, expected);
+}

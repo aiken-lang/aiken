@@ -1652,22 +1652,50 @@ fn plain_bytearray_literals() {
 fn base16_bytearray_literals() {
     let code = indoc! {r#"
         pub const my_policy_id = #"00aaff"
+
+        pub fn foo() {
+            my_policy_id == #"00aaff"
+        }
     "#};
 
     assert_definitions(
         code,
-        vec![ast::UntypedDefinition::ModuleConstant(ModuleConstant {
-            doc: None,
-            location: Span::new((), 0..34),
-            public: true,
-            name: "my_policy_id".to_string(),
-            annotation: None,
-            value: Box::new(Constant::ByteArray {
-                location: Span::new((), 25..34),
-                bytes: vec![0, 170, 255],
+        vec![
+            ast::UntypedDefinition::ModuleConstant(ModuleConstant {
+                doc: None,
+                location: Span::new((), 0..34),
+                public: true,
+                name: "my_policy_id".to_string(),
+                annotation: None,
+                value: Box::new(Constant::ByteArray {
+                    location: Span::new((), 25..34),
+                    bytes: vec![0, 170, 255],
+                }),
+                tipo: (),
             }),
-            tipo: (),
-        })],
+            ast::UntypedDefinition::Fn(Function {
+                arguments: vec![],
+                body: expr::UntypedExpr::BinOp {
+                    location: Span::new((), 55..80),
+                    name: ast::BinOp::Eq,
+                    left: Box::new(expr::UntypedExpr::Var {
+                        location: Span::new((), 55..67),
+                        name: "my_policy_id".to_string(),
+                    }),
+                    right: Box::new(expr::UntypedExpr::ByteArray {
+                        location: Span::new((), 71..80),
+                        bytes: vec![0, 170, 255],
+                    }),
+                },
+                doc: None,
+                location: Span::new((), 36..48),
+                name: "foo".to_string(),
+                public: true,
+                return_annotation: None,
+                return_type: (),
+                end_position: 81,
+            }),
+        ],
     )
 }
 

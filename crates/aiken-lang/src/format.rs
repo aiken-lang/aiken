@@ -318,16 +318,7 @@ impl<'comments> Formatter<'comments> {
 
     fn const_expr<'a, A, B>(&mut self, value: &'a Constant<A, B>) -> Document<'a> {
         match value {
-            Constant::ByteArray { bytes, .. } => "#"
-                .to_doc()
-                .append(
-                    flex_break("[", "[")
-                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
-                        .nest(INDENT)
-                        .append(break_(",", ""))
-                        .append("]"),
-                )
-                .group(),
+            Constant::ByteArray { bytes, .. } => self.bytearray(bytes),
             Constant::Int { value, .. } => value.to_doc(),
 
             Constant::String { value, .. } => self.string(value),
@@ -647,20 +638,18 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
+    pub fn bytearray<'a>(&mut self, bytes: &'a [u8]) -> Document<'a> {
+        "#".to_doc()
+            .append("\"")
+            .append(Document::String(hex::encode(bytes)))
+            .append("\"")
+    }
+
     pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
-            UntypedExpr::ByteArray { bytes, .. } => "#"
-                .to_doc()
-                .append(
-                    flex_break("[", "[")
-                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
-                        .nest(INDENT)
-                        .append(break_(",", ""))
-                        .append("]"),
-                )
-                .group(),
+            UntypedExpr::ByteArray { bytes, .. } => self.bytearray(bytes),
             UntypedExpr::If {
                 branches,
                 final_else,
