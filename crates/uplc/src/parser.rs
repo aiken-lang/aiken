@@ -87,7 +87,7 @@ peg::parser! {
             / constant_list()
             / constant_pair()
             ) _* ")" {
-            Term::Constant(con)
+            Term::Constant(con.into())
           }
 
         rule builtin() -> Term<Name>
@@ -96,11 +96,11 @@ peg::parser! {
           }
 
         rule var() -> Term<Name>
-          = n:name() { Term::Var(n) }
+          = n:name() { Term::Var(n.into()) }
 
         rule lambda() -> Term<Name>
           = "(" _* "lam" _+ parameter_name:name() _+ t:term() _* ")" {
-            Term::Lambda { parameter_name, body: Rc::new(t) }
+            Term::Lambda { parameter_name: parameter_name.into(), body: Rc::new(t) }
           }
 
         #[cache_left_rec]
@@ -148,7 +148,7 @@ peg::parser! {
 
         rule constant_pair() -> Constant
           = "pair" _* "<" _* l:type_info() _* "," r:type_info() _* ">" _+ p:pair(Some((&l, &r))) {
-            Constant::ProtoPair(l, r, Box::new(p.0), Box::new(p.1))
+            Constant::ProtoPair(l, r, p.0.into(), p.1.into())
           }
 
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
@@ -218,13 +218,13 @@ peg::parser! {
             }
           / ls:list(list_sub_type(type_info)) {?
               match type_info {
-                Some(Type::List(t)) => Ok(Constant::ProtoList(*t.clone(), ls)),
+                Some(Type::List(t)) => Ok(Constant::ProtoList(t.as_ref().clone(), ls)),
                 _ => Err("found 'List' instead of expected type")
               }
             }
           / p:pair(pair_sub_type(type_info)) {?
               match type_info {
-                Some(Type::Pair(l, r)) => Ok(Constant::ProtoPair(*l.clone(), *r.clone(), Box::new(p.0), Box::new(p.1))),
+                Some(Type::Pair(l, r)) => Ok(Constant::ProtoPair(l.as_ref().clone(), r.as_ref().clone(), p.0.into(), p.1.into())),
                 _ => Err("found 'Pair' instead of expected type")
               }
             }
@@ -237,10 +237,10 @@ peg::parser! {
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
           / _* "list" _* "<" _* t:type_info() _* ">" {
-              Type::List(Box::new(t))
+              Type::List(t.into())
             }
           / _* "pair" _* "<" l:type_info() "," r:type_info() ">" {
-              Type::Pair(Box::new(l), Box::new(r))
+              Type::Pair(l.into(), r.into())
             }
 
         rule name() -> Name
@@ -274,10 +274,10 @@ mod test {
                 version: (1, 0, 0),
                 term: Term::Apply {
                     function: Rc::new(Term::Lambda {
-                        parameter_name: x.clone(),
-                        body: Rc::new(Term::Var(x)),
+                        parameter_name: x.clone().into(),
+                        body: Rc::new(Term::Var(x.into())),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::Integer(0)))
+                    argument: Rc::new(Term::Constant(Constant::Integer(0).into()))
                 }
             }
         )
@@ -295,8 +295,8 @@ mod test {
             Program::<Name> {
                 version: (1, 0, 0),
                 term: Term::Lambda {
-                    parameter_name: x.clone(),
-                    body: Rc::new(Term::Var(x)),
+                    parameter_name: x.clone().into(),
+                    body: Rc::new(Term::Var(x.into())),
                 }
             }
         )
@@ -314,8 +314,8 @@ mod test {
             Program::<Name> {
                 version: (1, 0, 0),
                 term: Term::Lambda {
-                    parameter_name: x.clone(),
-                    body: Rc::new(Term::Delay(Rc::new(Term::Var(x)))),
+                    parameter_name: x.clone().into(),
+                    body: Rc::new(Term::Delay(Rc::new(Term::Var(x.into())))),
                 }
             }
         )
@@ -344,7 +344,7 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (11, 22, 33),
-                term: Term::Constant(Constant::Integer(11)),
+                term: Term::Constant(Constant::Integer(11).into()),
             }
         );
     }
@@ -469,9 +469,13 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::AppendByteString)),
-                        argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xFF]))),
+                        argument: Rc::new(Term::Constant(
+                            Constant::ByteString(vec![0x00, 0xFF]).into()
+                        )),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0xFF, 0x00])))
+                    argument: Rc::new(Term::Constant(
+                        Constant::ByteString(vec![0xFF, 0x00]).into()
+                    ))
                 }
             }
         )
@@ -488,9 +492,9 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::ConsByteString)),
-                        argument: Rc::new(Term::Constant(Constant::Integer(256))),
+                        argument: Rc::new(Term::Constant(Constant::Integer(256).into())),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![])))
+                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![]).into()))
                 }
             }
         )
@@ -507,11 +511,13 @@ mod test {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Apply {
                             function: Rc::new(Term::Builtin(DefaultFunction::SliceByteString)),
-                            argument: Rc::new(Term::Constant(Constant::Integer(1))),
+                            argument: Rc::new(Term::Constant(Constant::Integer(1).into())),
                         }),
-                        argument: Rc::new(Term::Constant(Constant::Integer(2))),
+                        argument: Rc::new(Term::Constant(Constant::Integer(2).into())),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xFF, 0xAA])))
+                    argument: Rc::new(Term::Constant(
+                        Constant::ByteString(vec![0x00, 0xFF, 0xAA]).into()
+                    ))
                 }
             }
         )
@@ -526,7 +532,9 @@ mod test {
                 version: (0, 0, 0),
                 term: Term::Apply {
                     function: Rc::new(Term::Builtin(DefaultFunction::LengthOfByteString)),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xFF, 0xAA])))
+                    argument: Rc::new(Term::Constant(
+                        Constant::ByteString(vec![0x00, 0xFF, 0xAA]).into()
+                    ))
                 },
             }
         )
@@ -542,9 +550,11 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::IndexByteString)),
-                        argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00])))
+                        argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00]).into()))
                     }),
-                    argument: Rc::new(Term::Constant(Constant::Integer(9223372036854775808))),
+                    argument: Rc::new(Term::Constant(
+                        Constant::Integer(9223372036854775808).into()
+                    )),
                 }
             }
         )
@@ -560,11 +570,13 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::EqualsByteString)),
-                        argument: Rc::new(Term::Constant(Constant::ByteString(vec![
-                            0x00, 0xff, 0xaa
-                        ])))
+                        argument: Rc::new(Term::Constant(
+                            Constant::ByteString(vec![0x00, 0xff, 0xaa]).into()
+                        ))
                     }),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xff, 0xaa]))),
+                    argument: Rc::new(Term::Constant(
+                        Constant::ByteString(vec![0x00, 0xff, 0xaa]).into()
+                    )),
                 }
             }
         )
@@ -580,9 +592,13 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::LessThanByteString)),
-                        argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xff])))
+                        argument: Rc::new(Term::Constant(
+                            Constant::ByteString(vec![0x00, 0xff]).into()
+                        ))
                     }),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xff, 0xaa]))),
+                    argument: Rc::new(Term::Constant(
+                        Constant::ByteString(vec![0x00, 0xff, 0xaa]).into()
+                    )),
                 }
             }
         )
@@ -598,9 +614,11 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::LessThanEqualsByteString)),
-                        argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00, 0xff])))
+                        argument: Rc::new(Term::Constant(
+                            Constant::ByteString(vec![0x00, 0xff]).into()
+                        ))
                     }),
-                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00]))),
+                    argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00]).into())),
                 }
             }
         )
@@ -613,7 +631,7 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![]))
+                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![]).into())
             }
         )
     }
@@ -625,7 +643,7 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![Constant::Unit]))
+                term: Term::Constant(Constant::ProtoList(Type::Unit, vec![Constant::Unit]).into())
             }
         )
     }
@@ -637,14 +655,17 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(
-                    Type::Bool,
-                    vec![
-                        Constant::Bool(true),
-                        Constant::Bool(false),
-                        Constant::Bool(true)
-                    ]
-                ))
+                term: Term::Constant(
+                    Constant::ProtoList(
+                        Type::Bool,
+                        vec![
+                            Constant::Bool(true),
+                            Constant::Bool(false),
+                            Constant::Bool(true)
+                        ]
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -656,13 +677,16 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(
-                    Type::ByteString,
-                    vec![
-                        Constant::ByteString(vec![0x00]),
-                        Constant::ByteString(vec![0x01]),
-                    ]
-                ))
+                term: Term::Constant(
+                    Constant::ProtoList(
+                        Type::ByteString,
+                        vec![
+                            Constant::ByteString(vec![0x00]),
+                            Constant::ByteString(vec![0x01]),
+                        ]
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -674,16 +698,19 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(
-                    Type::List(Box::new(Type::Integer)),
-                    vec![
-                        Constant::ProtoList(
-                            Type::Integer,
-                            vec![Constant::Integer(14), Constant::Integer(42)]
-                        ),
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(1337)])
-                    ]
-                ))
+                term: Term::Constant(
+                    Constant::ProtoList(
+                        Type::List(Type::Integer.into()),
+                        vec![
+                            Constant::ProtoList(
+                                Type::Integer,
+                                vec![Constant::Integer(14), Constant::Integer(42)]
+                            ),
+                            Constant::ProtoList(Type::Integer, vec![Constant::Integer(1337)])
+                        ]
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -703,10 +730,13 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoList(
-                    Type::Integer,
-                    vec![Constant::Integer(14), Constant::Integer(42)],
-                ))
+                term: Term::Constant(
+                    Constant::ProtoList(
+                        Type::Integer,
+                        vec![Constant::Integer(14), Constant::Integer(42)],
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -718,12 +748,15 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoPair(
-                    Type::Unit,
-                    Type::Unit,
-                    Box::new(Constant::Unit),
-                    Box::new(Constant::Unit)
-                ))
+                term: Term::Constant(
+                    Constant::ProtoPair(
+                        Type::Unit,
+                        Type::Unit,
+                        Constant::Unit.into(),
+                        Constant::Unit.into()
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -735,17 +768,21 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoPair(
-                    Type::Bool,
-                    Type::Pair(Box::new(Type::Integer), Box::new(Type::ByteString)),
-                    Box::new(Constant::Bool(true)),
-                    Box::new(Constant::ProtoPair(
-                        Type::Integer,
-                        Type::ByteString,
-                        Box::new(Constant::Integer(14)),
-                        Box::new(Constant::ByteString(vec![0x42])),
-                    ))
-                ))
+                term: Term::Constant(
+                    Constant::ProtoPair(
+                        Type::Bool,
+                        Type::Pair(Type::Integer.into(), Type::ByteString.into()),
+                        Constant::Bool(true).into(),
+                        Constant::ProtoPair(
+                            Type::Integer,
+                            Type::ByteString,
+                            Constant::Integer(14).into(),
+                            Constant::ByteString(vec![0x42]).into(),
+                        )
+                        .into()
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -757,15 +794,19 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoPair(
-                    Type::String,
-                    Type::List(Box::new(Type::Integer)),
-                    Box::new(Constant::String(String::from("foo"))),
-                    Box::new(Constant::ProtoList(
-                        Type::Integer,
-                        vec![Constant::Integer(14), Constant::Integer(42)],
-                    ))
-                ))
+                term: Term::Constant(
+                    Constant::ProtoPair(
+                        Type::String,
+                        Type::List(Type::Integer.into()),
+                        Constant::String(String::from("foo")).into(),
+                        Constant::ProtoList(
+                            Type::Integer,
+                            vec![Constant::Integer(14), Constant::Integer(42)],
+                        )
+                        .into()
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -783,12 +824,15 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (0, 0, 0),
-                term: Term::Constant(Constant::ProtoPair(
-                    Type::Integer,
-                    Type::Integer,
-                    Box::new(Constant::Integer(14)),
-                    Box::new(Constant::Integer(42))
-                ))
+                term: Term::Constant(
+                    Constant::ProtoPair(
+                        Type::Integer,
+                        Type::Integer,
+                        Constant::Integer(14).into(),
+                        Constant::Integer(42).into()
+                    )
+                    .into()
+                )
             }
         )
     }
@@ -815,9 +859,9 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(default_function)),
-                        argument: Rc::new(Term::Constant(Constant::Integer(x))),
+                        argument: Rc::new(Term::Constant(Constant::Integer(x).into())),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::Integer(y)))
+                    argument: Rc::new(Term::Constant(Constant::Integer(y).into()))
                 }
             }
         )

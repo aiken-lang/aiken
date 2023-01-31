@@ -655,7 +655,7 @@ where
             .map(|script| match script.program.eval(initial_budget) {
                 (Ok(result), remaining_budget, logs) => EvalInfo {
                     success: result != Term::Error
-                        && result != Term::Constant(Constant::Bool(false)),
+                        && result != Term::Constant(Constant::Bool(false).into()),
                     script,
                     spent_budget: initial_budget - remaining_budget,
                     output: Some(result),

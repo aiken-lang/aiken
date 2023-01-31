@@ -23,7 +23,7 @@ pub fn final_wrapper(term: Term<Name>) -> Term<Name> {
                     argument: term.into(),
                 }
                 .into(),
-                argument: Term::Delay(Term::Constant(Constant::Unit).into()).into(),
+                argument: Term::Delay(Term::Constant(Constant::Unit.into()).into()).into(),
             }
             .into(),
             argument: Term::Delay(Term::Error.into()).into(),
@@ -38,24 +38,32 @@ pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
             parameter_name: Name {
                 text: ASSERT_ON_LIST.to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: apply_wrap(
                 Term::Lambda {
                     parameter_name: Name {
                         text: ASSERT_ON_LIST.to_string(),
                         unique: 0.into(),
-                    },
+                    }
+                    .into(),
                     body: term.into(),
                 },
                 apply_wrap(
-                    Term::Var(Name {
-                        text: ASSERT_ON_LIST.to_string(),
-                        unique: 0.into(),
-                    }),
-                    Term::Var(Name {
-                        text: ASSERT_ON_LIST.to_string(),
-                        unique: 0.into(),
-                    }),
+                    Term::Var(
+                        Name {
+                            text: ASSERT_ON_LIST.to_string(),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ),
+                    Term::Var(
+                        Name {
+                            text: ASSERT_ON_LIST.to_string(),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ),
                 ),
             )
             .into(),
@@ -64,64 +72,88 @@ pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
             parameter_name: Name {
                 text: ASSERT_ON_LIST.to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: Term::Lambda {
                 parameter_name: Name {
                     text: "list_to_check".to_string(),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: Term::Lambda {
                     parameter_name: Name {
                         text: "check_with".to_string(),
                         unique: 0.into(),
-                    },
+                    }
+                    .into(),
                     body: delayed_choose_list(
-                        Term::Var(Name {
-                            text: "list_to_check".to_string(),
-                            unique: 0.into(),
-                        }),
-                        Term::Constant(Constant::Unit),
+                        Term::Var(
+                            Name {
+                                text: "list_to_check".to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
+                        Term::Constant(Constant::Unit.into()),
                         apply_wrap(
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(),
                                 apply_wrap(
-                                    Term::Var(Name {
-                                        text: "check_with".to_string(),
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: "check_with".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                                        Term::Var(Name {
-                                            text: "list_to_check".to_string(),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: "list_to_check".to_string(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                 ),
                             ),
                             apply_wrap(
                                 apply_wrap(
                                     apply_wrap(
-                                        Term::Var(Name {
-                                            text: ASSERT_ON_LIST.to_string(),
-                                            unique: 0.into(),
-                                        }),
-                                        Term::Var(Name {
-                                            text: ASSERT_ON_LIST.to_string(),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: ASSERT_ON_LIST.to_string(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
+                                        Term::Var(
+                                            Name {
+                                                text: ASSERT_ON_LIST.to_string(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                        Term::Var(Name {
-                                            text: "list_to_check".to_string(),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: "list_to_check".to_string(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                 ),
-                                Term::Var(Name {
-                                    text: "check_with".to_string(),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: "check_with".to_string(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             ),
                         ),
                     )
@@ -140,7 +172,8 @@ pub fn constr_fields_exposer(term: Term<Name>) -> Term<Name> {
             parameter_name: Name {
                 text: CONSTR_FIELDS_EXPOSER.to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: term.into(),
         }
         .into(),
@@ -148,7 +181,8 @@ pub fn constr_fields_exposer(term: Term<Name>) -> Term<Name> {
             parameter_name: Name {
                 text: "__constr_var".to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: Term::Apply {
                 function: Term::Force(
                     Term::Force(Term::Builtin(DefaultFunction::SndPair).into()).into(),
@@ -156,10 +190,13 @@ pub fn constr_fields_exposer(term: Term<Name>) -> Term<Name> {
                 .into(),
                 argument: Term::Apply {
                     function: Term::Builtin(DefaultFunction::UnConstrData).into(),
-                    argument: Term::Var(Name {
-                        text: "__constr_var".to_string(),
-                        unique: 0.into(),
-                    })
+                    argument: Term::Var(
+                        Name {
+                            text: "__constr_var".to_string(),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    )
                     .into(),
                 }
                 .into(),
@@ -188,7 +225,8 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
             parameter_name: Name {
                 text: CONSTR_GET_FIELD.to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: term.into(),
         }
         .into(),
@@ -196,42 +234,54 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
             parameter_name: Name {
                 text: "__constr_list".to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: Term::Lambda {
                 parameter_name: Name {
                     text: "__arg_number".to_string(),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: Term::Apply {
                     function: Term::Lambda {
                         parameter_name: Name {
                             text: "__recurse".to_string(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: Term::Apply {
                             function: Term::Apply {
                                 function: Term::Apply {
-                                    function: Term::Var(Name {
-                                        text: "__recurse".to_string(),
-                                        unique: 0.into(),
-                                    })
+                                    function: Term::Var(
+                                        Name {
+                                            text: "__recurse".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    )
                                     .into(),
-                                    argument: Term::Var(Name {
-                                        text: "__recurse".to_string(),
-                                        unique: 0.into(),
-                                    })
+                                    argument: Term::Var(
+                                        Name {
+                                            text: "__recurse".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    )
                                     .into(),
                                 }
                                 .into(),
 
                                 // Start recursive with index 0 of list
-                                argument: Term::Constant(Constant::Integer(0.into())).into(),
+                                argument: Term::Constant(Constant::Integer(0.into()).into()).into(),
                             }
                             .into(),
-                            argument: Term::Var(Name {
-                                text: "__constr_list".to_string(),
-                                unique: 0.into(),
-                            })
+                            argument: Term::Var(
+                                Name {
+                                    text: "__constr_list".to_string(),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            )
                             .into(),
                         }
                         .into(),
@@ -242,17 +292,20 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
                         parameter_name: Name {
                             text: "__self_recursor".to_string(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: Term::Lambda {
                             parameter_name: Name {
                                 text: "__current_arg_number".to_string(),
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: Term::Lambda {
                                 parameter_name: Name {
                                     text: "__list_of_constr_args".to_string(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: Term::Apply {
                                     function: Term::Apply {
                                         function: Term::Apply {
@@ -268,17 +321,24 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
                                                             DefaultFunction::EqualsInteger,
                                                         )
                                                         .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: "__arg_number".to_string(),
-                                                            unique: 0.into(),
-                                                        })
+                                                        argument: Term::Var(
+                                                            Name {
+                                                                text: "__arg_number".to_string(),
+                                                                unique: 0.into(),
+                                                            }
+                                                            .into(),
+                                                        )
                                                         .into(),
                                                     }
                                                     .into(),
-                                                    argument: Term::Var(Name {
-                                                        text: "__current_arg_number".to_string(),
-                                                        unique: 0.into(),
-                                                    })
+                                                    argument: Term::Var(
+                                                        Name {
+                                                            text: "__current_arg_number"
+                                                                .to_string(),
+                                                            unique: 0.into(),
+                                                        }
+                                                        .into(),
+                                                    )
                                                     .into(),
                                                 }
                                                 .into(),
@@ -294,19 +354,26 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
                                             parameter_name: Name {
                                                 text: "__current_list_of_constr_args".to_string(),
                                                 unique: 0.into(),
-                                            },
+                                            }
+                                            .into(),
                                             body: Term::Apply {
                                                 function: Term::Apply {
                                                     function: Term::Apply {
-                                                        function: Term::Var(Name {
-                                                            text: "__self_recursor".to_string(),
-                                                            unique: 0.into(),
-                                                        })
+                                                        function: Term::Var(
+                                                            Name {
+                                                                text: "__self_recursor".to_string(),
+                                                                unique: 0.into(),
+                                                            }
+                                                            .into(),
+                                                        )
                                                         .into(),
-                                                        argument: Term::Var(Name {
-                                                            text: "__self_recursor".to_string(),
-                                                            unique: 0.into(),
-                                                        })
+                                                        argument: Term::Var(
+                                                            Name {
+                                                                text: "__self_recursor".to_string(),
+                                                                unique: 0.into(),
+                                                            }
+                                                            .into(),
+                                                        )
                                                         .into(),
                                                     }
                                                     .into(),
@@ -317,16 +384,19 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
                                                                 DefaultFunction::AddInteger,
                                                             )
                                                             .into(),
-                                                            argument: Term::Var(Name {
-                                                                text: "__current_arg_number"
-                                                                    .to_string(),
-                                                                unique: 0.into(),
-                                                            })
+                                                            argument: Term::Var(
+                                                                Name {
+                                                                    text: "__current_arg_number"
+                                                                        .to_string(),
+                                                                    unique: 0.into(),
+                                                                }
+                                                                .into(),
+                                                            )
                                                             .into(),
                                                         }
                                                         .into(),
                                                         argument: Term::Constant(
-                                                            Constant::Integer(1.into()),
+                                                            Constant::Integer(1.into()).into(),
                                                         )
                                                         .into(),
                                                     }
@@ -341,11 +411,14 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
                                                     )
                                                     .into(),
 
-                                                    argument: Term::Var(Name {
-                                                        text: "__current_list_of_constr_args"
-                                                            .to_string(),
-                                                        unique: 0.into(),
-                                                    })
+                                                    argument: Term::Var(
+                                                        Name {
+                                                            text: "__current_list_of_constr_args"
+                                                                .to_string(),
+                                                            unique: 0.into(),
+                                                        }
+                                                        .into(),
+                                                    )
                                                     .into(),
                                                 }
                                                 .into(),
@@ -355,10 +428,13 @@ pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
                                         .into(),
                                     }
                                     .into(),
-                                    argument: Term::Var(Name {
-                                        text: "__list_of_constr_args".to_string(),
-                                        unique: 0.into(),
-                                    })
+                                    argument: Term::Var(
+                                        Name {
+                                            text: "__list_of_constr_args".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    )
                                     .into(),
                                 }
                                 .into(),

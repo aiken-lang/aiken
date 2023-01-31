@@ -74,7 +74,7 @@ where
     pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
-            argument: Rc::new(Term::Constant(Constant::Data(plutus_data))),
+            argument: Rc::new(Term::Constant(Constant::Data(plutus_data).into())),
         };
 
         Program {
@@ -239,7 +239,7 @@ pub enum Constant {
     // tag: 5
     ProtoList(Type, Vec<Constant>),
     // tag: 6
-    ProtoPair(Type, Type, Box<Constant>, Box<Constant>),
+    ProtoPair(Type, Type, Rc<Constant>, Rc<Constant>),
     // tag: 7
     // Apply(Box<Constant>, Type),
     // tag: 8
@@ -253,8 +253,8 @@ pub enum Type {
     String,
     ByteString,
     Unit,
-    List(Box<Type>),
-    Pair(Box<Type>, Box<Type>),
+    List(Rc<Type>),
+    Pair(Rc<Type>, Rc<Type>),
     Data,
 }
 

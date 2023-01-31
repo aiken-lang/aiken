@@ -13,7 +13,7 @@ impl<T: WithTerm> WithTerm for LambdaBuilder<T> {
 
     fn next(self, term: Term<Name>) -> Self::Next {
         let term = Term::Lambda {
-            parameter_name: self.parameter_name,
+            parameter_name: self.parameter_name.into(),
             body: Rc::new(term),
         };
         self.outer.next(term)

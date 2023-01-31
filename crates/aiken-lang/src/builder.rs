@@ -1,4 +1,4 @@
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -186,7 +186,8 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                 parameter_name: Name {
                     text: "__pair".to_string(),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: apply_wrap(
                     DefaultFunction::ListData.into(),
                     apply_wrap(
@@ -196,10 +197,13 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                                 Term::Builtin(DefaultFunction::FstPair)
                                     .force_wrap()
                                     .force_wrap(),
-                                Term::Var(Name {
-                                    text: "__pair".to_string(),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: "__pair".to_string(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             ),
                         ),
                         apply_wrap(
@@ -209,13 +213,16 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                                     Term::Builtin(DefaultFunction::SndPair)
                                         .force_wrap()
                                         .force_wrap(),
-                                    Term::Var(Name {
-                                        text: "__pair".to_string(),
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: "__pair".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                 ),
                             ),
-                            Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![])),
+                            Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]).into()),
                         ),
                     ),
                 )
@@ -228,16 +235,22 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
     } else if field_type.is_bool() {
         if_else(
             term,
-            Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(1),
-                any_constructor: None,
-                fields: vec![],
-            }))),
-            Term::Constant(UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(0),
-                any_constructor: None,
-                fields: vec![],
-            }))),
+            Term::Constant(
+                UplcConstant::Data(PlutusData::Constr(Constr {
+                    tag: convert_constr_to_tag(1),
+                    any_constructor: None,
+                    fields: vec![],
+                }))
+                .into(),
+            ),
+            Term::Constant(
+                UplcConstant::Data(PlutusData::Constr(Constr {
+                    tag: convert_constr_to_tag(0),
+                    any_constructor: None,
+                    fields: vec![],
+                }))
+                .into(),
+            ),
         )
     } else {
         term
@@ -262,40 +275,51 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                 parameter_name: Name {
                     text: "__list_data".to_string(),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
                             text: "__tail".to_string(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: apply_wrap(
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::MkPairData),
                                 apply_wrap(
                                     Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                                    Term::Var(Name {
-                                        text: "__list_data".to_string(),
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: "__list_data".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                 ),
                             ),
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                                Term::Var(Name {
-                                    text: "__tail".to_string(),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: "__tail".to_string(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             ),
                         )
                         .into(),
                     },
                     apply_wrap(
                         Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                        Term::Var(Name {
-                            text: "__list_data".to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: "__list_data".to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     ),
                 )
                 .into(),
@@ -308,7 +332,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(
             apply_wrap(
                 DefaultFunction::EqualsInteger.into(),
-                Term::Constant(UplcConstant::Integer(1)),
+                Term::Constant(UplcConstant::Integer(1).into()),
             ),
             apply_wrap(
                 Term::Builtin(DefaultFunction::FstPair)
@@ -493,19 +517,28 @@ pub fn list_access_to_uplc(
         let head_list = if current_tipo.is_map() {
             apply_wrap(
                 Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                Term::Var(Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
-                }),
+                Term::Var(
+                    Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                ),
             )
         } else {
             convert_data_to_type(
                 apply_wrap(
                     Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                    Term::Var(Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }),
+                    Term::Var(
+                        Name {
+                            text: format!(
+                                "tail_index_{}_{}",
+                                current_index, id_list[current_index]
+                            ),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ),
                 ),
                 &current_tipo.to_owned(),
             )
@@ -516,30 +549,36 @@ pub fn list_access_to_uplc(
                 parameter_name: Name {
                     text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
                             text: first.clone(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: apply_wrap(
                             Term::Lambda {
                                 parameter_name: Name {
                                     text: names[0].clone(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: term.into(),
                             },
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                Term::Var(Name {
-                                    text: format!(
-                                        "tail_index_{}_{}",
-                                        current_index, id_list[current_index]
-                                    ),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: format!(
+                                            "tail_index_{}_{}",
+                                            current_index, id_list[current_index]
+                                        ),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             ),
                         )
                         .into(),
@@ -553,33 +592,41 @@ pub fn list_access_to_uplc(
                 parameter_name: Name {
                     text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
                             text: first.clone(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: if check_last_item {
                             delayed_choose_list(
                                 apply_wrap(
                                     Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                    Term::Var(Name {
-                                        text: format!(
-                                            "tail_index_{}_{}",
-                                            current_index, id_list[current_index]
-                                        ),
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: format!(
+                                                "tail_index_{}_{}",
+                                                current_index, id_list[current_index]
+                                            ),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                 ),
                                 term,
                                 apply_wrap(
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                                        Term::Constant(UplcConstant::String(
-                                            "List/Tuple contains more items than it should"
-                                                .to_string(),
-                                        )),
+                                        Term::Constant(
+                                            UplcConstant::String(
+                                                "List/Tuple contains more items than it should"
+                                                    .to_string(),
+                                            )
+                                            .into(),
+                                        ),
                                     ),
                                     Term::Delay(Term::Error.into()),
                                 )
@@ -599,13 +646,15 @@ pub fn list_access_to_uplc(
                 parameter_name: Name {
                     text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                     unique: 0.into(),
-                },
+                }
+                .into(),
                 body: apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
                             text: first.clone(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: apply_wrap(
                             list_access_to_uplc(
                                 names,
@@ -618,13 +667,16 @@ pub fn list_access_to_uplc(
                             ),
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                Term::Var(Name {
-                                    text: format!(
-                                        "tail_index_{}_{}",
-                                        current_index, id_list[current_index]
-                                    ),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: format!(
+                                            "tail_index_{}_{}",
+                                            current_index, id_list[current_index]
+                                        ),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             ),
                         )
                         .into(),
@@ -935,38 +987,39 @@ pub fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
     });
 }
 
-pub fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConstant> {
+pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcConstant> {
     let mut new_constants = vec![];
     for constant in constants {
-        let constant = match constant {
+        let constant = match constant.as_ref() {
             UplcConstant::Integer(i) => {
-                UplcConstant::Data(PlutusData::BigInt(BigInt::Int((i).try_into().unwrap())))
+                UplcConstant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
             }
             UplcConstant::ByteString(b) => {
-                UplcConstant::Data(PlutusData::BoundedBytes(b.try_into().unwrap()))
+                UplcConstant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
             }
             UplcConstant::String(s) => UplcConstant::Data(PlutusData::BoundedBytes(
                 s.as_bytes().to_vec().try_into().unwrap(),
             )),
 
             UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(b.into()),
+                tag: convert_constr_to_tag((*b).into()),
                 any_constructor: None,
                 fields: vec![],
             })),
             UplcConstant::ProtoList(_, constants) => {
-                let inner_constants = convert_constants_to_data(constants)
-                    .into_iter()
-                    .map(|constant| match constant {
-                        UplcConstant::Data(d) => d,
-                        _ => todo!(),
-                    })
-                    .collect_vec();
+                let inner_constants =
+                    convert_constants_to_data(constants.iter().cloned().map(Rc::new).collect())
+                        .into_iter()
+                        .map(|constant| match constant {
+                            UplcConstant::Data(d) => d,
+                            _ => todo!(),
+                        })
+                        .collect_vec();
 
                 UplcConstant::Data(PlutusData::Array(inner_constants))
             }
             UplcConstant::ProtoPair(_, _, left, right) => {
-                let inner_constants = vec![*left, *right];
+                let inner_constants = vec![left.clone(), right.clone()];
                 let inner_constants = convert_constants_to_data(inner_constants)
                     .into_iter()
                     .map(|constant| match constant {
@@ -980,7 +1033,7 @@ pub fn convert_constants_to_data(constants: Vec<UplcConstant>) -> Vec<UplcConsta
                     inner_constants[1].clone(),
                 )])))
             }
-            d @ UplcConstant::Data(_) => d,
+            d @ UplcConstant::Data(_) => d.clone(),
             _ => unreachable!(),
         };
         new_constants.push(constant);
@@ -997,14 +1050,18 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
                     parameter_name: Name {
                         text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
                         unique: 0.into(),
-                    },
+                    }
+                    .into(),
                     body: term.into(),
                 },
                 convert_data_to_type(
-                    Term::Var(Name {
-                        text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                        unique: 0.into(),
-                    }),
+                    Term::Var(
+                        Name {
+                            text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ),
                     &arg.tipo,
                 ),
             );
@@ -1014,7 +1071,8 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
             parameter_name: Name {
                 text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
                 unique: 0.into(),
-            },
+            }
+            .into(),
             body: term.into(),
         }
     }

@@ -39,7 +39,7 @@ enum PartialTerm {
     // tag: 1
     Delay,
     // tag: 2
-    Lambda(NamedDeBruijn),
+    Lambda(Rc<NamedDeBruijn>),
     // tag: 3
     Apply,
     // tag: 4
@@ -330,7 +330,7 @@ impl Machine {
     fn lookup_var(&mut self, name: &NamedDeBruijn, env: Rc<Vec<Value>>) -> Result<Value, Error> {
         env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
-            .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone())))
+            .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone().into())))
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -398,10 +398,7 @@ fn discharge_value(value: Value) -> Rc<Term<NamedDeBruijn>> {
                         0,
                         env,
                         Term::Lambda {
-                            parameter_name: NamedDeBruijn {
-                                text: parameter_name.text,
-                                index: 0.into(),
-                            },
+                            parameter_name: parameter_name.clone(),
                             body,
                         }
                         .into(),
@@ -511,10 +508,10 @@ enum Context {
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Con(Constant),
+    Con(Rc<Constant>),
     Delay(Rc<Term<NamedDeBruijn>>, Rc<Vec<Value>>),
     Lambda {
-        parameter_name: NamedDeBruijn,
+        parameter_name: Rc<NamedDeBruijn>,
         body: Rc<Term<NamedDeBruijn>>,
         env: Rc<Vec<Value>>,
     },
@@ -527,17 +524,17 @@ pub enum Value {
 
 impl Value {
     pub fn is_integer(&self) -> bool {
-        matches!(self, Value::Con(Constant::Integer(_)))
+        matches!(self, Value::Con(i) if matches!(i.as_ref(), Constant::Integer(_)))
     }
 
     pub fn is_bool(&self) -> bool {
-        matches!(self, Value::Con(Constant::Bool(_)))
+        matches!(self, Value::Con(b) if matches!(b.as_ref(), Constant::Bool(_)))
     }
 
     // TODO: Make this to_ex_mem not recursive.
     pub fn to_ex_mem(&self) -> i64 {
         match self {
-            Value::Con(c) => match c {
+            Value::Con(c) => match c.as_ref() {
                 Constant::Integer(i) => {
                     if *i == 0 {
                         1
@@ -556,10 +553,10 @@ impl Value {
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
                 Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
-                    acc + Value::Con(constant.clone()).to_ex_mem()
+                    acc + Value::Con(constant.clone().into()).to_ex_mem()
                 }),
                 Constant::ProtoPair(_, _, l, r) => {
-                    Value::Con(*l.clone()).to_ex_mem() + Value::Con(*r.clone()).to_ex_mem()
+                    Value::Con(l.clone()).to_ex_mem() + Value::Con(r.clone()).to_ex_mem()
                 }
                 Constant::Data(item) => self.data_to_ex_mem(item),
             },
@@ -603,14 +600,14 @@ impl Value {
                 PlutusData::BigInt(i) => {
                     if let BigInt::Int(g) = i {
                         let numb: i128 = (*g).try_into().unwrap();
-                        total += Value::Con(Constant::Integer(numb)).to_ex_mem();
+                        total += Value::Con(Constant::Integer(numb).into()).to_ex_mem();
                     } else {
                         unreachable!()
                     };
                 }
                 PlutusData::BoundedBytes(b) => {
                     let byte_string: Vec<u8> = b.deref().clone();
-                    total += Value::Con(Constant::ByteString(byte_string)).to_ex_mem();
+                    total += Value::Con(Constant::ByteString(byte_string).into()).to_ex_mem();
                 }
                 PlutusData::Array(a) => {
                     // create new stack with of items from the list of data
@@ -679,7 +676,7 @@ impl TryFrom<Value> for Constant {
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::Con(constant) => Ok(constant),
+            Value::Con(constant) => Ok(constant.as_ref().clone()),
             rest => Err(Error::NotAConstant(rest)),
         }
     }
@@ -693,9 +690,9 @@ impl From<&Constant> for Type {
             Constant::String(_) => Type::String,
             Constant::Unit => Type::Unit,
             Constant::Bool(_) => Type::Bool,
-            Constant::ProtoList(t, _) => Type::List(Box::new(t.clone())),
+            Constant::ProtoList(t, _) => Type::List(Rc::new(t.clone())),
             Constant::ProtoPair(t1, t2, _, _) => {
-                Type::Pair(Box::new(t1.clone()), Box::new(t2.clone()))
+                Type::Pair(Rc::new(t1.clone()), Rc::new(t2.clone()))
             }
             Constant::Data(_) => Type::Data,
         }

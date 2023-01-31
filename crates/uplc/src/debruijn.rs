@@ -37,10 +37,13 @@ impl Converter {
         term: &Term<Name>,
     ) -> Result<Term<NamedDeBruijn>, Error> {
         let converted_term = match term {
-            Term::Var(name) => Term::Var(NamedDeBruijn {
-                text: name.text.to_string(),
-                index: self.get_index(name)?,
-            }),
+            Term::Var(name) => Term::Var(
+                NamedDeBruijn {
+                    text: name.text.to_string(),
+                    index: self.get_index(name)?,
+                }
+                .into(),
+            ),
             Term::Delay(term) => Term::Delay(Rc::new(self.name_to_named_debruijn(term)?)),
             Term::Lambda {
                 parameter_name,
@@ -64,7 +67,7 @@ impl Converter {
                 self.remove_unique(parameter_name.unique);
 
                 Term::Lambda {
-                    parameter_name: name,
+                    parameter_name: name.into(),
                     body: Rc::new(body),
                 }
             }
@@ -83,7 +86,7 @@ impl Converter {
 
     pub fn name_to_debruijn(&mut self, term: &Term<Name>) -> Result<Term<DeBruijn>, Error> {
         let converted_term = match term {
-            Term::Var(name) => Term::Var(self.get_index(name)?),
+            Term::Var(name) => Term::Var(self.get_index(name)?.into()),
             Term::Delay(term) => Term::Delay(Rc::new(self.name_to_debruijn(term)?)),
             Term::Lambda {
                 parameter_name,
@@ -102,7 +105,7 @@ impl Converter {
                 self.remove_unique(parameter_name.unique);
 
                 Term::Lambda {
-                    parameter_name: name,
+                    parameter_name: name.into(),
                     body: Rc::new(body),
                 }
             }
@@ -124,10 +127,13 @@ impl Converter {
         term: &Term<NamedDeBruijn>,
     ) -> Result<Term<Name>, Error> {
         let converted_term = match term {
-            Term::Var(NamedDeBruijn { text, index }) => Term::Var(Name {
-                text: text.to_string(),
-                unique: self.get_unique(*index)?,
-            }),
+            Term::Var(var_name) => Term::Var(
+                Name {
+                    text: var_name.text.to_string(),
+                    unique: self.get_unique(&var_name.index)?,
+                }
+                .into(),
+            ),
             Term::Delay(term) => Term::Delay(Rc::new(self.named_debruijn_to_name(term)?)),
             Term::Lambda {
                 parameter_name,
@@ -135,7 +141,7 @@ impl Converter {
             } => {
                 self.declare_binder();
 
-                let unique = self.get_unique(parameter_name.index)?;
+                let unique = self.get_unique(&parameter_name.index)?;
 
                 let name = Name {
                     text: parameter_name.text.to_string(),
@@ -149,7 +155,7 @@ impl Converter {
                 self.end_scope();
 
                 Term::Lambda {
-                    parameter_name: name,
+                    parameter_name: name.into(),
                     body: Rc::new(body),
                 }
             }
@@ -169,12 +175,15 @@ impl Converter {
     pub fn debruijn_to_name(&mut self, term: &Term<DeBruijn>) -> Result<Term<Name>, Error> {
         let converted_term = match term {
             Term::Var(index) => {
-                let unique = self.get_unique(*index)?;
+                let unique = self.get_unique(index)?;
 
-                Term::Var(Name {
-                    text: format!("i_{}", unique),
-                    unique,
-                })
+                Term::Var(
+                    Name {
+                        text: format!("i_{}", unique),
+                        unique,
+                    }
+                    .into(),
+                )
             }
             Term::Delay(term) => Term::Delay(Rc::new(self.debruijn_to_name(term)?)),
             Term::Lambda {
@@ -183,7 +192,7 @@ impl Converter {
             } => {
                 self.declare_binder();
 
-                let unique = self.get_unique(*parameter_name)?;
+                let unique = self.get_unique(parameter_name)?;
 
                 let name = Name {
                     text: format!("i_{}", unique),
@@ -197,7 +206,7 @@ impl Converter {
                 self.end_scope();
 
                 Term::Lambda {
-                    parameter_name: name,
+                    parameter_name: name.into(),
                     body: Rc::new(body),
                 }
             }
@@ -217,13 +226,13 @@ impl Converter {
     #[allow(clippy::only_used_in_recursion)]
     pub fn named_debruijn_to_debruijn(&mut self, term: &Term<NamedDeBruijn>) -> Term<DeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.clone().into()),
+            Term::Var(name) => Term::Var(name.index.into()),
             Term::Delay(term) => Term::Delay(Rc::new(self.named_debruijn_to_debruijn(term))),
             Term::Lambda {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.clone().into(),
+                parameter_name: parameter_name.index.into(),
                 body: Rc::new(self.named_debruijn_to_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
@@ -240,13 +249,19 @@ impl Converter {
     #[allow(clippy::only_used_in_recursion)]
     pub fn debruijn_to_named_debruijn(&mut self, term: &Term<DeBruijn>) -> Term<NamedDeBruijn> {
         match term {
-            Term::Var(name) => Term::Var((*name).into()),
+            Term::Var(name) => Term::Var(
+                NamedDeBruijn {
+                    text: format!("i_{}", name),
+                    index: *name.as_ref(),
+                }
+                .into(),
+            ),
             Term::Delay(term) => Term::Delay(Rc::new(self.debruijn_to_named_debruijn(term))),
             Term::Lambda {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: (*parameter_name).into(),
+                parameter_name: NamedDeBruijn::from(*parameter_name.as_ref()).into(),
                 body: Rc::new(self.debruijn_to_named_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
@@ -266,7 +281,7 @@ impl Converter {
         term: &Term<FakeNamedDeBruijn>,
     ) -> Term<NamedDeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.clone().into()),
+            Term::Var(name) => Term::Var(NamedDeBruijn::from(name.as_ref().clone()).into()),
             Term::Delay(term) => {
                 Term::Delay(Rc::new(self.fake_named_debruijn_to_named_debruijn(term)))
             }
@@ -274,7 +289,7 @@ impl Converter {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.clone().into(),
+                parameter_name: NamedDeBruijn::from(parameter_name.as_ref().clone()).into(),
                 body: Rc::new(self.fake_named_debruijn_to_named_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
@@ -296,7 +311,7 @@ impl Converter {
         term: &Term<NamedDeBruijn>,
     ) -> Term<FakeNamedDeBruijn> {
         match term {
-            Term::Var(name) => Term::Var(name.clone().into()),
+            Term::Var(name) => Term::Var(FakeNamedDeBruijn::from(name.as_ref().clone()).into()),
             Term::Delay(term) => {
                 Term::Delay(Rc::new(self.named_debruijn_to_fake_named_debruijn(term)))
             }
@@ -304,7 +319,7 @@ impl Converter {
                 parameter_name,
                 body,
             } => Term::Lambda {
-                parameter_name: parameter_name.clone().into(),
+                parameter_name: FakeNamedDeBruijn::from(parameter_name.as_ref().clone()).into(),
                 body: Rc::new(self.named_debruijn_to_fake_named_debruijn(body)),
             },
             Term::Apply { function, argument } => Term::Apply {
@@ -332,7 +347,7 @@ impl Converter {
         Err(Error::FreeUnique(name.clone()))
     }
 
-    fn get_unique(&mut self, index: DeBruijn) -> Result<Unique, Error> {
+    fn get_unique(&mut self, index: &DeBruijn) -> Result<Unique, Error> {
         for scope in self.levels.iter().rev() {
             let index = Level(self.current_level.0 - index.inner());
 
@@ -341,7 +356,7 @@ impl Converter {
             }
         }
 
-        Err(Error::FreeIndex(index))
+        Err(Error::FreeIndex(*index))
     }
 
     fn declare_unique(&mut self, unique: Unique) {
