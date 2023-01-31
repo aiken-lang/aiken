@@ -78,7 +78,11 @@ impl Validator {
         validator: &CheckedModule,
         def: &TypedFunction,
     ) -> Result<Validator, Error> {
-        let purpose: Purpose = def.name.clone().into();
+        let purpose: Purpose = def
+            .name
+            .clone()
+            .try_into()
+            .expect("unexpected validator name");
 
         assert_return_bool(validator, def)?;
         assert_min_arity(validator, def, purpose.min_arity())?;
@@ -141,14 +145,16 @@ impl Display for Purpose {
     }
 }
 
-impl From<String> for Purpose {
-    fn from(purpose: String) -> Purpose {
+impl TryFrom<String> for Purpose {
+    type Error = String;
+
+    fn try_from(purpose: String) -> Result<Purpose, Self::Error> {
         match &purpose[..] {
-            "spend" => Purpose::Spend,
-            "mint" => Purpose::Mint,
-            "withdraw" => Purpose::Withdraw,
-            "publish" => Purpose::Publish,
-            unexpected => panic!("Can't turn '{}' into any Purpose", unexpected),
+            "spend" => Ok(Purpose::Spend),
+            "mint" => Ok(Purpose::Mint),
+            "withdraw" => Ok(Purpose::Withdraw),
+            "publish" => Ok(Purpose::Publish),
+            unexpected => Err(format!("Can't turn '{}' into any Purpose", unexpected)),
         }
     }
 }

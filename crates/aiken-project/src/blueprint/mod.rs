@@ -30,7 +30,7 @@ impl Blueprint {
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
     ) -> Result<Self, Error> {
-        let preamble = Preamble::from_config(config);
+        let preamble = config.into();
 
         let validators: Result<Vec<_>, Error> = modules
             .validators()
@@ -53,8 +53,8 @@ impl Display for Blueprint {
     }
 }
 
-impl Preamble {
-    pub fn from_config(config: &Config) -> Self {
+impl From<&Config> for Preamble {
+    fn from(config: &Config) -> Self {
         Preamble {
             title: config.name.to_string(),
             description: if config.description.is_empty() {
