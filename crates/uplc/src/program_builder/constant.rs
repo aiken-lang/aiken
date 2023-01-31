@@ -3,27 +3,27 @@ use crate::program_builder::WithTerm;
 
 pub trait WithConstant: WithTerm {
     fn with_int(self, int: i128) -> Self::Next {
-        let term = Term::Constant(Constant::Integer(int));
+        let term = Term::Constant(Constant::Integer(int).into());
         self.next(term)
     }
 
     fn with_byte_string(self, bytes: Vec<u8>) -> Self::Next {
-        let term = Term::Constant(Constant::ByteString(bytes));
+        let term = Term::Constant(Constant::ByteString(bytes).into());
         self.next(term)
     }
 
     fn with_string(self, string: String) -> Self::Next {
-        let term = Term::Constant(Constant::String(string));
+        let term = Term::Constant(Constant::String(string).into());
         self.next(term)
     }
 
     fn with_unit(self) -> Self::Next {
-        let term = Term::Constant(Constant::Unit);
+        let term = Term::Constant(Constant::Unit.into());
         self.next(term)
     }
 
     fn with_bool(self, bool: bool) -> Self::Next {
-        let term = Term::Constant(Constant::Bool(bool));
+        let term = Term::Constant(Constant::Bool(bool).into());
         self.next(term)
     }
 }

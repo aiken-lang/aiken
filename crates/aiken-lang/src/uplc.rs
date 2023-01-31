@@ -3492,21 +3492,21 @@ impl<'a> CodeGenerator<'a> {
             Air::Int { value, .. } => {
                 let integer = value.parse().unwrap();
 
-                let term = Term::Constant(UplcConstant::Integer(integer));
+                let term = Term::Constant(UplcConstant::Integer(integer).into());
 
                 arg_stack.push(term);
             }
             Air::String { value, .. } => {
-                let term = Term::Constant(UplcConstant::String(value));
+                let term = Term::Constant(UplcConstant::String(value).into());
 
                 arg_stack.push(term);
             }
             Air::ByteArray { bytes, .. } => {
-                let term = Term::Constant(UplcConstant::ByteString(bytes));
+                let term = Term::Constant(UplcConstant::ByteString(bytes).into());
                 arg_stack.push(term);
             }
             Air::Bool { value, .. } => {
-                let term = Term::Constant(UplcConstant::Bool(value));
+                let term = Term::Constant(UplcConstant::Bool(value).into());
                 arg_stack.push(term);
             }
             Air::Var {
@@ -3516,12 +3516,13 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 match &constructor.variant {
-                    ValueConstructorVariant::LocalVariable { .. } => {
-                        arg_stack.push(Term::Var(Name {
+                    ValueConstructorVariant::LocalVariable { .. } => arg_stack.push(Term::Var(
+                        Name {
                             text: name,
                             unique: 0.into(),
-                        }))
-                    }
+                        }
+                        .into(),
+                    )),
                     ValueConstructorVariant::ModuleConstant { .. } => {
                         unreachable!()
                     }
@@ -3539,19 +3540,23 @@ impl<'a> CodeGenerator<'a> {
                             format!("{func_name}{variant_name}")
                         };
 
-                        arg_stack.push(Term::Var(Name {
-                            text: name,
-                            unique: 0.into(),
-                        }));
+                        arg_stack.push(Term::Var(
+                            Name {
+                                text: name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ));
                     }
                     ValueConstructorVariant::Record {
                         name: constr_name, ..
                     } => {
                         if constructor.tipo.is_bool() {
-                            arg_stack
-                                .push(Term::Constant(UplcConstant::Bool(constr_name == "True")));
+                            arg_stack.push(Term::Constant(
+                                UplcConstant::Bool(constr_name == "True").into(),
+                            ));
                         } else if constructor.tipo.is_void() {
-                            arg_stack.push(Term::Constant(UplcConstant::Unit));
+                            arg_stack.push(Term::Constant(UplcConstant::Unit.into()));
                         } else {
                             let data_type = lookup_data_type_by_tipo(
                                 self.data_types.clone(),
@@ -3566,15 +3571,17 @@ impl<'a> CodeGenerator<'a> {
                                 .find(|(_, x)| x.name == *constr_name)
                                 .unwrap();
 
-                            let fields =
-                                Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]));
+                            let fields = Term::Constant(
+                                UplcConstant::ProtoList(UplcType::Data, vec![]).into(),
+                            );
 
                             let term = apply_wrap(
                                 apply_wrap(
                                     Term::Builtin(DefaultFunction::ConstrData),
-                                    Term::Constant(UplcConstant::Integer(
-                                        constr_index.try_into().unwrap(),
-                                    )),
+                                    Term::Constant(
+                                        UplcConstant::Integer(constr_index.try_into().unwrap())
+                                            .into(),
+                                    ),
                                 ),
                                 fields,
                             );
@@ -3585,7 +3592,7 @@ impl<'a> CodeGenerator<'a> {
                 };
             }
             Air::Void { .. } => {
-                arg_stack.push(Term::Constant(UplcConstant::Unit));
+                arg_stack.push(Term::Constant(UplcConstant::Unit.into()));
             }
             Air::List {
                 count, tipo, tail, ..
@@ -3610,37 +3617,44 @@ impl<'a> CodeGenerator<'a> {
                         let mut convert_keys = vec![];
                         let mut convert_values = vec![];
                         for constant in constants {
-                            match constant {
+                            match constant.as_ref() {
                                 UplcConstant::ProtoPair(_, _, fst, snd) => {
-                                    convert_keys.push(*fst);
-                                    convert_values.push(*snd);
+                                    convert_keys.push(fst.clone());
+                                    convert_values.push(snd.clone());
                                 }
                                 _ => unreachable!(),
                             }
                         }
-                        convert_keys = convert_constants_to_data(convert_keys);
-                        convert_values = convert_constants_to_data(convert_values);
 
-                        Term::Constant(UplcConstant::ProtoList(
-                            UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
-                            convert_keys
-                                .into_iter()
-                                .zip(convert_values.into_iter())
-                                .map(|(key, value)| {
-                                    UplcConstant::ProtoPair(
-                                        UplcType::Data,
-                                        UplcType::Data,
-                                        key.into(),
-                                        value.into(),
-                                    )
-                                })
-                                .collect_vec(),
-                        ))
+                        let convert_keys = convert_constants_to_data(convert_keys);
+                        let convert_values = convert_constants_to_data(convert_values);
+
+                        Term::Constant(
+                            UplcConstant::ProtoList(
+                                UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
+                                convert_keys
+                                    .into_iter()
+                                    .zip(convert_values.into_iter())
+                                    .map(|(key, value)| {
+                                        UplcConstant::ProtoPair(
+                                            UplcType::Data,
+                                            UplcType::Data,
+                                            key.into(),
+                                            value.into(),
+                                        )
+                                    })
+                                    .collect_vec(),
+                            )
+                            .into(),
+                        )
                     } else {
-                        Term::Constant(UplcConstant::ProtoList(
-                            UplcType::Data,
-                            convert_constants_to_data(constants),
-                        ))
+                        Term::Constant(
+                            UplcConstant::ProtoList(
+                                UplcType::Data,
+                                convert_constants_to_data(constants),
+                            )
+                            .into(),
+                        )
                     };
 
                     arg_stack.push(list);
@@ -3648,12 +3662,15 @@ impl<'a> CodeGenerator<'a> {
                     let mut term = if tail {
                         arg_stack.pop().unwrap()
                     } else if tipo.is_map() {
-                        Term::Constant(UplcConstant::ProtoList(
-                            UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
-                            vec![],
-                        ))
+                        Term::Constant(
+                            UplcConstant::ProtoList(
+                                UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
+                                vec![],
+                            )
+                            .into(),
+                        )
                     } else {
-                        Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]))
+                        Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]).into())
                     };
 
                     for arg in args.into_iter().rev() {
@@ -3697,19 +3714,25 @@ impl<'a> CodeGenerator<'a> {
                 let head_list = if tipo.is_map() {
                     apply_wrap(
                         Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                        Term::Var(Name {
-                            text: format!("__list_{}", list_id),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: format!("__list_{}", list_id),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     )
                 } else {
                     convert_data_to_type(
                         apply_wrap(
                             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                            Term::Var(Name {
-                                text: format!("__list_{}", list_id),
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: format!("__list_{}", list_id),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         ),
                         &tipo.get_inner_types()[0],
                     )
@@ -3727,13 +3750,15 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: format!("__list_{}", list_id),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: apply_wrap(
                             Term::Lambda {
                                 parameter_name: Name {
                                     text: first_name.clone(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: apply_wrap(
                                     list_access_to_uplc(
                                         names,
@@ -3746,10 +3771,13 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                        Term::Var(Name {
-                                            text: format!("__list_{}", list_id),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: format!("__list_{}", list_id),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                 )
                                 .into(),
@@ -3777,15 +3805,19 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: tail_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         apply_wrap(
                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(Name {
-                                text: tail_var,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: tail_var,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         ),
                     );
                 }
@@ -3794,19 +3826,25 @@ impl<'a> CodeGenerator<'a> {
                     let head_list = if tipo.is_map() {
                         apply_wrap(
                             Term::Force(Term::Builtin(DefaultFunction::HeadList).into()),
-                            Term::Var(Name {
-                                text: tail_var,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: tail_var,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else {
                         convert_data_to_type(
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                                Term::Var(Name {
-                                    text: tail_var,
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: tail_var,
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             ),
                             &tipo.get_inner_types()[0],
                         )
@@ -3816,7 +3854,8 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: head_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         head_list,
@@ -3833,7 +3872,8 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: param.clone(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: term.into(),
                     };
                 }
@@ -3856,7 +3896,9 @@ impl<'a> CodeGenerator<'a> {
                     let zero_arg_functions = self.zero_arg_functions.clone();
                     let mut anon_func = true;
 
-                    if let Term::Var(Name { text, .. }) = term.clone() {
+                    if let Term::Var(name) = term.clone() {
+                        let text = &name.text;
+
                         for (
                             FunctionAccessKey {
                                 module_name,
@@ -3869,7 +3911,7 @@ impl<'a> CodeGenerator<'a> {
                             let name_module =
                                 format!("{module_name}_{function_name}{variant_name}");
                             let name = format!("{function_name}{variant_name}");
-                            if text == name || text == name_module {
+                            if text == &name || text == &name_module {
                                 let mut term = self.uplc_code_gen(&mut ir.clone());
                                 term = builder::constr_get_field(term);
                                 term = builder::constr_fields_exposer(term);
@@ -3909,10 +3951,13 @@ impl<'a> CodeGenerator<'a> {
 
                     term = apply_wrap(
                         term,
-                        Term::Var(Name {
-                            text: format!("__arg_{}", id),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: format!("__arg_{}", id),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     );
 
                     let inner_type = if matches!(func, DefaultFunction::SndPair) {
@@ -3926,7 +3971,8 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: format!("__arg_{}", id),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: term.into(),
                     };
 
@@ -3957,12 +4003,16 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 let term = match name {
-                    BinOp::And => {
-                        delayed_if_else(left, right, Term::Constant(UplcConstant::Bool(false)))
-                    }
-                    BinOp::Or => {
-                        delayed_if_else(left, Term::Constant(UplcConstant::Bool(true)), right)
-                    }
+                    BinOp::And => delayed_if_else(
+                        left,
+                        right,
+                        Term::Constant(UplcConstant::Bool(false).into()),
+                    ),
+                    BinOp::Or => delayed_if_else(
+                        left,
+                        Term::Constant(UplcConstant::Bool(true).into()),
+                        right,
+                    ),
 
                     BinOp::Eq => {
                         if tipo.is_bool() {
@@ -3971,8 +4021,8 @@ impl<'a> CodeGenerator<'a> {
                                 right.clone(),
                                 if_else(
                                     right,
-                                    Term::Constant(UplcConstant::Bool(false)),
-                                    Term::Constant(UplcConstant::Bool(true)),
+                                    Term::Constant(UplcConstant::Bool(false).into()),
+                                    Term::Constant(UplcConstant::Bool(true).into()),
                                 ),
                             );
                             arg_stack.push(term);
@@ -4001,13 +4051,16 @@ impl<'a> CodeGenerator<'a> {
                                                 Term::Builtin(DefaultFunction::MkCons).force_wrap(),
                                                 left,
                                             ),
-                                            Term::Constant(UplcConstant::ProtoList(
-                                                UplcType::Pair(
-                                                    UplcType::Data.into(),
-                                                    UplcType::Data.into(),
-                                                ),
-                                                vec![],
-                                            )),
+                                            Term::Constant(
+                                                UplcConstant::ProtoList(
+                                                    UplcType::Pair(
+                                                        UplcType::Data.into(),
+                                                        UplcType::Data.into(),
+                                                    ),
+                                                    vec![],
+                                                )
+                                                .into(),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -4018,13 +4071,16 @@ impl<'a> CodeGenerator<'a> {
                                             Term::Builtin(DefaultFunction::MkCons).force_wrap(),
                                             right,
                                         ),
-                                        Term::Constant(UplcConstant::ProtoList(
-                                            UplcType::Pair(
-                                                UplcType::Data.into(),
-                                                UplcType::Data.into(),
-                                            ),
-                                            vec![],
-                                        )),
+                                        Term::Constant(
+                                            UplcConstant::ProtoList(
+                                                UplcType::Pair(
+                                                    UplcType::Data.into(),
+                                                    UplcType::Data.into(),
+                                                ),
+                                                vec![],
+                                            )
+                                            .into(),
+                                        ),
                                     ),
                                 ),
                             );
@@ -4043,7 +4099,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_void() {
-                            arg_stack.push(Term::Constant(UplcConstant::Bool(true)));
+                            arg_stack.push(Term::Constant(UplcConstant::Bool(true).into()));
                             return;
                         }
 
@@ -4055,8 +4111,8 @@ impl<'a> CodeGenerator<'a> {
                                 left,
                                 if_else(
                                     right.clone(),
-                                    Term::Constant(UplcConstant::Bool(false)),
-                                    Term::Constant(UplcConstant::Bool(true)),
+                                    Term::Constant(UplcConstant::Bool(false).into()),
+                                    Term::Constant(UplcConstant::Bool(true).into()),
                                 ),
                                 right,
                             );
@@ -4071,8 +4127,8 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     apply_wrap(DefaultFunction::MapData.into(), right),
                                 ),
-                                Term::Constant(UplcConstant::Bool(false)),
-                                Term::Constant(UplcConstant::Bool(true)),
+                                Term::Constant(UplcConstant::Bool(false).into()),
+                                Term::Constant(UplcConstant::Bool(true).into()),
                             );
 
                             arg_stack.push(term);
@@ -4090,13 +4146,16 @@ impl<'a> CodeGenerator<'a> {
                                                 Term::Builtin(DefaultFunction::MkCons).force_wrap(),
                                                 left,
                                             ),
-                                            Term::Constant(UplcConstant::ProtoList(
-                                                UplcType::Pair(
-                                                    UplcType::Data.into(),
-                                                    UplcType::Data.into(),
-                                                ),
-                                                vec![],
-                                            )),
+                                            Term::Constant(
+                                                UplcConstant::ProtoList(
+                                                    UplcType::Pair(
+                                                        UplcType::Data.into(),
+                                                        UplcType::Data.into(),
+                                                    ),
+                                                    vec![],
+                                                )
+                                                .into(),
+                                            ),
                                         ),
                                     ),
                                 ),
@@ -4107,21 +4166,24 @@ impl<'a> CodeGenerator<'a> {
                                             Term::Builtin(DefaultFunction::MkCons).force_wrap(),
                                             right,
                                         ),
-                                        Term::Constant(UplcConstant::ProtoList(
-                                            UplcType::Pair(
-                                                UplcType::Data.into(),
-                                                UplcType::Data.into(),
-                                            ),
-                                            vec![],
-                                        )),
+                                        Term::Constant(
+                                            UplcConstant::ProtoList(
+                                                UplcType::Pair(
+                                                    UplcType::Data.into(),
+                                                    UplcType::Data.into(),
+                                                ),
+                                                vec![],
+                                            )
+                                            .into(),
+                                        ),
                                     ),
                                 ),
                             );
 
                             term = if_else(
                                 term,
-                                Term::Constant(UplcConstant::Bool(false)),
-                                Term::Constant(UplcConstant::Bool(true)),
+                                Term::Constant(UplcConstant::Bool(false).into()),
+                                Term::Constant(UplcConstant::Bool(true).into()),
                             );
                             arg_stack.push(term);
                             return;
@@ -4134,21 +4196,21 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     apply_wrap(DefaultFunction::ListData.into(), right),
                                 ),
-                                Term::Constant(UplcConstant::Bool(false)),
-                                Term::Constant(UplcConstant::Bool(true)),
+                                Term::Constant(UplcConstant::Bool(false).into()),
+                                Term::Constant(UplcConstant::Bool(true).into()),
                             );
 
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_void() {
-                            arg_stack.push(Term::Constant(UplcConstant::Bool(false)));
+                            arg_stack.push(Term::Constant(UplcConstant::Bool(false).into()));
                             return;
                         }
 
                         if_else(
                             apply_wrap(apply_wrap(default_builtin.into(), left), right),
-                            Term::Constant(UplcConstant::Bool(false)),
-                            Term::Constant(UplcConstant::Bool(true)),
+                            Term::Constant(UplcConstant::Bool(false).into()),
+                            Term::Constant(UplcConstant::Bool(true).into()),
                         )
                     }
                     BinOp::LtInt => apply_wrap(
@@ -4211,7 +4273,8 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: param.clone(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: func_body.into(),
                     };
                 }
@@ -4222,7 +4285,8 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: func_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         func_body,
@@ -4234,7 +4298,8 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: func_name.clone(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: func_body.into(),
                     };
 
@@ -4243,24 +4308,32 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: func_name.clone(),
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: apply_wrap(
                                 Term::Lambda {
                                     parameter_name: Name {
                                         text: func_name.clone(),
                                         unique: 0.into(),
-                                    },
+                                    }
+                                    .into(),
                                     body: term.into(),
                                 },
                                 apply_wrap(
-                                    Term::Var(Name {
-                                        text: func_name.clone(),
-                                        unique: 0.into(),
-                                    }),
-                                    Term::Var(Name {
-                                        text: func_name,
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: func_name.clone(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
+                                    Term::Var(
+                                        Name {
+                                            text: func_name,
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                 ),
                             )
                             .into(),
@@ -4281,7 +4354,8 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: name,
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: term.into(),
                     },
                     arg,
@@ -4304,9 +4378,12 @@ impl<'a> CodeGenerator<'a> {
                 let error_term = apply_wrap(
                     apply_wrap(
                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                        Term::Constant(UplcConstant::String(
-                            "Asserted on incorrect constructor variant.".to_string(),
-                        )),
+                        Term::Constant(
+                            UplcConstant::String(
+                                "Asserted on incorrect constructor variant.".to_string(),
+                            )
+                            .into(),
+                        ),
                     ),
                     Term::Delay(Term::Error.into()),
                 )
@@ -4316,7 +4393,7 @@ impl<'a> CodeGenerator<'a> {
                     apply_wrap(
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),
-                            Term::Constant(UplcConstant::Integer(constr_index as i128)),
+                            Term::Constant(UplcConstant::Integer(constr_index as i128).into()),
                         ),
                         constr_index_exposer(constr),
                     ),
@@ -4345,7 +4422,8 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: subject_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         subject,
@@ -4356,7 +4434,8 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: subject_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         constr_index_exposer(subject),
@@ -4383,29 +4462,42 @@ impl<'a> CodeGenerator<'a> {
                 if tipo.is_bool() {
                     if complex_clause {
                         let other_clauses = term;
-                        if matches!(clause, Term::Constant(UplcConstant::Bool(true))) {
+                        if matches!(clause, Term::Constant(boolean ) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
+                        {
                             term = if_else(
-                                Term::Var(Name {
-                                    text: subject_name,
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: subject_name,
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                                 Term::Delay(body.into()),
-                                Term::Var(Name {
-                                    text: "__other_clauses_delayed".to_string(),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: "__other_clauses_delayed".to_string(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                             )
                             .force_wrap();
                         } else {
                             term = if_else(
-                                Term::Var(Name {
-                                    text: subject_name,
-                                    unique: 0.into(),
-                                }),
-                                Term::Var(Name {
-                                    text: "__other_clauses_delayed".to_string(),
-                                    unique: 0.into(),
-                                }),
+                                Term::Var(
+                                    Name {
+                                        text: subject_name,
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
+                                Term::Var(
+                                    Name {
+                                        text: "__other_clauses_delayed".to_string(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
                                 Term::Delay(body.into()),
                             )
                             .force_wrap();
@@ -4416,26 +4508,34 @@ impl<'a> CodeGenerator<'a> {
                                 parameter_name: Name {
                                     text: "__other_clauses_delayed".to_string(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: term.into(),
                             },
                             Term::Delay(other_clauses.into()),
                         );
-                    } else if matches!(clause, Term::Constant(UplcConstant::Bool(true))) {
+                    } else if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
+                    {
                         term = delayed_if_else(
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                             body,
                             term,
                         );
                     } else {
                         term = delayed_if_else(
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                             term,
                             body,
                         );
@@ -4444,36 +4544,48 @@ impl<'a> CodeGenerator<'a> {
                     let checker = if tipo.is_int() {
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else if tipo.is_bytearray() {
                         apply_wrap(
                             DefaultFunction::EqualsByteString.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else if tipo.is_string() {
                         apply_wrap(
                             DefaultFunction::EqualsString.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else if tipo.is_list() || tipo.is_tuple() {
                         unreachable!()
                     } else {
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     };
 
@@ -4483,14 +4595,18 @@ impl<'a> CodeGenerator<'a> {
                                 parameter_name: Name {
                                     text: "__other_clauses_delayed".to_string(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: if_else(
                                     apply_wrap(checker, clause),
                                     Term::Delay(body.into()),
-                                    Term::Var(Name {
-                                        text: "__other_clauses_delayed".to_string(),
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: "__other_clauses_delayed".to_string(),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                 )
                                 .force_wrap()
                                 .into(),
@@ -4522,15 +4638,19 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: next_tail_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         apply_wrap(
                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(Name {
-                                text: tail_name.clone(),
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: tail_name.clone(),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         ),
                     )
                 } else {
@@ -4539,15 +4659,21 @@ impl<'a> CodeGenerator<'a> {
 
                 if complex_clause {
                     term = choose_list(
-                        Term::Var(Name {
-                            text: tail_name,
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                         Term::Delay(body.into()),
-                        Term::Var(Name {
-                            text: "__other_clauses_delayed".to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     )
                     .force_wrap();
 
@@ -4556,17 +4682,21 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: "__other_clauses_delayed".into(),
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         Term::Delay(arg.into()),
                     );
                 } else {
                     term = delayed_choose_list(
-                        Term::Var(Name {
-                            text: tail_name,
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                         body,
                         arg,
                     );
@@ -4586,7 +4716,8 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: "__other_clauses_delayed".into(),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: term.into(),
                     },
                     Term::Delay(arg.into()),
@@ -4601,26 +4732,36 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
 
                 if tipo.is_bool() {
-                    let mut term = Term::Var(Name {
-                        text: "__other_clauses_delayed".to_string(),
-                        unique: 0.into(),
-                    });
-                    if matches!(condition, Term::Constant(UplcConstant::Bool(true))) {
+                    let mut term = Term::Var(
+                        Name {
+                            text: "__other_clauses_delayed".to_string(),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    );
+                    if matches!(condition, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
+                    {
                         term = if_else(
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                             Term::Delay(then.into()),
                             term,
                         )
                         .force_wrap();
                     } else {
                         term = if_else(
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                             term,
                             Term::Delay(then.into()),
                         )
@@ -4631,46 +4772,61 @@ impl<'a> CodeGenerator<'a> {
                     let checker = if tipo.is_int() {
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else if tipo.is_bytearray() {
                         apply_wrap(
                             DefaultFunction::EqualsByteString.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else if tipo.is_string() {
                         apply_wrap(
                             DefaultFunction::EqualsString.into(),
-                            Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         )
                     } else if tipo.is_list() || tipo.is_tuple() {
                         unreachable!()
                     } else {
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),
-                            constr_index_exposer(Term::Var(Name {
-                                text: subject_name,
-                                unique: 0.into(),
-                            })),
+                            constr_index_exposer(Term::Var(
+                                Name {
+                                    text: subject_name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            )),
                         )
                     };
 
                     let term = if_else(
                         apply_wrap(checker, condition),
                         Term::Delay(then.into()),
-                        Term::Var(Name {
-                            text: "__other_clauses_delayed".to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     )
                     .force_wrap();
                     arg_stack.push(term);
@@ -4695,15 +4851,19 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: next_tail_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         apply_wrap(
                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(Name {
-                                text: tail_name.clone(),
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: tail_name.clone(),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         ),
                     )
                 } else {
@@ -4712,27 +4872,39 @@ impl<'a> CodeGenerator<'a> {
 
                 if !inverse {
                     term = choose_list(
-                        Term::Var(Name {
-                            text: tail_name,
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                         Term::Delay(term.into()),
-                        Term::Var(Name {
-                            text: "__other_clauses_delayed".to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     )
                     .force_wrap();
                 } else {
                     term = choose_list(
-                        Term::Var(Name {
-                            text: tail_name,
-                            unique: 0.into(),
-                        }),
-                        Term::Var(Name {
-                            text: "__other_clauses_delayed".to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: tail_name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
+                        Term::Var(
+                            Name {
+                                text: "__other_clauses_delayed".to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                         Term::Delay(term.into()),
                     )
                     .force_wrap();
@@ -4763,7 +4935,8 @@ impl<'a> CodeGenerator<'a> {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                let mut term = Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]));
+                let mut term =
+                    Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]).into());
 
                 for (index, arg) in arg_vec.iter().enumerate().rev() {
                     term = apply_wrap(
@@ -4778,7 +4951,7 @@ impl<'a> CodeGenerator<'a> {
                 term = apply_wrap(
                     apply_wrap(
                         DefaultFunction::ConstrData.into(),
-                        Term::Constant(UplcConstant::Integer(constr_index as i128)),
+                        Term::Constant(UplcConstant::Integer(constr_index as i128).into()),
                     ),
                     term,
                 );
@@ -4809,19 +4982,25 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = apply_wrap(
                     apply_wrap(
-                        Term::Var(Name {
-                            text: CONSTR_GET_FIELD.to_string(),
-                            unique: 0.into(),
-                        }),
-                        apply_wrap(
-                            Term::Var(Name {
-                                text: CONSTR_FIELDS_EXPOSER.to_string(),
+                        Term::Var(
+                            Name {
+                                text: CONSTR_GET_FIELD.to_string(),
                                 unique: 0.into(),
-                            }),
+                            }
+                            .into(),
+                        ),
+                        apply_wrap(
+                            Term::Var(
+                                Name {
+                                    text: CONSTR_FIELDS_EXPOSER.to_string(),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                             constr,
                         ),
                     ),
-                    Term::Constant(UplcConstant::Integer(record_index.into())),
+                    Term::Constant(UplcConstant::Integer(record_index.into()).into()),
                 );
 
                 term = convert_data_to_type(term, &tipo);
@@ -4849,10 +5028,13 @@ impl<'a> CodeGenerator<'a> {
                 let head_list = convert_data_to_type(
                     apply_wrap(
                         Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                        Term::Var(Name {
-                            text: format!("__constr_fields_{}", list_id),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: format!("__constr_fields_{}", list_id),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                     ),
                     &first_name.2,
                 );
@@ -4873,10 +5055,13 @@ impl<'a> CodeGenerator<'a> {
                         ),
                         apply_wrap(
                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(Name {
-                                text: format!("__constr_fields_{}", list_id),
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: format!("__constr_fields_{}", list_id),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         ),
                     )
                 } else {
@@ -4888,13 +5073,15 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: format!("__constr_fields_{}", list_id),
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: apply_wrap(
                             Term::Lambda {
                                 parameter_name: Name {
                                     text: first_name.1.clone(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: tail_list.into(),
                             },
                             head_list,
@@ -4902,10 +5089,13 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     },
                     apply_wrap(
-                        Term::Var(Name {
-                            text: CONSTR_FIELDS_EXPOSER.to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: CONSTR_FIELDS_EXPOSER.to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                         value,
                     ),
                 );
@@ -4932,16 +5122,20 @@ impl<'a> CodeGenerator<'a> {
                     let data_constants = convert_constants_to_data(constants);
 
                     if count == 2 {
-                        let term = Term::Constant(UplcConstant::ProtoPair(
-                            UplcType::Data,
-                            UplcType::Data,
-                            data_constants[0].clone().into(),
-                            data_constants[1].clone().into(),
-                        ));
+                        let term = Term::Constant(
+                            UplcConstant::ProtoPair(
+                                UplcType::Data,
+                                UplcType::Data,
+                                data_constants[0].clone().into(),
+                                data_constants[1].clone().into(),
+                            )
+                            .into(),
+                        );
                         arg_stack.push(term);
                     } else {
-                        let term =
-                            Term::Constant(UplcConstant::ProtoList(UplcType::Data, data_constants));
+                        let term = Term::Constant(
+                            UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
+                        );
                         arg_stack.push(term);
                     }
                 } else if count == 2 {
@@ -4954,7 +5148,8 @@ impl<'a> CodeGenerator<'a> {
                     );
                     arg_stack.push(term);
                 } else {
-                    let mut term = Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]));
+                    let mut term =
+                        Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]).into());
                     for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()).rev() {
                         term = apply_wrap(
                             apply_wrap(
@@ -4971,9 +5166,12 @@ impl<'a> CodeGenerator<'a> {
                 let term = apply_wrap(
                     apply_wrap(
                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                        Term::Constant(UplcConstant::String(
-                            label.unwrap_or_else(|| "aiken::todo".to_string()),
-                        )),
+                        Term::Constant(
+                            UplcConstant::String(
+                                label.unwrap_or_else(|| "aiken::todo".to_string()),
+                            )
+                            .into(),
+                        ),
                     ),
                     Term::Delay(Term::Error.into()),
                 )
@@ -5011,10 +5209,13 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = apply_wrap(
                     Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                    Term::Var(Name {
-                        text: format!("{tail_name_prefix}_{highest_index}"),
-                        unique: 0.into(),
-                    }),
+                    Term::Var(
+                        Name {
+                            text: format!("{tail_name_prefix}_{highest_index}"),
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ),
                 );
 
                 for current_index in (0..(highest_index + 1)).rev() {
@@ -5034,10 +5235,13 @@ impl<'a> CodeGenerator<'a> {
                                 Term::Builtin(DefaultFunction::MkCons).force_wrap(),
                                 apply_wrap(
                                     Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                                    Term::Var(Name {
-                                        text: tail_name,
-                                        unique: 0.into(),
-                                    }),
+                                    Term::Var(
+                                        Name {
+                                            text: tail_name,
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
                                 ),
                             ),
                             term,
@@ -5048,7 +5252,7 @@ impl<'a> CodeGenerator<'a> {
                 term = apply_wrap(
                     apply_wrap(
                         Term::Builtin(DefaultFunction::ConstrData),
-                        Term::Constant(UplcConstant::Integer(0)),
+                        Term::Constant(UplcConstant::Integer(0).into()),
                     ),
                     term,
                 );
@@ -5059,10 +5263,13 @@ impl<'a> CodeGenerator<'a> {
                         let tail_name = format!("{tail_name_prefix}_{}", prev_index);
                         let prev_tail_name = format!("{tail_name_prefix}_{index}");
 
-                        let mut tail_list = Term::Var(Name {
-                            text: prev_tail_name,
-                            unique: 0.into(),
-                        });
+                        let mut tail_list = Term::Var(
+                            Name {
+                                text: prev_tail_name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        );
 
                         if index < prev_index {
                             for _ in index..prev_index {
@@ -5077,7 +5284,8 @@ impl<'a> CodeGenerator<'a> {
                                     parameter_name: Name {
                                         text: tail_name,
                                         unique: 0.into(),
-                                    },
+                                    }
+                                    .into(),
                                     body: term.into(),
                                 },
                                 tail_list,
@@ -5089,10 +5297,13 @@ impl<'a> CodeGenerator<'a> {
                 let tail_name = format!("{tail_name_prefix}_{prev_index}");
                 let prev_tail_name = format!("{tail_name_prefix}_0");
 
-                let mut tail_list = Term::Var(Name {
-                    text: prev_tail_name.clone(),
-                    unique: 0.into(),
-                });
+                let mut tail_list = Term::Var(
+                    Name {
+                        text: prev_tail_name.clone(),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                );
 
                 for _ in 0..prev_index {
                     tail_list = apply_wrap(
@@ -5106,7 +5317,8 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: tail_name,
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         tail_list,
@@ -5119,14 +5331,18 @@ impl<'a> CodeGenerator<'a> {
                         parameter_name: Name {
                             text: prev_tail_name,
                             unique: 0.into(),
-                        },
+                        }
+                        .into(),
                         body: term.into(),
                     },
                     apply_wrap(
-                        Term::Var(Name {
-                            text: CONSTR_FIELDS_EXPOSER.to_string(),
-                            unique: 0.into(),
-                        }),
+                        Term::Var(
+                            Name {
+                                text: CONSTR_FIELDS_EXPOSER.to_string(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ),
                         record,
                     ),
                 );
@@ -5138,13 +5354,13 @@ impl<'a> CodeGenerator<'a> {
                 let term = match op {
                     UnOp::Not => if_else(
                         value,
-                        Term::Constant(UplcConstant::Bool(false)),
-                        Term::Constant(UplcConstant::Bool(true)),
+                        Term::Constant(UplcConstant::Bool(false).into()),
+                        Term::Constant(UplcConstant::Bool(true).into()),
                     ),
                     UnOp::Negate => apply_wrap(
                         apply_wrap(
                             DefaultFunction::SubtractInteger.into(),
-                            Term::Constant(UplcConstant::Integer(0)),
+                            Term::Constant(UplcConstant::Integer(0).into()),
                         ),
                         value,
                     ),
@@ -5183,13 +5399,16 @@ impl<'a> CodeGenerator<'a> {
                     self.needs_field_access = true;
                     term = apply_wrap(
                         apply_wrap(
-                            Term::Var(Name {
-                                text: CONSTR_GET_FIELD.to_string(),
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: CONSTR_GET_FIELD.to_string(),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                             term,
                         ),
-                        Term::Constant(UplcConstant::Integer(tuple_index as i128)),
+                        Term::Constant(UplcConstant::Integer(tuple_index as i128).into()),
                     );
                 }
 
@@ -5212,19 +5431,22 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: format!("__tuple_{}", list_id),
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: apply_wrap(
                                 Term::Lambda {
                                     parameter_name: Name {
                                         text: names[0].clone(),
                                         unique: 0.into(),
-                                    },
+                                    }
+                                    .into(),
                                     body: apply_wrap(
                                         Term::Lambda {
                                             parameter_name: Name {
                                                 text: names[1].clone(),
                                                 unique: 0.into(),
-                                            },
+                                            }
+                                            .into(),
                                             body: term.into(),
                                         },
                                         convert_data_to_type(
@@ -5232,10 +5454,13 @@ impl<'a> CodeGenerator<'a> {
                                                 Term::Builtin(DefaultFunction::SndPair)
                                                     .force_wrap()
                                                     .force_wrap(),
-                                                Term::Var(Name {
-                                                    text: format!("__tuple_{}", list_id),
-                                                    unique: 0.into(),
-                                                }),
+                                                Term::Var(
+                                                    Name {
+                                                        text: format!("__tuple_{}", list_id),
+                                                        unique: 0.into(),
+                                                    }
+                                                    .into(),
+                                                ),
                                             ),
                                             &inner_types[1],
                                         ),
@@ -5247,10 +5472,13 @@ impl<'a> CodeGenerator<'a> {
                                         Term::Builtin(DefaultFunction::FstPair)
                                             .force_wrap()
                                             .force_wrap(),
-                                        Term::Var(Name {
-                                            text: format!("__tuple_{}", list_id),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: format!("__tuple_{}", list_id),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                     &inner_types[0],
                                 ),
@@ -5272,10 +5500,13 @@ impl<'a> CodeGenerator<'a> {
                     let head_list = convert_data_to_type(
                         apply_wrap(
                             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                            Term::Var(Name {
-                                text: format!("__tuple_{}", list_id),
-                                unique: 0.into(),
-                            }),
+                            Term::Var(
+                                Name {
+                                    text: format!("__tuple_{}", list_id),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ),
                         ),
                         &tipo.get_inner_types()[0],
                     );
@@ -5285,13 +5516,15 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: format!("__tuple_{}", list_id),
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: apply_wrap(
                                 Term::Lambda {
                                     parameter_name: Name {
                                         text: first_name.clone(),
                                         unique: 0.into(),
-                                    },
+                                    }
+                                    .into(),
                                     body: apply_wrap(
                                         list_access_to_uplc(
                                             names,
@@ -5304,10 +5537,13 @@ impl<'a> CodeGenerator<'a> {
                                         ),
                                         apply_wrap(
                                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                            Term::Var(Name {
-                                                text: format!("__tuple_{}", list_id),
-                                                unique: 0.into(),
-                                            }),
+                                            Term::Var(
+                                                Name {
+                                                    text: format!("__tuple_{}", list_id),
+                                                    unique: 0.into(),
+                                                }
+                                                .into(),
+                                            ),
                                         ),
                                     )
                                     .into(),
@@ -5328,9 +5564,12 @@ impl<'a> CodeGenerator<'a> {
                 let term = apply_wrap(
                     apply_wrap(
                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                        Term::Constant(UplcConstant::String(
-                            text.unwrap_or_else(|| "aiken::trace".to_string()),
-                        )),
+                        Term::Constant(
+                            UplcConstant::String(
+                                text.unwrap_or_else(|| "aiken::trace".to_string()),
+                            )
+                            .into(),
+                        ),
                     ),
                     term,
                 );
@@ -5342,7 +5581,7 @@ impl<'a> CodeGenerator<'a> {
                     let term = apply_wrap(
                         apply_wrap(
                             Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                            Term::Constant(UplcConstant::String(label)),
+                            Term::Constant(UplcConstant::String(label).into()),
                         ),
                         Term::Delay(Term::Error.into()),
                     )
@@ -5372,7 +5611,8 @@ impl<'a> CodeGenerator<'a> {
                             parameter_name: Name {
                                 text: "__other_clauses_delayed".to_string(),
                                 unique: 0.into(),
-                            },
+                            }
+                            .into(),
                             body: term.into(),
                         },
                         Term::Delay(next_clause.into()),
@@ -5387,7 +5627,8 @@ impl<'a> CodeGenerator<'a> {
                                     parameter_name: Name {
                                         text: name.clone(),
                                         unique: 0.into(),
-                                    },
+                                    }
+                                    .into(),
                                     body: term.into(),
                                 },
                                 convert_data_to_type(
@@ -5395,10 +5636,13 @@ impl<'a> CodeGenerator<'a> {
                                         Term::Builtin(DefaultFunction::FstPair)
                                             .force_wrap()
                                             .force_wrap(),
-                                        Term::Var(Name {
-                                            text: subject_name.clone(),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: subject_name.clone(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                     &tuple_types[*index].clone(),
                                 ),
@@ -5409,7 +5653,8 @@ impl<'a> CodeGenerator<'a> {
                                     parameter_name: Name {
                                         text: name.clone(),
                                         unique: 0.into(),
-                                    },
+                                    }
+                                    .into(),
                                     body: term.into(),
                                 },
                                 convert_data_to_type(
@@ -5417,10 +5662,13 @@ impl<'a> CodeGenerator<'a> {
                                         Term::Builtin(DefaultFunction::SndPair)
                                             .force_wrap()
                                             .force_wrap(),
-                                        Term::Var(Name {
-                                            text: subject_name.clone(),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: subject_name.clone(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                     ),
                                     &tuple_types[*index].clone(),
                                 ),
@@ -5434,17 +5682,21 @@ impl<'a> CodeGenerator<'a> {
                                 parameter_name: Name {
                                     text: name.clone(),
                                     unique: 0.into(),
-                                },
+                                }
+                                .into(),
                                 body: term.into(),
                             },
                             convert_data_to_type(
                                 apply_wrap(
                                     Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                                     repeat_tail_list(
-                                        Term::Var(Name {
-                                            text: subject_name.clone(),
-                                            unique: 0.into(),
-                                        }),
+                                        Term::Var(
+                                            Name {
+                                                text: subject_name.clone(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        ),
                                         *index,
                                     ),
                                 ),

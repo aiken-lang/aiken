@@ -27,12 +27,16 @@ impl Interner {
 
     pub fn term(&mut self, term: &mut Term<Name>) {
         match term {
-            Term::Var(name) => name.unique = self.intern(&name.text),
+            Term::Var(name) => {
+                let name = Rc::make_mut(name);
+                name.unique = self.intern(&name.text)
+            }
             Term::Delay(term) => self.term(Rc::make_mut(term)),
             Term::Lambda {
                 parameter_name,
                 body,
             } => {
+                let parameter_name = Rc::make_mut(parameter_name);
                 parameter_name.unique = self.intern(&parameter_name.text);
                 self.term(Rc::make_mut(body));
             }

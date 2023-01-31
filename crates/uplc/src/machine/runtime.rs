@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::Deref, rc::Rc};
 
 use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
 
@@ -281,7 +281,7 @@ impl DefaultFunction {
                 } else {
                     let first = args[0].clone();
 
-                    arg.expect_type(Type::List(Box::new(first.try_into()?)))
+                    arg.expect_type(Type::List(Rc::new(first.try_into()?)))
                 }
             }
             DefaultFunction::HeadList => arg.expect_list(),
@@ -298,14 +298,14 @@ impl DefaultFunction {
                 if args.is_empty() {
                     arg.expect_type(Type::Integer)
                 } else {
-                    arg.expect_type(Type::List(Box::new(Type::Data)))
+                    arg.expect_type(Type::List(Rc::new(Type::Data)))
                 }
             }
-            DefaultFunction::MapData => arg.expect_type(Type::List(Box::new(Type::Pair(
-                Box::new(Type::Data),
-                Box::new(Type::Data),
+            DefaultFunction::MapData => arg.expect_type(Type::List(Rc::new(Type::Pair(
+                Rc::new(Type::Data),
+                Rc::new(Type::Data),
             )))),
-            DefaultFunction::ListData => arg.expect_type(Type::List(Box::new(Type::Data))),
+            DefaultFunction::ListData => arg.expect_type(Type::List(Rc::new(Type::Data))),
             DefaultFunction::IData => arg.expect_type(Type::Integer),
             DefaultFunction::BData => arg.expect_type(Type::ByteString),
             DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
@@ -327,543 +327,762 @@ impl DefaultFunction {
     pub fn call(&self, args: &[Value], logs: &mut Vec<String>) -> Result<Value, Error> {
         match self {
             DefaultFunction::AddInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    match arg1.checked_add(*arg2) {
-                        Some(res) => Ok(Value::Con(Constant::Integer(res))),
-                        None => Err(Error::OverflowError),
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            match arg1.checked_add(*arg2) {
+                                Some(res) => Ok(Value::Con(Constant::Integer(res).into())),
+                                None => Err(Error::OverflowError),
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::SubtractInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    match arg1.checked_sub(*arg2) {
-                        Some(res) => Ok(Value::Con(Constant::Integer(res))),
-                        None => Err(Error::OverflowError),
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            match arg1.checked_sub(*arg2) {
+                                Some(res) => Ok(Value::Con(Constant::Integer(res).into())),
+                                None => Err(Error::OverflowError),
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::MultiplyInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    match arg1.checked_mul(*arg2) {
-                        Some(res) => Ok(Value::Con(Constant::Integer(res))),
-                        None => Err(Error::OverflowError),
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            match arg1.checked_mul(*arg2) {
+                                Some(res) => Ok(Value::Con(Constant::Integer(res).into())),
+                                None => Err(Error::OverflowError),
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::DivideInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    if *arg2 != 0 {
-                        let ret = (*arg1 as f64) / (*arg2 as f64);
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            if *arg2 != 0 {
+                                let ret = (*arg1 as f64) / (*arg2 as f64);
 
-                        Ok(Value::Con(Constant::Integer(ret.floor() as i128)))
-                    } else {
-                        Err(Error::DivideByZero(*arg1, *arg2))
+                                Ok(Value::Con(Constant::Integer(ret.floor() as i128).into()))
+                            } else {
+                                Err(Error::DivideByZero(*arg1, *arg2))
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::QuotientInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    if *arg2 != 0 {
-                        let ret = (*arg1 as f64) / (*arg2 as f64);
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            if *arg2 != 0 {
+                                let ret = (*arg1 as f64) / (*arg2 as f64);
 
-                        let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
+                                let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
 
-                        Ok(Value::Con(Constant::Integer(ret as i128)))
-                    } else {
-                        Err(Error::DivideByZero(*arg1, *arg2))
+                                Ok(Value::Con(Constant::Integer(ret as i128).into()))
+                            } else {
+                                Err(Error::DivideByZero(*arg1, *arg2))
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::RemainderInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    if *arg2 != 0 {
-                        let ret = arg1 % arg2;
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            if *arg2 != 0 {
+                                let ret = arg1 % arg2;
 
-                        Ok(Value::Con(Constant::Integer(ret)))
-                    } else {
-                        Err(Error::DivideByZero(*arg1, *arg2))
+                                Ok(Value::Con(Constant::Integer(ret).into()))
+                            } else {
+                                Err(Error::DivideByZero(*arg1, *arg2))
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::ModInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    if *arg2 != 0 {
-                        let ret = arg1 % arg2;
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            if *arg2 != 0 {
+                                let ret = arg1 % arg2;
 
-                        Ok(Value::Con(Constant::Integer(ret.abs())))
-                    } else {
-                        Err(Error::DivideByZero(*arg1, *arg2))
+                                Ok(Value::Con(Constant::Integer(ret.abs()).into()))
+                            } else {
+                                Err(Error::DivideByZero(*arg1, *arg2))
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::EqualsInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    Ok(Value::Con(Constant::Bool(arg1 == arg2)))
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::LessThanInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    Ok(Value::Con(Constant::Bool(arg1 < arg2)))
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 < arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::LessThanEqualsInteger => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    Ok(Value::Con(Constant::Bool(arg1 <= arg2)))
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 <= arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::AppendByteString => match (&args[0], &args[1]) {
-                (
-                    Value::Con(Constant::ByteString(arg1)),
-                    Value::Con(Constant::ByteString(arg2)),
-                ) => Ok(Value::Con(Constant::ByteString(
-                    arg1.iter().copied().chain(arg2.iter().copied()).collect(),
-                ))),
+                (Value::Con(byte_string1), Value::Con(byte_string2)) => {
+                    match (byte_string1.as_ref(), byte_string2.as_ref()) {
+                        (Constant::ByteString(arg1), Constant::ByteString(arg2)) => Ok(Value::Con(
+                            Constant::ByteString(
+                                arg1.iter().copied().chain(arg2.iter().copied()).collect(),
+                            )
+                            .into(),
+                        )),
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             },
             DefaultFunction::ConsByteString => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::ByteString(arg2))) => {
-                    let mut ret = vec![(arg1 % 256) as u8];
-                    ret.extend(arg2.clone());
+                (Value::Con(integer), Value::Con(byte_string)) => {
+                    match (integer.as_ref(), byte_string.as_ref()) {
+                        (Constant::Integer(arg1), Constant::ByteString(arg2)) => {
+                            let mut ret = vec![(arg1 % 256) as u8];
+                            ret.extend(arg2.clone());
 
-                    Ok(Value::Con(Constant::ByteString(ret)))
+                            Ok(Value::Con(Constant::ByteString(ret).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::SliceByteString => match (&args[0], &args[1], &args[2]) {
-                (
-                    Value::Con(Constant::Integer(arg1)),
-                    Value::Con(Constant::Integer(arg2)),
-                    Value::Con(Constant::ByteString(arg3)),
-                ) => {
-                    let skip = if 0 > *arg1 { 0 } else { *arg1 as usize };
-                    let take = if 0 > *arg2 { 0 } else { *arg2 as usize };
+                (Value::Con(integer1), Value::Con(integer2), Value::Con(byte_string)) => {
+                    match (integer1.as_ref(), integer2.as_ref(), byte_string.as_ref()) {
+                        (
+                            Constant::Integer(arg1),
+                            Constant::Integer(arg2),
+                            Constant::ByteString(arg3),
+                        ) => {
+                            let skip = if 0 > *arg1 { 0 } else { *arg1 as usize };
+                            let take = if 0 > *arg2 { 0 } else { *arg2 as usize };
 
-                    let ret: Vec<u8> = arg3.iter().skip(skip).take(take).cloned().collect();
+                            let ret: Vec<u8> = arg3.iter().skip(skip).take(take).cloned().collect();
 
-                    Ok(Value::Con(Constant::ByteString(ret)))
+                            Ok(Value::Con(Constant::ByteString(ret).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::LengthOfByteString => match &args[0] {
-                Value::Con(Constant::ByteString(arg1)) => {
-                    Ok(Value::Con(Constant::Integer(arg1.len() as i128)))
-                }
+                Value::Con(byte_string) => match byte_string.as_ref() {
+                    Constant::ByteString(arg1) => {
+                        Ok(Value::Con(Constant::Integer(arg1.len() as i128).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::IndexByteString => match (&args[0], &args[1]) {
-                (Value::Con(Constant::ByteString(arg1)), Value::Con(Constant::Integer(arg2))) => {
-                    let index = *arg2 as usize;
+                (Value::Con(byte_string), Value::Con(integer)) => {
+                    match (byte_string.as_ref(), integer.as_ref()) {
+                        (Constant::ByteString(arg1), Constant::Integer(arg2)) => {
+                            let index = *arg2 as usize;
 
-                    if 0 <= *arg2 && index < arg1.len() {
-                        let ret = arg1[index] as i128;
+                            if 0 <= *arg2 && index < arg1.len() {
+                                let ret = arg1[index] as i128;
 
-                        Ok(Value::Con(Constant::Integer(ret)))
-                    } else {
-                        Err(Error::ByteStringOutOfBounds(*arg2, arg1.to_vec()))
+                                Ok(Value::Con(Constant::Integer(ret).into()))
+                            } else {
+                                Err(Error::ByteStringOutOfBounds(*arg2, arg1.to_vec()))
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::EqualsByteString => match (&args[0], &args[1]) {
-                (
-                    Value::Con(Constant::ByteString(arg1)),
-                    Value::Con(Constant::ByteString(arg2)),
-                ) => Ok(Value::Con(Constant::Bool(arg1 == arg2))),
+                (Value::Con(byte_string1), Value::Con(byte_string2)) => {
+                    match (byte_string1.as_ref(), byte_string2.as_ref()) {
+                        (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             },
             DefaultFunction::LessThanByteString => match (&args[0], &args[1]) {
-                (
-                    Value::Con(Constant::ByteString(arg1)),
-                    Value::Con(Constant::ByteString(arg2)),
-                ) => Ok(Value::Con(Constant::Bool(arg1 < arg2))),
+                (Value::Con(byte_string1), Value::Con(byte_string2)) => {
+                    match (byte_string1.as_ref(), byte_string2.as_ref()) {
+                        (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 < arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             },
             DefaultFunction::LessThanEqualsByteString => match (&args[0], &args[1]) {
-                (
-                    Value::Con(Constant::ByteString(arg1)),
-                    Value::Con(Constant::ByteString(arg2)),
-                ) => Ok(Value::Con(Constant::Bool(arg1 <= arg2))),
+                (Value::Con(byte_string1), Value::Con(byte_string2)) => {
+                    match (byte_string1.as_ref(), byte_string2.as_ref()) {
+                        (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 <= arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             },
             DefaultFunction::Sha2_256 => match &args[0] {
-                Value::Con(Constant::ByteString(arg1)) => {
-                    use cryptoxide::{digest::Digest, sha2::Sha256};
+                Value::Con(byte_string) => match byte_string.as_ref() {
+                    Constant::ByteString(arg1) => {
+                        use cryptoxide::{digest::Digest, sha2::Sha256};
 
-                    let mut hasher = Sha256::new();
+                        let mut hasher = Sha256::new();
 
-                    hasher.input(arg1);
+                        hasher.input(arg1);
 
-                    let mut bytes = vec![0; hasher.output_bytes()];
+                        let mut bytes = vec![0; hasher.output_bytes()];
 
-                    hasher.result(&mut bytes);
+                        hasher.result(&mut bytes);
 
-                    Ok(Value::Con(Constant::ByteString(bytes)))
-                }
+                        Ok(Value::Con(Constant::ByteString(bytes).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::Sha3_256 => match &args[0] {
-                Value::Con(Constant::ByteString(arg1)) => {
-                    use cryptoxide::{digest::Digest, sha3::Sha3_256};
+                Value::Con(byte_string) => match byte_string.as_ref() {
+                    Constant::ByteString(arg1) => {
+                        use cryptoxide::{digest::Digest, sha3::Sha3_256};
 
-                    let mut hasher = Sha3_256::new();
+                        let mut hasher = Sha3_256::new();
 
-                    hasher.input(arg1);
+                        hasher.input(arg1);
 
-                    let mut bytes = vec![0; hasher.output_bytes()];
+                        let mut bytes = vec![0; hasher.output_bytes()];
 
-                    hasher.result(&mut bytes);
+                        hasher.result(&mut bytes);
 
-                    Ok(Value::Con(Constant::ByteString(bytes)))
-                }
+                        Ok(Value::Con(Constant::ByteString(bytes).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::Blake2b_256 => match &args[0] {
-                Value::Con(Constant::ByteString(arg1)) => {
-                    use cryptoxide::{blake2b::Blake2b, digest::Digest};
+                Value::Con(byte_string) => match byte_string.as_ref() {
+                    Constant::ByteString(arg1) => {
+                        use cryptoxide::{blake2b::Blake2b, digest::Digest};
 
-                    let mut digest = [0u8; 32];
-                    let mut context = Blake2b::new(32);
+                        let mut digest = [0u8; 32];
+                        let mut context = Blake2b::new(32);
 
-                    context.input(arg1);
-                    context.result(&mut digest);
+                        context.input(arg1);
+                        context.result(&mut digest);
 
-                    Ok(Value::Con(Constant::ByteString(digest.to_vec())))
-                }
+                        Ok(Value::Con(Constant::ByteString(digest.to_vec()).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::VerifyEd25519Signature => match (&args[0], &args[1], &args[2]) {
-                (
-                    Value::Con(Constant::ByteString(public_key)),
-                    Value::Con(Constant::ByteString(message)),
-                    Value::Con(Constant::ByteString(signature)),
-                ) => {
-                    use cryptoxide::ed25519;
+                (Value::Con(public_key), Value::Con(message), Value::Con(signature)) => {
+                    match (public_key.as_ref(), message.as_ref(), signature.as_ref()) {
+                        (
+                            Constant::ByteString(public_key),
+                            Constant::ByteString(message),
+                            Constant::ByteString(signature),
+                        ) => {
+                            use cryptoxide::ed25519;
 
-                    let public_key: [u8; 32] = public_key
-                        .clone()
-                        .try_into()
-                        .map_err(|e: Vec<u8>| Error::UnexpectedEd25519PublicKeyLength(e.len()))?;
+                            let public_key: [u8; 32] =
+                                public_key.clone().try_into().map_err(|e: Vec<u8>| {
+                                    Error::UnexpectedEd25519PublicKeyLength(e.len())
+                                })?;
 
-                    let signature: [u8; 64] = signature
-                        .clone()
-                        .try_into()
-                        .map_err(|e: Vec<u8>| Error::UnexpectedEd25519SignatureLength(e.len()))?;
+                            let signature: [u8; 64] =
+                                signature.clone().try_into().map_err(|e: Vec<u8>| {
+                                    Error::UnexpectedEd25519SignatureLength(e.len())
+                                })?;
 
-                    let valid = ed25519::verify(message, &public_key, &signature);
+                            let valid = ed25519::verify(message, &public_key, &signature);
 
-                    Ok(Value::Con(Constant::Bool(valid)))
+                            Ok(Value::Con(Constant::Bool(valid).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => match (&args[0], &args[1]) {
-                (Value::Con(Constant::String(arg1)), Value::Con(Constant::String(arg2))) => {
-                    Ok(Value::Con(Constant::String(format!("{}{}", arg1, arg2))))
+                (Value::Con(string1), Value::Con(string2)) => {
+                    match (string1.as_ref(), string2.as_ref()) {
+                        (Constant::String(arg1), Constant::String(arg2)) => Ok(Value::Con(
+                            Constant::String(format!("{}{}", arg1, arg2)).into(),
+                        )),
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::EqualsString => match (&args[0], &args[1]) {
-                (Value::Con(Constant::String(arg1)), Value::Con(Constant::String(arg2))) => {
-                    Ok(Value::Con(Constant::Bool(arg1 == arg2)))
+                (Value::Con(string1), Value::Con(string2)) => {
+                    match (string1.as_ref(), string2.as_ref()) {
+                        (Constant::String(arg1), Constant::String(arg2)) => {
+                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::EncodeUtf8 => match &args[0] {
-                Value::Con(Constant::String(arg1)) => {
-                    let bytes = arg1.as_bytes().to_vec();
+                Value::Con(string) => match string.as_ref() {
+                    Constant::String(arg1) => {
+                        let bytes = arg1.as_bytes().to_vec();
 
-                    Ok(Value::Con(Constant::ByteString(bytes)))
-                }
+                        Ok(Value::Con(Constant::ByteString(bytes).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::DecodeUtf8 => match &args[0] {
-                Value::Con(Constant::ByteString(arg1)) => {
-                    let string = String::from_utf8(arg1.clone())?;
+                Value::Con(byte_string) => match byte_string.as_ref() {
+                    Constant::ByteString(arg1) => {
+                        let string = String::from_utf8(arg1.clone())?;
 
-                    Ok(Value::Con(Constant::String(string)))
-                }
+                        Ok(Value::Con(Constant::String(string).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
-            DefaultFunction::IfThenElse => match args[0] {
-                Value::Con(Constant::Bool(condition)) => {
-                    if condition {
-                        Ok(args[1].clone())
-                    } else {
-                        Ok(args[2].clone())
+            DefaultFunction::IfThenElse => match &args[0] {
+                Value::Con(boolean) => match boolean.as_ref() {
+                    Constant::Bool(condition) => {
+                        if *condition {
+                            Ok(args[1].clone())
+                        } else {
+                            Ok(args[2].clone())
+                        }
                     }
-                }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::ChooseUnit => match &args[0] {
-                Value::Con(Constant::Unit) => Ok(args[1].clone()),
+                Value::Con(unit) => match unit.as_ref() {
+                    Constant::Unit => Ok(args[1].clone()),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::Trace => match &args[0] {
-                Value::Con(Constant::String(arg1)) => {
-                    logs.push(arg1.clone());
+                Value::Con(string) => match string.as_ref() {
+                    Constant::String(arg1) => {
+                        logs.push(arg1.clone());
 
-                    Ok(args[1].clone())
-                }
+                        Ok(args[1].clone())
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::FstPair => match &args[0] {
-                Value::Con(Constant::ProtoPair(_, _, first, _)) => Ok(Value::Con(*first.clone())),
+                Value::Con(pair) => match pair.as_ref() {
+                    Constant::ProtoPair(_, _, first, _) => {
+                        Ok(Value::Con(first.as_ref().clone().into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::SndPair => match &args[0] {
-                Value::Con(Constant::ProtoPair(_, _, _, second)) => Ok(Value::Con(*second.clone())),
+                Value::Con(pair) => match pair.as_ref() {
+                    Constant::ProtoPair(_, _, _, second) => {
+                        Ok(Value::Con(second.as_ref().clone().into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::ChooseList => match &args[0] {
-                Value::Con(Constant::ProtoList(_, list)) => {
-                    if list.is_empty() {
-                        Ok(args[1].clone())
-                    } else {
-                        Ok(args[2].clone())
+                Value::Con(list) => match list.as_ref() {
+                    Constant::ProtoList(_, list) => {
+                        if list.is_empty() {
+                            Ok(args[1].clone())
+                        } else {
+                            Ok(args[2].clone())
+                        }
                     }
-                }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::MkCons => match (&args[0], &args[1]) {
-                (Value::Con(item), Value::Con(Constant::ProtoList(r#type, list))) => {
-                    let mut ret = vec![item.clone()];
-                    ret.extend(list.clone());
+                (Value::Con(item), Value::Con(list)) => match list.as_ref() {
+                    Constant::ProtoList(r#type, list) => {
+                        let mut ret = vec![item.as_ref().clone()];
+                        ret.extend(list.clone());
 
-                    Ok(Value::Con(Constant::ProtoList(r#type.clone(), ret)))
-                }
+                        Ok(Value::Con(Constant::ProtoList(r#type.clone(), ret).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::HeadList => match &args[0] {
-                c @ Value::Con(Constant::ProtoList(_, list)) => {
-                    if list.is_empty() {
-                        Err(Error::EmptyList(c.clone()))
-                    } else {
-                        Ok(Value::Con(list[0].clone()))
+                c @ Value::Con(list) => match list.as_ref() {
+                    Constant::ProtoList(_, list) => {
+                        if list.is_empty() {
+                            Err(Error::EmptyList(c.clone()))
+                        } else {
+                            Ok(Value::Con(list[0].clone().into()))
+                        }
                     }
-                }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::TailList => match &args[0] {
-                c @ Value::Con(Constant::ProtoList(r#type, list)) => {
-                    if list.is_empty() {
-                        Err(Error::EmptyList(c.clone()))
-                    } else {
-                        Ok(Value::Con(Constant::ProtoList(
-                            r#type.clone(),
-                            list[1..].to_vec(),
-                        )))
+                c @ Value::Con(list) => match list.as_ref() {
+                    Constant::ProtoList(r#type, list) => {
+                        if list.is_empty() {
+                            Err(Error::EmptyList(c.clone()))
+                        } else {
+                            Ok(Value::Con(
+                                Constant::ProtoList(r#type.clone(), list[1..].to_vec()).into(),
+                            ))
+                        }
                     }
-                }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::NullList => match &args[0] {
-                Value::Con(Constant::ProtoList(_, list)) => {
-                    Ok(Value::Con(Constant::Bool(list.is_empty())))
-                }
+                Value::Con(list) => match list.as_ref() {
+                    Constant::ProtoList(_, list) => {
+                        Ok(Value::Con(Constant::Bool(list.is_empty()).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::ChooseData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::Constr(_))) => Ok(args[1].clone()),
-                Value::Con(Constant::Data(PlutusData::Map(_))) => Ok(args[2].clone()),
-                Value::Con(Constant::Data(PlutusData::Array(_))) => Ok(args[3].clone()),
-                Value::Con(Constant::Data(PlutusData::BigInt(_))) => Ok(args[4].clone()),
-                Value::Con(Constant::Data(PlutusData::BoundedBytes(_))) => Ok(args[5].clone()),
+                Value::Con(con) => match con.as_ref() {
+                    Constant::Data(PlutusData::Constr(_)) => Ok(args[1].clone()),
+                    Constant::Data(PlutusData::Map(_)) => Ok(args[2].clone()),
+                    Constant::Data(PlutusData::Array(_)) => Ok(args[3].clone()),
+                    Constant::Data(PlutusData::BigInt(_)) => Ok(args[4].clone()),
+                    Constant::Data(PlutusData::BoundedBytes(_)) => Ok(args[5].clone()),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::ConstrData => match (&args[0], &args[1]) {
-                (
-                    Value::Con(Constant::Integer(i)),
-                    Value::Con(Constant::ProtoList(Type::Data, l)),
-                ) => {
-                    let data_list: Vec<PlutusData> = l
-                        .iter()
-                        .map(|item| match item {
-                            Constant::Data(d) => d.clone(),
-                            _ => unreachable!(),
-                        })
-                        .collect();
+                (Value::Con(integer), Value::Con(list)) => {
+                    match (integer.as_ref(), list.as_ref()) {
+                        (Constant::Integer(i), Constant::ProtoList(Type::Data, l)) => {
+                            let data_list: Vec<PlutusData> = l
+                                .iter()
+                                .map(|item| match item {
+                                    Constant::Data(d) => d.clone(),
+                                    _ => unreachable!(),
+                                })
+                                .collect();
 
-                    let constr_data = PlutusData::Constr(Constr {
-                        // TODO: handle other types of constructor tags
-                        tag: convert_constr_to_tag(*i as u64),
-                        any_constructor: None,
-                        fields: data_list,
-                    });
-                    Ok(Value::Con(Constant::Data(constr_data)))
+                            let constr_data = PlutusData::Constr(Constr {
+                                // TODO: handle other types of constructor tags
+                                tag: convert_constr_to_tag(*i as u64),
+                                any_constructor: None,
+                                fields: data_list,
+                            });
+
+                            Ok(Value::Con(Constant::Data(constr_data).into()))
+                        }
+                        _ => unreachable!(),
+                    }
                 }
                 _ => unreachable!(),
             },
             DefaultFunction::MapData => match &args[0] {
-                Value::Con(Constant::ProtoList(_, list)) => {
-                    let mut map = Vec::new();
+                Value::Con(list) => match list.as_ref() {
+                    Constant::ProtoList(_, list) => {
+                        let mut map = Vec::new();
 
-                    for item in list {
-                        match item {
-                            Constant::ProtoPair(Type::Data, Type::Data, left, right) => {
-                                match (*left.clone(), *right.clone()) {
-                                    (Constant::Data(key), Constant::Data(value)) => {
-                                        map.push((key, value));
+                        for item in list {
+                            match item {
+                                Constant::ProtoPair(Type::Data, Type::Data, left, right) => {
+                                    match (left.as_ref(), right.as_ref()) {
+                                        (Constant::Data(key), Constant::Data(value)) => {
+                                            map.push((key.clone(), value.clone()));
+                                        }
+                                        _ => unreachable!(),
                                     }
-                                    _ => unreachable!(),
                                 }
+                                _ => unreachable!(),
                             }
-                            _ => unreachable!(),
                         }
-                    }
 
-                    Ok(Value::Con(Constant::Data(PlutusData::Map(map.into()))))
-                }
+                        Ok(Value::Con(
+                            Constant::Data(PlutusData::Map(map.into())).into(),
+                        ))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::ListData => match &args[0] {
-                Value::Con(Constant::ProtoList(_, list)) => {
-                    let data_list: Vec<PlutusData> = list
-                        .iter()
-                        .map(|item| match item {
-                            Constant::Data(d) => d.clone(),
-                            _ => unreachable!(),
-                        })
-                        .collect();
+                Value::Con(list) => match list.as_ref() {
+                    Constant::ProtoList(_, list) => {
+                        let data_list: Vec<PlutusData> = list
+                            .iter()
+                            .map(|item| match item {
+                                Constant::Data(d) => d.clone(),
+                                _ => unreachable!(),
+                            })
+                            .collect();
 
-                    Ok(Value::Con(Constant::Data(PlutusData::Array(data_list))))
-                }
+                        Ok(Value::Con(
+                            Constant::Data(PlutusData::Array(data_list)).into(),
+                        ))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::IData => match &args[0] {
-                Value::Con(Constant::Integer(i)) => Ok(Value::Con(Constant::Data(
-                    PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())),
-                ))),
+                Value::Con(integer) => match integer.as_ref() {
+                    Constant::Integer(i) => Ok(Value::Con(
+                        Constant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
+                            .into(),
+                    )),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::BData => match &args[0] {
-                Value::Con(Constant::ByteString(b)) => Ok(Value::Con(Constant::Data(
-                    PlutusData::BoundedBytes(b.clone().try_into().unwrap()),
-                ))),
+                Value::Con(byte_string) => match byte_string.as_ref() {
+                    Constant::ByteString(b) => Ok(Value::Con(
+                        Constant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
+                            .into(),
+                    )),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::UnConstrData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::Constr(c))) => {
-                    Ok(Value::Con(Constant::ProtoPair(
-                        Type::Integer,
-                        Type::List(Box::new(Type::Data)),
-                        // TODO: handle other types of constructor tags
-                        Box::new(Constant::Integer(convert_tag_to_constr(c.tag as i128))),
-                        Box::new(Constant::ProtoList(
-                            Type::Data,
-                            c.fields
-                                .deref()
-                                .iter()
-                                .map(|d| Constant::Data(d.clone()))
-                                .collect(),
-                        )),
-                    )))
-                }
+                Value::Con(con) => match con.as_ref() {
+                    Constant::Data(PlutusData::Constr(c)) => {
+                        Ok(Value::Con(
+                            Constant::ProtoPair(
+                                Type::Integer,
+                                Type::List(Rc::new(Type::Data)),
+                                // TODO: handle other types of constructor tags
+                                Rc::new(Constant::Integer(convert_tag_to_constr(c.tag as i128))),
+                                Rc::new(Constant::ProtoList(
+                                    Type::Data,
+                                    c.fields
+                                        .deref()
+                                        .iter()
+                                        .map(|d| Constant::Data(d.clone()))
+                                        .collect(),
+                                )),
+                            )
+                            .into(),
+                        ))
+                    }
+                    v => Err(Error::DeserialisationError(
+                        "UnConstrData".to_string(),
+                        Value::Con(v.clone().into()),
+                    )),
+                },
                 v => Err(Error::DeserialisationError(
                     "UnConstrData".to_string(),
                     v.clone(),
                 )),
             },
             DefaultFunction::UnMapData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::Map(m))) => {
-                    Ok(Value::Con(Constant::ProtoList(
-                        Type::Pair(Box::new(Type::Data), Box::new(Type::Data)),
-                        m.deref()
-                            .iter()
-                            .map(|p| -> Constant {
-                                Constant::ProtoPair(
-                                    Type::Data,
-                                    Type::Data,
-                                    Box::new(Constant::Data(p.0.clone())),
-                                    Box::new(Constant::Data(p.1.clone())),
-                                )
-                            })
-                            .collect(),
-                    )))
-                }
+                Value::Con(data) => match data.as_ref() {
+                    Constant::Data(PlutusData::Map(m)) => Ok(Value::Con(
+                        Constant::ProtoList(
+                            Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data)),
+                            m.deref()
+                                .iter()
+                                .map(|p| -> Constant {
+                                    Constant::ProtoPair(
+                                        Type::Data,
+                                        Type::Data,
+                                        Rc::new(Constant::Data(p.0.clone())),
+                                        Rc::new(Constant::Data(p.1.clone())),
+                                    )
+                                })
+                                .collect(),
+                        )
+                        .into(),
+                    )),
+                    v => Err(Error::DeserialisationError(
+                        "UnMapData".to_string(),
+                        Value::Con(v.clone().into()),
+                    )),
+                },
                 v => Err(Error::DeserialisationError(
                     "UnMapData".to_string(),
                     v.clone(),
                 )),
             },
             DefaultFunction::UnListData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::Array(l))) => {
-                    Ok(Value::Con(Constant::ProtoList(
-                        Type::Data,
-                        l.deref()
-                            .iter()
-                            .map(|d| Constant::Data(d.clone()))
-                            .collect(),
-                    )))
-                }
+                Value::Con(data) => match data.as_ref() {
+                    Constant::Data(PlutusData::Array(l)) => Ok(Value::Con(
+                        Constant::ProtoList(
+                            Type::Data,
+                            l.deref()
+                                .iter()
+                                .map(|d| Constant::Data(d.clone()))
+                                .collect(),
+                        )
+                        .into(),
+                    )),
+                    v => Err(Error::DeserialisationError(
+                        "UnMapData".to_string(),
+                        Value::Con(v.clone().into()),
+                    )),
+                },
                 v => Err(Error::DeserialisationError(
                     "UnListData".to_string(),
                     v.clone(),
                 )),
             },
             DefaultFunction::UnIData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::BigInt(b))) => {
-                    if let BigInt::Int(i) = b {
-                        let x: i128 = (*i).try_into().unwrap();
+                Value::Con(data) => match data.as_ref() {
+                    Constant::Data(PlutusData::BigInt(b)) => {
+                        if let BigInt::Int(i) = b {
+                            let x: i128 = (*i).try_into().unwrap();
 
-                        Ok(Value::Con(Constant::Integer(x)))
-                    } else {
-                        unreachable!()
+                            Ok(Value::Con(Constant::Integer(x).into()))
+                        } else {
+                            unreachable!()
+                        }
                     }
-                }
+                    v => Err(Error::DeserialisationError(
+                        "UnMapData".to_string(),
+                        Value::Con(v.clone().into()),
+                    )),
+                },
                 v => Err(Error::DeserialisationError(
                     "UnIData".to_string(),
                     v.clone(),
                 )),
             },
             DefaultFunction::UnBData => match &args[0] {
-                Value::Con(Constant::Data(PlutusData::BoundedBytes(b))) => {
-                    Ok(Value::Con(Constant::ByteString(b.to_vec())))
-                }
+                Value::Con(data) => match data.as_ref() {
+                    Constant::Data(PlutusData::BoundedBytes(b)) => {
+                        Ok(Value::Con(Constant::ByteString(b.to_vec()).into()))
+                    }
+                    v => Err(Error::DeserialisationError(
+                        "UnMapData".to_string(),
+                        Value::Con(v.clone().into()),
+                    )),
+                },
                 v => Err(Error::DeserialisationError(
                     "UnBData".to_string(),
                     v.clone(),
                 )),
             },
             DefaultFunction::EqualsData => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
-                    Ok(Value::Con(Constant::Bool(d1.eq(d2))))
-                }
+                (Value::Con(data1), Value::Con(data2)) => match (data1.as_ref(), data2.as_ref()) {
+                    (Constant::Data(d1), Constant::Data(d2)) => {
+                        Ok(Value::Con(Constant::Bool(d1.eq(d2)).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::SerialiseData => match &args[0] {
-                Value::Con(Constant::Data(d)) => {
-                    let serialized_data = plutus_data_to_bytes(d).unwrap();
-                    Ok(Value::Con(Constant::ByteString(serialized_data)))
-                }
+                Value::Con(data) => match data.as_ref() {
+                    Constant::Data(d) => {
+                        let serialized_data = plutus_data_to_bytes(d).unwrap();
+                        Ok(Value::Con(Constant::ByteString(serialized_data).into()))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
             DefaultFunction::MkPairData => match (&args[0], &args[1]) {
-                (Value::Con(Constant::Data(d1)), Value::Con(Constant::Data(d2))) => {
-                    Ok(Value::Con(Constant::ProtoPair(
-                        Type::Data,
-                        Type::Data,
-                        Box::new(Constant::Data(d1.clone())),
-                        Box::new(Constant::Data(d2.clone())),
-                    )))
-                }
+                (Value::Con(data1), Value::Con(data2)) => match (data1.as_ref(), data2.as_ref()) {
+                    (Constant::Data(d1), Constant::Data(d2)) => Ok(Value::Con(
+                        Constant::ProtoPair(
+                            Type::Data,
+                            Type::Data,
+                            Rc::new(Constant::Data(d1.clone())),
+                            Rc::new(Constant::Data(d2.clone())),
+                        )
+                        .into(),
+                    )),
+                    _ => unreachable!(),
+                },
                 _ => unreachable!(),
             },
-            DefaultFunction::MkNilData => Ok(Value::Con(Constant::ProtoList(Type::Data, vec![]))),
-            DefaultFunction::MkNilPairData => Ok(Value::Con(Constant::ProtoList(
-                Type::Pair(Box::new(Type::Data), Box::new(Type::Data)),
-                vec![],
-            ))),
+            DefaultFunction::MkNilData => {
+                Ok(Value::Con(Constant::ProtoList(Type::Data, vec![]).into()))
+            }
+            DefaultFunction::MkNilPairData => Ok(Value::Con(
+                Constant::ProtoList(Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data)), vec![])
+                    .into(),
+            )),
         }
     }
 }

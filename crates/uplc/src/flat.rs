@@ -179,10 +179,10 @@ where
 {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         match decode_term_tag(d)? {
-            0 => Ok(Term::Var(T::decode(d)?)),
+            0 => Ok(Term::Var(T::decode(d)?.into())),
             1 => Ok(Term::Delay(Rc::new(Term::decode(d)?))),
             2 => Ok(Term::Lambda {
-                parameter_name: T::binder_decode(d)?,
+                parameter_name: T::binder_decode(d)?.into(),
                 body: Rc::new(Term::decode(d)?),
             }),
             3 => Ok(Term::Apply {
@@ -190,7 +190,7 @@ where
                 argument: Rc::new(Term::decode(d)?),
             }),
             // Need size limit for Constant
-            4 => Ok(Term::Constant(Constant::decode(d)?)),
+            4 => Ok(Term::Constant(Constant::decode(d)?.into())),
             5 => Ok(Term::Force(Rc::new(Term::decode(d)?))),
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
@@ -228,7 +228,7 @@ where
                 match var_option {
                     Ok(var) => {
                         state_log.push(format!("{})", var.text()));
-                        Ok(Term::Var(var))
+                        Ok(Term::Var(var.into()))
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -263,7 +263,7 @@ where
                             Ok(term) => {
                                 state_log.push(")".to_string());
                                 Ok(Term::Lambda {
-                                    parameter_name: var,
+                                    parameter_name: var.into(),
                                     body: Rc::new(term),
                                 })
                             }
@@ -315,7 +315,7 @@ where
                 match con_option {
                     Ok(constant) => {
                         state_log.push(format!("{})", constant.to_pretty()));
-                        Ok(Term::Constant(constant))
+                        Ok(Term::Constant(constant.into()))
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -502,7 +502,7 @@ impl<'b> Decode<'b> for Constant {
                 let typ = decode_type(&mut rest)?;
 
                 let list: Vec<Constant> =
-                    d.decode_list_with(|d| decode_constant_value(typ.clone(), d))?;
+                    d.decode_list_with(|d| decode_constant_value(typ.clone().into(), d))?;
 
                 Ok(Constant::ProtoList(typ, list))
             }
@@ -512,10 +512,10 @@ impl<'b> Decode<'b> for Constant {
                 let type1 = decode_type(&mut rest)?;
                 let type2 = decode_type(&mut rest)?;
 
-                let a = decode_constant_value(type1.clone(), d)?;
-                let b = decode_constant_value(type2.clone(), d)?;
+                let a = decode_constant_value(type1.clone().into(), d)?;
+                let b = decode_constant_value(type2.clone().into(), d)?;
 
-                Ok(Constant::ProtoPair(type1, type2, Box::new(a), Box::new(b)))
+                Ok(Constant::ProtoPair(type1, type2, a.into(), b.into()))
             }
             [8] => {
                 let cbor = Vec::<u8>::decode(d)?;
@@ -533,8 +533,8 @@ impl<'b> Decode<'b> for Constant {
     }
 }
 
-fn decode_constant_value(typ: Type, d: &mut Decoder) -> Result<Constant, de::Error> {
-    match typ {
+fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de::Error> {
+    match typ.as_ref() {
         Type::Integer => Ok(Constant::Integer(i128::decode(d)?)),
         Type::ByteString => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
         Type::String => Ok(Constant::String(String::decode(d)?)),
@@ -542,19 +542,19 @@ fn decode_constant_value(typ: Type, d: &mut Decoder) -> Result<Constant, de::Err
         Type::Bool => Ok(Constant::Bool(bool::decode(d)?)),
         Type::List(sub_type) => {
             let list: Vec<Constant> =
-                d.decode_list_with(|d| decode_constant_value(*sub_type.clone(), d))?;
+                d.decode_list_with(|d| decode_constant_value(sub_type.clone(), d))?;
 
-            Ok(Constant::ProtoList(*sub_type, list))
+            Ok(Constant::ProtoList(sub_type.as_ref().clone(), list))
         }
         Type::Pair(type1, type2) => {
-            let a = decode_constant_value(*type1.clone(), d)?;
-            let b = decode_constant_value(*type2.clone(), d)?;
+            let a = decode_constant_value(type1.clone(), d)?;
+            let b = decode_constant_value(type2.clone(), d)?;
 
             Ok(Constant::ProtoPair(
-                *type1,
-                *type2,
-                Box::new(a),
-                Box::new(b),
+                type1.as_ref().clone(),
+                type2.as_ref().clone(),
+                a.into(),
+                b.into(),
             ))
         }
         Type::Data => {
@@ -577,13 +577,13 @@ fn decode_type(types: &mut VecDeque<u8>) -> Result<Type, de::Error> {
         Some(3) => Ok(Type::Unit),
         Some(8) => Ok(Type::Data),
         Some(7) => match types.pop_front() {
-            Some(5) => Ok(Type::List(Box::new(decode_type(types)?))),
+            Some(5) => Ok(Type::List(decode_type(types)?.into())),
             Some(7) => match types.pop_front() {
                 Some(6) => {
                     let type1 = decode_type(types)?;
                     let type2 = decode_type(types)?;
 
-                    Ok(Type::Pair(Box::new(type1), Box::new(type2)))
+                    Ok(Type::Pair(type1.into(), type2.into()))
                 }
                 Some(x) => Err(de::Error::Message(format!(
                     "Unknown constant type tag: {}",
@@ -818,7 +818,7 @@ mod test {
     fn flat_encode_integer() {
         let program = Program::<Name> {
             version: (11, 22, 33),
-            term: Term::Constant(Constant::Integer(11)),
+            term: Term::Constant(Constant::Integer(11).into()),
         };
 
         let expected_bytes = vec![
@@ -834,13 +834,16 @@ mod test {
     fn flat_encode_list_list_integer() {
         let program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(Constant::ProtoList(
-                Type::List(Box::new(Type::Integer)),
-                vec![
-                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
-                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
-                ],
-            )),
+            term: Term::Constant(
+                Constant::ProtoList(
+                    Type::List(Type::Integer.into()),
+                    vec![
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
+                    ],
+                )
+                .into(),
+            ),
         };
 
         let expected_bytes = vec![
@@ -857,17 +860,21 @@ mod test {
     fn flat_encode_pair_pair_integer_bool_integer() {
         let program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(Constant::ProtoPair(
-                Type::Pair(Box::new(Type::Integer), Box::new(Type::Bool)),
-                Type::Integer,
-                Box::new(Constant::ProtoPair(
+            term: Term::Constant(
+                Constant::ProtoPair(
+                    Type::Pair(Type::Integer.into(), Type::Bool.into()),
                     Type::Integer,
-                    Type::Bool,
-                    Box::new(Constant::Integer(11)),
-                    Box::new(Constant::Bool(true)),
-                )),
-                Box::new(Constant::Integer(11)),
-            )),
+                    Constant::ProtoPair(
+                        Type::Integer,
+                        Type::Bool,
+                        Constant::Integer(11).into(),
+                        Constant::Bool(true).into(),
+                    )
+                    .into(),
+                    Constant::Integer(11).into(),
+                )
+                .into(),
+            ),
         };
 
         let expected_bytes = vec![
@@ -889,13 +896,16 @@ mod test {
 
         let expected_program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(Constant::ProtoList(
-                Type::List(Box::new(Type::Integer)),
-                vec![
-                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
-                    Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
-                ],
-            )),
+            term: Term::Constant(
+                Constant::ProtoList(
+                    Type::List(Type::Integer.into()),
+                    vec![
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
+                    ],
+                )
+                .into(),
+            ),
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
@@ -912,17 +922,21 @@ mod test {
 
         let expected_program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(Constant::ProtoPair(
-                Type::Pair(Box::new(Type::Integer), Box::new(Type::Bool)),
-                Type::Integer,
-                Box::new(Constant::ProtoPair(
+            term: Term::Constant(
+                Constant::ProtoPair(
+                    Type::Pair(Type::Integer.into(), Type::Bool.into()),
                     Type::Integer,
-                    Type::Bool,
-                    Box::new(Constant::Integer(11)),
-                    Box::new(Constant::Bool(true)),
-                )),
-                Box::new(Constant::Integer(11)),
-            )),
+                    Constant::ProtoPair(
+                        Type::Integer,
+                        Type::Bool,
+                        Constant::Integer(11).into(),
+                        Constant::Bool(true).into(),
+                    )
+                    .into(),
+                    Constant::Integer(11).into(),
+                )
+                .into(),
+            ),
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
@@ -938,7 +952,7 @@ mod test {
 
         let expected_program = Program {
             version: (11, 22, 33),
-            term: Term::Constant(Constant::Integer(11)),
+            term: Term::Constant(Constant::Integer(11).into()),
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();

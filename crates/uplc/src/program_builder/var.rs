@@ -4,7 +4,7 @@ use crate::program_builder::WithTerm;
 pub trait WithVar: WithTerm {
     fn with_var(self, name_str: &str) -> Self::Next {
         let name = self.get_name(name_str);
-        let term = Term::Var(name);
+        let term = Term::Var(name.into());
         self.next(term)
     }
 }
