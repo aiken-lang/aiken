@@ -44,7 +44,7 @@ pub fn exec(
             let mut output = String::new();
 
             for (i, byte) in bytes.iter().enumerate() {
-                let _ = write!(output, "{:08b}", byte);
+                let _ = write!(output, "{byte:08b}");
 
                 if (i + 1) % 4 == 0 {
                     output.push('\n');
@@ -53,7 +53,7 @@ pub fn exec(
                 }
             }
 
-            println!("{}", output);
+            println!("{output}");
         } else {
             let out_name = if let Some(out) = out {
                 out

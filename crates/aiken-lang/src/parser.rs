@@ -1188,7 +1188,7 @@ pub fn expr_parser(
                         .map(|(index, a)| match a {
                             ParserArg::Arg(arg) => *arg,
                             ParserArg::Hole { location, label } => {
-                                let name = format!("{}__{}", CAPTURE_VARIABLE, index);
+                                let name = format!("{CAPTURE_VARIABLE}__{index}");
                                 holes.push(ast::Arg {
                                     location: Span::empty(),
                                     annotation: None,
@@ -1205,7 +1205,7 @@ pub fn expr_parser(
                                     location,
                                     value: expr::UntypedExpr::Var {
                                         location,
-                                        name: format!("{}__{}", CAPTURE_VARIABLE, index),
+                                        name: format!("{CAPTURE_VARIABLE}__{index}"),
                                     },
                                 }
                             }

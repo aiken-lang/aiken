@@ -259,7 +259,7 @@ fn test_eval() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -529,7 +529,7 @@ fn test_eval_1() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -634,7 +634,7 @@ fn test_eval_2() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -898,7 +898,7 @@ fn test_eval_3() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -1082,7 +1082,7 @@ fn test_eval_5() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -1186,7 +1186,7 @@ fn test_eval_6() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -1290,7 +1290,7 @@ fn test_eval_7() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,
@@ -1545,7 +1545,7 @@ fn test_eval_8() {
                         cpu: accum.cpu + curr.ex_units.steps as i64,
                     });
 
-            println!("{:?}", total_budget_used);
+            println!("{total_budget_used:?}");
 
             assert_eq!(
                 total_budget_used,

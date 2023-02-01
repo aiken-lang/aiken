@@ -38,7 +38,7 @@ where
         err.report();
         println!("\n{}", "Summary".purple().bold());
 
-        let warning_text = format!("{warning_count} warning{}", plural);
+        let warning_text = format!("{warning_count} warning{plural}");
 
         let plural = if err.len() == 1 { "" } else { "s" };
 
@@ -46,13 +46,13 @@ where
 
         let full_summary = format!("    {}, {}", error_text.red(), warning_text.yellow());
 
-        println!("{}", full_summary);
+        println!("{full_summary}");
 
         process::exit(1);
     } else {
         println!("\n{}", "Summary".purple().bold());
 
-        let warning_text = format!("{warning_count} warning{}", plural);
+        let warning_text = format!("{warning_count} warning{plural}");
 
         println!("    0 errors, {}", warning_text.yellow(),);
     }
@@ -169,8 +169,8 @@ impl telemetry::EventListener for Terminal {
                 let elapsed = format!("{:.2}s", start.elapsed().as_millis() as f32 / 1000.);
 
                 let msg = match count {
-                    1 => format!("1 package in {}", elapsed),
-                    _ => format!("{} packages in {}", count, elapsed),
+                    1 => format!("1 package in {elapsed}"),
+                    _ => format!("{count} packages in {elapsed}"),
                 };
 
                 println!("{} {}", "   Downloaded".bold().purple(), msg.bold())
@@ -244,11 +244,11 @@ fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {
         pretty::style_if(styled, format!("{} tests", tests.len()), |s| s
             .bold()
             .to_string()),
-        pretty::style_if(styled, format!("{} passed", n_passed), |s| s
+        pretty::style_if(styled, format!("{n_passed} passed"), |s| s
             .bright_green()
             .bold()
             .to_string()),
-        pretty::style_if(styled, format!("{} failed", n_failed), |s| s
+        pretty::style_if(styled, format!("{n_failed} failed"), |s| s
             .bright_red()
             .bold()
             .to_string()),
@@ -273,7 +273,7 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
         pretty::pad_left(cpu.to_string(), max_cpu, " "),
         output
             .as_ref()
-            .map(|x| format!("{}", x))
+            .map(|x| format!("{x}"))
             .unwrap_or_else(|| "Error.".to_string()),
     )
 }

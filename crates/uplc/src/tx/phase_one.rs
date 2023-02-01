@@ -48,13 +48,13 @@ pub fn validate_missing_scripts(
         .clone()
         .into_iter()
         .filter(|x| !received_hashes.contains(x))
-        .map(|x| format!("[Missing (sh: {})]", x))
+        .map(|x| format!("[Missing (sh: {x})]"))
         .collect();
 
     let extra: Vec<_> = received_hashes
         .into_iter()
         .filter(|x| !needed_hashes.contains(x))
-        .map(|x| format!("[Extraneous (sh: {:?})]", x))
+        .map(|x| format!("[Extraneous (sh: {x:?})]"))
         .collect();
 
     if !missing.is_empty() || !extra.is_empty() {
@@ -206,7 +206,7 @@ pub fn has_exact_set_of_redeemers(
     let extra: Vec<_> = wits_redeemer_ptrs
         .into_iter()
         .filter(|x| !needed_redeemer_ptrs.contains(x))
-        .map(|x| format!("[Extraneous (redeemer_ptr: {:?})]", x))
+        .map(|x| format!("[Extraneous (redeemer_ptr: {x:?})]"))
         .collect();
 
     if !missing.is_empty() || !extra.is_empty() {

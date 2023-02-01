@@ -37,7 +37,7 @@ pub trait Documentable<'a> {
 
 impl<'a> Documentable<'a> for char {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
@@ -49,49 +49,49 @@ impl<'a> Documentable<'a> for &'a str {
 
 impl<'a> Documentable<'a> for isize {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for i64 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for usize {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for f64 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{:?}", self))
+        Document::String(format!("{self:?}"))
     }
 }
 
 impl<'a> Documentable<'a> for u64 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{:?}", self))
+        Document::String(format!("{self:?}"))
     }
 }
 
 impl<'a> Documentable<'a> for u32 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for u16 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for u8 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 

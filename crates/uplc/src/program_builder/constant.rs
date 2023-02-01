@@ -46,8 +46,8 @@ mod tests {
         ) {
             let code = format!(r"(program
                            11.22.33
-                           (con integer {})
-                         )", int);
+                           (con integer {int})
+                         )");
             let expected = parser::program(&code).unwrap();
             let actual = Builder::start(11, 22, 33).with_int(int).build_named();
             assert_eq!(expected, actual);
@@ -62,8 +62,8 @@ mod tests {
             let bstring = hex::encode(&bytes);
             let code = format!(r"(program
                            11.22.33
-                           (con bytestring #{})
-                         )", bstring);
+                           (con bytestring #{bstring})
+                         )");
             let expected = parser::program(&code).unwrap();
             let actual = Builder::start(11, 22, 33)
                 .with_byte_string(bytes)
