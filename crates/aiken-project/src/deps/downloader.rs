@@ -1,7 +1,11 @@
-use std::{io::Cursor, path::Path};
+use std::{
+    io::{self, Cursor, Read},
+    path::{Path, PathBuf},
+};
 
 use futures::future;
 use reqwest::Client;
+use zip::result::ZipError;
 
 use crate::{
     error::Error,
@@ -117,7 +121,10 @@ impl<'a> Downloader<'a> {
             let d = destination.clone();
 
             tokio::task::spawn_blocking(move || {
-                zip_extract::extract(Cursor::new(zipball), &d, true)
+                let mut archive =
+                    zip::ZipArchive::new(Cursor::new(zipball)).expect("failed to load zip archive");
+
+                extract_zip(&mut archive, &d)
             })
             .await?
         };
@@ -130,4 +137,46 @@ impl<'a> Downloader<'a> {
 
         Ok(true)
     }
+}
+
+fn extract_zip<R: Read + io::Seek, P: AsRef<Path>>(
+    archive: &mut zip::ZipArchive<R>,
+    directory: P,
+) -> Result<(), ZipError> {
+    use std::fs;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+
+        let filepath = file
+            .enclosed_name()
+            .ok_or(ZipError::InvalidArchive("Invalid file path"))?
+            .iter()
+            .skip(1)
+            .collect::<PathBuf>();
+
+        let outpath = directory.as_ref().join(filepath);
+
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(p)?;
+                }
+            }
+            let mut outfile = fs::File::create(&outpath)?;
+            std::io::copy(&mut file, &mut outfile)?;
+        }
+        // Get and Set permissions
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Some(mode) = file.unix_mode() {
+                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
+            }
+        }
+    }
+
+    Ok(())
 }

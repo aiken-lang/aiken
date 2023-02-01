@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use uplc::machine::cost_model::ExBudget;
-use zip_extract::ZipExtractError;
+use zip::result::ZipError;
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -48,7 +48,7 @@ pub enum Error {
     Http(#[from] reqwest::Error),
 
     #[error(transparent)]
-    ZipExtract(#[from] ZipExtractError),
+    ZipExtract(#[from] ZipError),
 
     #[error(transparent)]
     JoinError(#[from] tokio::task::JoinError),
