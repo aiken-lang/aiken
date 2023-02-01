@@ -2,5 +2,4 @@
 members = ["crates/*"]
 
 [profile.release]
-# strip = true
-debug = true
+strip = true
