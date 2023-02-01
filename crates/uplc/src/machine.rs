@@ -680,6 +680,18 @@ impl TryFrom<Value> for Type {
     }
 }
 
+impl TryFrom<&Value> for Type {
+    type Error = Error;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        let constant: Constant = value.try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        Ok(constant_type)
+    }
+}
+
 impl TryFrom<Value> for Constant {
     type Error = Error;
 
@@ -687,6 +699,17 @@ impl TryFrom<Value> for Constant {
         match value {
             Value::Con(constant) => Ok(constant.as_ref().clone()),
             rest => Err(Error::NotAConstant(rest)),
+        }
+    }
+}
+
+impl TryFrom<&Value> for Constant {
+    type Error = Error;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Con(constant) => Ok(constant.as_ref().clone()),
+            rest => Err(Error::NotAConstant(rest.clone())),
         }
     }
 }

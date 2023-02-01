@@ -279,7 +279,7 @@ impl DefaultFunction {
                 if args.is_empty() {
                     Ok(())
                 } else {
-                    let first = args[0].as_ref().clone();
+                    let first = args[0].as_ref();
 
                     arg.expect_type(Type::List(Rc::new(first.try_into()?)))
                 }
@@ -675,9 +675,9 @@ impl DefaultFunction {
             DefaultFunction::AppendString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
-                        (Constant::String(arg1), Constant::String(arg2)) => Ok(Value::Con(
-                            Constant::String(format!("{arg1}{arg2}")).into(),
-                        )),
+                        (Constant::String(arg1), Constant::String(arg2)) => {
+                            Ok(Value::Con(Constant::String(format!("{arg1}{arg2}")).into()))
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -749,18 +749,14 @@ impl DefaultFunction {
             },
             DefaultFunction::FstPair => match args[0].as_ref() {
                 Value::Con(pair) => match pair.as_ref() {
-                    Constant::ProtoPair(_, _, first, _) => {
-                        Ok(Value::Con(first.as_ref().clone().into()))
-                    }
+                    Constant::ProtoPair(_, _, first, _) => Ok(Value::Con(first.clone())),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
             DefaultFunction::SndPair => match args[0].as_ref() {
                 Value::Con(pair) => match pair.as_ref() {
-                    Constant::ProtoPair(_, _, _, second) => {
-                        Ok(Value::Con(second.as_ref().clone().into()))
-                    }
+                    Constant::ProtoPair(_, _, _, second) => Ok(Value::Con(second.clone())),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
