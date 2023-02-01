@@ -46,7 +46,7 @@ impl LocalPackages {
         let result: Self = toml::from_str(&src).map_err(|e| Error::TomlLoading {
             path: path.clone(),
             src: src.clone(),
-            named: NamedSource::new(path.display().to_string(), src),
+            named: NamedSource::new(path.display().to_string(), src).into(),
             // this isn't actually a legit way to get the span
             location: e.line_col().map(|(line, col)| Span {
                 start: line,

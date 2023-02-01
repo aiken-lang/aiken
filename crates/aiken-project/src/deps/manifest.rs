@@ -52,7 +52,7 @@ impl Manifest {
         let manifest: Self = toml::from_str(&toml).map_err(|e| Error::TomlLoading {
             path: manifest_path.clone(),
             src: toml.clone(),
-            named: NamedSource::new(manifest_path.display().to_string(), toml),
+            named: NamedSource::new(manifest_path.display().to_string(), toml).into(),
             // this isn't actually a legit way to get the span
             location: e.line_col().map(|(line, col)| Span {
                 start: line,
