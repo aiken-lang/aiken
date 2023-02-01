@@ -51,7 +51,7 @@ impl BuiltinRuntime {
         self.forces += 1;
     }
 
-    pub fn call(&self, logs: &mut Vec<String>) -> Result<Value, Error> {
+    pub fn call(&self, logs: &mut Vec<String>) -> Result<Rc<Value>, Error> {
         self.fun.call(&self.args, logs)
     }
 
@@ -324,14 +324,14 @@ impl DefaultFunction {
     // This should be safe because we've already checked
     // the types of the args as they were pushed. Although
     // the unreachables look ugly, it's the reality of the situation.
-    pub fn call(&self, args: &[Rc<Value>], logs: &mut Vec<String>) -> Result<Value, Error> {
+    pub fn call(&self, args: &[Rc<Value>], logs: &mut Vec<String>) -> Result<Rc<Value>, Error> {
         match self {
             DefaultFunction::AddInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
                             match arg1.checked_add(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into())),
+                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
                                 None => Err(Error::OverflowError),
                             }
                         }
@@ -345,7 +345,7 @@ impl DefaultFunction {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
                             match arg1.checked_sub(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into())),
+                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
                                 None => Err(Error::OverflowError),
                             }
                         }
@@ -359,7 +359,7 @@ impl DefaultFunction {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
                             match arg1.checked_mul(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into())),
+                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
                                 None => Err(Error::OverflowError),
                             }
                         }
@@ -368,23 +368,26 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::DivideInteger => match (args[0].as_ref(), args[1].as_ref()) {
-                (Value::Con(integer1), Value::Con(integer2)) => {
-                    match (integer1.as_ref(), integer2.as_ref()) {
-                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = (*arg1 as f64) / (*arg2 as f64);
+            DefaultFunction::DivideInteger => {
+                match (args[0].as_ref(), args[1].as_ref()) {
+                    (Value::Con(integer1), Value::Con(integer2)) => {
+                        match (integer1.as_ref(), integer2.as_ref()) {
+                            (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                                if *arg2 != 0 {
+                                    let ret = (*arg1 as f64) / (*arg2 as f64);
 
-                                Ok(Value::Con(Constant::Integer(ret.floor() as i128).into()))
-                            } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                    Ok(Value::Con(Constant::Integer(ret.floor() as i128).into())
+                                        .into())
+                                } else {
+                                    Err(Error::DivideByZero(*arg1, *arg2))
+                                }
                             }
+                            _ => unreachable!(),
                         }
-                        _ => unreachable!(),
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
+            }
             DefaultFunction::QuotientInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
@@ -394,7 +397,7 @@ impl DefaultFunction {
 
                                 let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
 
-                                Ok(Value::Con(Constant::Integer(ret as i128).into()))
+                                Ok(Value::Con(Constant::Integer(ret as i128).into()).into())
                             } else {
                                 Err(Error::DivideByZero(*arg1, *arg2))
                             }
@@ -411,7 +414,7 @@ impl DefaultFunction {
                             if *arg2 != 0 {
                                 let ret = arg1 % arg2;
 
-                                Ok(Value::Con(Constant::Integer(ret).into()))
+                                Ok(Value::Con(Constant::Integer(ret).into()).into())
                             } else {
                                 Err(Error::DivideByZero(*arg1, *arg2))
                             }
@@ -428,7 +431,7 @@ impl DefaultFunction {
                             if *arg2 != 0 {
                                 let ret = arg1 % arg2;
 
-                                Ok(Value::Con(Constant::Integer(ret.abs()).into()))
+                                Ok(Value::Con(Constant::Integer(ret.abs()).into()).into())
                             } else {
                                 Err(Error::DivideByZero(*arg1, *arg2))
                             }
@@ -442,7 +445,7 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -453,7 +456,7 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 < arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 < arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -464,7 +467,7 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 <= arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 <= arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -479,7 +482,8 @@ impl DefaultFunction {
                                 arg1.iter().copied().chain(arg2.iter().copied()).collect(),
                             )
                             .into(),
-                        )),
+                        )
+                        .into()),
                         _ => unreachable!(),
                     }
                 }
@@ -492,7 +496,7 @@ impl DefaultFunction {
                             let mut ret = vec![(arg1 % 256) as u8];
                             ret.extend(arg2.clone());
 
-                            Ok(Value::Con(Constant::ByteString(ret).into()))
+                            Ok(Value::Con(Constant::ByteString(ret).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -514,7 +518,7 @@ impl DefaultFunction {
                                 let ret: Vec<u8> =
                                     arg3.iter().skip(skip).take(take).cloned().collect();
 
-                                Ok(Value::Con(Constant::ByteString(ret).into()))
+                                Ok(Value::Con(Constant::ByteString(ret).into()).into())
                             }
                             _ => unreachable!(),
                         }
@@ -525,7 +529,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfByteString => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
-                        Ok(Value::Con(Constant::Integer(arg1.len() as i128).into()))
+                        Ok(Value::Con(Constant::Integer(arg1.len() as i128).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -540,7 +544,7 @@ impl DefaultFunction {
                             if 0 <= *arg2 && index < arg1.len() {
                                 let ret = arg1[index] as i128;
 
-                                Ok(Value::Con(Constant::Integer(ret).into()))
+                                Ok(Value::Con(Constant::Integer(ret).into()).into())
                             } else {
                                 Err(Error::ByteStringOutOfBounds(*arg2, arg1.to_vec()))
                             }
@@ -554,7 +558,7 @@ impl DefaultFunction {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -565,7 +569,7 @@ impl DefaultFunction {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 < arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 < arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -577,7 +581,7 @@ impl DefaultFunction {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 <= arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 <= arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -597,7 +601,7 @@ impl DefaultFunction {
 
                         hasher.result(&mut bytes);
 
-                        Ok(Value::Con(Constant::ByteString(bytes).into()))
+                        Ok(Value::Con(Constant::ByteString(bytes).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -616,7 +620,7 @@ impl DefaultFunction {
 
                         hasher.result(&mut bytes);
 
-                        Ok(Value::Con(Constant::ByteString(bytes).into()))
+                        Ok(Value::Con(Constant::ByteString(bytes).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -633,7 +637,7 @@ impl DefaultFunction {
                         context.input(arg1);
                         context.result(&mut digest);
 
-                        Ok(Value::Con(Constant::ByteString(digest.to_vec()).into()))
+                        Ok(Value::Con(Constant::ByteString(digest.to_vec()).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -662,7 +666,7 @@ impl DefaultFunction {
 
                                 let valid = ed25519::verify(message, &public_key, &signature);
 
-                                Ok(Value::Con(Constant::Bool(valid).into()))
+                                Ok(Value::Con(Constant::Bool(valid).into()).into())
                             }
                             _ => unreachable!(),
                         }
@@ -676,7 +680,7 @@ impl DefaultFunction {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
                         (Constant::String(arg1), Constant::String(arg2)) => {
-                            Ok(Value::Con(Constant::String(format!("{arg1}{arg2}")).into()))
+                            Ok(Value::Con(Constant::String(format!("{arg1}{arg2}")).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -687,7 +691,7 @@ impl DefaultFunction {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
                         (Constant::String(arg1), Constant::String(arg2)) => {
-                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()))
+                            Ok(Value::Con(Constant::Bool(arg1 == arg2).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -699,7 +703,7 @@ impl DefaultFunction {
                     Constant::String(arg1) => {
                         let bytes = arg1.as_bytes().to_vec();
 
-                        Ok(Value::Con(Constant::ByteString(bytes).into()))
+                        Ok(Value::Con(Constant::ByteString(bytes).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -710,7 +714,7 @@ impl DefaultFunction {
                     Constant::ByteString(arg1) => {
                         let string = String::from_utf8(arg1.clone())?;
 
-                        Ok(Value::Con(Constant::String(string).into()))
+                        Ok(Value::Con(Constant::String(string).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -720,9 +724,9 @@ impl DefaultFunction {
                 Value::Con(boolean) => match boolean.as_ref() {
                     Constant::Bool(condition) => {
                         if *condition {
-                            Ok(args[1].as_ref().clone())
+                            Ok(args[1].clone())
                         } else {
-                            Ok(args[2].as_ref().clone())
+                            Ok(args[2].clone())
                         }
                     }
                     _ => unreachable!(),
@@ -731,7 +735,7 @@ impl DefaultFunction {
             },
             DefaultFunction::ChooseUnit => match args[0].as_ref() {
                 Value::Con(unit) => match unit.as_ref() {
-                    Constant::Unit => Ok(args[1].as_ref().clone()),
+                    Constant::Unit => Ok(args[1].clone()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
@@ -741,7 +745,7 @@ impl DefaultFunction {
                     Constant::String(arg1) => {
                         logs.push(arg1.clone());
 
-                        Ok(args[1].as_ref().clone())
+                        Ok(args[1].clone())
                     }
                     _ => unreachable!(),
                 },
@@ -749,14 +753,14 @@ impl DefaultFunction {
             },
             DefaultFunction::FstPair => match args[0].as_ref() {
                 Value::Con(pair) => match pair.as_ref() {
-                    Constant::ProtoPair(_, _, first, _) => Ok(Value::Con(first.clone())),
+                    Constant::ProtoPair(_, _, first, _) => Ok(Value::Con(first.clone()).into()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
             DefaultFunction::SndPair => match args[0].as_ref() {
                 Value::Con(pair) => match pair.as_ref() {
-                    Constant::ProtoPair(_, _, _, second) => Ok(Value::Con(second.clone())),
+                    Constant::ProtoPair(_, _, _, second) => Ok(Value::Con(second.clone()).into()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
@@ -765,9 +769,9 @@ impl DefaultFunction {
                 Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
                         if list.is_empty() {
-                            Ok(args[1].as_ref().clone())
+                            Ok(args[1].clone())
                         } else {
-                            Ok(args[2].as_ref().clone())
+                            Ok(args[2].clone())
                         }
                     }
                     _ => unreachable!(),
@@ -780,7 +784,7 @@ impl DefaultFunction {
                         let mut ret = vec![item.as_ref().clone()];
                         ret.extend(list.clone());
 
-                        Ok(Value::Con(Constant::ProtoList(r#type.clone(), ret).into()))
+                        Ok(Value::Con(Constant::ProtoList(r#type.clone(), ret).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -792,7 +796,7 @@ impl DefaultFunction {
                         if list.is_empty() {
                             Err(Error::EmptyList(c.clone()))
                         } else {
-                            Ok(Value::Con(list[0].clone().into()))
+                            Ok(Value::Con(list[0].clone().into()).into())
                         }
                     }
                     _ => unreachable!(),
@@ -807,7 +811,8 @@ impl DefaultFunction {
                         } else {
                             Ok(Value::Con(
                                 Constant::ProtoList(r#type.clone(), list[1..].to_vec()).into(),
-                            ))
+                            )
+                            .into())
                         }
                     }
                     _ => unreachable!(),
@@ -817,7 +822,7 @@ impl DefaultFunction {
             DefaultFunction::NullList => match args[0].as_ref() {
                 Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
-                        Ok(Value::Con(Constant::Bool(list.is_empty()).into()))
+                        Ok(Value::Con(Constant::Bool(list.is_empty()).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -825,11 +830,11 @@ impl DefaultFunction {
             },
             DefaultFunction::ChooseData => match args[0].as_ref() {
                 Value::Con(con) => match con.as_ref() {
-                    Constant::Data(PlutusData::Constr(_)) => Ok(args[1].as_ref().clone()),
-                    Constant::Data(PlutusData::Map(_)) => Ok(args[2].as_ref().clone()),
-                    Constant::Data(PlutusData::Array(_)) => Ok(args[3].as_ref().clone()),
-                    Constant::Data(PlutusData::BigInt(_)) => Ok(args[4].as_ref().clone()),
-                    Constant::Data(PlutusData::BoundedBytes(_)) => Ok(args[5].as_ref().clone()),
+                    Constant::Data(PlutusData::Constr(_)) => Ok(args[1].clone()),
+                    Constant::Data(PlutusData::Map(_)) => Ok(args[2].clone()),
+                    Constant::Data(PlutusData::Array(_)) => Ok(args[3].clone()),
+                    Constant::Data(PlutusData::BigInt(_)) => Ok(args[4].clone()),
+                    Constant::Data(PlutusData::BoundedBytes(_)) => Ok(args[5].clone()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
@@ -853,7 +858,7 @@ impl DefaultFunction {
                                 fields: data_list,
                             });
 
-                            Ok(Value::Con(Constant::Data(constr_data).into()))
+                            Ok(Value::Con(Constant::Data(constr_data).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -879,9 +884,7 @@ impl DefaultFunction {
                             }
                         }
 
-                        Ok(Value::Con(
-                            Constant::Data(PlutusData::Map(map.into())).into(),
-                        ))
+                        Ok(Value::Con(Constant::Data(PlutusData::Map(map.into())).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -898,9 +901,7 @@ impl DefaultFunction {
                             })
                             .collect();
 
-                        Ok(Value::Con(
-                            Constant::Data(PlutusData::Array(data_list)).into(),
-                        ))
+                        Ok(Value::Con(Constant::Data(PlutusData::Array(data_list)).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -911,7 +912,8 @@ impl DefaultFunction {
                     Constant::Integer(i) => Ok(Value::Con(
                         Constant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
                             .into(),
-                    )),
+                    )
+                    .into()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
@@ -921,7 +923,8 @@ impl DefaultFunction {
                     Constant::ByteString(b) => Ok(Value::Con(
                         Constant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
                             .into(),
-                    )),
+                    )
+                    .into()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
@@ -932,20 +935,22 @@ impl DefaultFunction {
                         Ok(Value::Con(
                             Constant::ProtoPair(
                                 Type::Integer,
-                                Type::List(Rc::new(Type::Data)),
+                                Type::List(Type::Data.into()),
                                 // TODO: handle other types of constructor tags
-                                Rc::new(Constant::Integer(convert_tag_to_constr(c.tag as i128))),
-                                Rc::new(Constant::ProtoList(
+                                Constant::Integer(convert_tag_to_constr(c.tag as i128)).into(),
+                                Constant::ProtoList(
                                     Type::Data,
                                     c.fields
                                         .deref()
                                         .iter()
                                         .map(|d| Constant::Data(d.clone()))
                                         .collect(),
-                                )),
+                                )
+                                .into(),
                             )
                             .into(),
-                        ))
+                        )
+                        .into())
                     }
                     v => Err(Error::DeserialisationError(
                         "UnConstrData".to_string(),
@@ -961,21 +966,22 @@ impl DefaultFunction {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::Map(m)) => Ok(Value::Con(
                         Constant::ProtoList(
-                            Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data)),
+                            Type::Pair(Type::Data.into(), Type::Data.into()),
                             m.deref()
                                 .iter()
                                 .map(|p| -> Constant {
                                     Constant::ProtoPair(
                                         Type::Data,
                                         Type::Data,
-                                        Rc::new(Constant::Data(p.0.clone())),
-                                        Rc::new(Constant::Data(p.1.clone())),
+                                        Constant::Data(p.0.clone()).into(),
+                                        Constant::Data(p.1.clone()).into(),
                                     )
                                 })
                                 .collect(),
                         )
                         .into(),
-                    )),
+                    )
+                    .into()),
                     v => Err(Error::DeserialisationError(
                         "UnMapData".to_string(),
                         Value::Con(v.clone().into()),
@@ -997,7 +1003,8 @@ impl DefaultFunction {
                                 .collect(),
                         )
                         .into(),
-                    )),
+                    )
+                    .into()),
                     v => Err(Error::DeserialisationError(
                         "UnMapData".to_string(),
                         Value::Con(v.clone().into()),
@@ -1014,7 +1021,7 @@ impl DefaultFunction {
                         if let BigInt::Int(i) = b {
                             let x: i128 = (*i).try_into().unwrap();
 
-                            Ok(Value::Con(Constant::Integer(x).into()))
+                            Ok(Value::Con(Constant::Integer(x).into()).into())
                         } else {
                             unreachable!()
                         }
@@ -1032,7 +1039,7 @@ impl DefaultFunction {
             DefaultFunction::UnBData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::BoundedBytes(b)) => {
-                        Ok(Value::Con(Constant::ByteString(b.to_vec()).into()))
+                        Ok(Value::Con(Constant::ByteString(b.to_vec()).into()).into())
                     }
                     v => Err(Error::DeserialisationError(
                         "UnMapData".to_string(),
@@ -1047,7 +1054,7 @@ impl DefaultFunction {
             DefaultFunction::EqualsData => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(data1), Value::Con(data2)) => match (data1.as_ref(), data2.as_ref()) {
                     (Constant::Data(d1), Constant::Data(d2)) => {
-                        Ok(Value::Con(Constant::Bool(d1.eq(d2)).into()))
+                        Ok(Value::Con(Constant::Bool(d1.eq(d2)).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -1057,7 +1064,7 @@ impl DefaultFunction {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(d) => {
                         let serialized_data = plutus_data_to_bytes(d).unwrap();
-                        Ok(Value::Con(Constant::ByteString(serialized_data).into()))
+                        Ok(Value::Con(Constant::ByteString(serialized_data).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -1069,22 +1076,24 @@ impl DefaultFunction {
                         Constant::ProtoPair(
                             Type::Data,
                             Type::Data,
-                            Rc::new(Constant::Data(d1.clone())),
-                            Rc::new(Constant::Data(d2.clone())),
+                            Constant::Data(d1.clone()).into(),
+                            Constant::Data(d2.clone()).into(),
                         )
                         .into(),
-                    )),
+                    )
+                    .into()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
             DefaultFunction::MkNilData => {
-                Ok(Value::Con(Constant::ProtoList(Type::Data, vec![]).into()))
+                Ok(Value::Con(Constant::ProtoList(Type::Data, vec![]).into()).into())
             }
             DefaultFunction::MkNilPairData => Ok(Value::Con(
                 Constant::ProtoList(Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data)), vec![])
                     .into(),
-            )),
+            )
+            .into()),
         }
     }
 }

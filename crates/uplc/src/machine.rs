@@ -253,7 +253,7 @@ impl Machine {
 
                     let res = self.eval_builtin_app(*fun, force_term, runtime.clone())?;
 
-                    self.stack.push(MachineStep::Return(context, res.into()));
+                    self.stack.push(MachineStep::Return(context, res));
 
                     Ok(())
                 } else {
@@ -301,9 +301,9 @@ impl Machine {
                 if mut_runtime.is_arrow() && !mut_runtime.needs_force() {
                     mut_runtime.push(argument)?;
 
-                    let res = self.eval_builtin_app(*fun, t, runtime.clone())?;
+                    let res = self.eval_builtin_app(*fun, t, runtime.to_owned())?;
 
-                    self.stack.push(MachineStep::Return(context, res.into()));
+                    self.stack.push(MachineStep::Return(context, res));
 
                     Ok(())
                 } else {
@@ -322,7 +322,7 @@ impl Machine {
         fun: DefaultFunction,
         term: Rc<Term<NamedDeBruijn>>,
         runtime: Rc<BuiltinRuntime>,
-    ) -> Result<Value, Error> {
+    ) -> Result<Rc<Value>, Error> {
         if runtime.is_ready() {
             let cost = match self.version {
                 Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
@@ -332,7 +332,7 @@ impl Machine {
 
             runtime.call(&mut self.logs)
         } else {
-            Ok(Value::Builtin { fun, term, runtime })
+            Ok(Value::Builtin { fun, term, runtime }.into())
         }
     }
 
