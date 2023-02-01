@@ -47,7 +47,7 @@ pub fn exec(
     let pretty = program.to_pretty();
 
     if print {
-        println!("{}", pretty);
+        println!("{pretty}");
     } else {
         let out_name = if let Some(out) = out {
             out

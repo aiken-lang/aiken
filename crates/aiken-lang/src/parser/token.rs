@@ -84,7 +84,7 @@ impl fmt::Display for Token {
         let index_str;
         let s = match self {
             Token::Error(c) => {
-                write!(f, "\"{}\"", c)?;
+                write!(f, "\"{c}\"")?;
                 return Ok(());
             }
             Token::Name { name } => name,
@@ -159,6 +159,6 @@ impl fmt::Display for Token {
             Token::Test => "test",
             Token::ErrorTerm => "error",
         };
-        write!(f, "\"{}\"", s)
+        write!(f, "\"{s}\"")
     }
 }

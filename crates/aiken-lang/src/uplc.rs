@@ -756,7 +756,7 @@ impl<'a> CodeGenerator<'a> {
                         if next_list_size == current_clause_index {
                             None
                         } else {
-                            Some(format!("__tail_{}", current_clause_index))
+                            Some(format!("__tail_{current_clause_index}"))
                         }
                     };
 
@@ -1344,7 +1344,7 @@ impl<'a> CodeGenerator<'a> {
                             current_index: index as i64,
                         };
 
-                        let tail_name = format!("{}_{}", new_tail_name, index);
+                        let tail_name = format!("{new_tail_name}_{index}");
 
                         if elements.len() - 1 == index {
                             if tail.is_some() {
@@ -1969,11 +1969,11 @@ impl<'a> CodeGenerator<'a> {
                         current_index += 1;
                     } else {
                         let id_next = self.id_gen.next();
-                        final_args.push((format!("__field_{index}_{}", id_next), index));
+                        final_args.push((format!("__field_{index}_{id_next}"), index));
                         self.recursive_assert_tipo(
                             type_map.get(&index).unwrap(),
                             &mut nested_pattern,
-                            &format!("__field_{index}_{}", id_next),
+                            &format!("__field_{index}_{id_next}"),
                             scope.clone(),
                         )
                     }
@@ -2068,11 +2068,11 @@ impl<'a> CodeGenerator<'a> {
                         current_index += 1;
                     } else {
                         let id_next = self.id_gen.next();
-                        final_args.push((format!("__tuple_{index}_{}", id_next), index));
+                        final_args.push((format!("__tuple_{index}_{id_next}"), index));
                         self.recursive_assert_tipo(
                             type_map.get(&index).unwrap(),
                             &mut nested_pattern,
-                            &format!("__tuple_{index}_{}", id_next),
+                            &format!("__tuple_{index}_{id_next}"),
                             scope.clone(),
                         )
                     }
@@ -2159,7 +2159,7 @@ impl<'a> CodeGenerator<'a> {
 
             assert_vec.push(Air::Fn {
                 scope: scope.clone(),
-                params: vec![format!("__pair_{}", new_id)],
+                params: vec![format!("__pair_{new_id}")],
             });
 
             assert_vec.push(Air::TupleAccessor {
@@ -2180,7 +2180,7 @@ impl<'a> CodeGenerator<'a> {
                         location: Span::empty(),
                     },
                 ),
-                name: format!("__pair_{}", new_id),
+                name: format!("__pair_{new_id}"),
                 variant_name: String::new(),
             });
 
@@ -2248,12 +2248,12 @@ impl<'a> CodeGenerator<'a> {
 
             assert_vec.push(Air::Fn {
                 scope: scope.clone(),
-                params: vec![format!("__list_item_{}", new_id)],
+                params: vec![format!("__list_item_{new_id}")],
             });
 
             assert_vec.push(Air::Let {
                 scope: scope.clone(),
-                name: format!("__list_item_{}", new_id),
+                name: format!("__list_item_{new_id}"),
             });
 
             assert_vec.push(Air::UnWrapData {
@@ -2269,14 +2269,14 @@ impl<'a> CodeGenerator<'a> {
                         location: Span::empty(),
                     },
                 ),
-                name: format!("__list_item_{}", new_id),
+                name: format!("__list_item_{new_id}"),
                 variant_name: String::new(),
             });
 
             self.recursive_assert_tipo(
                 inner_list_type,
                 assert_vec,
-                &format!("__list_item_{}", new_id),
+                &format!("__list_item_{new_id}"),
                 scope.clone(),
             );
 
@@ -2292,7 +2292,7 @@ impl<'a> CodeGenerator<'a> {
                 scope: scope.clone(),
                 names: new_id_list
                     .iter()
-                    .map(|(index, id)| format!("__tuple_index_{}_{}", index, id))
+                    .map(|(index, id)| format!("__tuple_index_{index}_{id}"))
                     .collect_vec(),
                 tipo: tipo.clone().into(),
                 check_last_item: true,
@@ -2312,7 +2312,7 @@ impl<'a> CodeGenerator<'a> {
 
             for (index, name) in new_id_list
                 .into_iter()
-                .map(|(index, id)| (index, format!("__tuple_index_{}_{}", index, id)))
+                .map(|(index, id)| (index, format!("__tuple_index_{index}_{id}")))
             {
                 self.recursive_assert_tipo(
                     &tuple_inner_types[index],
@@ -2340,7 +2340,7 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::When {
                 scope: scope.clone(),
                 tipo: tipo.clone().into(),
-                subject_name: format!("__subject_{}", new_id),
+                subject_name: format!("__subject_{new_id}"),
             });
 
             assert_vec.push(Air::Var {
@@ -2364,7 +2364,7 @@ impl<'a> CodeGenerator<'a> {
                         let arg_name = arg
                             .label
                             .clone()
-                            .unwrap_or(format!("__field_{}_{}", index, new_id));
+                            .unwrap_or(format!("__field_{index}_{new_id}"));
                         (index, arg_name, arg.tipo.clone())
                     })
                     .collect_vec();
@@ -2372,7 +2372,7 @@ impl<'a> CodeGenerator<'a> {
                 assert_vec.push(Air::Clause {
                     scope: scope.clone(),
                     tipo: tipo.clone().into(),
-                    subject_name: format!("__subject_{}", new_id),
+                    subject_name: format!("__subject_{new_id}"),
                     complex_clause: false,
                 });
 
@@ -3716,7 +3716,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                         Term::Var(
                             Name {
-                                text: format!("__list_{}", list_id),
+                                text: format!("__list_{list_id}"),
                                 unique: 0.into(),
                             }
                             .into(),
@@ -3728,7 +3728,7 @@ impl<'a> CodeGenerator<'a> {
                             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                             Term::Var(
                                 Name {
-                                    text: format!("__list_{}", list_id),
+                                    text: format!("__list_{list_id}"),
                                     unique: 0.into(),
                                 }
                                 .into(),
@@ -3748,7 +3748,7 @@ impl<'a> CodeGenerator<'a> {
                 term = apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
-                            text: format!("__list_{}", list_id),
+                            text: format!("__list_{list_id}"),
                             unique: 0.into(),
                         }
                         .into(),
@@ -3773,7 +3773,7 @@ impl<'a> CodeGenerator<'a> {
                                         Term::Builtin(DefaultFunction::TailList).force_wrap(),
                                         Term::Var(
                                             Name {
-                                                text: format!("__list_{}", list_id),
+                                                text: format!("__list_{list_id}"),
                                                 unique: 0.into(),
                                             }
                                             .into(),
@@ -3953,7 +3953,7 @@ impl<'a> CodeGenerator<'a> {
                         term,
                         Term::Var(
                             Name {
-                                text: format!("__arg_{}", id),
+                                text: format!("__arg_{id}"),
                                 unique: 0.into(),
                             }
                             .into(),
@@ -3969,7 +3969,7 @@ impl<'a> CodeGenerator<'a> {
                     term = convert_data_to_type(term, &inner_type);
                     term = Term::Lambda {
                         parameter_name: Name {
-                            text: format!("__arg_{}", id),
+                            text: format!("__arg_{id}"),
                             unique: 0.into(),
                         }
                         .into(),
@@ -4039,7 +4039,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_tuple()
-                            && matches!(tipo.clone().get_uplc_type(), UplcType::Pair(_, _))
+                            && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
                         {
                             let term = apply_wrap(
                                 apply_wrap(
@@ -4134,7 +4134,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(term);
                             return;
                         } else if tipo.is_tuple()
-                            && matches!(tipo.clone().get_uplc_type(), UplcType::Pair(_, _))
+                            && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
                         {
                             let mut term = apply_wrap(
                                 apply_wrap(
@@ -5030,7 +5030,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                         Term::Var(
                             Name {
-                                text: format!("__constr_fields_{}", list_id),
+                                text: format!("__constr_fields_{list_id}"),
                                 unique: 0.into(),
                             }
                             .into(),
@@ -5057,7 +5057,7 @@ impl<'a> CodeGenerator<'a> {
                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
                             Term::Var(
                                 Name {
-                                    text: format!("__constr_fields_{}", list_id),
+                                    text: format!("__constr_fields_{list_id}"),
                                     unique: 0.into(),
                                 }
                                 .into(),
@@ -5071,7 +5071,7 @@ impl<'a> CodeGenerator<'a> {
                 term = apply_wrap(
                     Term::Lambda {
                         parameter_name: Name {
-                            text: format!("__constr_fields_{}", list_id),
+                            text: format!("__constr_fields_{list_id}"),
                             unique: 0.into(),
                         }
                         .into(),
@@ -5260,7 +5260,7 @@ impl<'a> CodeGenerator<'a> {
                 if !unchanged_field_indices.is_empty() {
                     prev_index = highest_index;
                     for index in unchanged_field_indices.into_iter() {
-                        let tail_name = format!("{tail_name_prefix}_{}", prev_index);
+                        let tail_name = format!("{tail_name_prefix}_{prev_index}");
                         let prev_tail_name = format!("{tail_name_prefix}_{index}");
 
                         let mut tail_list = Term::Var(
@@ -5429,7 +5429,7 @@ impl<'a> CodeGenerator<'a> {
                     term = apply_wrap(
                         Term::Lambda {
                             parameter_name: Name {
-                                text: format!("__tuple_{}", list_id),
+                                text: format!("__tuple_{list_id}"),
                                 unique: 0.into(),
                             }
                             .into(),
@@ -5456,7 +5456,7 @@ impl<'a> CodeGenerator<'a> {
                                                     .force_wrap(),
                                                 Term::Var(
                                                     Name {
-                                                        text: format!("__tuple_{}", list_id),
+                                                        text: format!("__tuple_{list_id}"),
                                                         unique: 0.into(),
                                                     }
                                                     .into(),
@@ -5474,7 +5474,7 @@ impl<'a> CodeGenerator<'a> {
                                             .force_wrap(),
                                         Term::Var(
                                             Name {
-                                                text: format!("__tuple_{}", list_id),
+                                                text: format!("__tuple_{list_id}"),
                                                 unique: 0.into(),
                                             }
                                             .into(),
@@ -5502,7 +5502,7 @@ impl<'a> CodeGenerator<'a> {
                             Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                             Term::Var(
                                 Name {
-                                    text: format!("__tuple_{}", list_id),
+                                    text: format!("__tuple_{list_id}"),
                                     unique: 0.into(),
                                 }
                                 .into(),
@@ -5514,7 +5514,7 @@ impl<'a> CodeGenerator<'a> {
                     term = apply_wrap(
                         Term::Lambda {
                             parameter_name: Name {
-                                text: format!("__tuple_{}", list_id),
+                                text: format!("__tuple_{list_id}"),
                                 unique: 0.into(),
                             }
                             .into(),
@@ -5539,7 +5539,7 @@ impl<'a> CodeGenerator<'a> {
                                             Term::Builtin(DefaultFunction::TailList).force_wrap(),
                                             Term::Var(
                                                 Name {
-                                                    text: format!("__tuple_{}", list_id),
+                                                    text: format!("__tuple_{list_id}"),
                                                     unique: 0.into(),
                                                 }
                                                 .into(),

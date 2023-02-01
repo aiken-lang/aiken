@@ -179,7 +179,7 @@ impl Converter {
 
                 Term::Var(
                     Name {
-                        text: format!("i_{}", unique),
+                        text: format!("i_{unique}"),
                         unique,
                     }
                     .into(),
@@ -195,7 +195,7 @@ impl Converter {
                 let unique = self.get_unique(parameter_name)?;
 
                 let name = Name {
-                    text: format!("i_{}", unique),
+                    text: format!("i_{unique}"),
                     unique,
                 };
 
@@ -251,7 +251,7 @@ impl Converter {
         match term {
             Term::Var(name) => Term::Var(
                 NamedDeBruijn {
-                    text: format!("i_{}", name),
+                    text: format!("i_{name}"),
                     index: *name.as_ref(),
                 }
                 .into(),

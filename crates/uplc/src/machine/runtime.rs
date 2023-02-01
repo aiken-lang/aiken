@@ -676,7 +676,7 @@ impl DefaultFunction {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
                         (Constant::String(arg1), Constant::String(arg2)) => Ok(Value::Con(
-                            Constant::String(format!("{}{}", arg1, arg2)).into(),
+                            Constant::String(format!("{arg1}{arg2}")).into(),
                         )),
                         _ => unreachable!(),
                     }

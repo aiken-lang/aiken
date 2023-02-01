@@ -133,7 +133,7 @@ impl Server {
                                     id,
                                     error: Some(lsp_server::ResponseError {
                                         code: 1, // We should assign a code to each error.
-                                        message: format!("{:?}", error),
+                                        message: format!("{error:?}"),
                                         data: None,
                                     }),
                                     result: None,

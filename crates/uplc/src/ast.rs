@@ -144,7 +144,7 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
                 Program::<DeBruijn>::from_hex(&compiled_code, &mut cbor_buffer, &mut flat_buffer)
                     .map_err(|e| {
                         de::Error::invalid_value(
-                            de::Unexpected::Other(&format!("{}", e)),
+                            de::Unexpected::Other(&format!("{e}")),
                             &"a base16-encoded CBOR-serialized UPLC program",
                         )
                     })
@@ -266,8 +266,8 @@ impl Display for Type {
             Type::String => write!(f, "string"),
             Type::ByteString => write!(f, "bytestring"),
             Type::Unit => write!(f, "unit"),
-            Type::List(t) => write!(f, "list {}", t),
-            Type::Pair(t1, t2) => write!(f, "pair {} {}", t1, t2),
+            Type::List(t) => write!(f, "list {t}"),
+            Type::Pair(t1, t2) => write!(f, "pair {t1} {t2}"),
             Type::Data => write!(f, "data"),
         }
     }

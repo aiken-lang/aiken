@@ -156,10 +156,10 @@ impl Error {
         match self {
             Error::List(errors) => {
                 for error in errors {
-                    eprintln!("Error: {:?}", error)
+                    eprintln!("Error: {error:?}")
                 }
             }
-            rest => eprintln!("Error: {:?}", rest),
+            rest => eprintln!("Error: {rest:?}"),
         }
     }
 
@@ -581,7 +581,7 @@ impl Warning {
     }
 
     pub fn report(&self) {
-        eprintln!("Warning: {:?}", self)
+        eprintln!("Warning: {self:?}")
     }
 }
 

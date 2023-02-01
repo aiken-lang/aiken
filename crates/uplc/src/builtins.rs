@@ -192,8 +192,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::MkNilData as u8 => Ok(DefaultFunction::MkNilData),
             v if v == DefaultFunction::MkNilPairData as u8 => Ok(DefaultFunction::MkNilPairData),
             _ => Err(de::Error::Message(format!(
-                "Default Function not found - {}",
-                v
+                "Default Function not found - {v}"
             ))),
         }
     }
@@ -260,7 +259,7 @@ impl FromStr for DefaultFunction {
             "mkPairData" => Ok(MkPairData),
             "mkNilData" => Ok(MkNilData),
             "mkNilPairData" => Ok(MkNilPairData),
-            rest => Err(format!("Default Function not found - {}", rest)),
+            rest => Err(format!("Default Function not found - {rest}")),
         }
     }
 }

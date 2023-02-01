@@ -124,7 +124,7 @@ impl TryFrom<String> for Purpose {
             "mint" => Ok(Purpose::Mint),
             "withdraw" => Ok(Purpose::Withdraw),
             "publish" => Ok(Purpose::Publish),
-            unexpected => Err(format!("Can't turn '{}' into any Purpose", unexpected)),
+            unexpected => Err(format!("Can't turn '{unexpected}' into any Purpose")),
         }
     }
 }
@@ -248,7 +248,7 @@ mod test {
         let validator = Validator::from_checked_module(&modules, &mut generator, validator, def)
             .expect("Failed to create validator blueprint");
 
-        println!("{}", validator);
+        println!("{validator}");
         assert_json_eq!(serde_json::to_value(&validator).unwrap(), json);
     }
 

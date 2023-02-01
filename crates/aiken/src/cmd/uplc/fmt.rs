@@ -21,7 +21,7 @@ pub fn exec(Args { input, print }: Args) -> miette::Result<()> {
     let pretty = program.to_pretty();
 
     if print {
-        println!("{}", pretty);
+        println!("{pretty}");
     } else {
         fs::write(&input, pretty).into_diagnostic()?;
     }

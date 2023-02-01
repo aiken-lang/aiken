@@ -116,7 +116,7 @@ pub fn exec(
                 println!("cpu: {}", total_budget_used.cpu);
             }
             Err(err) => {
-                eprintln!("\nError\n-----\n\n{}\n", err);
+                eprintln!("\nError\n-----\n\n{err}\n");
             }
         }
     }

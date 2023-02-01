@@ -11,5 +11,5 @@ impl<T: WithTerm> WithIdentity for T {}
 fn main() {
     let my_var = "some_var";
     let program = Builder::start(1, 2, 3).with_identity(my_var).build_named();
-    println!("{:#?}", program);
+    println!("{program:#?}");
 }

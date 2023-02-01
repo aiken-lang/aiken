@@ -207,7 +207,7 @@ where
                 Err(de::Error::UnknownTermConstructor(
                     x,
                     if d.pos > 5 { 5 } else { d.pos },
-                    format!("{:02X?}", buffer_slice),
+                    format!("{buffer_slice:02X?}"),
                     d.pos,
                     d.buffer.len(),
                 ))
@@ -347,7 +347,7 @@ where
                 let builtin_option = DefaultFunction::decode(d);
                 match builtin_option {
                     Ok(builtin) => {
-                        state_log.push(format!("{})", builtin));
+                        state_log.push(format!("{builtin})"));
                         Ok(Term::Builtin(builtin))
                     }
                     Err(error) => {
@@ -371,7 +371,7 @@ where
                 Err(de::Error::UnknownTermConstructor(
                     x,
                     if d.pos > 5 { 5 } else { d.pos },
-                    format!("{:02X?}", buffer_slice),
+                    format!("{buffer_slice:02X?}"),
                     d.pos,
                     d.buffer.len(),
                 ))
@@ -526,8 +526,7 @@ impl<'b> Decode<'b> for Constant {
                 Ok(Constant::Data(data))
             }
             x => Err(de::Error::Message(format!(
-                "Unknown constant constructor tag: {:?}",
-                x
+                "Unknown constant constructor tag: {x:?}"
             ))),
         }
     }
@@ -586,21 +585,18 @@ fn decode_type(types: &mut VecDeque<u8>) -> Result<Type, de::Error> {
                     Ok(Type::Pair(type1.into(), type2.into()))
                 }
                 Some(x) => Err(de::Error::Message(format!(
-                    "Unknown constant type tag: {}",
-                    x
+                    "Unknown constant type tag: {x}"
                 ))),
                 None => Err(de::Error::Message("Unexpected empty buffer".to_string())),
             },
             Some(x) => Err(de::Error::Message(format!(
-                "Unknown constant type tag: {}",
-                x
+                "Unknown constant type tag: {x}"
             ))),
             None => Err(de::Error::Message("Unexpected empty buffer".to_string())),
         },
 
         Some(x) => Err(de::Error::Message(format!(
-            "Unknown constant type tag: {}",
-            x
+            "Unknown constant type tag: {x}"
         ))),
         None => Err(de::Error::Message("Unexpected empty buffer".to_string())),
     }
@@ -779,8 +775,7 @@ fn decode_term_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 fn safe_encode_bits(num_bits: u32, byte: u8, e: &mut Encoder) -> Result<(), en::Error> {
     if 2_u8.pow(num_bits) < byte {
         Err(en::Error::Message(format!(
-            "Overflow detected, cannot fit {} in {} bits.",
-            byte, num_bits
+            "Overflow detected, cannot fit {byte} in {num_bits} bits."
         )))
     } else {
         e.bits(num_bits as i64, byte);

@@ -31,7 +31,7 @@ fn process_stdin(check: bool) -> Result<(), Error> {
     aiken_lang::format::pretty(&mut out, module, extra, &src);
 
     if !check {
-        print!("{}", out);
+        print!("{out}");
         return Ok(());
     }
 

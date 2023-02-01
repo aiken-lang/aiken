@@ -72,7 +72,7 @@ pub fn exec(
             println!("\nResult\n------\n\n{}\n", term.to_pretty());
         }
         Err(err) => {
-            eprintln!("\nError\n-----\n\n{}\n", err);
+            eprintln!("\nError\n-----\n\n{err}\n");
         }
     }
 
