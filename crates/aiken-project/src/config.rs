@@ -86,7 +86,7 @@ impl Config {
         let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
             path: config_path.clone(),
             src: raw_config.clone(),
-            named: NamedSource::new(config_path.display().to_string(), raw_config),
+            named: NamedSource::new(config_path.display().to_string(), raw_config).into(),
             // this isn't actually a legit way to get the span
             location: e.line_col().map(|(line, col)| Span {
                 start: line,

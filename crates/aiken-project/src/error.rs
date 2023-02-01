@@ -17,6 +17,7 @@ use owo_colors::OwoColorize;
 use std::{
     fmt::{Debug, Display},
     io,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 use uplc::machine::cost_model::ExBudget;
@@ -60,7 +61,7 @@ pub enum Error {
     TomlLoading {
         path: PathBuf,
         src: String,
-        named: NamedSource,
+        named: Box<NamedSource>,
         location: Option<Span>,
         help: String,
     },
@@ -108,7 +109,7 @@ pub enum Error {
         location: Span,
         path: PathBuf,
         src: String,
-        named: NamedSource,
+        named: Box<NamedSource>,
     },
 
     #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
@@ -438,10 +439,10 @@ impl Diagnostic for Error {
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
-            Error::TomlLoading { named, .. } => Some(named),
+            Error::TomlLoading { named, .. } => Some(named.deref()),
             Error::Format { .. } => None,
             Error::ValidatorMustReturnBool { named, .. } => Some(named),
-            Error::WrongValidatorArity { named, .. } => Some(named),
+            Error::WrongValidatorArity { named, .. } => Some(named.deref()),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,

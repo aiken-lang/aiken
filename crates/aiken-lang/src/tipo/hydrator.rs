@@ -87,10 +87,10 @@ impl Hydrator {
         self.rigid_type_names.clone()
     }
 
-    pub fn type_from_option_annotation<'a>(
+    pub fn type_from_option_annotation(
         &mut self,
         ast: &Option<Annotation>,
-        environment: &mut Environment<'a>,
+        environment: &mut Environment,
     ) -> Result<Arc<Type>, Error> {
         match ast {
             Some(ast) => self.type_from_annotation(ast, environment),
@@ -100,10 +100,10 @@ impl Hydrator {
 
     /// Construct a Type from an AST Type annotation.
     ///
-    pub fn type_from_annotation<'a>(
+    pub fn type_from_annotation(
         &mut self,
         annotation: &Annotation,
-        environment: &mut Environment<'a>,
+        environment: &mut Environment,
     ) -> Result<Arc<Type>, Error> {
         match annotation {
             Annotation::Constructor {
