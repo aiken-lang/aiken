@@ -21,7 +21,7 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub struct BuiltinRuntime {
-    args: Vec<Value>,
+    args: Vec<Rc<Value>>,
     fun: DefaultFunction,
     forces: u32,
 }
@@ -55,7 +55,7 @@ impl BuiltinRuntime {
         self.fun.call(&self.args, logs)
     }
 
-    pub fn push(&mut self, arg: Value) -> Result<(), Error> {
+    pub fn push(&mut self, arg: Rc<Value>) -> Result<(), Error> {
         self.fun.check_type(&arg, &self.args)?;
 
         self.args.push(arg);
@@ -197,7 +197,7 @@ impl DefaultFunction {
         }
     }
 
-    pub fn check_type(&self, arg: &Value, args: &[Value]) -> Result<(), Error> {
+    pub fn check_type(&self, arg: &Value, args: &[Rc<Value>]) -> Result<(), Error> {
         match self {
             DefaultFunction::AddInteger => arg.expect_type(Type::Integer),
             DefaultFunction::SubtractInteger => arg.expect_type(Type::Integer),
@@ -279,7 +279,7 @@ impl DefaultFunction {
                 if args.is_empty() {
                     Ok(())
                 } else {
-                    let first = args[0].clone();
+                    let first = args[0].as_ref().clone();
 
                     arg.expect_type(Type::List(Rc::new(first.try_into()?)))
                 }
@@ -324,9 +324,9 @@ impl DefaultFunction {
     // This should be safe because we've already checked
     // the types of the args as they were pushed. Although
     // the unreachables look ugly, it's the reality of the situation.
-    pub fn call(&self, args: &[Value], logs: &mut Vec<String>) -> Result<Value, Error> {
+    pub fn call(&self, args: &[Rc<Value>], logs: &mut Vec<String>) -> Result<Value, Error> {
         match self {
-            DefaultFunction::AddInteger => match (&args[0], &args[1]) {
+            DefaultFunction::AddInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -340,7 +340,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::SubtractInteger => match (&args[0], &args[1]) {
+            DefaultFunction::SubtractInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -354,7 +354,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::MultiplyInteger => match (&args[0], &args[1]) {
+            DefaultFunction::MultiplyInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -368,7 +368,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::DivideInteger => match (&args[0], &args[1]) {
+            DefaultFunction::DivideInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -385,7 +385,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::QuotientInteger => match (&args[0], &args[1]) {
+            DefaultFunction::QuotientInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -404,7 +404,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::RemainderInteger => match (&args[0], &args[1]) {
+            DefaultFunction::RemainderInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -421,7 +421,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::ModInteger => match (&args[0], &args[1]) {
+            DefaultFunction::ModInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -438,7 +438,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::EqualsInteger => match (&args[0], &args[1]) {
+            DefaultFunction::EqualsInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -449,7 +449,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::LessThanInteger => match (&args[0], &args[1]) {
+            DefaultFunction::LessThanInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -460,7 +460,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::LessThanEqualsInteger => match (&args[0], &args[1]) {
+            DefaultFunction::LessThanEqualsInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
@@ -471,7 +471,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::AppendByteString => match (&args[0], &args[1]) {
+            DefaultFunction::AppendByteString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => Ok(Value::Con(
@@ -485,7 +485,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::ConsByteString => match (&args[0], &args[1]) {
+            DefaultFunction::ConsByteString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer), Value::Con(byte_string)) => {
                     match (integer.as_ref(), byte_string.as_ref()) {
                         (Constant::Integer(arg1), Constant::ByteString(arg2)) => {
@@ -499,27 +499,30 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::SliceByteString => match (&args[0], &args[1], &args[2]) {
-                (Value::Con(integer1), Value::Con(integer2), Value::Con(byte_string)) => {
-                    match (integer1.as_ref(), integer2.as_ref(), byte_string.as_ref()) {
-                        (
-                            Constant::Integer(arg1),
-                            Constant::Integer(arg2),
-                            Constant::ByteString(arg3),
-                        ) => {
-                            let skip = if 0 > *arg1 { 0 } else { *arg1 as usize };
-                            let take = if 0 > *arg2 { 0 } else { *arg2 as usize };
+            DefaultFunction::SliceByteString => {
+                match (args[0].as_ref(), args[1].as_ref(), args[2].as_ref()) {
+                    (Value::Con(integer1), Value::Con(integer2), Value::Con(byte_string)) => {
+                        match (integer1.as_ref(), integer2.as_ref(), byte_string.as_ref()) {
+                            (
+                                Constant::Integer(arg1),
+                                Constant::Integer(arg2),
+                                Constant::ByteString(arg3),
+                            ) => {
+                                let skip = if 0 > *arg1 { 0 } else { *arg1 as usize };
+                                let take = if 0 > *arg2 { 0 } else { *arg2 as usize };
 
-                            let ret: Vec<u8> = arg3.iter().skip(skip).take(take).cloned().collect();
+                                let ret: Vec<u8> =
+                                    arg3.iter().skip(skip).take(take).cloned().collect();
 
-                            Ok(Value::Con(Constant::ByteString(ret).into()))
+                                Ok(Value::Con(Constant::ByteString(ret).into()))
+                            }
+                            _ => unreachable!(),
                         }
-                        _ => unreachable!(),
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
-            DefaultFunction::LengthOfByteString => match &args[0] {
+            }
+            DefaultFunction::LengthOfByteString => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
                         Ok(Value::Con(Constant::Integer(arg1.len() as i128).into()))
@@ -528,7 +531,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::IndexByteString => match (&args[0], &args[1]) {
+            DefaultFunction::IndexByteString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(byte_string), Value::Con(integer)) => {
                     match (byte_string.as_ref(), integer.as_ref()) {
                         (Constant::ByteString(arg1), Constant::Integer(arg2)) => {
@@ -547,7 +550,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::EqualsByteString => match (&args[0], &args[1]) {
+            DefaultFunction::EqualsByteString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
@@ -558,7 +561,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::LessThanByteString => match (&args[0], &args[1]) {
+            DefaultFunction::LessThanByteString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
@@ -569,7 +572,8 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::LessThanEqualsByteString => match (&args[0], &args[1]) {
+            DefaultFunction::LessThanEqualsByteString => match (args[0].as_ref(), args[1].as_ref())
+            {
                 (Value::Con(byte_string1), Value::Con(byte_string2)) => {
                     match (byte_string1.as_ref(), byte_string2.as_ref()) {
                         (Constant::ByteString(arg1), Constant::ByteString(arg2)) => {
@@ -580,7 +584,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::Sha2_256 => match &args[0] {
+            DefaultFunction::Sha2_256 => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
                         use cryptoxide::{digest::Digest, sha2::Sha256};
@@ -599,7 +603,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::Sha3_256 => match &args[0] {
+            DefaultFunction::Sha3_256 => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
                         use cryptoxide::{digest::Digest, sha3::Sha3_256};
@@ -618,7 +622,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::Blake2b_256 => match &args[0] {
+            DefaultFunction::Blake2b_256 => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
                         use cryptoxide::{blake2b::Blake2b, digest::Digest};
@@ -635,38 +639,40 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::VerifyEd25519Signature => match (&args[0], &args[1], &args[2]) {
-                (Value::Con(public_key), Value::Con(message), Value::Con(signature)) => {
-                    match (public_key.as_ref(), message.as_ref(), signature.as_ref()) {
-                        (
-                            Constant::ByteString(public_key),
-                            Constant::ByteString(message),
-                            Constant::ByteString(signature),
-                        ) => {
-                            use cryptoxide::ed25519;
+            DefaultFunction::VerifyEd25519Signature => {
+                match (args[0].as_ref(), args[1].as_ref(), args[2].as_ref()) {
+                    (Value::Con(public_key), Value::Con(message), Value::Con(signature)) => {
+                        match (public_key.as_ref(), message.as_ref(), signature.as_ref()) {
+                            (
+                                Constant::ByteString(public_key),
+                                Constant::ByteString(message),
+                                Constant::ByteString(signature),
+                            ) => {
+                                use cryptoxide::ed25519;
 
-                            let public_key: [u8; 32] =
-                                public_key.clone().try_into().map_err(|e: Vec<u8>| {
-                                    Error::UnexpectedEd25519PublicKeyLength(e.len())
-                                })?;
+                                let public_key: [u8; 32] =
+                                    public_key.clone().try_into().map_err(|e: Vec<u8>| {
+                                        Error::UnexpectedEd25519PublicKeyLength(e.len())
+                                    })?;
 
-                            let signature: [u8; 64] =
-                                signature.clone().try_into().map_err(|e: Vec<u8>| {
-                                    Error::UnexpectedEd25519SignatureLength(e.len())
-                                })?;
+                                let signature: [u8; 64] =
+                                    signature.clone().try_into().map_err(|e: Vec<u8>| {
+                                        Error::UnexpectedEd25519SignatureLength(e.len())
+                                    })?;
 
-                            let valid = ed25519::verify(message, &public_key, &signature);
+                                let valid = ed25519::verify(message, &public_key, &signature);
 
-                            Ok(Value::Con(Constant::Bool(valid).into()))
+                                Ok(Value::Con(Constant::Bool(valid).into()))
+                            }
+                            _ => unreachable!(),
                         }
-                        _ => unreachable!(),
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
+            }
             DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
-            DefaultFunction::AppendString => match (&args[0], &args[1]) {
+            DefaultFunction::AppendString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
                         (Constant::String(arg1), Constant::String(arg2)) => Ok(Value::Con(
@@ -677,7 +683,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::EqualsString => match (&args[0], &args[1]) {
+            DefaultFunction::EqualsString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
                         (Constant::String(arg1), Constant::String(arg2)) => {
@@ -688,7 +694,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::EncodeUtf8 => match &args[0] {
+            DefaultFunction::EncodeUtf8 => match args[0].as_ref() {
                 Value::Con(string) => match string.as_ref() {
                     Constant::String(arg1) => {
                         let bytes = arg1.as_bytes().to_vec();
@@ -699,7 +705,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::DecodeUtf8 => match &args[0] {
+            DefaultFunction::DecodeUtf8 => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
                         let string = String::from_utf8(arg1.clone())?;
@@ -710,38 +716,38 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::IfThenElse => match &args[0] {
+            DefaultFunction::IfThenElse => match args[0].as_ref() {
                 Value::Con(boolean) => match boolean.as_ref() {
                     Constant::Bool(condition) => {
                         if *condition {
-                            Ok(args[1].clone())
+                            Ok(args[1].as_ref().clone())
                         } else {
-                            Ok(args[2].clone())
+                            Ok(args[2].as_ref().clone())
                         }
                     }
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::ChooseUnit => match &args[0] {
+            DefaultFunction::ChooseUnit => match args[0].as_ref() {
                 Value::Con(unit) => match unit.as_ref() {
-                    Constant::Unit => Ok(args[1].clone()),
+                    Constant::Unit => Ok(args[1].as_ref().clone()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::Trace => match &args[0] {
+            DefaultFunction::Trace => match args[0].as_ref() {
                 Value::Con(string) => match string.as_ref() {
                     Constant::String(arg1) => {
                         logs.push(arg1.clone());
 
-                        Ok(args[1].clone())
+                        Ok(args[1].as_ref().clone())
                     }
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::FstPair => match &args[0] {
+            DefaultFunction::FstPair => match args[0].as_ref() {
                 Value::Con(pair) => match pair.as_ref() {
                     Constant::ProtoPair(_, _, first, _) => {
                         Ok(Value::Con(first.as_ref().clone().into()))
@@ -750,7 +756,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::SndPair => match &args[0] {
+            DefaultFunction::SndPair => match args[0].as_ref() {
                 Value::Con(pair) => match pair.as_ref() {
                     Constant::ProtoPair(_, _, _, second) => {
                         Ok(Value::Con(second.as_ref().clone().into()))
@@ -759,20 +765,20 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::ChooseList => match &args[0] {
+            DefaultFunction::ChooseList => match args[0].as_ref() {
                 Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
                         if list.is_empty() {
-                            Ok(args[1].clone())
+                            Ok(args[1].as_ref().clone())
                         } else {
-                            Ok(args[2].clone())
+                            Ok(args[2].as_ref().clone())
                         }
                     }
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::MkCons => match (&args[0], &args[1]) {
+            DefaultFunction::MkCons => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(item), Value::Con(list)) => match list.as_ref() {
                     Constant::ProtoList(r#type, list) => {
                         let mut ret = vec![item.as_ref().clone()];
@@ -784,7 +790,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::HeadList => match &args[0] {
+            DefaultFunction::HeadList => match args[0].as_ref() {
                 c @ Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
                         if list.is_empty() {
@@ -797,7 +803,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::TailList => match &args[0] {
+            DefaultFunction::TailList => match args[0].as_ref() {
                 c @ Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(r#type, list) => {
                         if list.is_empty() {
@@ -812,7 +818,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::NullList => match &args[0] {
+            DefaultFunction::NullList => match args[0].as_ref() {
                 Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
                         Ok(Value::Con(Constant::Bool(list.is_empty()).into()))
@@ -821,18 +827,18 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::ChooseData => match &args[0] {
+            DefaultFunction::ChooseData => match args[0].as_ref() {
                 Value::Con(con) => match con.as_ref() {
-                    Constant::Data(PlutusData::Constr(_)) => Ok(args[1].clone()),
-                    Constant::Data(PlutusData::Map(_)) => Ok(args[2].clone()),
-                    Constant::Data(PlutusData::Array(_)) => Ok(args[3].clone()),
-                    Constant::Data(PlutusData::BigInt(_)) => Ok(args[4].clone()),
-                    Constant::Data(PlutusData::BoundedBytes(_)) => Ok(args[5].clone()),
+                    Constant::Data(PlutusData::Constr(_)) => Ok(args[1].as_ref().clone()),
+                    Constant::Data(PlutusData::Map(_)) => Ok(args[2].as_ref().clone()),
+                    Constant::Data(PlutusData::Array(_)) => Ok(args[3].as_ref().clone()),
+                    Constant::Data(PlutusData::BigInt(_)) => Ok(args[4].as_ref().clone()),
+                    Constant::Data(PlutusData::BoundedBytes(_)) => Ok(args[5].as_ref().clone()),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::ConstrData => match (&args[0], &args[1]) {
+            DefaultFunction::ConstrData => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer), Value::Con(list)) => {
                     match (integer.as_ref(), list.as_ref()) {
                         (Constant::Integer(i), Constant::ProtoList(Type::Data, l)) => {
@@ -858,7 +864,7 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::MapData => match &args[0] {
+            DefaultFunction::MapData => match args[0].as_ref() {
                 Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
                         let mut map = Vec::new();
@@ -885,7 +891,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::ListData => match &args[0] {
+            DefaultFunction::ListData => match args[0].as_ref() {
                 Value::Con(list) => match list.as_ref() {
                     Constant::ProtoList(_, list) => {
                         let data_list: Vec<PlutusData> = list
@@ -904,7 +910,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::IData => match &args[0] {
+            DefaultFunction::IData => match args[0].as_ref() {
                 Value::Con(integer) => match integer.as_ref() {
                     Constant::Integer(i) => Ok(Value::Con(
                         Constant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
@@ -914,7 +920,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::BData => match &args[0] {
+            DefaultFunction::BData => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(b) => Ok(Value::Con(
                         Constant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
@@ -924,7 +930,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::UnConstrData => match &args[0] {
+            DefaultFunction::UnConstrData => match args[0].as_ref() {
                 Value::Con(con) => match con.as_ref() {
                     Constant::Data(PlutusData::Constr(c)) => {
                         Ok(Value::Con(
@@ -955,7 +961,7 @@ impl DefaultFunction {
                     v.clone(),
                 )),
             },
-            DefaultFunction::UnMapData => match &args[0] {
+            DefaultFunction::UnMapData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::Map(m)) => Ok(Value::Con(
                         Constant::ProtoList(
@@ -984,7 +990,7 @@ impl DefaultFunction {
                     v.clone(),
                 )),
             },
-            DefaultFunction::UnListData => match &args[0] {
+            DefaultFunction::UnListData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::Array(l)) => Ok(Value::Con(
                         Constant::ProtoList(
@@ -1006,7 +1012,7 @@ impl DefaultFunction {
                     v.clone(),
                 )),
             },
-            DefaultFunction::UnIData => match &args[0] {
+            DefaultFunction::UnIData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::BigInt(b)) => {
                         if let BigInt::Int(i) = b {
@@ -1027,7 +1033,7 @@ impl DefaultFunction {
                     v.clone(),
                 )),
             },
-            DefaultFunction::UnBData => match &args[0] {
+            DefaultFunction::UnBData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::BoundedBytes(b)) => {
                         Ok(Value::Con(Constant::ByteString(b.to_vec()).into()))
@@ -1042,7 +1048,7 @@ impl DefaultFunction {
                     v.clone(),
                 )),
             },
-            DefaultFunction::EqualsData => match (&args[0], &args[1]) {
+            DefaultFunction::EqualsData => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(data1), Value::Con(data2)) => match (data1.as_ref(), data2.as_ref()) {
                     (Constant::Data(d1), Constant::Data(d2)) => {
                         Ok(Value::Con(Constant::Bool(d1.eq(d2)).into()))
@@ -1051,7 +1057,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::SerialiseData => match &args[0] {
+            DefaultFunction::SerialiseData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(d) => {
                         let serialized_data = plutus_data_to_bytes(d).unwrap();
@@ -1061,7 +1067,7 @@ impl DefaultFunction {
                 },
                 _ => unreachable!(),
             },
-            DefaultFunction::MkPairData => match (&args[0], &args[1]) {
+            DefaultFunction::MkPairData => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(data1), Value::Con(data2)) => match (data1.as_ref(), data2.as_ref()) {
                     (Constant::Data(d1), Constant::Data(d2)) => Ok(Value::Con(
                         Constant::ProtoPair(
