@@ -3,11 +3,11 @@ pub mod builtins;
 mod debruijn;
 mod flat;
 pub mod machine;
+pub mod optimize;
 pub mod parser;
 mod pretty;
 pub mod program_builder;
 pub mod tx;
-pub mod optimize;
 
 pub use pallas_codec::utils::KeyValuePairs;
 pub use pallas_crypto::hash::Hash;
