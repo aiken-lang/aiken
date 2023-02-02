@@ -769,6 +769,16 @@ pub enum AssignmentKind {
     Assert,
 }
 
+impl AssignmentKind {
+    pub fn is_let(&self) -> bool {
+        matches!(self, AssignmentKind::Let)
+    }
+
+    pub fn is_assert(&self) -> bool {
+        matches!(self, AssignmentKind::Assert)
+    }
+}
+
 pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor, Type>>;
 
 pub type UntypedMultiPattern = MultiPattern<(), ()>;

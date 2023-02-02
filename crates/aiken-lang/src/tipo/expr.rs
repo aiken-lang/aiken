@@ -822,6 +822,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 typed_value.type_defining_location(),
             )?;
 
+            if value_typ.is_data() && kind.is_let() && !ann_typ.is_data() {
+                return Err(Error::CouldNotUnify {
+                    location,
+                    expected: ann_typ,
+                    given: value_typ,
+                    situation: Some(UnifyErrorSituation::UnsafeCast),
+                    rigid_type_names: HashMap::new(),
+                });
+            }
+
             value_typ = ann_typ.clone();
 
             // Ensure the pattern matches the type of the value
