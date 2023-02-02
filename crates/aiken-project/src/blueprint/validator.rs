@@ -248,7 +248,6 @@ mod test {
         let validator = Validator::from_checked_module(&modules, &mut generator, validator, def)
             .expect("Failed to create validator blueprint");
 
-        println!("{validator}");
         assert_json_eq!(serde_json::to_value(&validator).unwrap(), json);
     }
 
@@ -263,12 +262,12 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "mint",
-              "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
+              "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
               "redeemer": {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
+              "compiledCode": "4d01000022533357349445261601"
             }),
         );
     }
@@ -314,7 +313,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "3b7ee6139deb59d892955ac3cad15d53e48dcb1643227256b29d2b6f",
+              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
               "datum": {
                 "title": "State",
                 "description": "On-chain state",
@@ -381,7 +380,7 @@ mod test {
                   }
                 ]
               },
-              "compiledCode": "582f01000032322225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae880080041"
+              "compiledCode": "4d01000022253335734944526161"
             }),
         );
     }
@@ -397,7 +396,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "4a0c0768ff3e8c8f9da5fc2c499e592ae37f676a11dbc6e9de958116",
+              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
               "datum": {
                 "dataType": "#pair",
                 "left": {
@@ -410,7 +409,7 @@ mod test {
               "redeemer": {
                 "dataType": "#string"
               },
-              "compiledCode": "584901000032322322322533357349445261637326eb8004c8c8cdd81aba1002357420026ae88004dd600098008009112999aab9f00214984cd5cd98009aba100233300300335744004003"
+              "compiledCode": "4d01000022253335734944526161"
             }),
         )
     }
@@ -426,7 +425,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "5e7487927f32a4d6e8c3b462c8e0e0f685506621f5f2683807805d0e",
+              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
               "datum": {
                 "title": "Tuple",
                 "dataType": "#list",
@@ -446,7 +445,7 @@ mod test {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "5833010000323223222533357349445261637580026002002444a666aae7c008526133573660026ae84008ccc00c00cd5d10010009"
+              "compiledCode": "4d01000022253335734944526161"
             }),
         )
     }
@@ -473,7 +472,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "withdraw",
-                  "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
+                  "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
                   "redeemer": {
                     "title": "Either",
                     "anyOf": [
@@ -517,7 +516,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
+                  "compiledCode": "4d01000022533357349445261601"
                 }
             ),
         )
@@ -541,7 +540,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
+                  "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
                   "redeemer": {
                     "title": "Dict",
                     "anyOf": [
@@ -564,7 +563,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
+                  "compiledCode": "4d01000022533357349445261601"
                 }
             ),
         );
@@ -588,7 +587,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "f9fcaa5bfce8bde3b85e595b5235a184fe0fb79916d38273c74a23cf",
+                  "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
                   "redeemer": {
                     "title": "Dict",
                     "dataType": "map",
@@ -599,7 +598,7 @@ mod test {
                       "dataType": "integer"
                     }
                   },
-                  "compiledCode": "582e0100003232225333573494452616300100122253335573e004293099ab9b3001357420046660060066ae88008005"
+                  "compiledCode": "4d01000022533357349445261601"
                 }
             ),
         );
