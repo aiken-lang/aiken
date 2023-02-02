@@ -1043,21 +1043,6 @@ pub fn expr_parser(
                 },
             );
 
-        let check_parser = just(Token::Check)
-            .ignore_then(pattern_parser())
-            .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-            .then_ignore(just(Token::Equal))
-            .then(r.clone())
-            .map_with_span(
-                |((pattern, annotation), value), span| expr::UntypedExpr::Assignment {
-                    location: span,
-                    value: Box::new(value),
-                    pattern,
-                    kind: ast::AssignmentKind::Check,
-                    annotation,
-                },
-            );
-
         let if_parser = just(Token::If)
             .ignore_then(r.clone().then(block_parser.clone()).map_with_span(
                 |(condition, body), span| ast::IfBranch {
@@ -1109,7 +1094,6 @@ pub fn expr_parser(
             when_parser,
             let_parser,
             assert_parser,
-            check_parser,
             if_parser,
         ));
 

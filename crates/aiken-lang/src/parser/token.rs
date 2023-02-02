@@ -61,7 +61,6 @@ pub enum Token {
     // Keywords (alphabetically):
     As,
     Assert,
-    Check,
     Const,
     Fn,
     If,
@@ -142,7 +141,6 @@ impl fmt::Display for Token {
             Token::NewLine => "NEWLINE",
             Token::As => "as",
             Token::Assert => "assert",
-            Token::Check => "check",
             Token::When => "when",
             Token::Is => "is",
             Token::Const => "const",
