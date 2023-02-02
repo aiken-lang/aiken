@@ -12,7 +12,7 @@ use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
     error::Error,
     hydrator::Hydrator,
-    PatternConstructor, Type, ValueConstructor, ValueConstructorVariant,
+    PatternConstructor, Type, ValueConstructorVariant,
 };
 use crate::{
     ast::{CallArg, Pattern, Span, TypedPattern, UntypedMultiPattern, UntypedPattern},
@@ -233,32 +233,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 self.insert_variable(&name, ann_type.unwrap_or(tipo), location, location)?;
 
                 Ok(Pattern::Var { name, location })
-            }
-
-            Pattern::VarUsage { name, location, .. } => {
-                let ValueConstructor { tipo, .. } = self
-                    .environment
-                    .get_variable(&name)
-                    .cloned()
-                    .ok_or_else(|| Error::UnknownVariable {
-                    location,
-                    name: name.to_string(),
-                    variables: self.environment.local_value_names(),
-                })?;
-
-                self.environment.increment_usage(&name);
-
-                let tipo = self
-                    .environment
-                    .instantiate(tipo, &mut HashMap::new(), self.hydrator);
-
-                self.environment.unify(int(), tipo.clone(), location)?;
-
-                Ok(Pattern::VarUsage {
-                    name,
-                    location,
-                    tipo,
-                })
             }
 
             // Pattern::Concatenate {

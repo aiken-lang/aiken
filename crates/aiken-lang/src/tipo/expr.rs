@@ -831,7 +831,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 Some(ann_typ),
             )?
         } else {
-            if value_typ.is_data() {
+            if value_typ.is_data() && !pattern.is_var() && !pattern.is_discard() {
                 return Err(Error::CastDataNoAnn {
                     location,
                     value: UntypedExpr::Assignment {

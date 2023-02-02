@@ -864,7 +864,6 @@ impl<'a> CodeGenerator<'a> {
                 });
                 pattern_vec.append(values);
             }
-            Pattern::VarUsage { .. } => unreachable!(),
             Pattern::Assign { name, pattern, .. } => {
                 let mut new_vec = vec![];
                 new_vec.push(Air::Let {
@@ -1034,7 +1033,6 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Int { .. } => unreachable!(),
             Pattern::String { .. } => unreachable!(),
             Pattern::Var { .. } => unreachable!(),
-            Pattern::VarUsage { .. } => unreachable!(),
             Pattern::Assign { .. } => todo!("Nested assign not yet implemented"),
             Pattern::Discard { .. } => {
                 pattern_vec.push(Air::Void { scope });
@@ -1504,7 +1502,6 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Assign { .. } => todo!("Nested assign is not yet done"),
             Pattern::Int { .. } => unimplemented!(),
             Pattern::String { .. } => unimplemented!(),
-            Pattern::VarUsage { .. } => unreachable!(),
         }
     }
 
@@ -1552,7 +1549,6 @@ impl<'a> CodeGenerator<'a> {
                     pattern_vec.append(&mut assert_vec);
                 }
             }
-            Pattern::VarUsage { .. } => unreachable!(),
             Pattern::Assign { .. } => todo!("Assign not yet implemented yet"),
             Pattern::Discard { .. } => {
                 pattern_vec.push(Air::Let {
@@ -1651,7 +1647,6 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Int { .. } => todo!(),
             Pattern::String { .. } => todo!(),
             Pattern::Var { .. } => todo!(),
-            Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => todo!(),
             Pattern::List { elements, tail, .. } => {
@@ -1697,7 +1692,6 @@ impl<'a> CodeGenerator<'a> {
                         }
                         Pattern::Int { .. } => todo!(),
                         Pattern::String { .. } => todo!(),
-                        Pattern::VarUsage { .. } => todo!(),
                         Pattern::Assign { .. } => todo!(),
                         Pattern::Discard { .. } => {
                             names.push("_".to_string());
@@ -1846,7 +1840,6 @@ impl<'a> CodeGenerator<'a> {
 
                 self.recursive_assert_tipo(tipo, pattern_vec, name, scope);
             }
-            Pattern::VarUsage { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => unreachable!(),
             Pattern::List { elements, tail, .. } => {
@@ -1858,7 +1851,6 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
-                        Pattern::VarUsage { .. } => todo!(),
                         Pattern::Assign { .. } => todo!(),
                         l @ (Pattern::List { .. }
                         | Pattern::Constructor { .. }
@@ -2582,7 +2574,6 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Pattern::Int { .. } => todo!(),
                 Pattern::String { .. } => todo!(),
-                Pattern::VarUsage { .. } => todo!(),
                 Pattern::Assign { .. } => todo!(),
             };
 

@@ -694,14 +694,6 @@ pub enum Pattern<Constructor, Type> {
         name: String,
     },
 
-    /// A reference to a variable in a bit string. This is always a variable
-    /// being used rather than a new variable being assigned.
-    VarUsage {
-        location: Span,
-        name: String,
-        tipo: Type,
-    },
-
     /// A name given to a sub-pattern using the `as` keyword.
     /// e.g. `assert (1, [_, _] as the_list) = x`
     Assign {
@@ -747,7 +739,6 @@ impl<A, B> Pattern<A, B> {
             Pattern::Assign { pattern, .. } => pattern.location(),
             Pattern::Int { location, .. }
             | Pattern::Var { location, .. }
-            | Pattern::VarUsage { location, .. }
             | Pattern::List { location, .. }
             | Pattern::Discard { location, .. }
             | Pattern::String { location, .. }
@@ -762,6 +753,13 @@ impl<A, B> Pattern<A, B> {
     /// [`Discard`]: Pattern::Discard
     pub fn is_discard(&self) -> bool {
         matches!(self, Self::Discard { .. })
+    }
+
+    /// Returns `true` if the pattern is [`Var`].
+    ///
+    /// [`Var`]: Pattern::Discard
+    pub fn is_var(&self) -> bool {
+        matches!(self, Self::Var { .. })
     }
 }
 
