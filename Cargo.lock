@@ -2480,6 +2480,7 @@ dependencies = [
  "cryptoxide",
  "flat-rs",
  "hex",
+ "indexmap",
  "itertools",
  "pallas-addresses",
  "pallas-codec",

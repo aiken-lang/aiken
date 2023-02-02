@@ -1,5 +1,6 @@
 use std::{
     fmt::{self, Display},
+    hash::{self, Hash},
     rc::Rc,
 };
 
@@ -276,10 +277,17 @@ impl Display for Type {
 /// A Name containing it's parsed textual representation
 /// and a unique id from string interning. The Name's text is
 /// interned during parsing.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct Name {
     pub text: String,
     pub unique: Unique,
+}
+
+impl hash::Hash for Name {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.text.hash(state);
+        self.unique.hash(state);
+    }
 }
 
 impl PartialEq for Name {
@@ -326,7 +334,7 @@ impl Display for Unique {
 /// Similar to `Name` but for Debruijn indices.
 /// `Name` is replaced by `NamedDebruijn` when converting
 /// program to it's debruijn form.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct NamedDeBruijn {
     pub text: String,
     pub index: DeBruijn,

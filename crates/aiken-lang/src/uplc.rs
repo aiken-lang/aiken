@@ -1587,6 +1587,7 @@ impl<'a> CodeGenerator<'a> {
                     );
                 }
             }
+            // TODO: Check constr for assert on all cases
             constr @ Pattern::Constructor { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
                     && assignment_properties.value_is_data
