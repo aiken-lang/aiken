@@ -88,7 +88,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "error" => Token::ErrorTerm,
         "as" => Token::As,
         "assert" => Token::Assert,
-        "check" => Token::Assert,
         "const" => Token::Const,
         "fn" => Token::Fn,
         "test" => Token::Test,
