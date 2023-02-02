@@ -89,7 +89,7 @@ fn builtin_force_reduce(term: &mut Term<Name>, builtin_map: &mut IndexMap<u8, ()
                     builtin_map.insert(*func as u8, ());
                     *term = Term::Var(
                         Name {
-                            text: format!("__{}", func.aiken_name()),
+                            text: format!("__{}_wrapped", func.aiken_name()),
                             unique: 0.into(),
                         }
                         .into(),
@@ -160,7 +160,7 @@ fn inline_reduce(term: &mut Term<Name>) {
 fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>, occurrences: &mut usize) {
     match term {
         Term::Var(name) => {
-            if name.clone() == search_for {
+            if name.as_ref() == search_for.as_ref() {
                 *occurrences += 1;
             }
         }
@@ -202,8 +202,7 @@ fn lambda_reduce(term: &mut Term<Name>) {
             {
                 if let replace_term @ (Term::Var(_) | Term::Constant(_)) = argument.as_ref() {
                     let body = Rc::make_mut(body);
-                    lambda_reduce(body);
-                    *body = substitute_term(body, parameter_name.clone(), replace_term);
+                    *term = substitute_term(body, parameter_name.clone(), replace_term);
                 }
             }
         }
@@ -226,7 +225,7 @@ fn lambda_reduce(term: &mut Term<Name>) {
 fn substitute_term(term: &Term<Name>, original: Rc<Name>, replace_with: &Term<Name>) -> Term<Name> {
     match term {
         Term::Var(name) => {
-            if name.clone() == original {
+            if name.as_ref() == original.as_ref() {
                 replace_with.clone()
             } else {
                 Term::Var(name.clone())
@@ -239,7 +238,7 @@ fn substitute_term(term: &Term<Name>, original: Rc<Name>, replace_with: &Term<Na
             parameter_name,
             body,
         } => {
-            if parameter_name.clone() != original {
+            if parameter_name.as_ref() != original.as_ref() {
                 Term::Lambda {
                     parameter_name: parameter_name.clone(),
                     body: Rc::new(substitute_term(body.as_ref(), original, replace_with)),

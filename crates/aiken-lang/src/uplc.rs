@@ -13,6 +13,7 @@ use uplc::{
     },
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
+    optimize::aiken_optimize_and_intern,
     parser::interner::Interner,
 };
 
@@ -112,9 +113,11 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
-        let mut interner = Interner::new();
+        println!("{}", program.to_pretty());
 
-        interner.program(&mut program);
+        program = aiken_optimize_and_intern(program);
+
+        println!("{}", program.to_pretty());
 
         program
     }
