@@ -195,7 +195,9 @@ impl Constant {
                 .append(RcDoc::text(if *b { "True" } else { "False" })),
             Constant::ProtoList(r#type, items) => RcDoc::text("list")
                 .append(RcDoc::line_())
+                .append(RcDoc::text("<"))
                 .append(r#type.to_doc())
+                .append(RcDoc::text(">"))
                 .append(RcDoc::line())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
