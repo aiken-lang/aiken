@@ -349,7 +349,7 @@ impl PartialEq for NamedDeBruijn {
 /// This is useful for decoding a on chain program into debruijn form.
 /// It allows for injecting fake textual names while also using Debruijn for decoding
 /// without having to loop through twice.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct FakeNamedDeBruijn(pub NamedDeBruijn);
 
 impl From<DeBruijn> for FakeNamedDeBruijn {

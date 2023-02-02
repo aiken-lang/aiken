@@ -113,11 +113,7 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
-        println!("{}", program.to_pretty());
-
         program = aiken_optimize_and_intern(program);
-
-        println!("{}", program.to_pretty());
 
         program
     }
