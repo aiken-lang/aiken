@@ -29,14 +29,6 @@ pub struct ScopeResetData {
     local_values: HashMap<String, ValueConstructor>,
 }
 
-const EXCLUDE_DATA_UNIFY: [&str; 5] = [
-    builtins::INT,
-    builtins::BYTE_ARRAY,
-    builtins::STRING,
-    builtins::BOOL,
-    builtins::LIST,
-];
-
 #[derive(Debug)]
 pub struct Environment<'a> {
     /// Accessors defined in the current module
@@ -1218,16 +1210,8 @@ impl<'a> Environment<'a> {
             return Ok(());
         }
 
-        if let (Type::App { name: name1, .. }, Type::App { name: name2, .. }) =
-            (t1.deref(), t2.deref())
-        {
-            if name1 == "Data" && !EXCLUDE_DATA_UNIFY.contains(&name2.as_str()) {
-                return Ok(());
-            }
-
-            if name2 == "Data" && !EXCLUDE_DATA_UNIFY.contains(&name1.as_str()) {
-                return Ok(());
-            }
+        if t2.is_data() {
+            return Ok(());
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.

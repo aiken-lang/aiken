@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
-    error::{Error, Warning},
+    error::{Error, UnifyErrorSituation, Warning},
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
@@ -941,7 +941,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             (_, value) => self.infer(value),
         }?;
 
-        self.unify(tipo, value.tipo(), value.location())?;
+        self.unify(tipo.clone(), value.tipo(), value.location())?;
+
+        if value.tipo().is_data() && !tipo.is_data() {
+            return Err(Error::CouldNotUnify {
+                location: value.location(),
+                expected: tipo,
+                given: value.tipo(),
+                situation: Some(UnifyErrorSituation::UnsafeCast),
+                rigid_type_names: HashMap::new(),
+            });
+        }
 
         Ok(value)
     }

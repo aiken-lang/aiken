@@ -52,6 +52,39 @@ impl Diagnostic for UnknownLabels {
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
+    #[error("I discovered a type cast from Data without an annotation")]
+    #[diagnostic(code("illegal::type_cast"))]
+    #[diagnostic(help("Try adding an annotation...\n\n{}", format_suggestion(value)))]
+    CastDataNoAnn {
+        #[label("missing annotation")]
+        location: Span,
+        value: UntypedExpr,
+    },
+
+    #[error("I struggled to unify the types of two expressions.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types"))]
+    #[diagnostic(code("type_mismatch"))]
+    #[diagnostic(help("{}", suggest_unify(expected, given, situation, rigid_type_names)))]
+    CouldNotUnify {
+        #[label(
+            "expected type '{}'",
+            expected.to_pretty_with_names(rigid_type_names.clone(), 0),
+        )]
+        location: Span,
+        expected: Arc<Type>,
+        given: Arc<Type>,
+        situation: Option<UnifyErrorSituation>,
+        rigid_type_names: HashMap<u64, String>,
+    },
+
+    #[error("I almost got caught in an infinite cycle of type definitions.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-aliases"))]
+    #[diagnostic(code("cycle"))]
+    CyclicTypeDefinitions {
+        #[related]
+        errors: Vec<Snippet>,
+    },
+
     #[error("I found two function arguments both called '{}'.\n", label.purple())]
     #[diagnostic(code("duplicate::argument"))]
     #[diagnostic(help("Function arguments cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names."
@@ -74,17 +107,6 @@ pub enum Error {
         #[label("declared again here")]
         location: Span,
         #[label("declared here")]
-        previous_location: Span,
-        name: String,
-    },
-
-    #[error("I noticed you were importing '{}' twice.\n", name.purple())]
-    #[diagnostic(code("duplicate::import"))]
-    #[diagnostic(help("The best thing to do from here is to remove one of them."))]
-    DuplicateImport {
-        #[label]
-        location: Span,
-        #[label]
         previous_location: Span,
         name: String,
     },
@@ -116,6 +138,17 @@ For example:
         label: String,
     },
 
+    #[error("I noticed you were importing '{}' twice.\n", name.purple())]
+    #[diagnostic(code("duplicate::import"))]
+    #[diagnostic(help("The best thing to do from here is to remove one of them."))]
+    DuplicateImport {
+        #[label]
+        location: Span,
+        #[label]
+        previous_location: Span,
+        name: String,
+    },
+
     #[error("I discovered two top-level objects referred to as '{}'.\n", name.purple())]
     #[diagnostic(code("duplicate::name"))]
     #[diagnostic(help(r#"Top-level definitions cannot have the same name, even if they refer to objects with different natures (e.g. function and test).
@@ -145,6 +178,28 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
+    #[error("I realized the variable '{}' was mentioned more than once in an alternative pattern.\n", name.purple())]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
+    ))]
+    #[diagnostic(code("duplicate::pattern"))]
+    DuplicateVarInPattern {
+        #[label]
+        location: Span,
+        name: String,
+    },
+
+    #[error("I tripped over an extra variable in an alternative pattern: {}.\n", name.purple())]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
+    ))]
+    #[diagnostic(code("unexpected::variable"))]
+    ExtraVarInAlternativePattern {
+        #[label]
+        location: Span,
+        name: String,
+    },
+
     #[error("I found a data type that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
     #[diagnostic(help("Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."))]
@@ -162,22 +217,6 @@ You can use '{discard}' and numbers to distinguish between similar names.
     ImplicitlyDiscardedExpression {
         #[label]
         location: Span,
-    },
-
-    #[error("I discovered a function which is ending with an assignment.\n")]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
-    #[diagnostic(code("illegal::return"))]
-    #[diagnostic(help(r#"In Aiken, functions must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
-
-If you really meant to return that last expression, try to replace it with the following:
-
-{sample}"#
-        , sample = format_suggestion(expr)
-    ))]
-    LastExpressionIsAssignment {
-        #[label("let-binding as last expression")]
-        location: Span,
-        expr: expr::UntypedExpr,
     },
 
     #[error("I saw a {} fields in a context where there should be {}.\n", given.purple(), expected.purple())]
@@ -223,6 +262,18 @@ From there, you can define 'increment', a function that takes a single argument 
         given: usize,
     },
 
+    // TODO: Since we do not actually support patterns on multiple items, we won't likely ever
+    // encounter that error. We could simplify a bit the type-checker and get rid of that error
+    // eventually.
+    #[error("I counted {} different clauses in a multi-pattern instead of {}.\n", given.purple(), expected.purple())]
+    #[diagnostic(code("arity::clause"))]
+    IncorrectNumClausePatterns {
+        #[label]
+        location: Span,
+        expected: usize,
+        given: usize,
+    },
+
     #[error("I saw a pattern on a constructor that has {} field(s) be matched with {} argument(s).\n", expected.purple(), given.len().purple())]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
     #[diagnostic(code("arity::pattern"))]
@@ -238,18 +289,6 @@ From there, you can define 'increment', a function that takes a single argument 
         name: String,
         module: Option<String>,
         is_record: bool,
-    },
-
-    // TODO: Since we do not actually support patterns on multiple items, we won't likely ever
-    // encounter that error. We could simplify a bit the type-checker and get rid of that error
-    // eventually.
-    #[error("I counted {} different clauses in a multi-pattern instead of {}.\n", given.purple(), expected.purple())]
-    #[diagnostic(code("arity::clause"))]
-    IncorrectNumClausePatterns {
-        #[label]
-        location: Span,
-        expected: usize,
-        given: usize,
     },
 
     #[error("I saw a pattern on a {}-tuple be matched into a {}-tuple.\n", expected.purple(), given.purple())]
@@ -285,6 +324,71 @@ Perhaps, try the following:
         given: usize,
     },
 
+    #[error(
+      "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
+      name.purple(),
+      keyword.purple()
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
+    #[diagnostic(code("illegal::module_name"))]
+    #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
+
+    as, assert, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
+    KeywordInModuleName { name: String, keyword: String },
+
+    #[error("I discovered a function which is ending with an assignment.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
+    #[diagnostic(code("illegal::return"))]
+    #[diagnostic(help(r#"In Aiken, functions must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
+
+If you really meant to return that last expression, try to replace it with the following:
+
+{sample}"#
+        , sample = format_suggestion(expr)
+    ))]
+    LastExpressionIsAssignment {
+        #[label("let-binding as last expression")]
+        location: Span,
+        expr: expr::UntypedExpr,
+    },
+
+    #[error("I found a missing variable in an alternative pattern: {}.\n", name.purple())]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
+    ))]
+    #[diagnostic(code("missing::variable"))]
+    MissingVarInAlternativePattern {
+        #[label]
+        location: Span,
+        name: String,
+    },
+
+    #[error("I stumbled upon an invalid (non-local) clause guard '{}'.\n", name.purple())]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
+    #[diagnostic(code("illegal::clause_guard"))]
+    #[diagnostic(help("There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."))]
+    NonLocalClauseGuardVariable {
+        #[label]
+        location: Span,
+        name: String,
+    },
+
+    #[error(
+        "I tripped over an attempt to access tuple elements on something else than a tuple.\n"
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
+    #[diagnostic(code("illegal::tuple_index"))]
+    #[diagnostic(help(r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
+
+╰─▶ {type_info}"#
+        , type_info = tipo.to_pretty(4).red()
+    ))]
+    NotATuple {
+        #[label]
+        location: Span,
+        tipo: Arc<Type>,
+    },
+
     #[error("I realized that a given 'when/is' expression is non-exhaustive.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
     #[diagnostic(code("non_exhaustive_pattern_match"))]
@@ -317,28 +421,6 @@ In this particular instance, the following cases are missing:
         #[label]
         location: Span,
         tipo: Arc<Type>,
-    },
-
-    #[error(
-      "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
-      name.purple(),
-      keyword.purple()
-    )]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
-    #[diagnostic(code("illegal::module_name"))]
-    #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
-
-    as, assert, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
-    KeywordInModuleName { name: String, keyword: String },
-
-    #[error("I stumbled upon an invalid (non-local) clause guard '{}'.\n", name.purple())]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
-    #[diagnostic(code("illegal::clause_guard"))]
-    #[diagnostic(help("There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."))]
-    NonLocalClauseGuardVariable {
-        #[label]
-        location: Span,
-        name: String,
     },
 
     #[error("I discovered a positional argument after a label argument.\n")]
@@ -407,6 +489,15 @@ You can help me by providing a type-annotation for 'x', as such:
         location: Span,
     },
 
+    #[error("I almost got caught in an endless loop while inferring a recursive type.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-annotations"))]
+    #[diagnostic(code("missing::type_annotation"))]
+    #[diagnostic(help("I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."))]
+    RecursiveType {
+        #[label]
+        location: Span,
+    },
+
     #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n", name.purple())]
     #[diagnostic(code("illegal::module_name"))]
     #[diagnostic(help(r#"Some module names are reserved for internal use. This the case of:
@@ -417,6 +508,20 @@ You can help me by providing a type-annotation for 'x', as such:
 Note that 'aiken' is also imported by default; but you can refer to it explicitly to disambiguate with a local value that would clash with one from that module."#
     ))]
     ReservedModuleName { name: String },
+
+    #[error(
+        "I discovered an attempt to access the {} element of a {}-tuple.\n",
+        Ordinal(*index + 1).to_string().purple(),
+        size.purple()
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
+    #[diagnostic(code("invalid::tuple_index"))]
+    TupleIndexOutOfBound {
+        #[label]
+        location: Span,
+        index: usize,
+        size: usize,
+    },
 
     #[error("I tripped over the following labeled argument: {}.\n", label.purple())]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#labeled-arguments"))]
@@ -499,24 +604,6 @@ Perhaps, try the following:
     },
 
     #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
-    #[diagnostic(code("unknown::module_value"))]
-    #[diagnostic(help(
-        "{}",
-        suggest_neighbor(
-            name,
-            value_constructors.iter(),
-            &suggest_make_public()
-        )
-    ))]
-    UnknownModuleValue {
-        #[label]
-        location: Span,
-        name: String,
-        module_name: String,
-        value_constructors: Vec<String>,
-    },
-
-    #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
     #[diagnostic(code("unknown::module_type"))]
     #[diagnostic(help(
         "{}",
@@ -532,6 +619,24 @@ Perhaps, try the following:
         name: String,
         module_name: String,
         type_constructors: Vec<String>,
+    },
+
+    #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
+    #[diagnostic(code("unknown::module_value"))]
+    #[diagnostic(help(
+        "{}",
+        suggest_neighbor(
+            name,
+            value_constructors.iter(),
+            &suggest_make_public()
+        )
+    ))]
+    UnknownModuleValue {
+        #[label]
+        location: Span,
+        name: String,
+        module_name: String,
+        value_constructors: Vec<String>,
     },
 
     #[error(
@@ -566,6 +671,19 @@ Perhaps, try the following:
         types: Vec<String>,
     },
 
+    #[error("I found a reference to an unknown data-type constructor: '{}'.\n", name.purple())]
+    #[diagnostic(code("unknown::type_constructor"))]
+    #[diagnostic(help(
+        "{}",
+        suggest_neighbor(name, constructors.iter(), "Did you forget to import it?")
+    ))]
+    UnknownTypeConstructor {
+        #[label]
+        location: Span,
+        name: String,
+        constructors: Vec<String>,
+    },
+
     #[error("I found a reference to an unknown variable.\n")]
     #[diagnostic(code("unknown::variable"))]
     #[diagnostic(help(
@@ -585,19 +703,6 @@ Perhaps, try the following:
         location: Span,
         name: String,
         variables: Vec<String>,
-    },
-
-    #[error("I found a reference to an unknown data-type constructor: '{}'.\n", name.purple())]
-    #[diagnostic(code("unknown::type_constructor"))]
-    #[diagnostic(help(
-        "{}",
-        suggest_neighbor(name, constructors.iter(), "Did you forget to import it?")
-    ))]
-    UnknownTypeConstructor {
-        #[label]
-        location: Span,
-        name: String,
-        constructors: Vec<String>,
     },
 
     #[error("I discovered a redundant spread operator.\n")]
@@ -620,102 +725,6 @@ The best thing to do from here is to remove it."#))]
         location: Span,
     },
 
-    #[error("I struggled to unify the types of two expressions.\n")]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types"))]
-    #[diagnostic(code("type_mismatch"))]
-    #[diagnostic(help("{}", suggest_unify(expected, given, situation, rigid_type_names)))]
-    CouldNotUnify {
-        #[label(
-            "expected type '{}'",
-            expected.to_pretty_with_names(rigid_type_names.clone(), 0),
-        )]
-        location: Span,
-        expected: Arc<Type>,
-        given: Arc<Type>,
-        situation: Option<UnifyErrorSituation>,
-        rigid_type_names: HashMap<u64, String>,
-    },
-
-    #[error("I tripped over an extra variable in an alternative pattern: {}.\n", name.purple())]
-    #[diagnostic(url(
-        "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
-    ))]
-    #[diagnostic(code("unexpected::variable"))]
-    ExtraVarInAlternativePattern {
-        #[label]
-        location: Span,
-        name: String,
-    },
-
-    #[error("I found a missing variable in an alternative pattern: {}.\n", name.purple())]
-    #[diagnostic(url(
-        "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
-    ))]
-    #[diagnostic(code("missing::variable"))]
-    MissingVarInAlternativePattern {
-        #[label]
-        location: Span,
-        name: String,
-    },
-
-    #[error("I realized the variable '{}' was mentioned more than once in an alternative pattern.\n", name.purple())]
-    #[diagnostic(url(
-        "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
-    ))]
-    #[diagnostic(code("duplicate::pattern"))]
-    DuplicateVarInPattern {
-        #[label]
-        location: Span,
-        name: String,
-    },
-
-    #[error("I almost got caught in an infinite cycle of type definitions.\n")]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-aliases"))]
-    #[diagnostic(code("cycle"))]
-    CyclicTypeDefinitions {
-        #[related]
-        errors: Vec<Snippet>,
-    },
-
-    #[error("I almost got caught in an endless loop while inferring a recursive type.\n")]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-annotations"))]
-    #[diagnostic(code("missing::type_annotation"))]
-    #[diagnostic(help("I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."))]
-    RecursiveType {
-        #[label]
-        location: Span,
-    },
-
-    #[error(
-        "I tripped over an attempt to access tuple elements on something else than a tuple.\n"
-    )]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
-    #[diagnostic(code("illegal::tuple_index"))]
-    #[diagnostic(help(r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
-
-╰─▶ {type_info}"#
-        , type_info = tipo.to_pretty(4).red()
-    ))]
-    NotATuple {
-        #[label]
-        location: Span,
-        tipo: Arc<Type>,
-    },
-
-    #[error(
-        "I discovered an attempt to access the {} element of a {}-tuple.\n",
-        Ordinal(*index + 1).to_string().purple(),
-        size.purple()
-    )]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
-    #[diagnostic(code("invalid::tuple_index"))]
-    TupleIndexOutOfBound {
-        #[label]
-        location: Span,
-        index: usize,
-        size: usize,
-    },
-
     #[error("I discovered an attempt to import a validator module: '{}'\n", name.purple())]
     #[diagnostic(code("illegal::import"))]
     #[diagnostic(help("If you are trying to share code defined in a validator then move it to a library module under {}", "lib/".purple()))]
@@ -723,15 +732,6 @@ The best thing to do from here is to remove it."#))]
         #[label]
         location: Span,
         name: String,
-    },
-
-    #[error("I discovered a type cast from Data without an annotation")]
-    #[diagnostic(code("illegal::type_cast"))]
-    #[diagnostic(help("Try adding an annotation...\n\n{}", format_suggestion(value)))]
-    CastDataNoAnn {
-        #[label]
-        location: Span,
-        value: UntypedExpr,
     },
 }
 
@@ -948,6 +948,19 @@ fn suggest_unify(
                {}
             "#,
             op.to_doc().to_pretty_string(70).yellow(),
+            expected.green(),
+            given.red()
+        },
+        Some(UnifyErrorSituation::UnsafeCast) => formatdoc! {
+            r#"I am inferring the following type:
+
+               {}
+
+               but I found an expression with a different type:
+
+               {}
+
+               It is unsafe to cast Data without using assert"#,
             expected.green(),
             given.red()
         },
@@ -1187,6 +1200,9 @@ pub enum UnifyErrorSituation {
 
     /// The operands of a binary operator were incorrect.
     Operator(BinOp),
+
+    /// Called a function with something of type Data but something else was expected
+    UnsafeCast,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
