@@ -255,10 +255,20 @@ impl<'a> CodeGenerator<'a> {
                 scope_fun.push(self.id_gen.next());
                 self.build_ir(fun, ir_stack, scope_fun);
 
-                for arg in args {
-                    let mut scope = scope.clone();
-                    scope.push(self.id_gen.next());
-                    self.build_ir(&arg.value, ir_stack, scope);
+                if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                        let mut scope = scope.clone();
+                        scope.push(self.id_gen.next());
+
+                        if func_type.is_data() && !arg.value.tipo().is_data() {
+                            ir_stack.push(Air::WrapData {
+                                scope: scope.clone(),
+                                tipo: arg.value.tipo(),
+                            })
+                        }
+
+                        self.build_ir(&arg.value, ir_stack, scope);
+                    }
                 }
             }
             TypedExpr::BinOp {
@@ -292,8 +302,6 @@ impl<'a> CodeGenerator<'a> {
                 let mut value_scope = scope.clone();
                 value_scope.push(self.id_gen.next());
 
-                let value_is_data = value.tipo().is_data();
-
                 self.build_ir(value, &mut value_vec, value_scope);
 
                 self.assignment_ir(
@@ -302,7 +310,7 @@ impl<'a> CodeGenerator<'a> {
                     &mut value_vec,
                     tipo,
                     AssignmentProperties {
-                        value_is_data,
+                        value_type: value.tipo(),
                         kind: *kind,
                     },
                     scope,
@@ -333,7 +341,7 @@ impl<'a> CodeGenerator<'a> {
                         &mut subject_vec,
                         &subject.tipo(),
                         AssignmentProperties {
-                            value_is_data: false,
+                            value_type: clauses[0].then.tipo(),
                             kind: AssignmentKind::Let,
                         },
                         scope,
@@ -1514,7 +1522,7 @@ impl<'a> CodeGenerator<'a> {
         assignment_properties: AssignmentProperties,
         scope: Vec<u64>,
     ) {
-        if assignment_properties.value_is_data && !tipo.is_data() && !pattern.is_discard() {
+        if assignment_properties.value_type.is_data() && !tipo.is_data() && !pattern.is_discard() {
             value_vec.insert(
                 0,
                 Air::UnWrapData {
@@ -1522,6 +1530,15 @@ impl<'a> CodeGenerator<'a> {
                     tipo: tipo.clone().into(),
                 },
             );
+        }
+        if !assignment_properties.value_type.is_data() && tipo.is_data() && !pattern.is_discard() {
+            value_vec.insert(
+                0,
+                Air::WrapData {
+                    scope: scope.clone(),
+                    tipo: assignment_properties.value_type.clone(),
+                },
+            )
         }
         match pattern {
             Pattern::Int { .. } | Pattern::String { .. } => unreachable!(),
@@ -1534,7 +1551,7 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(value_vec);
 
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                    && assignment_properties.value_is_data
+                    && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
                     let mut assert_vec = vec![];
@@ -1560,7 +1577,7 @@ impl<'a> CodeGenerator<'a> {
             }
             list @ Pattern::List { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                    && assignment_properties.value_is_data
+                    && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
                     self.recursive_assert_pattern(
@@ -1585,7 +1602,7 @@ impl<'a> CodeGenerator<'a> {
             // TODO: Check constr for assert on all cases
             constr @ Pattern::Constructor { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                    && assignment_properties.value_is_data
+                    && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
                     self.recursive_assert_pattern(
@@ -1609,7 +1626,7 @@ impl<'a> CodeGenerator<'a> {
             }
             tuple @ Pattern::Tuple { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                    && assignment_properties.value_is_data
+                    && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
                     self.recursive_assert_pattern(
@@ -1831,11 +1848,6 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Int { .. } => unreachable!(),
             Pattern::String { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
-                pattern_vec.push(Air::Let {
-                    scope: scope.clone(),
-                    name: name.clone(),
-                });
-
                 pattern_vec.append(value_vec);
 
                 self.recursive_assert_tipo(tipo, pattern_vec, name, scope);
@@ -2426,7 +2438,7 @@ impl<'a> CodeGenerator<'a> {
                     let list_name = format!("__list_{id}");
 
                     if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                        && assignment_properties.value_is_data
+                        && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
                         self.recursive_assert_pattern(
@@ -2479,7 +2491,7 @@ impl<'a> CodeGenerator<'a> {
                     let constr_name = format!("{constr_name}_{id}");
 
                     if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                        && assignment_properties.value_is_data
+                        && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
                         self.recursive_assert_pattern(
@@ -2528,7 +2540,7 @@ impl<'a> CodeGenerator<'a> {
                     let tuple_name = format!("__tuple_name_{id}");
 
                     if matches!(assignment_properties.kind, AssignmentKind::Assert)
-                        && assignment_properties.value_is_data
+                        && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
                         self.recursive_assert_pattern(
@@ -3459,6 +3471,15 @@ impl<'a> CodeGenerator<'a> {
                         tipo: replaced_type,
                     };
                 }
+                Air::WrapData { scope, tipo } => {
+                    let mut replaced_type = tipo.clone();
+                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
+                    ir_stack[index] = Air::WrapData {
+                        scope,
+                        tipo: replaced_type,
+                    };
+                }
                 _ => {}
             }
         }
@@ -4358,6 +4379,13 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = convert_data_to_type(term, &tipo);
+
+                arg_stack.push(term);
+            }
+            Air::WrapData { tipo, .. } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                term = convert_type_to_data(term, &tipo);
 
                 arg_stack.push(term);
             }
@@ -5388,18 +5416,21 @@ impl<'a> CodeGenerator<'a> {
                     }
                 } else {
                     self.needs_field_access = true;
-                    term = apply_wrap(
+                    term = convert_data_to_type(
                         apply_wrap(
-                            Term::Var(
-                                Name {
-                                    text: CONSTR_GET_FIELD.to_string(),
-                                    unique: 0.into(),
-                                }
-                                .into(),
+                            apply_wrap(
+                                Term::Var(
+                                    Name {
+                                        text: CONSTR_GET_FIELD.to_string(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
+                                term,
                             ),
-                            term,
+                            Term::Constant(UplcConstant::Integer(tuple_index as i128).into()),
                         ),
-                        Term::Constant(UplcConstant::Integer(tuple_index as i128).into()),
+                        &tipo.get_inner_types()[tuple_index],
                     );
                 }
 

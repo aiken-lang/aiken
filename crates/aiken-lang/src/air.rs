@@ -106,6 +106,11 @@ pub enum Air {
         tipo: Arc<Type>,
     },
 
+    WrapData {
+        scope: Vec<u64>,
+        tipo: Arc<Type>,
+    },
+
     AssertConstr {
         scope: Vec<u64>,
         constr_index: usize,
@@ -268,6 +273,7 @@ impl Air {
             | Air::UnOp { scope, .. }
             | Air::Let { scope, .. }
             | Air::UnWrapData { scope, .. }
+            | Air::WrapData { scope, .. }
             | Air::AssertConstr { scope, .. }
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
@@ -335,6 +341,15 @@ impl Air {
                     public: true,
                     module: String::new(),
                     name: "Void".to_string(),
+                    args: vec![],
+                }
+                .into(),
+            ),
+            Air::WrapData { .. } => Some(
+                Type::App {
+                    public: true,
+                    module: String::new(),
+                    name: "Data".to_string(),
                     args: vec![],
                 }
                 .into(),
