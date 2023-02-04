@@ -53,7 +53,7 @@ pub struct FunctionAccessKey {
 
 #[derive(Clone, Debug)]
 pub struct AssignmentProperties {
-    pub value_is_data: bool,
+    pub value_type: Arc<Type>,
     pub kind: AssignmentKind,
 }
 
@@ -1217,6 +1217,15 @@ pub fn monomorphize(
                     find_generics_to_replace(&mut tipo, &generic_types);
 
                     new_air[index] = Air::UnWrapData { scope, tipo };
+                    needs_variant = true;
+                }
+            }
+            Air::WrapData { scope, tipo } => {
+                if tipo.is_generic() {
+                    let mut tipo = tipo.clone();
+                    find_generics_to_replace(&mut tipo, &generic_types);
+
+                    new_air[index] = Air::WrapData { scope, tipo };
                     needs_variant = true;
                 }
             }
