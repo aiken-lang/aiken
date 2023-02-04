@@ -391,6 +391,18 @@ pub fn from_default_function(
 
             Some((tipo, 3))
         }
+
+        DefaultFunction::VerifyEcdsaSecp256k1Signature => {
+            let tipo = function(vec![byte_array(), byte_array(), byte_array()], bool());
+
+            Some((tipo, 3))
+        }
+        DefaultFunction::VerifySchnorrSecp256k1Signature => {
+            let tipo = function(vec![byte_array(), byte_array(), byte_array()], bool());
+
+            Some((tipo, 3))
+        }
+
         DefaultFunction::AppendString => {
             let tipo = function(vec![string(), string()], string());
 
@@ -499,9 +511,6 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
-        // Disabled until the next hard-fork
-        DefaultFunction::VerifyEcdsaSecp256k1Signature => None,
-        DefaultFunction::VerifySchnorrSecp256k1Signature => None,
         // Anything below has a direct syntax equivalent in Aiken, so
         // there's no need to support builtin for those.
         DefaultFunction::ChooseData => None,
