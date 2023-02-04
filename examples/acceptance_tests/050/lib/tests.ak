@@ -4,6 +4,20 @@ pub type Thing {
   wow: Int,
 }
 
+test let_1() {
+  let x: Data = 1
+
+  x == builtin.i_data(1)
+}
+
+test let_2() {
+  let x: Data = 1
+
+  assert y: Int = x
+
+  y == 1
+}
+
 test assert_1() {
   assert thing: Thing = builtin.constr_data(0, [builtin.i_data(1)])
 
@@ -22,6 +36,16 @@ test assert_2() {
   let still_thing = cast_to_thing(thing)
 
   still_thing.wow == 1
+}
+
+test tuple_1() {
+  let thing = (#"aa", #"bb", #"cc")
+  thing.1st == #"aa"
+}
+
+test pair_1() {
+  let thing = (#"aa", #"bb")
+  thing.1st == #"aa"
 }
 // should not typecheck
 // test unlift_data_without_assert_1() {
