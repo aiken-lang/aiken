@@ -207,7 +207,7 @@ fn infer_definition(
                 })?;
 
             // Assert that the inferred type matches the type of any recursive call
-            environment.unify(preregistered_type, tipo.clone(), location)?;
+            environment.unify(preregistered_type, tipo.clone(), location, false)?;
 
             // Generalise the function if safe to do so
             let tipo = if safe_to_generalise {
@@ -250,7 +250,7 @@ fn infer_definition(
             if let Definition::Fn(f) =
                 infer_definition(Definition::Fn(f), module_name, hydrators, environment, kind)?
             {
-                environment.unify(f.return_type.clone(), builtins::bool(), f.location)?;
+                environment.unify(f.return_type.clone(), builtins::bool(), f.location, false)?;
                 Ok(Definition::Test(f))
             } else {
                 unreachable!("test defintion inferred as something else than a function?")

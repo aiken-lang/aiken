@@ -82,7 +82,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     Some(initial) if self.initial_pattern_vars.contains(name) => {
                         assigned.push(name.to_string());
                         let initial_typ = initial.tipo.clone();
-                        self.environment.unify(initial_typ, typ, err_location)
+                        self.environment
+                            .unify(initial_typ, typ, err_location, false)
                     }
 
                     // This variable was not defined in the Initial multi-pattern
@@ -280,13 +281,13 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
             }
 
             Pattern::Int { location, value } => {
-                self.environment.unify(tipo, int(), location)?;
+                self.environment.unify(tipo, int(), location, false)?;
 
                 Ok(Pattern::Int { location, value })
             }
 
             Pattern::String { location, value } => {
-                self.environment.unify(tipo, string(), location)?;
+                self.environment.unify(tipo, string(), location, false)?;
 
                 Ok(Pattern::String { location, value })
             }
@@ -358,7 +359,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                         .collect();
 
                     self.environment
-                        .unify(tuple(elems_types.clone()), tipo, location)?;
+                        .unify(tuple(elems_types.clone()), tipo, location, false)?;
 
                     let mut patterns = vec![];
 
@@ -513,7 +514,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 })
                                 .try_collect()?;
 
-                            self.environment.unify(tipo, ret.clone(), location)?;
+                            self.environment.unify(tipo, ret.clone(), location, false)?;
 
                             Ok(Pattern::Constructor {
                                 location,
@@ -543,6 +544,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 tipo,
                                 instantiated_constructor_type.clone(),
                                 location,
+                                false,
                             )?;
 
                             Ok(Pattern::Constructor {

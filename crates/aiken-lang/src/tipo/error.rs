@@ -951,19 +951,6 @@ fn suggest_unify(
             expected.green(),
             given.red()
         },
-        Some(UnifyErrorSituation::UnsafeCast) => formatdoc! {
-            r#"I am inferring the following type:
-
-               {}
-
-               but I found an expression with a different type:
-
-               {}
-
-               It is unsafe to cast Data without using assert"#,
-            expected.green(),
-            given.red()
-        },
         None => formatdoc! {
             r#"I am inferring the following type:
 
@@ -1200,9 +1187,6 @@ pub enum UnifyErrorSituation {
 
     /// The operands of a binary operator were incorrect.
     Operator(BinOp),
-
-    /// Called a function with something of type Data but something else was expected
-    UnsafeCast,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

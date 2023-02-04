@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use vec1::Vec1;
 
@@ -268,6 +268,15 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
                 func.tipo(),
                 function(vec![self.argument_type.clone()], return_type.clone()),
                 func.location(),
+                if let Type::Fn { args, .. } = func.tipo().deref() {
+                    if let Some(typ) = args.get(0) {
+                        typ.is_data()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                },
             )
             .map_err(|e| {
                 let is_pipe_mismatch = self.check_if_pipe_type_mismatch(&e, func.location());
@@ -301,7 +310,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
                     (Some(a), Some(b)) => self
                         .expr_typer
                         .environment
-                        .unify(a.clone(), b.clone(), location)
+                        .unify(a.clone(), b.clone(), location, a.is_data())
                         .is_err(),
                     _ => false,
                 }

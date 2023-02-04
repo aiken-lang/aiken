@@ -1205,19 +1205,30 @@ impl<'a> Environment<'a> {
     ///
     /// It two types are found to not be the same an error is returned.
     #[allow(clippy::only_used_in_recursion)]
-    pub fn unify(&mut self, t1: Arc<Type>, t2: Arc<Type>, location: Span) -> Result<(), Error> {
+    pub fn unify(
+        &mut self,
+        t1: Arc<Type>,
+        t2: Arc<Type>,
+        location: Span,
+        allow_cast: bool,
+    ) -> Result<(), Error> {
         if t1 == t2 {
             return Ok(());
         }
 
-        if (t1.is_data() || t2.is_data()) && !(t1.is_unbound() || t2.is_unbound()) {
+        if allow_cast
+            && (t1.is_data() || t2.is_data())
+            && !(t1.is_unbound() || t2.is_unbound())
+            && !(t1.is_function() || t2.is_function())
+            && !(t1.is_generic() || t2.is_generic())
+        {
             return Ok(());
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
         if let Type::Var { tipo } = t2.deref() {
             if let TypeVar::Link { tipo } = tipo.borrow().deref() {
-                return self.unify(t1, tipo.clone(), location);
+                return self.unify(t1, tipo.clone(), location, allow_cast);
             }
         }
 
@@ -1253,7 +1264,7 @@ impl<'a> Environment<'a> {
                     Ok(())
                 }
 
-                Action::Unify(t) => self.unify(t, t2, location),
+                Action::Unify(t) => self.unify(t, t2, location, allow_cast),
 
                 Action::CouldNotUnify => Err(Error::CouldNotUnify {
                     location,
@@ -1266,7 +1277,9 @@ impl<'a> Environment<'a> {
         }
 
         if let Type::Var { .. } = t2.deref() {
-            return self.unify(t2, t1, location).map_err(|e| e.flip_unify());
+            return self
+                .unify(t2, t1, location, allow_cast)
+                .map_err(|e| e.flip_unify());
         }
 
         match (t1.deref(), t2.deref()) {
@@ -1288,7 +1301,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         t1.clone(),
                         t2.clone(),
-                        self.unify(a.clone(), b.clone(), location),
+                        self.unify(a.clone(), b.clone(), location, allow_cast),
                     )?;
                 }
                 Ok(())
@@ -1301,7 +1314,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         t1.clone(),
                         t2.clone(),
-                        self.unify(a.clone(), b.clone(), location),
+                        self.unify(a.clone(), b.clone(), location, allow_cast),
                     )?;
                 }
                 Ok(())
@@ -1320,17 +1333,16 @@ impl<'a> Environment<'a> {
                 },
             ) if args1.len() == args2.len() => {
                 for (a, b) in args1.iter().zip(args2) {
-                    self.unify(a.clone(), b.clone(), location).map_err(|_| {
-                        Error::CouldNotUnify {
+                    self.unify(a.clone(), b.clone(), location, allow_cast)
+                        .map_err(|_| Error::CouldNotUnify {
                             location,
                             expected: t1.clone(),
                             given: t2.clone(),
                             situation: None,
                             rigid_type_names: HashMap::new(),
-                        }
-                    })?;
+                        })?;
                 }
-                self.unify(retrn1.clone(), retrn2.clone(), location)
+                self.unify(retrn1.clone(), retrn2.clone(), location, allow_cast)
                     .map_err(|_| Error::CouldNotUnify {
                         location,
                         expected: t1.clone(),
