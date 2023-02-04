@@ -160,7 +160,7 @@ impl Hydrator {
                 for (parameter, (location, argument)) in
                     parameter_types.into_iter().zip(argument_types)
                 {
-                    environment.unify(parameter, argument, location)?;
+                    environment.unify(parameter, argument, location, false)?;
                 }
 
                 Ok(return_type)
