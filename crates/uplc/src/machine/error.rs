@@ -48,4 +48,6 @@ pub enum Error {
     DeserialisationError(String, Value),
     #[error("Integer overflow")]
     OverflowError,
+    #[error(transparent)]
+    InvalidEcdsaSecp256k1Args(#[from] k256::ecdsa::signature::Error),
 }
