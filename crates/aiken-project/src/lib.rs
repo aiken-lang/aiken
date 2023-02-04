@@ -316,9 +316,14 @@ where
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
         blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
-            Ok(validator
-                .program
-                .address(Network::Testnet, delegation_part.to_owned()))
+            let n = validator.parameters.len();
+            if n > 0 {
+                Err(blueprint::error::Error::ParameterizedValidator { n }.into())
+            } else {
+                Ok(validator
+                    .program
+                    .address(Network::Testnet, delegation_part.to_owned()))
+            }
         })
     }
 
