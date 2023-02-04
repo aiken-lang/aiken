@@ -12,7 +12,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::{schema::Schema, validator, Blueprint, LookupResult};
+use crate::blueprint::{schema::Schema, validator, Blueprint};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -37,7 +37,7 @@ use std::{
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{Constant, Term},
+    ast::{Constant, DeBruijn, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -306,9 +306,8 @@ where
         };
 
         // Read blueprint
-        let filepath = self.blueprint_path();
-        let blueprint =
-            File::open(filepath).map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint = File::open(self.blueprint_path())
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let blueprint: Blueprint<serde_json::Value> =
             serde_json::from_reader(BufReader::new(blueprint))?;
 
@@ -321,6 +320,33 @@ where
                 .program
                 .address(Network::Testnet, delegation_part.to_owned()))
         })
+    }
+
+    pub fn apply_parameter(
+        &self,
+        title: Option<&String>,
+        purpose: Option<&validator::Purpose>,
+        param: &Term<DeBruijn>,
+    ) -> Result<Blueprint<serde_json::Value>, Error> {
+        // Read blueprint
+        let blueprint = File::open(self.blueprint_path())
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint: Blueprint<serde_json::Value> =
+            serde_json::from_reader(BufReader::new(blueprint))?;
+
+        // Apply parameters
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+        blueprint.with_validator(
+            title,
+            purpose,
+            when_too_many,
+            when_missing,
+            |mut validator| validator.apply(param).map_err(|e| e.into()),
+        )?;
+
+        Ok(blueprint)
     }
 
     fn compile_deps(&mut self) -> Result<(), Error> {

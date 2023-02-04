@@ -122,7 +122,12 @@ impl Validator<Schema> {
                 .unwrap(),
         })
     }
+}
 
+impl<T> Validator<T>
+where
+    T: Clone,
+{
     pub fn apply(&mut self, arg: &Term<DeBruijn>) -> Result<(), Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),

@@ -53,7 +53,10 @@ impl Blueprint<Schema> {
     }
 }
 
-impl<T> Blueprint<T> {
+impl<T> Blueprint<T>
+where
+    T: Clone,
+{
     pub fn lookup(
         &self,
         title: Option<&String>,
@@ -83,10 +86,10 @@ impl<T> Blueprint<T> {
         action: F,
     ) -> Result<A, E>
     where
-        F: Fn(&Validator<T>) -> Result<A, E>,
+        F: Fn(Validator<T>) -> Result<A, E>,
     {
         match self.lookup(title, purpose) {
-            Some(LookupResult::One(validator)) => action(validator),
+            Some(LookupResult::One(validator)) => action(validator.to_owned()),
             Some(LookupResult::Many) => Err(when_too_many(
                 self.validators
                     .iter()
