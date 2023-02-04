@@ -12,7 +12,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::{schema::Schema, validator, Blueprint};
+use crate::blueprint::{schema::Schema, validator, Blueprint, LookupResult};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -283,8 +283,8 @@ where
 
     pub fn address(
         &self,
-        with_title: Option<&String>,
-        with_purpose: Option<&validator::Purpose>,
+        title: Option<&String>,
+        purpose: Option<&validator::Purpose>,
         stake_address: Option<&String>,
     ) -> Result<ShelleyAddress, Error> {
         // Parse stake address
@@ -312,38 +312,15 @@ where
         let blueprint: Blueprint<serde_json::Value> =
             serde_json::from_reader(BufReader::new(blueprint))?;
 
-        // Find validator's program
-        let mut program = None;
-        for v in blueprint.validators.iter() {
-            if Some(&v.title) == with_title.or(Some(&v.title))
-                && Some(&v.purpose) == with_purpose.or(Some(&v.purpose))
-            {
-                program = Some(if program.is_none() {
-                    Ok(v.program.clone())
-                } else {
-                    Err(Error::MoreThanOneValidatorFound {
-                        known_validators: blueprint
-                            .validators
-                            .iter()
-                            .map(|v| (v.title.clone(), v.purpose.clone()))
-                            .collect(),
-                    })
-                })
-            }
-        }
-
-        // Print the address
-        match program {
-            Some(Ok(program)) => Ok(program.address(Network::Testnet, delegation_part)),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::NoValidatorNotFound {
-                known_validators: blueprint
-                    .validators
-                    .iter()
-                    .map(|v| (v.title.clone(), v.purpose.clone()))
-                    .collect(),
-            }),
-        }
+        // Calculate the address
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+        blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+            Ok(validator
+                .program
+                .address(Network::Testnet, delegation_part.to_owned()))
+        })
     }
 
     fn compile_deps(&mut self) -> Result<(), Error> {

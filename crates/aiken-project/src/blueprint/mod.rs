@@ -7,12 +7,12 @@ use aiken_lang::uplc::CodeGenerator;
 use error::Error;
 use schema::Schema;
 use std::fmt::{self, Debug, Display};
-use validator::Validator;
+use validator::{Purpose, Validator};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Blueprint<T> {
     pub preamble: Preamble,
-    pub validators: Vec<validator::Validator<T>>,
+    pub validators: Vec<Validator<T>>,
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -23,6 +23,12 @@ pub struct Preamble {
     pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum LookupResult<'a, T> {
+    One(&'a T),
+    Many,
 }
 
 impl Blueprint<Schema> {
@@ -44,6 +50,56 @@ impl Blueprint<Schema> {
             preamble,
             validators: validators?,
         })
+    }
+}
+
+impl<T> Blueprint<T> {
+    pub fn lookup(
+        &self,
+        title: Option<&String>,
+        purpose: Option<&Purpose>,
+    ) -> Option<LookupResult<Validator<T>>> {
+        let mut validator = None;
+        for v in self.validators.iter() {
+            let match_title = Some(&v.title) == title.or(Some(&v.title));
+            let match_purpose = Some(&v.purpose) == purpose.or(Some(&v.purpose));
+            if match_title && match_purpose {
+                validator = Some(if validator.is_none() {
+                    LookupResult::One(v)
+                } else {
+                    LookupResult::Many
+                })
+            }
+        }
+        validator
+    }
+
+    pub fn with_validator<F, A, E>(
+        &self,
+        title: Option<&String>,
+        purpose: Option<&Purpose>,
+        when_missing: fn(Vec<(String, Purpose)>) -> E,
+        when_too_many: fn(Vec<(String, Purpose)>) -> E,
+        action: F,
+    ) -> Result<A, E>
+    where
+        F: Fn(&Validator<T>) -> Result<A, E>,
+    {
+        match self.lookup(title, purpose) {
+            Some(LookupResult::One(validator)) => action(validator),
+            Some(LookupResult::Many) => Err(when_too_many(
+                self.validators
+                    .iter()
+                    .map(|v| (v.title.clone(), v.purpose.clone()))
+                    .collect(),
+            )),
+            None => Err(when_missing(
+                self.validators
+                    .iter()
+                    .map(|v| (v.title.clone(), v.purpose.clone()))
+                    .collect(),
+            )),
+        }
     }
 }
 
