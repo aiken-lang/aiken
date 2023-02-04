@@ -1210,7 +1210,7 @@ impl<'a> Environment<'a> {
             return Ok(());
         }
 
-        if t1.is_data() || t2.is_data() {
+        if (t1.is_data() || t2.is_data()) && !(t1.is_unbound() || t2.is_unbound()) {
             return Ok(());
         }
 
