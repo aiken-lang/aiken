@@ -674,7 +674,32 @@ impl DefaultFunction {
                     _ => unreachable!(),
                 }
             }
-            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
+            DefaultFunction::VerifyEcdsaSecp256k1Signature => {
+                match (args[0].as_ref(), args[1].as_ref(), args[2].as_ref()) {
+                    (Value::Con(public_key), Value::Con(message), Value::Con(signature)) => {
+                        match (public_key.as_ref(), message.as_ref(), signature.as_ref()) {
+                            (
+                                Constant::ByteString(public_key),
+                                Constant::ByteString(message),
+                                Constant::ByteString(signature),
+                            ) => {
+                                use k256::ecdsa::{self, signature::Verifier};
+
+                                let verifying_key =
+                                    ecdsa::VerifyingKey::try_from(public_key.as_slice())?;
+
+                                let signature = ecdsa::Signature::try_from(signature.as_slice())?;
+
+                                let valid = verifying_key.verify(message, &signature);
+
+                                Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
             DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
             DefaultFunction::AppendString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(string1), Value::Con(string2)) => {
