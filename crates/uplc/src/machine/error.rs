@@ -49,5 +49,5 @@ pub enum Error {
     #[error("Integer overflow")]
     OverflowError,
     #[error(transparent)]
-    InvalidEcdsaSecp256k1Args(#[from] k256::ecdsa::signature::Error),
+    Secp256k1(#[from] secp256k1::Error),
 }
