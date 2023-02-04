@@ -1175,8 +1175,30 @@ impl BuiltinCosts {
                     args[2].to_ex_mem(),
                 ),
             },
-            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
-            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
+            DefaultFunction::VerifyEcdsaSecp256k1Signature => ExBudget {
+                mem: self.verify_ecdsa_secp256k1_signature.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.verify_ecdsa_secp256k1_signature.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
+            DefaultFunction::VerifySchnorrSecp256k1Signature => ExBudget {
+                mem: self.verify_schnorr_secp256k1_signature.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.verify_schnorr_secp256k1_signature.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
             DefaultFunction::AppendString => ExBudget {
                 mem: self
                     .append_string
