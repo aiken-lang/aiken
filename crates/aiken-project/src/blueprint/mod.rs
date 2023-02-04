@@ -10,7 +10,7 @@ use std::fmt::{self, Debug, Display};
 use validator::{Purpose, Validator};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Blueprint<T> {
+pub struct Blueprint<T: Default> {
     pub preamble: Preamble,
     pub validators: Vec<Validator<T>>,
 }
@@ -55,7 +55,7 @@ impl Blueprint<Schema> {
 
 impl<T> Blueprint<T>
 where
-    T: Clone,
+    T: Clone + Default,
 {
     pub fn lookup(
         &self,

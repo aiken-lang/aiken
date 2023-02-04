@@ -22,6 +22,7 @@ pub struct Validator<T> {
     pub datum: Option<Annotated<T>>,
     pub redeemer: Annotated<T>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub parameters: Vec<Annotated<T>>,
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
