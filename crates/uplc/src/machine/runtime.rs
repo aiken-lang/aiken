@@ -103,8 +103,8 @@ impl DefaultFunction {
             DefaultFunction::Sha3_256 => 1,
             DefaultFunction::Blake2b_256 => 1,
             DefaultFunction::VerifyEd25519Signature => 3,
-            DefaultFunction::VerifyEcdsaSecp256k1Signature => todo!(),
-            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
+            DefaultFunction::VerifyEcdsaSecp256k1Signature => 3,
+            DefaultFunction::VerifySchnorrSecp256k1Signature => 3,
             DefaultFunction::AppendString => 2,
             DefaultFunction::EqualsString => 2,
             DefaultFunction::EncodeUtf8 => 1,
@@ -683,14 +683,17 @@ impl DefaultFunction {
                                 Constant::ByteString(message),
                                 Constant::ByteString(signature),
                             ) => {
-                                use k256::ecdsa::{self, signature::Verifier};
+                                use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 
-                                let verifying_key =
-                                    ecdsa::VerifyingKey::try_from(public_key.as_slice())?;
+                                let secp = Secp256k1::verification_only();
 
-                                let signature = ecdsa::Signature::try_from(signature.as_slice())?;
+                                let public_key = PublicKey::from_slice(public_key.as_slice())?;
 
-                                let valid = verifying_key.verify(message, &signature);
+                                let signature = Signature::from_compact(signature.as_slice())?;
+
+                                let message = Message::from_slice(message.as_slice())?;
+
+                                let valid = secp.verify_ecdsa(&message, &signature, &public_key);
 
                                 Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
                             }
@@ -700,7 +703,37 @@ impl DefaultFunction {
                     _ => unreachable!(),
                 }
             }
-            DefaultFunction::VerifySchnorrSecp256k1Signature => todo!(),
+            DefaultFunction::VerifySchnorrSecp256k1Signature => {
+                match (args[0].as_ref(), args[1].as_ref(), args[2].as_ref()) {
+                    (Value::Con(public_key), Value::Con(message), Value::Con(signature)) => {
+                        match (public_key.as_ref(), message.as_ref(), signature.as_ref()) {
+                            (
+                                Constant::ByteString(public_key),
+                                Constant::ByteString(message),
+                                Constant::ByteString(signature),
+                            ) => {
+                                use secp256k1::{
+                                    schnorr::Signature, Message, Secp256k1, XOnlyPublicKey,
+                                };
+
+                                let secp = Secp256k1::verification_only();
+
+                                let public_key = XOnlyPublicKey::from_slice(public_key.as_slice())?;
+
+                                let signature = Signature::from_slice(signature.as_slice())?;
+
+                                let message = Message::from_slice(message.as_slice())?;
+
+                                let valid = secp.verify_schnorr(&signature, &message, &public_key);
+
+                                Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
             DefaultFunction::AppendString => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(string1), Value::Con(string2)) => {
                     match (string1.as_ref(), string2.as_ref()) {
