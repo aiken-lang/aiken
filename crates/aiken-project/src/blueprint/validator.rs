@@ -21,6 +21,8 @@ pub struct Validator<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datum: Option<Annotated<T>>,
     pub redeemer: Annotated<T>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub parameters: Vec<Annotated<T>>,
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
 }
@@ -58,12 +60,39 @@ impl Validator<Schema> {
         assert_min_arity(validator, def, purpose.min_arity())?;
 
         let mut args = def.arguments.iter().rev();
-        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
+        let (_, redeemer) = (args.next(), args.next().unwrap());
+        let datum = if purpose.min_arity() > 2 {
+            args.next()
+        } else {
+            None
+        };
 
         Ok(Validator {
             title: validator.name.clone(),
             description: None,
             purpose,
+            parameters: args
+                .rev()
+                .map(|param| {
+                    let annotation =
+                        Annotated::from_type(modules.into(), &param.tipo, &HashMap::new()).map_err(
+                            |error| Error::Schema {
+                                error,
+                                location: param.location,
+                                source_code: NamedSource::new(
+                                    validator.input_path.display().to_string(),
+                                    validator.code.clone(),
+                                ),
+                            },
+                        );
+                    annotation.map(|mut annotation| {
+                        annotation.title = annotation
+                            .title
+                            .or_else(|| Some(param.arg_name.get_label()));
+                        annotation
+                    })
+                })
+                .collect::<Result<_, _>>()?,
             datum: datum
                 .map(|datum| {
                     Annotated::from_type(modules.into(), &datum.tipo, &HashMap::new()).map_err(
@@ -268,6 +297,32 @@ mod test {
                 "description": "Any Plutus data."
               },
               "compiledCode": "4d01000022533357349445261601"
+            }),
+        );
+    }
+
+    #[test]
+    fn validator_mint_parameterized() {
+        assert_validator(
+            r#"
+            fn mint(utxo_ref: Int, redeemer: Data, ctx: Data) {
+                True
+            }
+            "#,
+            json!({
+              "title": "test_module",
+              "purpose": "mint",
+              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
+              "parameters": [{
+                "title": "utxo_ref",
+                "dataType": "integer"
+
+              }],
+              "redeemer": {
+                "title": "Data",
+                "description": "Any Plutus data."
+              },
+              "compiledCode": "4d01000022253335734944526161"
             }),
         );
     }
