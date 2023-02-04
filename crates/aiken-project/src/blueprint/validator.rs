@@ -129,14 +129,16 @@ impl<T> Validator<T>
 where
     T: Clone,
 {
-    pub fn apply(&mut self, arg: &Term<DeBruijn>) -> Result<(), Error> {
+    pub fn apply(self, arg: &Term<DeBruijn>) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
             Some((_, tail)) => {
                 // TODO: Ideally, we should control that the applied term matches its schema.
-                self.program = self.program.apply_term(arg);
-                self.parameters = tail.to_vec();
-                Ok(())
+                Ok(Self {
+                    program: self.program.apply_term(arg),
+                    parameters: tail.to_vec(),
+                    ..self
+                })
             }
         }
     }

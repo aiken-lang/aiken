@@ -1,5 +1,6 @@
 use aiken::cmd::{
-    address, build, check, docs, fmt, lsp, new,
+    blueprint::{self, address},
+    build, check, docs, fmt, lsp, new,
     packages::{self, add},
     tx, uplc,
 };
@@ -18,6 +19,9 @@ pub enum Cmd {
     Check(check::Args),
     Docs(docs::Args),
     Add(add::Args),
+
+    #[clap(subcommand)]
+    Blueprint(blueprint::Cmd),
 
     #[clap(subcommand)]
     Packages(packages::Cmd),
@@ -48,6 +52,7 @@ fn main() -> miette::Result<()> {
         Cmd::Check(args) => check::exec(args),
         Cmd::Docs(args) => docs::exec(args),
         Cmd::Add(args) => add::exec(args),
+        Cmd::Blueprint(args) => blueprint::exec(args),
         Cmd::Packages(args) => packages::exec(args),
         Cmd::Lsp(args) => lsp::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),

@@ -331,20 +331,32 @@ where
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let blueprint: Blueprint<serde_json::Value> =
+        let mut blueprint: Blueprint<serde_json::Value> =
             serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Apply parameters
         let when_too_many =
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
-        blueprint.with_validator(
-            title,
-            purpose,
-            when_too_many,
-            when_missing,
-            |mut validator| validator.apply(param).map_err(|e| e.into()),
-        )?;
+        let applied_validator =
+            blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+                validator.apply(param).map_err(|e| e.into())
+            })?;
+
+        // Overwrite validator
+        blueprint.validators = blueprint
+            .validators
+            .into_iter()
+            .map(|validator| {
+                let same_title = validator.title == applied_validator.title;
+                let same_purpose = validator.purpose == applied_validator.purpose;
+                if same_title && same_purpose {
+                    applied_validator.to_owned()
+                } else {
+                    validator
+                }
+            })
+            .collect();
 
         Ok(blueprint)
     }
