@@ -2111,6 +2111,7 @@ impl<'a> CodeGenerator<'a> {
             || tipo.is_string()
             || tipo.is_void()
             || tipo.get_generic().is_some()
+            || tipo.is_data()
         {
         } else if tipo.is_map() {
             self.used_data_assert_on_list = true;
