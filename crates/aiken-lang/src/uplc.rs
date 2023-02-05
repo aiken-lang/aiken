@@ -70,6 +70,14 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.needs_field_access = false;
+        self.used_data_assert_on_list = false;
+        self.zero_arg_functions = IndexMap::new();
+        self.id_gen = IdGenerator::new();
+        self.defined_functions = IndexMap::new();
+    }
+
     pub fn generate(
         &mut self,
         body: &TypedExpr,
@@ -83,7 +91,11 @@ impl<'a> CodeGenerator<'a> {
 
         self.define_ir(&mut ir_stack);
 
+        println!("{ir_stack:#?}");
+
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
+
+        println!("{ir_stack:#?}");
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -112,6 +124,8 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
+
+        println!("{}", program.to_pretty());
 
         program = aiken_optimize_and_intern(program);
 
@@ -302,13 +316,16 @@ impl<'a> CodeGenerator<'a> {
                 let mut value_scope = scope.clone();
                 value_scope.push(self.id_gen.next());
 
+                let mut replaced_type = tipo.clone();
+                replace_opaque_type(&mut replaced_type, self.data_types.clone());
+
                 self.build_ir(value, &mut value_vec, value_scope);
 
                 self.assignment_ir(
                     pattern,
                     &mut pattern_vec,
                     &mut value_vec,
-                    tipo,
+                    &replaced_type,
                     AssignmentProperties {
                         value_type: value.tipo(),
                         kind: *kind,
@@ -326,6 +343,8 @@ impl<'a> CodeGenerator<'a> {
 
                 // assuming one subject at the moment
                 let subject = subjects[0].clone();
+                let mut replaced_type = subject.tipo();
+                replace_opaque_type(&mut replaced_type, self.data_types.clone());
                 if clauses.len() <= 1 {
                     let mut value_vec: Vec<Air> = vec![];
                     let mut pattern_vec: Vec<Air> = vec![];
@@ -339,7 +358,7 @@ impl<'a> CodeGenerator<'a> {
                         &clauses[0].pattern[0],
                         &mut pattern_vec,
                         &mut subject_vec,
-                        &subject.tipo(),
+                        &replaced_type,
                         AssignmentProperties {
                             value_type: clauses[0].then.tipo(),
                             kind: AssignmentKind::Let,
@@ -350,7 +369,8 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.append(&mut pattern_vec);
                     ir_stack.append(&mut value_vec);
                 } else {
-                    let clauses = if matches!(clauses[0].pattern[0], Pattern::List { .. }) {
+                    // HERE TODO
+                    let clauses = if replaced_type.is_list() {
                         rearrange_clauses(clauses.clone())
                     } else {
                         clauses.clone()
@@ -360,7 +380,7 @@ impl<'a> CodeGenerator<'a> {
                         let mut pattern_vec = vec![];
 
                         let mut clause_properties = ClauseProperties::init(
-                            &subject.tipo(),
+                            &replaced_type,
                             constr_var.clone(),
                             subject_name.clone(),
                         );
@@ -369,7 +389,7 @@ impl<'a> CodeGenerator<'a> {
                             &mut pattern_vec,
                             &mut clause_properties,
                             clauses,
-                            &subject.tipo(),
+                            &replaced_type,
                             scope.clone(),
                         );
 
@@ -395,7 +415,7 @@ impl<'a> CodeGenerator<'a> {
                             last_pattern,
                             &mut pattern_vec,
                             &mut final_clause_vec,
-                            &subject.tipo(),
+                            &replaced_type,
                             &mut clause_properties,
                             final_scope,
                         );
@@ -411,7 +431,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::When {
                                 scope: scope.clone(),
                                 subject_name,
-                                tipo: subject.tipo(),
+                                tipo: replaced_type.clone(),
                             });
 
                             let mut scope = scope;
@@ -420,7 +440,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::Var {
                                 scope,
                                 constructor: ValueConstructor::public(
-                                    subject.tipo(),
+                                    replaced_type,
                                     ValueConstructorVariant::LocalVariable {
                                         location: Span::empty(),
                                     },
@@ -432,7 +452,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::When {
                                 scope: scope.clone(),
                                 subject_name,
-                                tipo: subject.tipo(),
+                                tipo: replaced_type,
                             });
 
                             let mut scope = scope;
@@ -892,7 +912,6 @@ impl<'a> CodeGenerator<'a> {
 
                 new_vec.append(values);
 
-                // pattern_vec.push(value)
                 self.when_ir(
                     pattern,
                     pattern_vec,
@@ -1724,8 +1743,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                if matches!(&assignment_properties.kind, AssignmentKind::Assert) {
-                } else {
+                if !names.is_empty() {
                     pattern_vec.push(Air::ListAccessor {
                         names,
                         tail: tail.is_some(),
@@ -1733,6 +1751,11 @@ impl<'a> CodeGenerator<'a> {
                         tipo: tipo.clone().into(),
                         check_last_item: false,
                     });
+                } else {
+                    pattern_vec.push(Air::Let {
+                        scope,
+                        name: "_".to_string(),
+                    })
                 }
 
                 pattern_vec.append(values);
@@ -1747,7 +1770,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut nested_pattern = vec![];
 
                 let field_map = match constructor {
-                    PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
+                    PatternConstructor::Record { field_map, .. } => field_map.clone(),
                 };
 
                 let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
@@ -1759,14 +1782,19 @@ impl<'a> CodeGenerator<'a> {
 
                 let arguments_index = arguments
                     .iter()
-                    .filter_map(|item| {
+                    .enumerate()
+                    .filter_map(|(index, item)| {
                         let label = item.label.clone().unwrap_or_default();
-                        let field_index = field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+                        let field_index = if let Some(field_map) = &field_map {
+                            *field_map.fields.get(&label).map(|x| &x.0).unwrap()
+                        } else {
+                            index
+                        };
                         self.extract_arg_and_index(
                             &item.value,
-                            *field_index,
+                            field_index,
                             &mut nested_pattern,
-                            type_map.get(field_index).unwrap(),
+                            type_map.get(&field_index).unwrap(),
                             &assignment_properties,
                             &scope,
                         )
@@ -1785,6 +1813,11 @@ impl<'a> CodeGenerator<'a> {
                             .collect_vec(),
                         scope,
                         check_last_item: false,
+                    });
+                } else {
+                    pattern_vec.push(Air::Let {
+                        scope,
+                        name: "_".to_string(),
                     });
                 }
 
@@ -1826,10 +1859,14 @@ impl<'a> CodeGenerator<'a> {
                         tipo: tipo.clone().into(),
                         check_last_item: true,
                     });
+                } else {
+                    pattern_vec.push(Air::Let {
+                        scope,
+                        name: "_".to_string(),
+                    });
                 }
 
                 pattern_vec.append(values);
-
                 pattern_vec.append(&mut nested_pattern);
             }
         }
@@ -1903,6 +1940,8 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 self.recursive_assert_tipo(tipo, &mut assert_list_vec, &name, scope.clone());
+
+                names.push(name);
 
                 pattern_vec.push(Air::ListAccessor {
                     scope,
@@ -2105,6 +2144,9 @@ impl<'a> CodeGenerator<'a> {
         name: &str,
         scope: Vec<u64>,
     ) {
+        let mut tipo = tipo.clone().into();
+        replace_opaque_type(&mut tipo, self.data_types.clone());
+
         if tipo.is_bool()
             || tipo.is_bytearray()
             || tipo.is_int()
@@ -2123,25 +2165,25 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
                 count: 2,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Builtin {
                 scope: scope.clone(),
                 func: DefaultFunction::ChooseUnit,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
                 count: 2,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2153,7 +2195,7 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2180,7 +2222,7 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2212,25 +2254,25 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
                 count: 2,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Builtin {
                 scope: scope.clone(),
                 func: DefaultFunction::ChooseUnit,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
                 count: 2,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2242,7 +2284,7 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2269,7 +2311,7 @@ impl<'a> CodeGenerator<'a> {
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2327,31 +2369,31 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
         } else {
-            let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+            let data_type = lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
             let new_id = self.id_gen.next();
 
             assert_vec.push(Air::Call {
                 scope: scope.clone(),
                 count: 2,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::Builtin {
                 scope: scope.clone(),
                 func: DefaultFunction::ChooseUnit,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
             });
 
             assert_vec.push(Air::When {
                 scope: scope.clone(),
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
                 subject_name: format!("__subject_{new_id}"),
             });
 
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2376,7 +2418,7 @@ impl<'a> CodeGenerator<'a> {
 
                 assert_vec.push(Air::Clause {
                     scope: scope.clone(),
-                    tipo: tipo.clone().into(),
+                    tipo: tipo.clone(),
                     subject_name: format!("__subject_{new_id}"),
                     complex_clause: false,
                 });
@@ -2386,23 +2428,25 @@ impl<'a> CodeGenerator<'a> {
                     value: index.to_string(),
                 });
 
-                assert_vec.push(Air::FieldsExpose {
-                    scope: scope.clone(),
-                    indices: arg_indices.clone(),
-                    check_last_item: true,
-                });
+                if !arg_indices.is_empty() {
+                    assert_vec.push(Air::FieldsExpose {
+                        scope: scope.clone(),
+                        indices: arg_indices.clone(),
+                        check_last_item: true,
+                    });
 
-                assert_vec.push(Air::Var {
-                    scope: scope.clone(),
-                    constructor: ValueConstructor::public(
-                        tipo.clone().into(),
-                        ValueConstructorVariant::LocalVariable {
-                            location: Span::empty(),
-                        },
-                    ),
-                    name: name.to_owned(),
-                    variant_name: String::new(),
-                });
+                    assert_vec.push(Air::Var {
+                        scope: scope.clone(),
+                        constructor: ValueConstructor::public(
+                            tipo.clone(),
+                            ValueConstructorVariant::LocalVariable {
+                                location: Span::empty(),
+                            },
+                        ),
+                        name: name.to_owned(),
+                        variant_name: String::new(),
+                    });
+                }
 
                 for (_, name, tipo) in arg_indices {
                     self.recursive_assert_tipo(&tipo, assert_vec, &name, scope.clone());
@@ -3494,9 +3538,12 @@ impl<'a> CodeGenerator<'a> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
         while let Some(ir_element) = ir_stack.pop() {
+            println!("IR ELEMENT IS {:#?}", ir_element);
             self.gen_uplc(ir_element, &mut arg_stack);
-        }
 
+            println!("Arg STACK LEN IS {:#?} ", arg_stack.len());
+        }
+        println!("ARGSTACK FINALLY IS {:#?}", arg_stack);
         arg_stack[0].clone()
     }
 
@@ -4595,7 +4642,7 @@ impl<'a> CodeGenerator<'a> {
                             ),
                         )
                     } else if tipo.is_list() || tipo.is_tuple() {
-                        unreachable!()
+                        unreachable!("{:#?}", tipo)
                     } else {
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),

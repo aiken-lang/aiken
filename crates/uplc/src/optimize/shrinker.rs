@@ -58,7 +58,7 @@ impl Program<Name> {
 
     pub fn inline_reduce(self) -> Program<Name> {
         let mut term = self.term.clone();
-        inline_reduce(&mut term);
+        inline_basic_reduce(&mut term);
         Program {
             version: self.version,
             term,
@@ -120,38 +120,46 @@ fn builtin_force_reduce(term: &mut Term<Name>, builtin_map: &mut IndexMap<u8, ()
     }
 }
 
-fn inline_reduce(term: &mut Term<Name>) {
+fn inline_basic_reduce(term: &mut Term<Name>) {
     match term {
         Term::Delay(d) => {
             let d = Rc::make_mut(d);
-            inline_reduce(d);
+            inline_basic_reduce(d);
         }
         Term::Lambda { body, .. } => {
             let body = Rc::make_mut(body);
-            inline_reduce(body);
+            inline_basic_reduce(body);
         }
         Term::Apply { function, argument } => {
             let arg = Rc::make_mut(argument);
-            inline_reduce(arg);
+            inline_basic_reduce(arg);
 
             let func = Rc::make_mut(function);
-            inline_reduce(func);
+            inline_basic_reduce(func);
 
             if let Term::Lambda {
                 parameter_name,
                 body,
             } = func
             {
-                let mut occurrences = 0;
-                var_occurrences(body, parameter_name.clone(), &mut occurrences);
-                if occurrences <= 1 {
-                    *term = substitute_term(body.as_ref(), parameter_name.clone(), argument);
+                if let replace_term @ (Term::Var(_)
+                | Term::Constant(_)
+                | Term::Error
+                | Term::Delay(_)
+                | Term::Lambda { .. }) = argument.as_ref()
+                {
+                    let mut occurrences = 0;
+                    var_occurrences(body, parameter_name.clone(), &mut occurrences);
+                    if occurrences <= 1 {
+                        *term =
+                            substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
+                    }
                 }
             }
         }
         Term::Force(f) => {
             let f = Rc::make_mut(f);
-            inline_reduce(f);
+            inline_basic_reduce(f);
         }
         _ => {}
     }
