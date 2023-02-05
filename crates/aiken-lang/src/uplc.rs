@@ -91,11 +91,7 @@ impl<'a> CodeGenerator<'a> {
 
         self.define_ir(&mut ir_stack);
 
-        println!("{ir_stack:#?}");
-
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
-
-        println!("{ir_stack:#?}");
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -124,8 +120,6 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
-
-        println!("{}", program.to_pretty());
 
         program = aiken_optimize_and_intern(program);
 
@@ -2341,14 +2335,14 @@ impl<'a> CodeGenerator<'a> {
                     .iter()
                     .map(|(index, id)| format!("__tuple_index_{index}_{id}"))
                     .collect_vec(),
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
                 check_last_item: true,
             });
 
             assert_vec.push(Air::Var {
                 scope: scope.clone(),
                 constructor: ValueConstructor::public(
-                    tipo.clone().into(),
+                    tipo.clone(),
                     ValueConstructorVariant::LocalVariable {
                         location: Span::empty(),
                     },
@@ -2459,7 +2453,7 @@ impl<'a> CodeGenerator<'a> {
 
             assert_vec.push(Air::ErrorTerm {
                 scope,
-                tipo: tipo.clone().into(),
+                tipo: tipo.clone(),
                 label: Some("Constr index did not match any type variant".to_string()),
             });
         }
@@ -3538,12 +3532,8 @@ impl<'a> CodeGenerator<'a> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
         while let Some(ir_element) = ir_stack.pop() {
-            println!("IR ELEMENT IS {:#?}", ir_element);
             self.gen_uplc(ir_element, &mut arg_stack);
-
-            println!("Arg STACK LEN IS {:#?} ", arg_stack.len());
         }
-        println!("ARGSTACK FINALLY IS {:#?}", arg_stack);
         arg_stack[0].clone()
     }
 
