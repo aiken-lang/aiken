@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Name, Program},
+    ast::{Name, NamedDeBruijn, Program},
     parser::interner::Interner,
 };
 
@@ -11,6 +11,11 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
     let mut interner = Interner::new();
 
     interner.program(&mut program);
+
+    // Use conversion to Debruijn to prevent optimizations from affecting shadowing
+    let program_named: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+    let program: Program<Name> = program_named.try_into().unwrap();
 
     program.lambda_reduce().inline_reduce()
 }
