@@ -262,12 +262,12 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "mint",
-              "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
+              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
               "redeemer": {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "4d01000022533357349445261601"
+              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
             }),
         );
     }
@@ -313,7 +313,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
+              "hash": "e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
               "datum": {
                 "title": "State",
                 "description": "On-chain state",
@@ -380,7 +380,7 @@ mod test {
                   }
                 ]
               },
-              "compiledCode": "4d01000022253335734944526161"
+              "compiledCode": "583b0100003232323232323222253330064a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae89"
             }),
         );
     }
@@ -396,7 +396,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
+              "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
               "datum": {
                 "dataType": "#pair",
                 "left": {
@@ -409,7 +409,7 @@ mod test {
               "redeemer": {
                 "dataType": "#string"
               },
-              "compiledCode": "4d01000022253335734944526161"
+              "compiledCode": "585501000032323232323232232232253330084a22930b1b99375c002646466ec0c024008c024004c024004dd6000980080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
             }),
         )
     }
@@ -425,7 +425,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
+              "hash": "f335ce0436fd7df56e727a66ada7298534a27b98f887bc3b7947ee48",
               "datum": {
                 "title": "Tuple",
                 "dataType": "#list",
@@ -445,7 +445,7 @@ mod test {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "4d01000022253335734944526161"
+              "compiledCode": "5840010000323232323232322322253330074a22930b1bac0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
             }),
         )
     }
@@ -472,7 +472,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "withdraw",
-                  "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
+                  "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Either",
                     "anyOf": [
@@ -516,7 +516,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "4d01000022533357349445261601"
+                  "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
                 }
             ),
         )
@@ -540,7 +540,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
+                  "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
                     "anyOf": [
@@ -563,7 +563,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "4d01000022533357349445261601"
+                  "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
                 }
             ),
         );
@@ -587,7 +587,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "ee1ce172ef62870ce83d22bdcc49335d7f41d4798dcf62ec5f29b5b4",
+                  "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
                     "dataType": "map",
@@ -598,7 +598,7 @@ mod test {
                       "dataType": "integer"
                     }
                   },
-                  "compiledCode": "4d01000022533357349445261601"
+                  "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
                 }
             ),
         );
