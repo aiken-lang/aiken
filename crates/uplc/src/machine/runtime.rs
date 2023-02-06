@@ -682,21 +682,7 @@ impl DefaultFunction {
                                 Constant::ByteString(public_key),
                                 Constant::ByteString(message),
                                 Constant::ByteString(signature),
-                            ) => {
-                                use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
-
-                                let secp = Secp256k1::verification_only();
-
-                                let public_key = PublicKey::from_slice(public_key.as_slice())?;
-
-                                let signature = Signature::from_compact(signature.as_slice())?;
-
-                                let message = Message::from_slice(message.as_slice())?;
-
-                                let valid = secp.verify_ecdsa(&message, &signature, &public_key);
-
-                                Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
-                            }
+                            ) => verify_ecdsa(public_key, message, signature),
                             _ => unreachable!(),
                         }
                     }
@@ -711,23 +697,7 @@ impl DefaultFunction {
                                 Constant::ByteString(public_key),
                                 Constant::ByteString(message),
                                 Constant::ByteString(signature),
-                            ) => {
-                                use secp256k1::{
-                                    schnorr::Signature, Message, Secp256k1, XOnlyPublicKey,
-                                };
-
-                                let secp = Secp256k1::verification_only();
-
-                                let public_key = XOnlyPublicKey::from_slice(public_key.as_slice())?;
-
-                                let signature = Signature::from_slice(signature.as_slice())?;
-
-                                let message = Message::from_slice(message.as_slice())?;
-
-                                let valid = secp.verify_schnorr(&signature, &message, &public_key);
-
-                                Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
-                            }
+                            ) => verify_schnorr(public_key, message, signature),
                             _ => unreachable!(),
                         }
                     }
@@ -1174,4 +1144,64 @@ pub fn convert_constr_to_tag(constr: u64) -> u64 {
     } else {
         todo!()
     }
+}
+
+#[cfg(not(feature = "wasm"))]
+fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
+    use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
+
+    let secp = Secp256k1::verification_only();
+
+    let public_key = PublicKey::from_slice(public_key)?;
+
+    let signature = Signature::from_compact(signature)?;
+
+    let message = Message::from_slice(message)?;
+
+    let valid = secp.verify_ecdsa(&message, &signature, &public_key);
+
+    Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
+}
+
+#[cfg(not(feature = "wasm"))]
+fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
+    use secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
+
+    let secp = Secp256k1::verification_only();
+
+    let public_key = XOnlyPublicKey::from_slice(public_key)?;
+
+    let signature = Signature::from_slice(signature)?;
+
+    let message = Message::from_slice(message)?;
+
+    let valid = secp.verify_schnorr(&signature, &message, &public_key);
+
+    Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
+}
+
+#[cfg(feature = "wasm")]
+fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
+    use k256::ecdsa::{self, signature::Verifier};
+
+    let verifying_key = ecdsa::VerifyingKey::try_from(public_key)?;
+
+    let signature = ecdsa::Signature::try_from(signature)?;
+
+    let valid = verifying_key.verify(message, &signature);
+
+    Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
+}
+
+#[cfg(feature = "wasm")]
+fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
+    use k256::schnorr::{self, signature::Verifier};
+
+    let verifying_key = schnorr::VerifyingKey::from_bytes(public_key)?;
+
+    let signature = schnorr::Signature::try_from(signature)?;
+
+    let valid = verifying_key.verify(message, &signature);
+
+    Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
