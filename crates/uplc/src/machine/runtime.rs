@@ -1146,7 +1146,7 @@ pub fn convert_constr_to_tag(constr: u64) -> u64 {
     }
 }
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(feature = "native-secp256k1"))]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
     use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 
@@ -1163,7 +1163,7 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<R
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(feature = "native-secp256k1"))]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
     use secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
 
@@ -1180,7 +1180,7 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
 
-#[cfg(feature = "wasm")]
+#[cfg(feature = "native-secp256k1")]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
     use k256::ecdsa::{self, signature::Verifier};
 
@@ -1193,7 +1193,7 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<R
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
 
-#[cfg(feature = "wasm")]
+#[cfg(feature = "native-secp256k1")]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
     use k256::schnorr::{self, signature::Verifier};
 
