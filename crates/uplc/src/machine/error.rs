@@ -48,6 +48,10 @@ pub enum Error {
     DeserialisationError(String, Value),
     #[error("Integer overflow")]
     OverflowError,
+    #[cfg(not(feature = "wasm"))]
     #[error(transparent)]
     Secp256k1(#[from] secp256k1::Error),
+    #[cfg(feature = "wasm")]
+    #[error(transparent)]
+    Secp256k1(#[from] k256::ecdsa::Error),
 }
