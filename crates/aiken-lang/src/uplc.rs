@@ -346,8 +346,7 @@ impl<'a> CodeGenerator<'a> {
 
                 // assuming one subject at the moment
                 let subject = subjects[0].clone();
-                let mut replaced_type = subject.tipo();
-                replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                let subject_tipo = subject.tipo();
                 if clauses.len() <= 1 {
                     let mut value_vec: Vec<Air> = vec![];
                     let mut pattern_vec: Vec<Air> = vec![];
@@ -361,7 +360,7 @@ impl<'a> CodeGenerator<'a> {
                         &clauses[0].pattern[0],
                         &mut pattern_vec,
                         &mut subject_vec,
-                        &replaced_type,
+                        &subject_tipo,
                         AssignmentProperties {
                             value_type: clauses[0].then.tipo(),
                             kind: AssignmentKind::Let,
@@ -373,7 +372,7 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.append(&mut value_vec);
                 } else {
                     // HERE TODO
-                    let clauses = if replaced_type.is_list() {
+                    let clauses = if subject_tipo.is_list() {
                         rearrange_clauses(clauses.clone())
                     } else {
                         clauses.clone()
@@ -383,7 +382,7 @@ impl<'a> CodeGenerator<'a> {
                         let mut pattern_vec = vec![];
 
                         let mut clause_properties = ClauseProperties::init(
-                            &replaced_type,
+                            &subject_tipo,
                             constr_var.clone(),
                             subject_name.clone(),
                         );
@@ -392,7 +391,7 @@ impl<'a> CodeGenerator<'a> {
                             &mut pattern_vec,
                             &mut clause_properties,
                             clauses,
-                            &replaced_type,
+                            &subject_tipo,
                             scope.clone(),
                         );
 
@@ -418,7 +417,7 @@ impl<'a> CodeGenerator<'a> {
                             last_pattern,
                             &mut pattern_vec,
                             &mut final_clause_vec,
-                            &replaced_type,
+                            &subject_tipo,
                             &mut clause_properties,
                             final_scope,
                         );
@@ -434,7 +433,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::When {
                                 scope: scope.clone(),
                                 subject_name,
-                                tipo: replaced_type.clone(),
+                                tipo: subject_tipo.clone(),
                             });
 
                             let mut scope = scope;
@@ -443,7 +442,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::Var {
                                 scope,
                                 constructor: ValueConstructor::public(
-                                    replaced_type,
+                                    subject_tipo,
                                     ValueConstructorVariant::LocalVariable {
                                         location: Span::empty(),
                                     },
@@ -455,7 +454,7 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.push(Air::When {
                                 scope: scope.clone(),
                                 subject_name,
-                                tipo: replaced_type,
+                                tipo: subject_tipo,
                             });
 
                             let mut scope = scope;
