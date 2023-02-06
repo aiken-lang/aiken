@@ -123,6 +123,15 @@ impl<'a> CodeGenerator<'a> {
 
         program = aiken_optimize_and_intern(program);
 
+        // This is very important to call here.
+        // If this isn't done, re-using the same instance
+        // of the generator will result in free unique errors
+        // among other unpredictable things. In fact,
+        // switching to a shared code generator caused some
+        // instability issues and we fixed it by placing this
+        // method here.
+        self.reset();
+
         program
     }
 
