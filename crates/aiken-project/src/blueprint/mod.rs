@@ -36,7 +36,6 @@ impl Blueprint<Schema> {
         let validators: Result<Vec<_>, Error> = modules
             .validators()
             .map(|(validator, def)| {
-                generator.reset();
                 Validator::from_checked_module(modules, generator, validator, def)
             })
             .collect();
