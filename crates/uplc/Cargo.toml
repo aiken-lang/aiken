@@ -40,5 +40,5 @@ proptest = "1.0.0"
 
 [features]
 default = ["dep:secp256k1"]
-wasm = ["dep:k256"]
+native-secp256k1 = ["dep:k256"]
 unstable = []
