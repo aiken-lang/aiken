@@ -510,11 +510,14 @@ pub fn list_access_to_uplc(
     term: Term<Name>,
     tipos: Vec<Arc<Type>>,
     check_last_item: bool,
+    is_list_accessor: bool,
 ) -> Term<Name> {
     if let Some((first, names)) = names.split_first() {
         let (current_tipo, tipos) = tipos.split_first().unwrap();
 
-        let head_list = if current_tipo.is_map() {
+        let head_list = if matches!(current_tipo.get_uplc_type(), UplcType::Pair(_, _))
+            && is_list_accessor
+        {
             apply_wrap(
                 Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                 Term::Var(
@@ -622,7 +625,7 @@ pub fn list_access_to_uplc(
                                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
                                         Term::Constant(
                                             UplcConstant::String(
-                                                "List/Tuple contains more items than it should"
+                                                "List/Tuple/Constr contains more items than it should"
                                                     .to_string(),
                                             )
                                             .into(),
@@ -664,6 +667,7 @@ pub fn list_access_to_uplc(
                                 term,
                                 tipos.to_owned(),
                                 check_last_item,
+                                is_list_accessor,
                             ),
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::TailList).force_wrap(),
@@ -757,7 +761,9 @@ pub fn check_when_pattern_needs(
                 check_when_pattern_needs(&argument.value, clause_properties);
             }
         }
-        Pattern::Discard { .. } => {}
+        Pattern::Discard { .. } => {
+            *clause_properties.needs_constr_var() = true;
+        }
         _ => todo!("{pattern:#?}"),
     }
 }
