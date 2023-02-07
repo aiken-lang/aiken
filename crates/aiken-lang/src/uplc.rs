@@ -354,7 +354,7 @@ impl<'a> CodeGenerator<'a> {
 
                     self.build_ir(&clauses[0].then, &mut value_vec, scope.clone());
 
-                    self.build_ir(&subject, &mut value_vec, scope.clone());
+                    self.build_ir(&subject, &mut subject_vec, scope.clone());
 
                     self.assignment_ir(
                         &clauses[0].pattern[0],
@@ -1192,7 +1192,10 @@ impl<'a> CodeGenerator<'a> {
                                 scope.clone(),
                             );
 
-                            var_name.map(|var_name| (label, var_name, *field_index))
+                            var_name.map_or(
+                                Some((label.clone(), "_".to_string(), *field_index)),
+                                |var_name| Some((label, var_name, *field_index)),
+                            )
                         })
                         .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
                         .collect::<Vec<(String, String, usize)>>();
@@ -1230,7 +1233,9 @@ impl<'a> CodeGenerator<'a> {
                                 scope.clone(),
                             );
 
-                            var_name.map(|var_name| (var_name, index))
+                            var_name.map_or(Some(("_".to_string(), index)), |var_name| {
+                                Some((var_name, index))
+                            })
                         })
                         .collect::<Vec<(String, usize)>>();
 
@@ -1788,7 +1793,7 @@ impl<'a> CodeGenerator<'a> {
                     .filter_map(|(index, item)| {
                         let label = item.label.clone().unwrap_or_default();
                         let field_index = if let Some(field_map) = &field_map {
-                            *field_map.fields.get(&label).map(|x| &x.0).unwrap()
+                            *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
                         } else {
                             index
                         };
@@ -1800,6 +1805,7 @@ impl<'a> CodeGenerator<'a> {
                             &assignment_properties,
                             &scope,
                         )
+                        .map_or(Some(("_".to_string(), index)), Some)
                     })
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
                     .collect::<Vec<(String, usize)>>();
@@ -1852,14 +1858,25 @@ impl<'a> CodeGenerator<'a> {
                     .collect::<Vec<(String, usize)>>();
 
                 if !arguments_index.is_empty() {
+                    let mut current_index = 0;
+                    let mut final_args = vec![];
+
+                    for index in 0..elems.len() {
+                        if arguments_index.get(current_index).is_some()
+                            && arguments_index[current_index].1 == index
+                        {
+                            final_args.push(arguments_index.get(current_index).unwrap().clone());
+                            current_index += 1;
+                        } else {
+                            final_args.push(("_".to_string(), index));
+                        }
+                    }
+
                     pattern_vec.push(Air::TupleAccessor {
                         scope,
-                        names: arguments_index
-                            .into_iter()
-                            .map(|(item, _)| item)
-                            .collect_vec(),
+                        names: final_args.into_iter().map(|(item, _)| item).collect_vec(),
                         tipo: tipo.clone().into(),
-                        check_last_item: true,
+                        check_last_item: false,
                     });
                 } else {
                     pattern_vec.push(Air::Let {
@@ -2109,7 +2126,7 @@ impl<'a> CodeGenerator<'a> {
                     if arguments_index.get(current_index).is_some()
                         && arguments_index[current_index].1 == index
                     {
-                        final_args.push(arguments_index.get(index).unwrap().clone());
+                        final_args.push(arguments_index.get(current_index).unwrap().clone());
                         current_index += 1;
                     } else {
                         let id_next = self.id_gen.next();
@@ -3826,6 +3843,7 @@ impl<'a> CodeGenerator<'a> {
                                         term,
                                         inner_types,
                                         check_last_item,
+                                        true,
                                     ),
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::TailList).force_wrap(),
@@ -5083,76 +5101,34 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
 
+                id_list.push(list_id);
+
                 for _ in 0..indices.len() {
                     id_list.push(self.id_gen.next());
                 }
 
                 let current_index = 0;
-                let (first_name, indices) = indices.split_first().unwrap();
-
-                let head_list = convert_data_to_type(
-                    apply_wrap(
-                        Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                        Term::Var(
-                            Name {
-                                text: format!("__constr_fields_{list_id}"),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                        ),
-                    ),
-                    &first_name.2,
-                );
 
                 let names = indices.iter().cloned().map(|item| item.1).collect_vec();
                 let inner_types = indices.iter().cloned().map(|item| item.2).collect_vec();
 
-                let tail_list = if !indices.is_empty() {
-                    apply_wrap(
-                        list_access_to_uplc(
-                            &names,
-                            &id_list,
-                            false,
-                            current_index,
-                            term,
-                            inner_types,
-                            check_last_item,
-                        ),
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                            Term::Var(
-                                Name {
-                                    text: format!("__constr_fields_{list_id}"),
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                            ),
-                        ),
+                term = if !indices.is_empty() {
+                    list_access_to_uplc(
+                        &names,
+                        &id_list,
+                        false,
+                        current_index,
+                        term,
+                        inner_types,
+                        check_last_item,
+                        false,
                     )
                 } else {
                     term
                 };
 
                 term = apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("__constr_fields_{list_id}"),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                        body: apply_wrap(
-                            Term::Lambda {
-                                parameter_name: Name {
-                                    text: first_name.1.clone(),
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                                body: tail_list.into(),
-                            },
-                            head_list,
-                        )
-                        .into(),
-                    },
+                    term,
                     apply_wrap(
                         Term::Var(
                             Name {
@@ -5557,69 +5533,23 @@ impl<'a> CodeGenerator<'a> {
                     );
                 } else {
                     let mut id_list = vec![];
+                    id_list.push(list_id);
 
                     for _ in 0..names.len() {
                         id_list.push(self.id_gen.next());
                     }
 
-                    let current_index = 0;
-                    let (first_name, names) = names.split_first().unwrap();
-
-                    let head_list = convert_data_to_type(
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                            Term::Var(
-                                Name {
-                                    text: format!("__tuple_{list_id}"),
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                            ),
-                        ),
-                        &tipo.get_inner_types()[0],
-                    );
-
                     term = apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: format!("__tuple_{list_id}"),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: apply_wrap(
-                                Term::Lambda {
-                                    parameter_name: Name {
-                                        text: first_name.clone(),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                    body: apply_wrap(
-                                        list_access_to_uplc(
-                                            names,
-                                            &id_list,
-                                            false,
-                                            current_index,
-                                            term,
-                                            tipo.get_inner_types(),
-                                            check_last_item,
-                                        ),
-                                        apply_wrap(
-                                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                            Term::Var(
-                                                Name {
-                                                    text: format!("__tuple_{list_id}"),
-                                                    unique: 0.into(),
-                                                }
-                                                .into(),
-                                            ),
-                                        ),
-                                    )
-                                    .into(),
-                                },
-                                head_list,
-                            )
-                            .into(),
-                        },
+                        list_access_to_uplc(
+                            &names,
+                            &id_list,
+                            false,
+                            0,
+                            term,
+                            tipo.get_inner_types(),
+                            check_last_item,
+                            false,
+                        ),
                         value,
                     );
                 }
