@@ -24,7 +24,6 @@ pub struct Args {
     purpose: Option<String>,
 
     /// The parameter, using high-level UPLC-syntax
-    #[clap(long)]
     parameter: String,
 }
 
