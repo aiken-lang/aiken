@@ -332,7 +332,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "mint",
-              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
+              "hash": "a82df717fd39f5b273c4eb89ae5252e11cc272ac59d815419bf2e4c3",
               "parameters": [{
                 "title": "utxo_ref",
                 "dataType": "integer"
@@ -342,7 +342,7 @@ mod test {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "4d01000022253335734944526161"
+              "compiledCode": "5840010000323232323232322322253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
             }),
         );
     }
