@@ -14,6 +14,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
     - name: Install Nix
       uses: cachix/install-nix-action@v18
