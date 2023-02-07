@@ -1182,13 +1182,13 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
 #[cfg(feature = "native-secp256k1")]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
-    use k256::ecdsa::{self, signature::Verifier};
+    use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
 
     let verifying_key = ecdsa::VerifyingKey::try_from(public_key)?;
 
     let signature = ecdsa::Signature::try_from(signature)?;
 
-    let valid = verifying_key.verify(message, &signature);
+    let valid = verifying_key.verify_prehash(message, &signature);
 
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
