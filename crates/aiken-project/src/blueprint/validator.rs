@@ -10,7 +10,7 @@ use std::{
     collections::HashMap,
     fmt::{self, Display},
 };
-use uplc::ast::{DeBruijn, Program};
+use uplc::ast::{DeBruijn, Program, Term};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T> {
@@ -21,6 +21,9 @@ pub struct Validator<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datum: Option<Annotated<T>>,
     pub redeemer: Annotated<T>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
+    pub parameters: Vec<Annotated<T>>,
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
 }
@@ -58,12 +61,39 @@ impl Validator<Schema> {
         assert_min_arity(validator, def, purpose.min_arity())?;
 
         let mut args = def.arguments.iter().rev();
-        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
+        let (_, redeemer) = (args.next(), args.next().unwrap());
+        let datum = if purpose.min_arity() > 2 {
+            args.next()
+        } else {
+            None
+        };
 
         Ok(Validator {
             title: validator.name.clone(),
             description: None,
             purpose,
+            parameters: args
+                .rev()
+                .map(|param| {
+                    let annotation =
+                        Annotated::from_type(modules.into(), &param.tipo, &HashMap::new()).map_err(
+                            |error| Error::Schema {
+                                error,
+                                location: param.location,
+                                source_code: NamedSource::new(
+                                    validator.input_path.display().to_string(),
+                                    validator.code.clone(),
+                                ),
+                            },
+                        );
+                    annotation.map(|mut annotation| {
+                        annotation.title = annotation
+                            .title
+                            .or_else(|| Some(param.arg_name.get_label()));
+                        annotation
+                    })
+                })
+                .collect::<Result<_, _>>()?,
             datum: datum
                 .map(|datum| {
                     Annotated::from_type(modules.into(), &datum.tipo, &HashMap::new()).map_err(
@@ -92,6 +122,25 @@ impl Validator<Schema> {
                 .try_into()
                 .unwrap(),
         })
+    }
+}
+
+impl<T> Validator<T>
+where
+    T: Clone,
+{
+    pub fn apply(self, arg: &Term<DeBruijn>) -> Result<Self, Error> {
+        match self.parameters.split_first() {
+            None => Err(Error::NoParametersToApply),
+            Some((_, tail)) => {
+                // TODO: Ideally, we should control that the applied term matches its schema.
+                Ok(Self {
+                    program: self.program.apply_term(arg),
+                    parameters: tail.to_vec(),
+                    ..self
+                })
+            }
+        }
     }
 }
 
@@ -268,6 +317,32 @@ mod test {
                 "description": "Any Plutus data."
               },
               "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
+            }),
+        );
+    }
+
+    #[test]
+    fn validator_mint_parameterized() {
+        assert_validator(
+            r#"
+            fn mint(utxo_ref: Int, redeemer: Data, ctx: Data) {
+                True
+            }
+            "#,
+            json!({
+              "title": "test_module",
+              "purpose": "mint",
+              "hash": "455f24922a520c59499fdafad95e1272fab81a99452f6b9545f95337",
+              "parameters": [{
+                "title": "utxo_ref",
+                "dataType": "integer"
+
+              }],
+              "redeemer": {
+                "title": "Data",
+                "description": "Any Plutus data."
+              },
+              "compiledCode": "4d01000022253335734944526161"
             }),
         );
     }

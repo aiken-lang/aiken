@@ -27,6 +27,7 @@ pub enum Error {
         source_code: NamedSource,
         return_type: Arc<Type>,
     },
+
     #[error("A {} validator requires at least {} arguments.", name.purple().bold(), at_least.to_string().purple().bold())]
     #[diagnostic(code("aiken::blueprint::invalid::arity"))]
     WrongValidatorArity {
@@ -37,12 +38,13 @@ pub enum Error {
         #[source_code]
         source_code: NamedSource,
     },
+
     #[error("{}", error)]
     #[diagnostic(help("{}", error.help()))]
     #[diagnostic(code("aiken::blueprint::interface"))]
     Schema {
         error: schema::Error,
-        #[label("invalid contract's boundary")]
+        #[label("invalid validator's boundary")]
         location: Span,
         #[source_code]
         source_code: NamedSource,
@@ -52,6 +54,15 @@ pub enum Error {
     #[diagnostic(code("aiken::blueprint::missing"))]
     #[diagnostic(help("Did you forget to {build} the project?", build = "build".purple().bold()))]
     InvalidOrMissingFile,
+
+    #[error("I didn't find any parameters to apply in the given validator.")]
+    #[diagnostic(code("aiken::blueprint::apply::no_parameters"))]
+    NoParametersToApply,
+
+    #[error("I couldn't compute the address of the given validator because it's parameterized by {} parameter(s)!", format!("{n}").purple())]
+    #[diagnostic(code("aiken::blueprint::address::parameterized"))]
+    #[diagnostic(help("I can only compute addresses of validators that are fully applied. For example, a {keyword_spend} validator must have exactly 3 arguments: a datum, a redeemer and a context. If it has more, they need to be provided beforehand and applied directly in the validator. Applying parameters change the validator's compiled code, and thus the address.\n\nThis is why I need you to apply parmeters first.", keyword_spend = "spend".purple()))]
+    ParameterizedValidator { n: usize },
 }
 
 pub fn assert_return_bool(module: &CheckedModule, def: &TypedFunction) -> Result<(), Error> {

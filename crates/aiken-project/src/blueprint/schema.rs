@@ -302,6 +302,12 @@ impl Data {
     }
 }
 
+impl Default for Schema {
+    fn default() -> Self {
+        Schema::Unit
+    }
+}
+
 impl Display for Schema {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;

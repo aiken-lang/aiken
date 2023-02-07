@@ -37,7 +37,7 @@ use std::{
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{Constant, Term},
+    ast::{Constant, DeBruijn, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -283,8 +283,8 @@ where
 
     pub fn address(
         &self,
-        with_title: Option<&String>,
-        with_purpose: Option<&validator::Purpose>,
+        title: Option<&String>,
+        purpose: Option<&validator::Purpose>,
         stake_address: Option<&String>,
     ) -> Result<ShelleyAddress, Error> {
         // Parse stake address
@@ -306,44 +306,64 @@ where
         };
 
         // Read blueprint
-        let filepath = self.blueprint_path();
-        let blueprint =
-            File::open(filepath).map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint = File::open(self.blueprint_path())
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let blueprint: Blueprint<serde_json::Value> =
             serde_json::from_reader(BufReader::new(blueprint))?;
 
-        // Find validator's program
-        let mut program = None;
-        for v in blueprint.validators.iter() {
-            if Some(&v.title) == with_title.or(Some(&v.title))
-                && Some(&v.purpose) == with_purpose.or(Some(&v.purpose))
-            {
-                program = Some(if program.is_none() {
-                    Ok(v.program.clone())
-                } else {
-                    Err(Error::MoreThanOneValidatorFound {
-                        known_validators: blueprint
-                            .validators
-                            .iter()
-                            .map(|v| (v.title.clone(), v.purpose.clone()))
-                            .collect(),
-                    })
-                })
+        // Calculate the address
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+        blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+            let n = validator.parameters.len();
+            if n > 0 {
+                Err(blueprint::error::Error::ParameterizedValidator { n }.into())
+            } else {
+                Ok(validator
+                    .program
+                    .address(Network::Testnet, delegation_part.to_owned()))
             }
-        }
+        })
+    }
 
-        // Print the address
-        match program {
-            Some(Ok(program)) => Ok(program.address(Network::Testnet, delegation_part)),
-            Some(Err(e)) => Err(e),
-            None => Err(Error::NoValidatorNotFound {
-                known_validators: blueprint
-                    .validators
-                    .iter()
-                    .map(|v| (v.title.clone(), v.purpose.clone()))
-                    .collect(),
-            }),
-        }
+    pub fn apply_parameter(
+        &self,
+        title: Option<&String>,
+        purpose: Option<&validator::Purpose>,
+        param: &Term<DeBruijn>,
+    ) -> Result<Blueprint<serde_json::Value>, Error> {
+        // Read blueprint
+        let blueprint = File::open(self.blueprint_path())
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let mut blueprint: Blueprint<serde_json::Value> =
+            serde_json::from_reader(BufReader::new(blueprint))?;
+
+        // Apply parameters
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+        let applied_validator =
+            blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+                validator.apply(param).map_err(|e| e.into())
+            })?;
+
+        // Overwrite validator
+        blueprint.validators = blueprint
+            .validators
+            .into_iter()
+            .map(|validator| {
+                let same_title = validator.title == applied_validator.title;
+                let same_purpose = validator.purpose == applied_validator.purpose;
+                if same_title && same_purpose {
+                    applied_validator.to_owned()
+                } else {
+                    validator
+                }
+            })
+            .collect();
+
+        Ok(blueprint)
     }
 
     fn compile_deps(&mut self) -> Result<(), Error> {

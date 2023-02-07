@@ -1,4 +1,4 @@
-pub mod address;
+pub mod blueprint;
 pub mod build;
 pub mod check;
 pub mod docs;
