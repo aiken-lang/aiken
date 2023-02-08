@@ -504,7 +504,7 @@ mod test {
               "datum": {
                 "title": "Tuple",
                 "dataType": "#list",
-                "elements": [
+                "items": [
                   {
                     "dataType": "integer"
                   },

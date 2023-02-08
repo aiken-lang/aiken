@@ -324,8 +324,8 @@ impl Serialize for Schema {
                 s.end()
             }
             Schema::Boolean => {
-                let mut s = serializer.serialize_struct("Integer", 1)?;
-                s.serialize_field("dataType", "#integer")?;
+                let mut s = serializer.serialize_struct("Boolean", 1)?;
+                s.serialize_field("dataType", "#boolean")?;
                 s.end()
             }
             Schema::Integer => {
@@ -350,10 +350,10 @@ impl Serialize for Schema {
                 s.serialize_field("right", &right)?;
                 s.end()
             }
-            Schema::List(elements) => {
+            Schema::List(items) => {
                 let mut s = serializer.serialize_struct("List", 2)?;
                 s.serialize_field("dataType", "#list")?;
-                s.serialize_field("elements", &elements)?;
+                s.serialize_field("items", &items)?;
                 s.end()
             }
             Schema::Data(None) => {
