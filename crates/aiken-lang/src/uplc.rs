@@ -1205,7 +1205,9 @@ impl<'a> CodeGenerator<'a> {
                             indices: arguments_index
                                 .iter()
                                 .map(|(label, var_name, index)| {
-                                    let field_type = type_map.get(label).unwrap();
+                                    let field_type = type_map
+                                        .get(label)
+                                        .unwrap_or_else(|| type_map.get_index(*index).unwrap().1);
                                     (*index, var_name.clone(), field_type.clone())
                                 })
                                 .collect_vec(),

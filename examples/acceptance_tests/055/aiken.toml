@@ -1,0 +1,6 @@
+name = "aiken-lang/acceptance_test_036"
+version = "0.0.0"
+
+dependencies = [
+  { name = "aiken-lang/stdlib", version="cf89161cbcd5e2c9519e7ea5d61986473b708179", source = "github" },
+]
