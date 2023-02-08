@@ -3774,44 +3774,14 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
+                let list_id = self.id_gen.next();
 
                 let mut id_list = vec![];
+                id_list.push(list_id);
 
                 for _ in 0..names.len() {
                     id_list.push(self.id_gen.next());
                 }
-
-                let current_index = 0;
-                let (first_name, names) = names.split_first().unwrap();
-
-                let list_id = self.id_gen.next();
-
-                let head_list = if tipo.is_map() {
-                    apply_wrap(
-                        Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                        Term::Var(
-                            Name {
-                                text: format!("__list_{list_id}"),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                        ),
-                    )
-                } else {
-                    convert_data_to_type(
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::HeadList).force_wrap(),
-                            Term::Var(
-                                Name {
-                                    text: format!("__list_{list_id}"),
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                            ),
-                        ),
-                        &tipo.get_inner_types()[0],
-                    )
-                };
 
                 let inner_types = tipo
                     .get_inner_types()
@@ -3821,47 +3791,16 @@ impl<'a> CodeGenerator<'a> {
                     .collect_vec();
 
                 term = apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("__list_{list_id}"),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                        body: apply_wrap(
-                            Term::Lambda {
-                                parameter_name: Name {
-                                    text: first_name.clone(),
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                                body: apply_wrap(
-                                    list_access_to_uplc(
-                                        names,
-                                        &id_list,
-                                        tail,
-                                        current_index,
-                                        term,
-                                        inner_types,
-                                        check_last_item,
-                                        true,
-                                    ),
-                                    apply_wrap(
-                                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                        Term::Var(
-                                            Name {
-                                                text: format!("__list_{list_id}"),
-                                                unique: 0.into(),
-                                            }
-                                            .into(),
-                                        ),
-                                    ),
-                                )
-                                .into(),
-                            },
-                            head_list,
-                        )
-                        .into(),
-                    },
+                    list_access_to_uplc(
+                        &names,
+                        &id_list,
+                        tail,
+                        0,
+                        term,
+                        inner_types,
+                        check_last_item,
+                        true,
+                    ),
                     value,
                 );
 
