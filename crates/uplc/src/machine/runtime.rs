@@ -1211,3 +1211,57 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::machine::runtime::convert_tag_to_constr;
+
+    use super::convert_constr_to_tag;
+
+    #[test]
+    fn compact_tag_range() {
+        assert_eq!(convert_constr_to_tag(0), Some(121));
+        assert_eq!(convert_constr_to_tag(1), Some(122));
+        assert_eq!(convert_constr_to_tag(6), Some(127));
+        assert_ne!(convert_constr_to_tag(7), Some(128)); // This is not allowed
+    }
+    #[test]
+    fn compact_tag_mid_range() {
+        assert_eq!(convert_constr_to_tag(7), Some(1280));
+        assert_eq!(convert_constr_to_tag(8), Some(1281));
+        assert_eq!(convert_constr_to_tag(100), Some(1373));
+        assert_eq!(convert_constr_to_tag(127), Some(1400));
+        assert_ne!(convert_constr_to_tag(128), Some(1401)); // This is not allowed
+    }
+
+    #[test]
+    fn any_range() {
+        assert_eq!(convert_constr_to_tag(128), None);
+        assert_eq!(
+            convert_constr_to_tag(128).map_or(Some(128), |_| None),
+            Some(128)
+        );
+        assert_eq!(convert_constr_to_tag(123124125125), None);
+        assert_eq!(convert_constr_to_tag(1).map_or(Some(1), |_| None), None); // This is a compact tag
+    }
+
+    #[test]
+    fn to_compact_tag() {
+        assert_eq!(convert_tag_to_constr(121), Some(0));
+        assert_eq!(convert_tag_to_constr(122), Some(1));
+        assert_eq!(convert_tag_to_constr(127), Some(6));
+        assert_eq!(convert_tag_to_constr(128), None); // This can never happen actually. Pallas sorts that out already during deserialization.
+    }
+    #[test]
+    fn to_compact_tag_mid() {
+        assert_eq!(convert_tag_to_constr(1280), Some(7));
+        assert_eq!(convert_tag_to_constr(1281), Some(8));
+        assert_eq!(convert_tag_to_constr(1400), Some(127));
+        assert_eq!(convert_tag_to_constr(1401), None); // This can never happen actually. Pallas sorts that out already during deserialization.
+    }
+
+    #[test]
+    fn to_any_tag() {
+        assert_eq!(convert_tag_to_constr(102), None);
+    }
+}
