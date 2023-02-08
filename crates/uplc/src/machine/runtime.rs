@@ -1163,6 +1163,8 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<R
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
 
+/// Unlike the Haskell implementation the schnorr verification function in Aiken doesn't allow for arbitrary message sizes (at the moment).
+/// The message needs to be 32 bytes (ideally prehashed, but not a requirement).
 #[cfg(not(feature = "native-secp256k1"))]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
     use secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
@@ -1195,13 +1197,13 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<R
 
 #[cfg(feature = "native-secp256k1")]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
-    use k256::schnorr::{self, signature::Verifier};
+    use k256::schnorr::{self, signature::hazmat::PrehashVerifier};
 
     let verifying_key = schnorr::VerifyingKey::from_bytes(public_key)?;
 
     let signature = schnorr::Signature::try_from(signature)?;
 
-    let valid = verifying_key.verify(message, &signature);
+    let valid = verifying_key.verify_prehash(message, &signature);
 
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
