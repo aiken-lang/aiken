@@ -8,7 +8,7 @@ use uplc::{
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
-    machine::runtime::convert_constr_to_tag,
+    machine::runtime::{convert_constr_to_tag, ANY_TAG},
     BigInt, Constr, KeyValuePairs, PlutusData,
 };
 
@@ -237,7 +237,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
             term,
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(1),
+                    tag: convert_constr_to_tag(1).unwrap(),
                     any_constructor: None,
                     fields: vec![],
                 }))
@@ -245,7 +245,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
             ),
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(0),
+                    tag: convert_constr_to_tag(0).unwrap(),
                     any_constructor: None,
                     fields: vec![],
                 }))
@@ -1002,8 +1002,9 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
             )),
 
             UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag((*b).into()),
-                any_constructor: None,
+                tag: convert_constr_to_tag((*b).into()).unwrap_or(ANY_TAG),
+                any_constructor: convert_constr_to_tag((*b).into())
+                    .map_or(Some((*b).into()), |_| None),
                 fields: vec![],
             })),
             UplcConstant::ProtoList(_, constants) => {
