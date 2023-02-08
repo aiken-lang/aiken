@@ -1214,9 +1214,7 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 
 #[cfg(test)]
 mod tests {
-    use crate::machine::runtime::convert_tag_to_constr;
-
-    use super::convert_constr_to_tag;
+    use super::{convert_constr_to_tag, convert_tag_to_constr};
 
     #[test]
     fn compact_tag_range() {
