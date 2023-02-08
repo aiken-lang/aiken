@@ -880,9 +880,9 @@ impl DefaultFunction {
                                 .collect();
 
                             let constr_data = PlutusData::Constr(Constr {
-                                // TODO: handle other types of constructor tags
-                                tag: convert_constr_to_tag(*i as u64),
-                                any_constructor: None,
+                                tag: convert_constr_to_tag(*i as u64).unwrap_or(ANY_TAG),
+                                any_constructor: convert_constr_to_tag(*i as u64)
+                                    .map_or(Some(*i as u64), |_| None),
                                 fields: data_list,
                             });
 
@@ -959,27 +959,29 @@ impl DefaultFunction {
             },
             DefaultFunction::UnConstrData => match args[0].as_ref() {
                 Value::Con(con) => match con.as_ref() {
-                    Constant::Data(PlutusData::Constr(c)) => {
-                        Ok(Value::Con(
-                            Constant::ProtoPair(
-                                Type::Integer,
-                                Type::List(Type::Data.into()),
-                                // TODO: handle other types of constructor tags
-                                Constant::Integer(convert_tag_to_constr(c.tag as i128)).into(),
-                                Constant::ProtoList(
-                                    Type::Data,
-                                    c.fields
-                                        .deref()
-                                        .iter()
-                                        .map(|d| Constant::Data(d.clone()))
-                                        .collect(),
-                                )
-                                .into(),
+                    Constant::Data(PlutusData::Constr(c)) => Ok(Value::Con(
+                        Constant::ProtoPair(
+                            Type::Integer,
+                            Type::List(Type::Data.into()),
+                            Constant::Integer(
+                                convert_tag_to_constr(c.tag)
+                                    .unwrap_or_else(|| c.any_constructor.unwrap())
+                                    as i128,
+                            )
+                            .into(),
+                            Constant::ProtoList(
+                                Type::Data,
+                                c.fields
+                                    .deref()
+                                    .iter()
+                                    .map(|d| Constant::Data(d.clone()))
+                                    .collect(),
                             )
                             .into(),
                         )
-                        .into())
-                    }
+                        .into(),
+                    )
+                    .into()),
                     v => Err(Error::DeserialisationError(
                         "UnConstrData".to_string(),
                         Value::Con(v.clone().into()),
@@ -1126,25 +1128,27 @@ impl DefaultFunction {
     }
 }
 
-pub fn convert_tag_to_constr(tag: i128) -> i128 {
-    if tag < 128 {
-        tag - 121
-    } else if (1280..1401).contains(&tag) {
-        tag - 1280
+pub fn convert_tag_to_constr(tag: u64) -> Option<u64> {
+    if (121..=127).contains(&tag) {
+        Some(tag - 121)
+    } else if (1280..=1400).contains(&tag) {
+        Some(tag - 1280 + 7)
     } else {
-        todo!()
+        None
     }
 }
 
-pub fn convert_constr_to_tag(constr: u64) -> u64 {
-    if constr < 7 {
-        constr + 121
-    } else if constr < 128 {
-        constr + 1280
+pub fn convert_constr_to_tag(constr: u64) -> Option<u64> {
+    if (0..=6).contains(&constr) {
+        Some(121 + constr)
+    } else if (7..=127).contains(&constr) {
+        Some(1280 - 7 + constr)
     } else {
-        todo!()
+        None // 102 otherwise
     }
 }
+
+pub static ANY_TAG: u64 = 102;
 
 #[cfg(not(feature = "native-secp256k1"))]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {

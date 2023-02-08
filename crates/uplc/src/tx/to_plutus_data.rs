@@ -8,35 +8,35 @@ use pallas_primitives::babbage::{
 };
 use pallas_traverse::ComputeHash;
 
+use crate::machine::runtime::{convert_constr_to_tag, ANY_TAG};
+
 use super::script_context::{ScriptContext, ScriptPurpose, TimeRange, TxInInfo, TxInfo, TxOut};
 
 fn wrap_with_constr(index: u64, data: PlutusData) -> PlutusData {
+    let converted = convert_constr_to_tag(index);
     PlutusData::Constr(Constr {
-        tag: constr_index(index),
-        any_constructor: None,
+        tag: converted.unwrap_or(ANY_TAG),
+        any_constructor: converted.map_or(Some(index), |_| None),
         fields: vec![data],
     })
 }
 
 fn wrap_multiple_with_constr(index: u64, data: Vec<PlutusData>) -> PlutusData {
+    let converted = convert_constr_to_tag(index);
     PlutusData::Constr(Constr {
-        tag: constr_index(index),
-        any_constructor: None,
+        tag: converted.unwrap_or(ANY_TAG),
+        any_constructor: converted.map_or(Some(index), |_| None),
         fields: data,
     })
 }
 
 fn empty_constr(index: u64) -> PlutusData {
+    let converted = convert_constr_to_tag(index);
     PlutusData::Constr(Constr {
-        tag: constr_index(index),
-        any_constructor: None,
+        tag: converted.unwrap_or(ANY_TAG),
+        any_constructor: converted.map_or(Some(index), |_| None),
         fields: vec![],
     })
-}
-
-/// Translate constructor index to cbor tag.
-fn constr_index(index: u64) -> u64 {
-    121 + index
 }
 
 pub trait ToPlutusData {
