@@ -12,12 +12,18 @@
     devshell.url = "github:numtide/devshell";
   };
 
-  outputs = { self, cargo2nix, nixpkgs, flake-utils, devshell }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
+  outputs = {
+    self,
+    cargo2nix,
+    nixpkgs,
+    flake-utils,
+    devshell,
+  }:
+    flake-utils.lib.eachDefaultSystem (
+      system: let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ cargo2nix.overlays.default devshell.overlay ];
+          overlays = [cargo2nix.overlays.default devshell.overlay];
         };
 
         rustPkgs = pkgs.rustBuilder.makePackageSet {
@@ -25,10 +31,10 @@
           packageFun = import ./Cargo.nix;
         };
 
-        commonCategory = y: builtins.map (x: x // { category = y; });
+        commonCategory = y: builtins.map (x: x // {category = y;});
 
         packages = {
-          aiken = (rustPkgs.workspace.aiken { }).bin;
+          aiken = (rustPkgs.workspace.aiken {}).bin;
           default = packages.aiken;
         };
 
@@ -39,16 +45,24 @@
             package = packages.aiken;
           }
         ];
-
       in rec {
         inherit packages;
         devShell = pkgs.devshell.mkShell {
           name = "aiken";
-          motd = ''Aiken
-                        $(type -p menu &>/dev/null && menu)'';
+          motd = ''            Aiken
+                                    $(type -p menu &>/dev/null && menu)'';
           commands = aikenCmds;
         };
-        devShells.aiken = devShell;
+        devShells = {
+          aiken = devShell;
+          ws = rustPkgs.workspaceShell {
+            packages = with pkgs; [
+              # nix
+              rnix-lsp
+              alejandra
+            ];
+          };
+        };
       }
     );
 }
