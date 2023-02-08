@@ -502,6 +502,7 @@ pub fn rearrange_clauses(
     final_clauses
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn list_access_to_uplc(
     names: &[String],
     id_list: &[u64],
