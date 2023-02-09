@@ -145,6 +145,41 @@ pub struct TypeAlias<T> {
 pub type TypedDataType = DataType<Arc<Type>>;
 
 impl TypedDataType {
+    pub fn ordering() -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Less".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Equal".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Greater".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "Ordering".to_string(),
+            opaque: false,
+            parameters: vec![],
+            public: true,
+            typed_parameters: vec![],
+        }
+    }
+
     pub fn option(tipo: Arc<Type>) -> Self {
         DataType {
             constructors: vec![

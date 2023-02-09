@@ -877,6 +877,16 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
 pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDataType> {
     let mut data_types = IndexMap::new();
 
+    // Ordering
+    let ordering_data_type = TypedDataType::ordering();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "Ordering".to_string(),
+        },
+        ordering_data_type,
+    );
+
     // Option
     let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
     data_types.insert(
