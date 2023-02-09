@@ -65,6 +65,8 @@ pub enum Token {
     Fn,
     If,
     Else,
+    ErrorTerm,
+    Expect,
     Is,
     Let,
     Opaque,
@@ -75,7 +77,6 @@ pub enum Token {
     Type,
     When,
     Trace,
-    ErrorTerm,
 }
 
 impl fmt::Display for Token {
@@ -141,6 +142,7 @@ impl fmt::Display for Token {
             Token::NewLine => "NEWLINE",
             Token::As => "as",
             Token::Assert => "assert",
+            Token::Expect => "expect",
             Token::When => "when",
             Token::Is => "is",
             Token::Const => "const",
