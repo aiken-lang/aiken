@@ -1578,7 +1578,7 @@ impl<'a> CodeGenerator<'a> {
 
                 pattern_vec.append(value_vec);
 
-                if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
@@ -1604,7 +1604,7 @@ impl<'a> CodeGenerator<'a> {
                 pattern_vec.append(value_vec);
             }
             list @ Pattern::List { .. } => {
-                if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
@@ -1629,7 +1629,7 @@ impl<'a> CodeGenerator<'a> {
             }
             // TODO: Check constr for assert on all cases
             constr @ Pattern::Constructor { .. } => {
-                if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
@@ -1653,7 +1653,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             tuple @ Pattern::Tuple { .. } => {
-                if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
@@ -2503,7 +2503,7 @@ impl<'a> CodeGenerator<'a> {
                     let id = self.id_gen.next();
                     let list_name = format!("__list_{id}");
 
-                    if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                    if matches!(assignment_properties.kind, AssignmentKind::Expect)
                         && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
@@ -2556,7 +2556,7 @@ impl<'a> CodeGenerator<'a> {
                     let id = self.id_gen.next();
                     let constr_name = format!("{constr_name}_{id}");
 
-                    if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                    if matches!(assignment_properties.kind, AssignmentKind::Expect)
                         && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
@@ -2605,7 +2605,7 @@ impl<'a> CodeGenerator<'a> {
                     let id = self.id_gen.next();
                     let tuple_name = format!("__tuple_name_{id}");
 
-                    if matches!(assignment_properties.kind, AssignmentKind::Assert)
+                    if matches!(assignment_properties.kind, AssignmentKind::Expect)
                         && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {

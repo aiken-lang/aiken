@@ -28,6 +28,6 @@ test update_owner1() {
         builtin.list_data([]),
       ],
     )
-  assert Ford { owner, wheels, truck_bed_limit, .. }: Car = initial_car
+  expect Ford { owner, wheels, truck_bed_limit, .. }: Car = initial_car
   owner == #"" && wheels == 4 && truck_bed_limit == 10000
 }

@@ -37,52 +37,52 @@ pub fn update_door_locked_and_wheels(
 test update_owner1() {
   let initial_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 4,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: False, hinge_angle: 45 },
     }
   let final_car =
     Car {
-      owner: #[244, 244, 244, 244],
+      owner: #"f4f4f4f4",
       wheels: 4,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: False, hinge_angle: 45 },
     }
-  update_owner(#[244, 244, 244, 244], initial_car) == final_car
+  update_owner(#"f4f4f4f4", initial_car) == final_car
 }
 
 test update_vin1() {
   let initial_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 4,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: False, hinge_angle: 45 },
     }
   let final_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 4,
-      vin: #[2, 2, 2, 2, 2, 2, 2, 2, 2],
+      vin: #"020202020202020202",
       door: Door { locked: False, hinge_angle: 45 },
     }
-  update_vin(#[2, 2, 2, 2, 2, 2, 2, 2, 2], initial_car) == final_car
+  update_vin(#"020202020202020202", initial_car) == final_car
 }
 
 test update_door_angle1() {
   let initial_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 4,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: False, hinge_angle: 45 },
     }
   let final_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 4,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: False, hinge_angle: 90 },
     }
   update_door_angle(90, initial_car) == final_car
@@ -91,16 +91,16 @@ test update_door_angle1() {
 test update_door_locked_and_wheels1() {
   let initial_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 4,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: False, hinge_angle: 45 },
     }
   let final_car =
     Car {
-      owner: #[],
+      owner: #"",
       wheels: 5,
-      vin: #[1, 1, 1, 1, 1, 1, 1],
+      vin: #"01010101010101",
       door: Door { locked: True, hinge_angle: 45 },
     }
   update_door_locked_and_wheels(True, 5, initial_car) == final_car

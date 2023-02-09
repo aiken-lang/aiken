@@ -801,7 +801,7 @@ impl<A, B> Pattern<A, B> {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum AssignmentKind {
     Let,
-    Assert,
+    Expect,
 }
 
 impl AssignmentKind {
@@ -809,8 +809,15 @@ impl AssignmentKind {
         matches!(self, AssignmentKind::Let)
     }
 
-    pub fn is_assert(&self) -> bool {
-        matches!(self, AssignmentKind::Assert)
+    pub fn is_expect(&self) -> bool {
+        matches!(self, AssignmentKind::Expect)
+    }
+
+    pub fn location_offset(&self) -> usize {
+        match self {
+            AssignmentKind::Let => 3,
+            AssignmentKind::Expect => 6,
+        }
     }
 }
 

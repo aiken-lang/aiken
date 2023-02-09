@@ -333,7 +333,7 @@ Perhaps, try the following:
     #[diagnostic(code("illegal::module_name"))]
     #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
 
-    as, assert, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
+    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
     KeywordInModuleName { name: String, keyword: String },
 
     #[error("I discovered a function which is ending with an assignment.\n")]
@@ -1073,6 +1073,21 @@ pub enum Warning {
     SingleWhenClause {
         #[label("use let")]
         location: Span,
+        sample: UntypedExpr,
+    },
+
+    #[error("I found an {} trying to match a type with one constructor", "expect".purple())]
+    #[diagnostic(
+        code("single_constructor_expect"),
+        help("If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}", "FROM".bold(), "Data".purple(), "let".purple(), format_suggestion(sample))
+    )]
+    SingleConstructorExpect {
+        #[label("use let")]
+        location: Span,
+        #[label("only one constructor")]
+        pattern_location: Span,
+        #[label("is not Data")]
+        value_location: Span,
         sample: UntypedExpr,
     },
 

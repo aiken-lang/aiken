@@ -20,7 +20,7 @@ pub fn insert(
 ) -> Dict<key, value> {
   Dict {
   inner: do_insert_with(self.inner, k, v, fn(_, left, _right) { Some(left) })}
-
+  
 }
 
 pub fn union_with(

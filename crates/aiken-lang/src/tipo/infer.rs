@@ -20,6 +20,8 @@ use super::{
     TypeInfo, ValueConstructor, ValueConstructorVariant,
 };
 
+const PUB_OFFSET: usize = 3;
+
 impl UntypedModule {
     pub fn infer(
         mut self,
@@ -162,7 +164,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -270,7 +272,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -306,7 +308,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -449,7 +451,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -511,8 +513,11 @@ fn validate_module_name(name: &str) -> Result<(), Error> {
 fn str_to_keyword(word: &str) -> Option<Token> {
     // Alphabetical keywords:
     match word {
+        "assert" => Some(Token::Expect),
+        "expect" => Some(Token::Expect),
+        "else" => Some(Token::Else),
+        "is" => Some(Token::Is),
         "as" => Some(Token::As),
-        "assert" => Some(Token::Assert),
         "when" => Some(Token::When),
         "const" => Some(Token::Const),
         "fn" => Some(Token::Fn),
