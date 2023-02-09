@@ -3,7 +3,7 @@ use crate::program_builder::WithTerm;
 
 pub trait WithConstant: WithTerm {
     fn with_int(self, int: i128) -> Self::Next {
-        let term = Term::Constant(Constant::Integer(int).into());
+        let term = Term::Constant(Constant::Integer(int.into()).into());
         self.next(term)
     }
 

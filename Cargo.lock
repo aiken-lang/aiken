@@ -2669,6 +2669,7 @@ dependencies = [
  "itertools",
  "k256",
  "num-bigint",
+ "num-traits",
  "pallas-addresses",
  "pallas-codec",
  "pallas-crypto",

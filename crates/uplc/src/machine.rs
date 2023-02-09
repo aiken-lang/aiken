@@ -1,3 +1,4 @@
+use num_traits::sign::Signed;
 use std::{collections::VecDeque, ops::Deref, rc::Rc};
 
 use crate::{
@@ -545,10 +546,10 @@ impl Value {
         match self {
             Value::Con(c) => match c.as_ref() {
                 Constant::Integer(i) => {
-                    if *i == 0 {
+                    if *i == 0.into() {
                         1
                     } else {
-                        ((i.abs() as f64).log2().floor() as i64 / 64) + 1
+                        (i.abs().log2().floor() as i64 / 64) + 1
                     }
                 }
                 Constant::ByteString(b) => {
@@ -748,10 +749,10 @@ mod test {
             term: Term::Apply {
                 function: Term::Apply {
                     function: Term::Builtin(DefaultFunction::AddInteger).into(),
-                    argument: Term::Constant(Constant::Integer(i128::MAX).into()).into(),
+                    argument: Term::Constant(Constant::Integer(i128::MAX.into()).into()).into(),
                 }
                 .into(),
-                argument: Term::Constant(Constant::Integer(i128::MAX).into()).into(),
+                argument: Term::Constant(Constant::Integer(i128::MAX.into()).into()).into(),
             },
         };
 
