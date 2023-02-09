@@ -1028,7 +1028,7 @@ pub fn expr_parser(
                 },
             );
 
-        let assert_parser = just(Token::Assert)
+        let assert_parser = just(Token::Expect)
             .ignore_then(pattern_parser())
             .then(just(Token::Colon).ignore_then(type_parser()).or_not())
             .then_ignore(just(Token::Equal))

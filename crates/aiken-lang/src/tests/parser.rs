@@ -325,6 +325,77 @@ fn empty_function() {
 }
 
 #[test]
+fn expect() {
+    let code = indoc! {r#"
+        pub fn run() {
+            expect Some(x) = something.field
+            x.other_field
+        }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 19..69),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 19..51),
+                        value: expr::UntypedExpr::FieldAccess {
+                            location: Span::new((), 36..51),
+                            label: "field".to_string(),
+                            container: expr::UntypedExpr::Var {
+                                location: Span::new((), 36..45),
+                                name: "something".to_string(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        pattern: ast::Pattern::Constructor {
+                            is_record: false,
+                            location: Span::new((), 26..33),
+                            name: "Some".to_string(),
+                            arguments: vec![ast::CallArg {
+                                label: None,
+                                location: Span::new((), 31..32),
+                                value: ast::Pattern::Var {
+                                    location: Span::new((), 31..32),
+                                    name: "x".to_string(),
+                                },
+                            }],
+                            module: None,
+                            constructor: (),
+                            with_spread: false,
+                            tipo: (),
+                        },
+                        kind: ast::AssignmentKind::Assert,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::FieldAccess {
+                        location: Span::new((), 56..69),
+                        label: "other_field".to_string(),
+                        container: expr::UntypedExpr::Var {
+                            location: Span::new((), 56..57),
+                            name: "x".to_string(),
+                        }
+                        .into(),
+                    },
+                ],
+            },
+            doc: None,
+
+            location: Span::new((), 0..12),
+            name: "run".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type: (),
+            end_position: 70,
+        })],
+    )
+}
+
+#[test]
 fn plus_binop() {
     let code = indoc! {r#"
         pub fn add_one(a) -> Int {
