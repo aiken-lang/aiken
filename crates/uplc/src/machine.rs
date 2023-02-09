@@ -730,3 +730,33 @@ impl From<&Constant> for Type {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        ast::{Constant, NamedDeBruijn, Program, Term},
+        builtins::DefaultFunction,
+        machine::Error,
+    };
+
+    use super::cost_model::ExBudget;
+
+    #[test]
+    fn add_big_ints() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (0, 0, 0),
+            term: Term::Apply {
+                function: Term::Apply {
+                    function: Term::Builtin(DefaultFunction::AddInteger).into(),
+                    argument: Term::Constant(Constant::Integer(i128::MAX).into()).into(),
+                }
+                .into(),
+                argument: Term::Constant(Constant::Integer(i128::MAX).into()).into(),
+            },
+        };
+
+        let (eval_result, _, _) = program.eval(ExBudget::default());
+
+        assert!(!matches!(eval_result, Err(Error::OverflowError)));
+    }
+}
