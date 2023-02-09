@@ -774,7 +774,7 @@ impl AssignmentKind {
         matches!(self, AssignmentKind::Let)
     }
 
-    pub fn is_assert(&self) -> bool {
+    pub fn is_expect(&self) -> bool {
         matches!(self, AssignmentKind::Expect)
     }
 }

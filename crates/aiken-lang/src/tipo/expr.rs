@@ -817,14 +817,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_assignment(
         &mut self,
-        pattern: UntypedPattern,
-        value: UntypedExpr,
+        untyped_pattern: UntypedPattern,
+        untyped_value: UntypedExpr,
         kind: AssignmentKind,
         annotation: &Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let typed_value = self.in_new_scope(|value_typer| value_typer.infer(value.clone()))?;
+        let typed_value =
+            self.in_new_scope(|value_typer| value_typer.infer(untyped_value.clone()))?;
         let mut value_typ = typed_value.tipo();
+
+        let value_is_data = value_typ.is_data();
 
         // Check that any type annotation is accurate.
         let pattern = if let Some(ann) = annotation {
@@ -836,25 +839,25 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data()) || (kind.is_assert() && value_typ.is_data()),
+                (kind.is_let() && ann_typ.is_data()) || (kind.is_expect() && value_is_data),
             )?;
 
             value_typ = ann_typ.clone();
 
             // Ensure the pattern matches the type of the value
             PatternTyper::new(self.environment, &self.hydrator).unify(
-                pattern,
+                untyped_pattern.clone(),
                 value_typ.clone(),
                 Some(ann_typ),
             )?
         } else {
-            if value_typ.is_data() && !pattern.is_var() && !pattern.is_discard() {
+            if value_is_data && !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
                 return Err(Error::CastDataNoAnn {
                     location,
                     value: UntypedExpr::Assignment {
                         location,
-                        value: value.into(),
-                        pattern,
+                        value: untyped_value.into(),
+                        pattern: untyped_pattern,
                         kind,
                         annotation: Some(Annotation::Constructor {
                             location: Span::empty(),
@@ -868,7 +871,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             // Ensure the pattern matches the type of the value
             PatternTyper::new(self.environment, &self.hydrator).unify(
-                pattern,
+                untyped_pattern.clone(),
                 value_typ.clone(),
                 None,
             )?
@@ -888,6 +891,33 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     unmatched,
                 });
             }
+        } else if !value_is_data
+            && self
+                .environment
+                .check_exhaustiveness(
+                    vec![pattern.clone()],
+                    collapse_links(value_typ.clone()),
+                    location,
+                )
+                .is_ok()
+        {
+            self.environment
+                .warnings
+                .push(Warning::SingleConstructorExpect {
+                    location: Span {
+                        start: location.start,
+                        end: location.start + 6,
+                    },
+                    pattern_location: dbg!(untyped_pattern.location()),
+                    value_location: dbg!(untyped_value.location()),
+                    sample: UntypedExpr::Assignment {
+                        location: Span::empty(),
+                        value: Box::new(untyped_value),
+                        pattern: untyped_pattern,
+                        kind: AssignmentKind::Let,
+                        annotation: None,
+                    },
+                })
         }
 
         Ok(TypedExpr::Assignment {

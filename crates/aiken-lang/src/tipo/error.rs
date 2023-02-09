@@ -1076,6 +1076,21 @@ pub enum Warning {
         sample: UntypedExpr,
     },
 
+    #[error("I found an {} trying to match a type with one constructor", "expect".purple())]
+    #[diagnostic(
+        code("single_constructor_expect"),
+        help("If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}", "FROM".bold(), "Data".purple(), "let".purple(), format_suggestion(sample))
+    )]
+    SingleConstructorExpect {
+        #[label("use let")]
+        location: Span,
+        #[label("only one constructor")]
+        pattern_location: Span,
+        #[label("is not {}", "Data".purple())]
+        value_location: Span,
+        sample: UntypedExpr,
+    },
+
     #[error("I found a todo left in the code.\n")]
     #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
     #[diagnostic(code("todo"))]
