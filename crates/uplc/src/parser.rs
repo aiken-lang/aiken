@@ -159,7 +159,7 @@ peg::parser! {
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
         rule big_number() -> BigInt
-          = n:$("-"* ['0'..='9']+) {? (if n.starts_with("-") { BigInt::parse_bytes(&n.as_bytes()[1..], 10).map(|i| i.neg()) } else { BigInt::parse_bytes(n.as_bytes(), 10) }).ok_or("BigInt") }
+          = n:$("-"* ['0'..='9']+) {? (if n.starts_with('-') { BigInt::parse_bytes(&n.as_bytes()[1..], 10).map(|i| i.neg()) } else { BigInt::parse_bytes(n.as_bytes(), 10) }).ok_or("BigInt") }
 
         rule boolean() -> bool
           = b:$("True" / "False") { b == "True" }
@@ -258,6 +258,8 @@ peg::parser! {
 
 #[cfg(test)]
 mod test {
+    use num_bigint::BigInt;
+
     use crate::ast::{Constant, Name, Program, Term, Type, Unique};
     use crate::builtins::DefaultFunction;
     use std::rc::Rc;
@@ -554,7 +556,10 @@ mod test {
                         argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00]).into()))
                     }),
                     argument: Rc::new(Term::Constant(
-                        Constant::Integer(9223372036854775808.into()).into()
+                        Constant::Integer(
+                            BigInt::parse_bytes("9223372036854775808".as_bytes(), 10).unwrap()
+                        )
+                        .into()
                     )),
                 }
             }

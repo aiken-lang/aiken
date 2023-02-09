@@ -4417,7 +4417,7 @@ impl<'a> CodeGenerator<'a> {
                     apply_wrap(
                         apply_wrap(
                             DefaultFunction::EqualsInteger.into(),
-                            Term::Constant(UplcConstant::Integer(constr_index as i128).into()),
+                            Term::Constant(UplcConstant::Integer(constr_index.into()).into()),
                         ),
                         constr_index_exposer(constr),
                     ),
@@ -4975,7 +4975,7 @@ impl<'a> CodeGenerator<'a> {
                 term = apply_wrap(
                     apply_wrap(
                         DefaultFunction::ConstrData.into(),
-                        Term::Constant(UplcConstant::Integer(constr_index as i128).into()),
+                        Term::Constant(UplcConstant::Integer(constr_index.into()).into()),
                     ),
                     term,
                 );
@@ -5234,7 +5234,7 @@ impl<'a> CodeGenerator<'a> {
                 term = apply_wrap(
                     apply_wrap(
                         Term::Builtin(DefaultFunction::ConstrData),
-                        Term::Constant(UplcConstant::Integer(0).into()),
+                        Term::Constant(UplcConstant::Integer(0.into()).into()),
                     ),
                     term,
                 );
@@ -5342,7 +5342,7 @@ impl<'a> CodeGenerator<'a> {
                     UnOp::Negate => apply_wrap(
                         apply_wrap(
                             DefaultFunction::SubtractInteger.into(),
-                            Term::Constant(UplcConstant::Integer(0).into()),
+                            Term::Constant(UplcConstant::Integer(0.into()).into()),
                         ),
                         value,
                     ),
@@ -5391,7 +5391,7 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 term,
                             ),
-                            Term::Constant(UplcConstant::Integer(tuple_index as i128).into()),
+                            Term::Constant(UplcConstant::Integer(tuple_index.into()).into()),
                         ),
                         &tipo.get_inner_types()[tuple_index],
                     );

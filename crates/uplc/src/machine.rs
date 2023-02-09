@@ -541,6 +541,29 @@ fn integer_log2(i: BigInt) -> i64 {
     }
 }
 
+pub fn from_pallas_bigint(n: &pallas::BigInt) -> BigInt {
+    match n {
+        pallas::BigInt::Int(i) => i128::from(*i).into(),
+        pallas::BigInt::BigUInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes),
+        pallas::BigInt::BigNInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Minus, bytes),
+    }
+}
+
+pub fn to_pallas_bigint(n: &BigInt) -> pallas::BigInt {
+    if n.bits() <= 64 {
+        let regular_int: i64 = n.try_into().unwrap();
+        let pallas_int: pallas_codec::utils::Int = regular_int.into();
+
+        pallas::BigInt::Int(pallas_int)
+    } else if n.is_positive() {
+        let (_, bytes) = n.to_bytes_be();
+        pallas::BigInt::BigUInt(bytes.into())
+    } else {
+        let (_, bytes) = n.to_bytes_be();
+        pallas::BigInt::BigNInt(bytes.into())
+    }
+}
+
 impl Value {
     pub fn is_integer(&self) -> bool {
         matches!(self, Value::Con(i) if matches!(i.as_ref(), Constant::Integer(_)))
@@ -558,7 +581,7 @@ impl Value {
                     if *i == 0.into() {
                         1
                     } else {
-                        (i.abs().log2().floor() as i64 / 64) + 1
+                        (integer_log2(i.abs()) / 64) + 1
                     }
                 }
                 Constant::ByteString(b) => {
@@ -617,12 +640,9 @@ impl Value {
                     stack = new_stack;
                 }
                 PlutusData::BigInt(i) => {
-                    if let pallas::BigInt::Int(g) = i {
-                        let numb: i128 = (*g).try_into().unwrap();
-                        total += Value::Con(Constant::Integer(numb).into()).to_ex_mem();
-                    } else {
-                        unreachable!()
-                    };
+                    let i = from_pallas_bigint(i);
+
+                    total += Value::Con(Constant::Integer(i).into()).to_ex_mem();
                 }
                 PlutusData::BoundedBytes(b) => {
                     let byte_string: Vec<u8> = b.deref().clone();
@@ -742,14 +762,14 @@ impl From<&Constant> for Type {
 }
 
 #[cfg(test)]
-mod test {
-    use super::{cost_model::ExBudget, integer_log2};
+mod tests {
+    use num_bigint::BigInt;
+
+    use super::{cost_model::ExBudget, integer_log2, Value};
     use crate::{
         ast::{Constant, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
-        machine::Error,
     };
-    use num_bigint::BigInt;
 
     #[test]
     fn add_big_ints() {
@@ -767,7 +787,152 @@ mod test {
 
         let (eval_result, _, _) = program.eval(ExBudget::default());
 
-        assert!(!matches!(eval_result, Err(Error::OverflowError)));
+        let term = eval_result.unwrap();
+
+        assert_eq!(
+            term,
+            Term::Constant(
+                Constant::Integer(
+                    Into::<BigInt>::into(i128::MAX) + Into::<BigInt>::into(i128::MAX)
+                )
+                .into()
+            )
+        );
+    }
+
+    #[test]
+    fn divide_integer() {
+        let make_program = |fun: DefaultFunction, n: i32, m: i32| Program::<NamedDeBruijn> {
+            version: (0, 0, 0),
+            term: Term::Apply {
+                function: Term::Apply {
+                    function: Term::Builtin(fun).into(),
+                    argument: Term::Constant(Constant::Integer(n.into()).into()).into(),
+                }
+                .into(),
+                argument: Term::Constant(Constant::Integer(m.into()).into()).into(),
+            },
+        };
+
+        let test_data = vec![
+            (DefaultFunction::DivideInteger, 8, 3, 2),
+            (DefaultFunction::DivideInteger, 8, -3, -3),
+            (DefaultFunction::DivideInteger, -8, 3, -3),
+            (DefaultFunction::DivideInteger, -8, -3, 2),
+            (DefaultFunction::QuotientInteger, 8, 3, 2),
+            (DefaultFunction::QuotientInteger, 8, -3, -2),
+            (DefaultFunction::QuotientInteger, -8, 3, -2),
+            (DefaultFunction::QuotientInteger, -8, -3, 2),
+            (DefaultFunction::RemainderInteger, 8, 3, 2),
+            (DefaultFunction::RemainderInteger, 8, -3, 2),
+            (DefaultFunction::RemainderInteger, -8, 3, -2),
+            (DefaultFunction::RemainderInteger, -8, -3, -2),
+            (DefaultFunction::ModInteger, 8, 3, 2),
+            (DefaultFunction::ModInteger, 8, -3, -1),
+            (DefaultFunction::ModInteger, -8, 3, 1),
+            (DefaultFunction::ModInteger, -8, -3, -2),
+        ];
+
+        for (fun, n, m, result) in test_data {
+            let (eval_result, _, _) = make_program(fun, n, m).eval(ExBudget::default());
+
+            assert_eq!(
+                eval_result.unwrap(),
+                Term::Constant(Constant::Integer(result.into()).into())
+            );
+        }
+    }
+
+    #[test]
+    fn to_ex_mem_bigint() {
+        let value = Value::Con(Constant::Integer(1.into()).into());
+
+        assert_eq!(value.to_ex_mem(), 1);
+
+        let value = Value::Con(Constant::Integer(42.into()).into());
+
+        assert_eq!(value.to_ex_mem(), 1);
+
+        let value = Value::Con(
+            Constant::Integer(BigInt::parse_bytes("18446744073709551615".as_bytes(), 10).unwrap())
+                .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 1);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("999999999999999999999999999999".as_bytes(), 10).unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 2);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("170141183460469231731687303715884105726".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 2);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("170141183460469231731687303715884105727".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 2);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("170141183460469231731687303715884105728".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 2);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("170141183460469231731687303715884105729".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 2);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("340282366920938463463374607431768211458".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 3);
+
+        let value = Value::Con(
+            Constant::Integer(
+                BigInt::parse_bytes("999999999999999999999999999999999999999999".as_bytes(), 10)
+                    .unwrap(),
+            )
+            .into(),
+        );
+
+        assert_eq!(value.to_ex_mem(), 3);
+
+        let value =
+            Value::Con(Constant::Integer(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()).into());
+
+        assert_eq!(value.to_ex_mem(), 5);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use std::{ops::Deref, rc::Rc};
 
-use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
+use num_integer::Integer;
+use pallas_primitives::babbage::{Constr, PlutusData};
 
 use crate::{
     ast::{Constant, Type},
@@ -10,7 +11,7 @@ use crate::{
 
 use super::{
     cost_model::{BuiltinCosts, ExBudget},
-    Error, Value,
+    from_pallas_bigint, to_pallas_bigint, Error, Value,
 };
 
 //#[derive(std::cmp::PartialEq)]
@@ -330,10 +331,9 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            match arg1.checked_add(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
-                                None => Err(Error::OverflowError),
-                            }
+                            let result = arg1 + arg2;
+
+                            Ok(Value::Con(Constant::Integer(result).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -344,10 +344,9 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            match arg1.checked_sub(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
-                                None => Err(Error::OverflowError),
-                            }
+                            let result = arg1 - arg2;
+
+                            Ok(Value::Con(Constant::Integer(result).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -358,9 +357,25 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            match arg1.checked_mul(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
-                                None => Err(Error::OverflowError),
+                            let result = arg1 * arg2;
+
+                            Ok(Value::Con(Constant::Integer(result).into()).into())
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::DivideInteger => match (args[0].as_ref(), args[1].as_ref()) {
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            if *arg2 != 0.into() {
+                                let (result, _) = arg1.div_mod_floor(arg2);
+
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
+                            } else {
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -368,38 +383,16 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::DivideInteger => {
-                match (args[0].as_ref(), args[1].as_ref()) {
-                    (Value::Con(integer1), Value::Con(integer2)) => {
-                        match (integer1.as_ref(), integer2.as_ref()) {
-                            (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                                if *arg2 != 0 {
-                                    let ret = (*arg1 as f64) / (*arg2 as f64);
-
-                                    Ok(Value::Con(Constant::Integer(ret.floor() as i128).into())
-                                        .into())
-                                } else {
-                                    Err(Error::DivideByZero(*arg1, *arg2))
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
             DefaultFunction::QuotientInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = (*arg1 as f64) / (*arg2 as f64);
+                            if *arg2 != 0.into() {
+                                let (result, _) = arg1.div_rem(arg2);
 
-                                let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
-
-                                Ok(Value::Con(Constant::Integer(ret as i128).into()).into())
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
                             } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -411,12 +404,12 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = arg1 % arg2;
+                            if *arg2 != 0.into() {
+                                let (_, result) = arg1.div_rem(arg2);
 
-                                Ok(Value::Con(Constant::Integer(ret).into()).into())
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
                             } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -428,12 +421,12 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = arg1 % arg2;
+                            if *arg2 != 0.into() {
+                                let (_, result) = arg1.div_mod_floor(arg2);
 
-                                Ok(Value::Con(Constant::Integer(ret.abs()).into()).into())
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
                             } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -493,7 +486,12 @@ impl DefaultFunction {
                 (Value::Con(integer), Value::Con(byte_string)) => {
                     match (integer.as_ref(), byte_string.as_ref()) {
                         (Constant::Integer(arg1), Constant::ByteString(arg2)) => {
-                            let mut ret = vec![(arg1 % 256) as u8];
+                            let wrap = arg1.mod_floor(&256.into());
+
+                            let byte: u8 = wrap.try_into().unwrap();
+
+                            let mut ret = vec![byte];
+
                             ret.extend(arg2.clone());
 
                             Ok(Value::Con(Constant::ByteString(ret).into()).into())
@@ -512,8 +510,16 @@ impl DefaultFunction {
                                 Constant::Integer(arg2),
                                 Constant::ByteString(arg3),
                             ) => {
-                                let skip = if 0 > *arg1 { 0 } else { *arg1 as usize };
-                                let take = if 0 > *arg2 { 0 } else { *arg2 as usize };
+                                let skip: usize = if arg1.lt(&0.into()) {
+                                    0
+                                } else {
+                                    arg1.try_into().unwrap()
+                                };
+                                let take: usize = if arg2.lt(&0.into()) {
+                                    0
+                                } else {
+                                    arg2.try_into().unwrap()
+                                };
 
                                 let ret: Vec<u8> =
                                     arg3.iter().skip(skip).take(take).cloned().collect();
@@ -529,7 +535,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfByteString => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
-                        Ok(Value::Con(Constant::Integer(arg1.len() as i128).into()).into())
+                        Ok(Value::Con(Constant::Integer(arg1.len().into()).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -539,14 +545,14 @@ impl DefaultFunction {
                 (Value::Con(byte_string), Value::Con(integer)) => {
                     match (byte_string.as_ref(), integer.as_ref()) {
                         (Constant::ByteString(arg1), Constant::Integer(arg2)) => {
-                            let index = *arg2 as usize;
+                            let index: i128 = arg2.try_into().unwrap();
 
-                            if 0 <= *arg2 && index < arg1.len() {
-                                let ret = arg1[index] as i128;
+                            if 0 <= index && index < arg1.len() as i128 {
+                                let ret = arg1[index as usize];
 
-                                Ok(Value::Con(Constant::Integer(ret).into()).into())
+                                Ok(Value::Con(Constant::Integer(ret.into()).into()).into())
                             } else {
-                                Err(Error::ByteStringOutOfBounds(*arg2, arg1.to_vec()))
+                                Err(Error::ByteStringOutOfBounds(arg2.clone(), arg1.to_vec()))
                             }
                         }
                         _ => unreachable!(),
@@ -879,10 +885,11 @@ impl DefaultFunction {
                                 })
                                 .collect();
 
+                            let i: u64 = i.try_into().unwrap();
+
                             let constr_data = PlutusData::Constr(Constr {
-                                tag: convert_constr_to_tag(*i as u64).unwrap_or(ANY_TAG),
-                                any_constructor: convert_constr_to_tag(*i as u64)
-                                    .map_or(Some(*i as u64), |_| None),
+                                tag: convert_constr_to_tag(i).unwrap_or(ANY_TAG),
+                                any_constructor: convert_constr_to_tag(i).map_or(Some(i), |_| None),
                                 fields: data_list,
                             });
 
@@ -938,8 +945,7 @@ impl DefaultFunction {
             DefaultFunction::IData => match args[0].as_ref() {
                 Value::Con(integer) => match integer.as_ref() {
                     Constant::Integer(i) => Ok(Value::Con(
-                        Constant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
-                            .into(),
+                        Constant::Data(PlutusData::BigInt(to_pallas_bigint(i))).into(),
                     )
                     .into()),
                     _ => unreachable!(),
@@ -966,7 +972,7 @@ impl DefaultFunction {
                             Constant::Integer(
                                 convert_tag_to_constr(c.tag)
                                     .unwrap_or_else(|| c.any_constructor.unwrap())
-                                    as i128,
+                                    .into(),
                             )
                             .into(),
                             Constant::ProtoList(
@@ -1048,13 +1054,7 @@ impl DefaultFunction {
             DefaultFunction::UnIData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::BigInt(b)) => {
-                        if let BigInt::Int(i) = b {
-                            let x: i128 = (*i).try_into().unwrap();
-
-                            Ok(Value::Con(Constant::Integer(x).into()).into())
-                        } else {
-                            unreachable!()
-                        }
+                        Ok(Value::Con(Constant::Integer(from_pallas_bigint(b)).into()).into())
                     }
                     v => Err(Error::DeserialisationError(
                         "UnMapData".to_string(),

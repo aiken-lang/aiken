@@ -8,8 +8,11 @@ use uplc::{
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
-    machine::runtime::{convert_constr_to_tag, ANY_TAG},
-    BigInt, Constr, KeyValuePairs, PlutusData,
+    machine::{
+        runtime::{convert_constr_to_tag, ANY_TAG},
+        to_pallas_bigint,
+    },
+    Constr, KeyValuePairs, PlutusData,
 };
 
 use crate::{
@@ -332,7 +335,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(
             apply_wrap(
                 DefaultFunction::EqualsInteger.into(),
-                Term::Constant(UplcConstant::Integer(1).into()),
+                Term::Constant(UplcConstant::Integer(1.into()).into()),
             ),
             apply_wrap(
                 Term::Builtin(DefaultFunction::FstPair)
@@ -998,9 +1001,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
     let mut new_constants = vec![];
     for constant in constants {
         let constant = match constant.as_ref() {
-            UplcConstant::Integer(i) => {
-                UplcConstant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
-            }
+            UplcConstant::Integer(i) => UplcConstant::Data(PlutusData::BigInt(to_pallas_bigint(i))),
             UplcConstant::ByteString(b) => {
                 UplcConstant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
             }
