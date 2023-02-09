@@ -22,6 +22,7 @@ pub const VOID: &str = "Void";
 pub const RESULT: &str = "Result";
 pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
+pub const ORDERING: &str = "Ordering";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -114,6 +115,72 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             location: Span::empty(),
             parameters: vec![],
             tipo: bool(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // Ordering
+    prelude.types_constructors.insert(
+        ORDERING.to_string(),
+        vec![
+            "Less".to_string(),
+            "Equal".to_string(),
+            "Greater".to_string(),
+        ],
+    );
+
+    prelude.values.insert(
+        "Less".to_string(),
+        ValueConstructor::public(
+            ordering(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Less".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 3,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        "Equal".to_string(),
+        ValueConstructor::public(
+            ordering(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Equal".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 3,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        "Greater".to_string(),
+        ValueConstructor::public(
+            ordering(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Greater".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 3,
+            },
+        ),
+    );
+
+    prelude.types.insert(
+        ORDERING.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![],
+            tipo: ordering(),
             module: "".to_string(),
             public: true,
         },
@@ -905,6 +972,15 @@ pub fn option(a: Arc<Type>) -> Arc<Type> {
         name: OPTION.to_string(),
         module: "".to_string(),
         args: vec![a],
+    })
+}
+
+pub fn ordering() -> Arc<Type> {
+    Arc::new(Type::App {
+        public: true,
+        name: ORDERING.to_string(),
+        module: "".to_string(),
+        args: vec![],
     })
 }
 

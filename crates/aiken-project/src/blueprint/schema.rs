@@ -127,6 +127,37 @@ impl Annotated<Schema> {
                     ]))),
                 }),
 
+                "Ordering" => Ok(Annotated {
+                    title: Some("Ordering".to_string()),
+                    description: None,
+                    annotated: Schema::Data(Some(Data::AnyOf(vec![
+                        Annotated {
+                            title: Some("Less".to_string()),
+                            description: None,
+                            annotated: Constructor {
+                                index: 0,
+                                fields: vec![],
+                            },
+                        },
+                        Annotated {
+                            title: Some("Equal".to_string()),
+                            description: None,
+                            annotated: Constructor {
+                                index: 1,
+                                fields: vec![],
+                            },
+                        },
+                        Annotated {
+                            title: Some("Greater".to_string()),
+                            description: None,
+                            annotated: Constructor {
+                                index: 2,
+                                fields: vec![],
+                            },
+                        },
+                    ]))),
+                }),
+
                 "Option" => {
                     let generic =
                         Annotated::from_type(modules, args.get(0).unwrap(), type_parameters)
