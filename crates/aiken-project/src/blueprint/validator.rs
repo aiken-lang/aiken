@@ -311,12 +311,12 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "mint",
-              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+              "hash": "69eb6e27b7098c51cef74d8929553456e0ff6748c50a08c0daae7986",
               "redeemer": {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
+              "compiledCode": "4f010000322253330034a22930b2b9a1"
             }),
         );
     }
@@ -332,7 +332,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "mint",
-              "hash": "a82df717fd39f5b273c4eb89ae5252e11cc272ac59d815419bf2e4c3",
+              "hash": "90592520b329fe08f0e93946ecd405e49b7480795e27cb618f002d88",
               "parameters": [{
                 "title": "utxo_ref",
                 "dataType": "integer"
@@ -342,7 +342,7 @@ mod test {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "5840010000323232323232322322253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
+              "compiledCode": "500100003222253330044a22930b2b9a01"
             }),
         );
     }
@@ -388,7 +388,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
+              "hash": "90592520b329fe08f0e93946ecd405e49b7480795e27cb618f002d88",
               "datum": {
                 "title": "State",
                 "description": "On-chain state",
@@ -455,7 +455,7 @@ mod test {
                   }
                 ]
               },
-              "compiledCode": "583b0100003232323232323222253330064a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae89"
+              "compiledCode": "500100003222253330044a22930b2b9a01"
             }),
         );
     }
@@ -471,7 +471,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
+              "hash": "90592520b329fe08f0e93946ecd405e49b7480795e27cb618f002d88",
               "datum": {
                 "dataType": "#pair",
                 "left": {
@@ -484,7 +484,7 @@ mod test {
               "redeemer": {
                 "dataType": "#string"
               },
-              "compiledCode": "585501000032323232323232232232253330084a22930b1b99375c002646466ec0c024008c024004c024004dd6000980080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
+              "compiledCode": "500100003222253330044a22930b2b9a01"
             }),
         )
     }
@@ -500,7 +500,7 @@ mod test {
             json!({
               "title": "test_module",
               "purpose": "spend",
-              "hash": "f335ce0436fd7df56e727a66ada7298534a27b98f887bc3b7947ee48",
+              "hash": "90592520b329fe08f0e93946ecd405e49b7480795e27cb618f002d88",
               "datum": {
                 "title": "Tuple",
                 "dataType": "#list",
@@ -520,7 +520,7 @@ mod test {
                 "title": "Data",
                 "description": "Any Plutus data."
               },
-              "compiledCode": "5840010000323232323232322322253330074a22930b1bac0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
+              "compiledCode": "500100003222253330044a22930b2b9a01"
             }),
         )
     }
@@ -547,7 +547,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "withdraw",
-                  "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+                  "hash": "69eb6e27b7098c51cef74d8929553456e0ff6748c50a08c0daae7986",
                   "redeemer": {
                     "title": "Either",
                     "anyOf": [
@@ -591,7 +591,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
+                  "compiledCode": "4f010000322253330034a22930b2b9a1"
                 }
             ),
         )
@@ -615,7 +615,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+                  "hash": "69eb6e27b7098c51cef74d8929553456e0ff6748c50a08c0daae7986",
                   "redeemer": {
                     "title": "Dict",
                     "anyOf": [
@@ -638,7 +638,7 @@ mod test {
                       }
                     ]
                   },
-                  "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
+                  "compiledCode": "4f010000322253330034a22930b2b9a1"
                 }
             ),
         );
@@ -662,7 +662,7 @@ mod test {
                 {
                   "title": "test_module",
                   "purpose": "mint",
-                  "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+                  "hash": "69eb6e27b7098c51cef74d8929553456e0ff6748c50a08c0daae7986",
                   "redeemer": {
                     "title": "Dict",
                     "dataType": "map",
@@ -673,7 +673,7 @@ mod test {
                       "dataType": "integer"
                     }
                   },
-                  "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
+                  "compiledCode": "4f010000322253330034a22930b2b9a1"
                 }
             ),
         );
