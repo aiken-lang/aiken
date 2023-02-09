@@ -12,7 +12,8 @@ pub mod runtime;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
-use pallas_primitives::babbage::{BigInt, Language, PlutusData};
+use num_bigint::BigInt;
+use pallas_primitives::babbage::{self as pallas, Language, PlutusData};
 
 use self::{cost_model::CostModel, runtime::BuiltinRuntime};
 
@@ -532,6 +533,14 @@ pub enum Value {
     },
 }
 
+fn integer_log2(i: BigInt) -> i64 {
+    let (_, bytes) = i.to_bytes_be();
+    match bytes.first() {
+        None => unreachable!("empty number?"),
+        Some(u) => (8 - u.leading_zeros() - 1) as i64 + 8 * (bytes.len() - 1) as i64,
+    }
+}
+
 impl Value {
     pub fn is_integer(&self) -> bool {
         matches!(self, Value::Con(i) if matches!(i.as_ref(), Constant::Integer(_)))
@@ -608,7 +617,7 @@ impl Value {
                     stack = new_stack;
                 }
                 PlutusData::BigInt(i) => {
-                    if let BigInt::Int(g) = i {
+                    if let pallas::BigInt::Int(g) = i {
                         let numb: i128 = (*g).try_into().unwrap();
                         total += Value::Con(Constant::Integer(numb).into()).to_ex_mem();
                     } else {
@@ -734,13 +743,13 @@ impl From<&Constant> for Type {
 
 #[cfg(test)]
 mod test {
+    use super::{cost_model::ExBudget, integer_log2};
     use crate::{
         ast::{Constant, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
         machine::Error,
     };
-
-    use super::cost_model::ExBudget;
+    use num_bigint::BigInt;
 
     #[test]
     fn add_big_ints() {
@@ -759,5 +768,61 @@ mod test {
         let (eval_result, _, _) = program.eval(ExBudget::default());
 
         assert!(!matches!(eval_result, Err(Error::OverflowError)));
+    }
+
+    #[test]
+    fn integer_log2_oracle() {
+        // Values come from the Haskell implementation
+        assert_eq!(integer_log2(1.into()), 0);
+        assert_eq!(integer_log2(42.into()), 5);
+        assert_eq!(
+            integer_log2(BigInt::parse_bytes("18446744073709551615".as_bytes(), 10).unwrap()),
+            63
+        );
+        assert_eq!(
+            integer_log2(
+                BigInt::parse_bytes("999999999999999999999999999999".as_bytes(), 10).unwrap()
+            ),
+            99
+        );
+        assert_eq!(
+            integer_log2(
+                BigInt::parse_bytes("170141183460469231731687303715884105726".as_bytes(), 10)
+                    .unwrap()
+            ),
+            126
+        );
+        assert_eq!(
+            integer_log2(
+                BigInt::parse_bytes("170141183460469231731687303715884105727".as_bytes(), 10)
+                    .unwrap()
+            ),
+            126
+        );
+        assert_eq!(
+            integer_log2(
+                BigInt::parse_bytes("170141183460469231731687303715884105728".as_bytes(), 10)
+                    .unwrap()
+            ),
+            127
+        );
+        assert_eq!(
+            integer_log2(
+                BigInt::parse_bytes("340282366920938463463374607431768211458".as_bytes(), 10)
+                    .unwrap()
+            ),
+            128
+        );
+        assert_eq!(
+            integer_log2(
+                BigInt::parse_bytes("999999999999999999999999999999999999999999".as_bytes(), 10)
+                    .unwrap()
+            ),
+            139
+        );
+        assert_eq!(
+            integer_log2(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()),
+            279
+        );
     }
 }
