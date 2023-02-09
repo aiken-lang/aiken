@@ -606,7 +606,7 @@ impl<'comments> Formatter<'comments> {
 
         let keyword = match kind {
             Some(AssignmentKind::Let) => "let ",
-            Some(AssignmentKind::Expect) => "assert ",
+            Some(AssignmentKind::Expect) => "expect ",
             None => "try ",
         };
 
