@@ -906,7 +906,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .push(Warning::SingleConstructorExpect {
                     location: Span {
                         start: location.start,
-                        end: location.start + 6,
+                        end: kind.location_offset(),
                     },
                     pattern_location: dbg!(untyped_pattern.location()),
                     value_location: dbg!(untyped_value.location()),

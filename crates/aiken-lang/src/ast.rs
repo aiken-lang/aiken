@@ -777,6 +777,13 @@ impl AssignmentKind {
     pub fn is_expect(&self) -> bool {
         matches!(self, AssignmentKind::Expect)
     }
+
+    pub fn location_offset(&self) -> usize {
+        match self {
+            AssignmentKind::Let => 3,
+            AssignmentKind::Expect => 6,
+        }
+    }
 }
 
 pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor, Type>>;
