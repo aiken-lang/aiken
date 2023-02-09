@@ -3,7 +3,7 @@ use aiken/list
 use aiken/transaction.{Output, ScriptContext}
 use aiken/transaction/value.{PolicyId}
 
-const my_policy_id: PolicyId = #[0, 0, 0, 0, 0]
+const my_policy_id: PolicyId = #"0000000000"
 
 pub fn has_policy_id(self: Output, policy_id: PolicyId) -> Bool {
   self.value

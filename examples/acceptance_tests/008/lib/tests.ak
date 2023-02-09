@@ -5,17 +5,17 @@ pub fn is_empty(bytes: ByteArray) -> Bool {
 }
 
 test is_empty_1() {
-  is_empty(#[]) == True
+  is_empty(#"") == True
 }
 
 test is_empty_1_alt() {
-  is_empty(#[])
+  is_empty(#"")
 }
 
 test is_empty_2() {
-  is_empty(#[1]) == False
+  is_empty(#"01") == False
 }
 
 test is_empty_2_alt() {
-  !is_empty(#[1])
+  !is_empty(#"01")
 }

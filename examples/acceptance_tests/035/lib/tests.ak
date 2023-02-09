@@ -22,7 +22,7 @@ pub fn from_asset(
 }
 
 pub fn from_lovelace(quantity: Int) -> Value {
-  from_asset(#[], #[], quantity)
+  from_asset(#"", #"", quantity)
 }
 
 pub fn add(left v0: Value, right v1: Value) -> Value {

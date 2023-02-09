@@ -18,11 +18,7 @@ pub fn insert(
   AssocList { inner: do_insert(m.inner, k, v) }
 }
 
-fn do_insert(
-  elems: List<(key, value)>,
-  k: key,
-  v: value,
-) -> List<(key, value)> {
+fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
   when elems is {
     [] -> [(k, v)]
     [(k2, v2), ..rest] ->
