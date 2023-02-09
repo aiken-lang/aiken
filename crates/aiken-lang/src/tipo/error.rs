@@ -1086,7 +1086,7 @@ pub enum Warning {
         location: Span,
         #[label("only one constructor")]
         pattern_location: Span,
-        #[label("is not {}", "Data".purple())]
+        #[label("is not Data")]
         value_location: Span,
         sample: UntypedExpr,
     },
