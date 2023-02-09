@@ -877,7 +877,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // We currently only do limited exhaustiveness checking of custom types
         // at the top level of patterns.
         // Do not perform exhaustiveness checking if user explicitly used `assert`.
-        if kind != AssignmentKind::Assert {
+        if kind != AssignmentKind::Expect {
             if let Err(unmatched) = self.environment.check_exhaustiveness(
                 vec![pattern.clone()],
                 collapse_links(value_typ.clone()),

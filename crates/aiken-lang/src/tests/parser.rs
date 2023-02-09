@@ -369,7 +369,7 @@ fn expect() {
                             with_spread: false,
                             tipo: (),
                         },
-                        kind: ast::AssignmentKind::Assert,
+                        kind: ast::AssignmentKind::Expect,
                         annotation: None,
                     },
                     expr::UntypedExpr::FieldAccess {

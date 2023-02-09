@@ -1038,7 +1038,7 @@ pub fn expr_parser(
                     location: span,
                     value: Box::new(value),
                     pattern,
-                    kind: ast::AssignmentKind::Assert,
+                    kind: ast::AssignmentKind::Expect,
                     annotation,
                 },
             );

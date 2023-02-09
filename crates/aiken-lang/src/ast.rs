@@ -766,7 +766,7 @@ impl<A, B> Pattern<A, B> {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum AssignmentKind {
     Let,
-    Assert,
+    Expect,
 }
 
 impl AssignmentKind {
@@ -775,7 +775,7 @@ impl AssignmentKind {
     }
 
     pub fn is_assert(&self) -> bool {
-        matches!(self, AssignmentKind::Assert)
+        matches!(self, AssignmentKind::Expect)
     }
 }
 

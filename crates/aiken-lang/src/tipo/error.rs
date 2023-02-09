@@ -333,7 +333,7 @@ Perhaps, try the following:
     #[diagnostic(code("illegal::module_name"))]
     #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
 
-    as, assert, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
+    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
     KeywordInModuleName { name: String, keyword: String },
 
     #[error("I discovered a function which is ending with an assignment.\n")]
