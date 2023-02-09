@@ -1571,8 +1571,15 @@ impl<'comments> Formatter<'comments> {
 
     fn un_op<'a>(&mut self, value: &'a UntypedExpr, op: &'a UnOp) -> Document<'a> {
         match op {
-            UnOp::Not => docvec!["!", self.wrap_expr(value)],
-            UnOp::Negate => docvec!["-", self.wrap_expr(value)],
+            UnOp::Not => docvec!["!", self.wrap_unary_op(value)],
+            UnOp::Negate => docvec!["-", self.wrap_unary_op(value)],
+        }
+    }
+
+    fn wrap_unary_op<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
+        match expr {
+            UntypedExpr::BinOp { .. } => "(".to_doc().append(self.expr(expr)).append(")"),
+            _ => self.wrap_expr(expr),
         }
     }
 }
