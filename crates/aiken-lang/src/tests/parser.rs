@@ -2166,7 +2166,7 @@ fn clause_guards() {
               _ if bar -> Void
               _ if True -> Void
               _ if a || b && c -> Void
-              _ if a || (b && c) -> Void
+              _ if (a || b) && c -> Void
               _ if a <= 42 || b > 14 || "str" -> Void
               _ if a == 14 && !b -> Void
               _ if !!True -> Void
@@ -2241,25 +2241,25 @@ fn clause_guards() {
                             location: Span::new((), 92..93),
                         }],
                         alternative_patterns: vec![],
-                        guard: Some(ast::ClauseGuard::And {
+                        guard: Some(ast::ClauseGuard::Or {
                             location: Span::new((), 97..108),
-                            left: Box::new(ast::ClauseGuard::Or {
-                                location: Span::new((), 97..103),
+                            left: Box::new(ast::ClauseGuard::Var {
+                                location: Span::new((), 97..98),
+                                name: "a".to_string(),
+                                tipo: (),
+                            }),
+                            right: Box::new(ast::ClauseGuard::And {
+                                location: Span::new((), 102..108),
                                 left: Box::new(ast::ClauseGuard::Var {
-                                    location: Span::new((), 97..98),
-                                    name: "a".to_string(),
-                                    tipo: (),
-                                }),
-                                right: Box::new(ast::ClauseGuard::Var {
                                     location: Span::new((), 102..103),
                                     name: "b".to_string(),
                                     tipo: (),
                                 }),
-                            }),
-                            right: Box::new(ast::ClauseGuard::Var {
-                                location: Span::new((), 107..108),
-                                name: "c".to_string(),
-                                tipo: (),
+                                right: Box::new(ast::ClauseGuard::Var {
+                                    location: Span::new((), 107..108),
+                                    name: "c".to_string(),
+                                    tipo: (),
+                                }),
                             }),
                         }),
                         then: expr::UntypedExpr::Var {
@@ -2274,25 +2274,25 @@ fn clause_guards() {
                             location: Span::new((), 121..122),
                         }],
                         alternative_patterns: vec![],
-                        guard: Some(ast::ClauseGuard::Or {
-                            location: Span::new((), 126..138),
-                            left: Box::new(ast::ClauseGuard::Var {
-                                location: Span::new((), 126..127),
-                                name: "a".to_string(),
-                                tipo: (),
-                            }),
-                            right: Box::new(ast::ClauseGuard::And {
-                                location: Span::new((), 132..138),
+                        guard: Some(ast::ClauseGuard::And {
+                            location: Span::new((), 127..139),
+                            left: Box::new(ast::ClauseGuard::Or {
+                                location: Span::new((), 127..133),
                                 left: Box::new(ast::ClauseGuard::Var {
+                                    location: Span::new((), 127..128),
+                                    name: "a".to_string(),
+                                    tipo: (),
+                                }),
+                                right: Box::new(ast::ClauseGuard::Var {
                                     location: Span::new((), 132..133),
                                     name: "b".to_string(),
                                     tipo: (),
                                 }),
-                                right: Box::new(ast::ClauseGuard::Var {
-                                    location: Span::new((), 137..138),
-                                    name: "c".to_string(),
-                                    tipo: (),
-                                }),
+                            }),
+                            right: Box::new(ast::ClauseGuard::Var {
+                                location: Span::new((), 138..139),
+                                name: "c".to_string(),
+                                tipo: (),
                             }),
                         }),
                         then: expr::UntypedExpr::Var {
@@ -2419,4 +2419,99 @@ fn clause_guards() {
             end_position: 251,
         })],
     );
+}
+
+#[test]
+fn scope_logical_expression() {
+    let code = indoc! {r#"
+          fn foo() {
+            let x = !(a && b)
+            let y = a || b && c || d
+            x
+          }
+        "#};
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 13..61),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 13..30),
+                        value: Box::new(expr::UntypedExpr::UnOp {
+                            op: ast::UnOp::Not,
+                            location: Span::new((), 21..29),
+                            value: Box::new(expr::UntypedExpr::BinOp {
+                                location: Span::new((), 23..29),
+                                name: ast::BinOp::And,
+                                left: Box::new(expr::UntypedExpr::Var {
+                                    location: Span::new((), 23..24),
+                                    name: "a".to_string(),
+                                }),
+                                right: Box::new(expr::UntypedExpr::Var {
+                                    location: Span::new((), 28..29),
+                                    name: "b".to_string(),
+                                }),
+                            }),
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..18),
+                            name: "x".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 33..57),
+                        value: Box::new(expr::UntypedExpr::BinOp {
+                            location: Span::new((), 41..57),
+                            name: ast::BinOp::Or,
+                            left: Box::new(expr::UntypedExpr::BinOp {
+                                location: Span::new((), 41..52),
+                                name: ast::BinOp::Or,
+                                left: Box::new(expr::UntypedExpr::Var {
+                                    location: Span::new((), 41..42),
+                                    name: "a".to_string(),
+                                }),
+                                right: Box::new(expr::UntypedExpr::BinOp {
+                                    location: Span::new((), 46..52),
+                                    name: ast::BinOp::And,
+                                    left: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new((), 46..47),
+                                        name: "b".to_string(),
+                                    }),
+                                    right: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new((), 51..52),
+                                        name: "c".to_string(),
+                                    }),
+                                }),
+                            }),
+                            right: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new((), 56..57),
+                                name: "d".to_string(),
+                            }),
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 37..38),
+                            name: "y".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Var {
+                        location: Span::new((), 60..61),
+                        name: "x".to_string(),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 62,
+        })],
+    )
 }

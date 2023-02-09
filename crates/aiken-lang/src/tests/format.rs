@@ -14,7 +14,7 @@ fn assert_fmt(src: &str, expected: &str) {
     let (module2, extra2) = parser::module(&out, ModuleKind::Lib).unwrap();
     let mut out2 = String::new();
     format::pretty(&mut out2, module2, extra2, &out);
-    assert!(out == out2, "formatting isn't idempotent");
+    assert_eq!(out, out2, "formatting isn't idempotent");
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn test_negate() {
 }
 
 #[test]
-fn test_block_expr() {
+fn test_block_arithmetic_expr() {
     let src = indoc! {r#"
         fn foo() {
           ( 14 + 42 ) * 1337
@@ -251,6 +251,39 @@ fn test_block_expr() {
 
         fn bar() {
           ( 14 + 42 ) * 1337
+        }
+    "#};
+
+    assert_fmt(src, expected);
+}
+
+#[test]
+fn test_block_logical_expr() {
+    let src = indoc! {r#"
+        fn foo() {
+          !(a && b)
+        }
+
+        fn bar() {
+          (a || b) && (c || d)
+        }
+
+        fn baz() {
+          a || (b && c) || d
+        }
+    "#};
+
+    let expected = indoc! {r#"
+        fn foo() {
+          !(a && b)
+        }
+
+        fn bar() {
+          ( a || b ) && ( c || d )
+        }
+
+        fn baz() {
+          a || b && c || d
         }
     "#};
 

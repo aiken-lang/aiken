@@ -1301,13 +1301,9 @@ pub fn expr_parser(
             })
             .boxed();
 
-        // Logical
-        let op = choice((
-            just(Token::AmperAmper).to(BinOp::And),
-            just(Token::VbarVbar).to(BinOp::Or),
-        ));
-
-        let logical = comparison
+        // Conjunction
+        let op = just(Token::AmperAmper).to(BinOp::And);
+        let conjunction = comparison
             .clone()
             .then(op.then(comparison).repeated())
             .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
@@ -1318,10 +1314,23 @@ pub fn expr_parser(
             })
             .boxed();
 
-        // Pipeline
-        logical
+        // Disjunction
+        let op = just(Token::VbarVbar).to(BinOp::Or);
+        let disjunction = conjunction
             .clone()
-            .then(just(Token::Pipe).ignore_then(logical).repeated())
+            .then(op.then(conjunction).repeated())
+            .foldl(|a, (op, b)| expr::UntypedExpr::BinOp {
+                location: a.location().union(b.location()),
+                name: op,
+                left: Box::new(a),
+                right: Box::new(b),
+            })
+            .boxed();
+
+        // Pipeline
+        disjunction
+            .clone()
+            .then(just(Token::Pipe).ignore_then(disjunction).repeated())
             .foldl(|l, r| {
                 let expressions = if let expr::UntypedExpr::PipeLine { mut expressions } = l {
                     expressions.push(r);
@@ -1421,30 +1430,33 @@ pub fn when_clause_guard_parser() -> impl Parser<Token, ast::ClauseGuard<(), ()>
             })
             .boxed();
 
-        let logical_op = choice((
-            just(Token::AmperAmper).to(BinOp::And),
-            just(Token::VbarVbar).to(BinOp::Or),
-        ));
-
-        comparison
+        let and_op = just(Token::AmperAmper);
+        let conjunction = comparison
             .clone()
-            .then(logical_op.then(comparison).repeated())
-            .foldl(|left, (op, right)| {
+            .then(and_op.then(comparison).repeated())
+            .foldl(|left, (_tok, right)| {
                 let location = left.location().union(right.location());
                 let left = Box::new(left);
                 let right = Box::new(right);
-                match op {
-                    BinOp::And => ast::ClauseGuard::And {
-                        location,
-                        left,
-                        right,
-                    },
-                    BinOp::Or => ast::ClauseGuard::Or {
-                        location,
-                        left,
-                        right,
-                    },
-                    _ => unreachable!(),
+                ast::ClauseGuard::And {
+                    location,
+                    left,
+                    right,
+                }
+            });
+
+        let or_op = just(Token::VbarVbar);
+        conjunction
+            .clone()
+            .then(or_op.then(conjunction).repeated())
+            .foldl(|left, (_tok, right)| {
+                let location = left.location().union(right.location());
+                let left = Box::new(left);
+                let right = Box::new(right);
+                ast::ClauseGuard::Or {
+                    location,
+                    left,
+                    right,
                 }
             })
     })
