@@ -140,13 +140,24 @@ For example:
 
     #[error("I noticed you were importing '{}' twice.\n", name.purple())]
     #[diagnostic(code("duplicate::import"))]
-    #[diagnostic(help("The best thing to do from here is to remove one of them."))]
+    #[diagnostic(help(r#"If you're trying to import two modules with identical names but from different packages, you'll need to use a named import.
+For example:
+
+╰─▶ {keyword_use} {import} {keyword_as} {named}
+
+Otherwise, just remove the redundant import."#
+        , keyword_use = "use".bright_blue()
+        , keyword_as = "as".bright_blue()
+        , import = module.iter().map(|x| x.purple().bold().to_string()).collect::<Vec<_>>().join("/".bold().to_string().as_ref())
+        , named = module.join("_")
+    ))]
     DuplicateImport {
-        #[label]
+        #[label("also imported here as '{name}'")]
         location: Span,
-        #[label]
-        previous_location: Span,
         name: String,
+        module: Vec<String>,
+        #[label("imported here as '{name}'")]
+        previous_location: Span,
     },
 
     #[error("I discovered two top-level objects referred to as '{}'.\n", name.purple())]

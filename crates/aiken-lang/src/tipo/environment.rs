@@ -710,6 +710,7 @@ impl<'a> Environment<'a> {
                             location: *location,
                             previous_location: *previous,
                             name: name.to_string(),
+                            module: module.clone(),
                         });
                     }
 
@@ -800,6 +801,7 @@ impl<'a> Environment<'a> {
                         location: *location,
                         previous_location: *previous_location,
                         name: module_name,
+                        module: module.clone(),
                     });
                 }
 
