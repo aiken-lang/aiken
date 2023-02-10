@@ -2006,6 +2006,24 @@ in
     };
   });
   
+  "registry+https://github.com/rust-lang/crates.io-index".num-bigint."0.4.3" = overridableMkRustCrate (profileName: rec {
+    name = "num-bigint";
+    version = "0.4.3";
+    registry = "registry+https://github.com/rust-lang/crates.io-index";
+    src = fetchCratesIo { inherit name version; sha256 = "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"; };
+    features = builtins.concatLists [
+      [ "default" ]
+      [ "std" ]
+    ];
+    dependencies = {
+      num_integer = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-integer."0.1.45" { inherit profileName; };
+      num_traits = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-traits."0.2.15" { inherit profileName; };
+    };
+    buildDependencies = {
+      autocfg = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".autocfg."1.1.0" { profileName = "__noProfile"; };
+    };
+  });
+  
   "registry+https://github.com/rust-lang/crates.io-index".num-integer."0.1.45" = overridableMkRustCrate (profileName: rec {
     name = "num-integer";
     version = "0.1.45";
@@ -2013,6 +2031,7 @@ in
     src = fetchCratesIo { inherit name version; sha256 = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"; };
     features = builtins.concatLists [
       [ "default" ]
+      [ "i128" ]
       [ "std" ]
     ];
     dependencies = {
@@ -2030,6 +2049,7 @@ in
     src = fetchCratesIo { inherit name version; sha256 = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"; };
     features = builtins.concatLists [
       [ "default" ]
+      [ "i128" ]
       [ "std" ]
     ];
     buildDependencies = {
@@ -3752,6 +3772,9 @@ in
       indexmap = rustPackages."registry+https://github.com/rust-lang/crates.io-index".indexmap."1.9.2" { inherit profileName; };
       itertools = rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; };
       ${ if rootFeatures' ? "uplc/native-secp256k1" then "k256" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".k256."0.12.0" { inherit profileName; };
+      num_bigint = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-bigint."0.4.3" { inherit profileName; };
+      num_integer = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-integer."0.1.45" { inherit profileName; };
+      num_traits = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-traits."0.2.15" { inherit profileName; };
       pallas_addresses = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas-addresses."0.16.0" { inherit profileName; };
       pallas_codec = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas-codec."0.16.0" { inherit profileName; };
       pallas_crypto = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas-crypto."0.16.0" { inherit profileName; };
