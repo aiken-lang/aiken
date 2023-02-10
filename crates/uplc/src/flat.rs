@@ -391,6 +391,9 @@ impl Encode for Constant {
         match self {
             Constant::Integer(i) => {
                 encode_constant(&[0], e)?;
+
+                let i: i128 = i.try_into().unwrap();
+
                 i.encode(e)?;
             }
 
@@ -444,7 +447,11 @@ impl Encode for Constant {
 
 fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error> {
     match x {
-        Constant::Integer(x) => x.encode(e),
+        Constant::Integer(x) => {
+            let x: i128 = x.try_into().unwrap();
+
+            x.encode(e)
+        }
         Constant::ByteString(b) => b.encode(e),
         Constant::String(s) => s.encode(e),
         Constant::Unit => Ok(()),
@@ -491,7 +498,7 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
 impl<'b> Decode<'b> for Constant {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         match &decode_constant(d)?[..] {
-            [0] => Ok(Constant::Integer(i128::decode(d)?)),
+            [0] => Ok(Constant::Integer(i128::decode(d)?.into())),
             [1] => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
             [2] => Ok(Constant::String(String::decode(d)?)),
             [3] => Ok(Constant::Unit),
@@ -534,7 +541,7 @@ impl<'b> Decode<'b> for Constant {
 
 fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de::Error> {
     match typ.as_ref() {
-        Type::Integer => Ok(Constant::Integer(i128::decode(d)?)),
+        Type::Integer => Ok(Constant::Integer(i128::decode(d)?.into())),
         Type::ByteString => Ok(Constant::ByteString(Vec::<u8>::decode(d)?)),
         Type::String => Ok(Constant::String(String::decode(d)?)),
         Type::Unit => Ok(Constant::Unit),
@@ -813,7 +820,7 @@ mod test {
     fn flat_encode_integer() {
         let program = Program::<Name> {
             version: (11, 22, 33),
-            term: Term::Constant(Constant::Integer(11).into()),
+            term: Term::Constant(Constant::Integer(11.into()).into()),
         };
 
         let expected_bytes = vec![
@@ -833,8 +840,8 @@ mod test {
                 Constant::ProtoList(
                     Type::List(Type::Integer.into()),
                     vec![
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7.into())]),
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5.into())]),
                     ],
                 )
                 .into(),
@@ -862,11 +869,11 @@ mod test {
                     Constant::ProtoPair(
                         Type::Integer,
                         Type::Bool,
-                        Constant::Integer(11).into(),
+                        Constant::Integer(11.into()).into(),
                         Constant::Bool(true).into(),
                     )
                     .into(),
-                    Constant::Integer(11).into(),
+                    Constant::Integer(11.into()).into(),
                 )
                 .into(),
             ),
@@ -895,8 +902,8 @@ mod test {
                 Constant::ProtoList(
                     Type::List(Type::Integer.into()),
                     vec![
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7)]),
-                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5)]),
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(7.into())]),
+                        Constant::ProtoList(Type::Integer, vec![Constant::Integer(5.into())]),
                     ],
                 )
                 .into(),
@@ -924,11 +931,11 @@ mod test {
                     Constant::ProtoPair(
                         Type::Integer,
                         Type::Bool,
-                        Constant::Integer(11).into(),
+                        Constant::Integer(11.into()).into(),
                         Constant::Bool(true).into(),
                     )
                     .into(),
-                    Constant::Integer(11).into(),
+                    Constant::Integer(11.into()).into(),
                 )
                 .into(),
             ),
@@ -947,7 +954,7 @@ mod test {
 
         let expected_program = Program {
             version: (11, 22, 33),
-            term: Term::Constant(Constant::Integer(11).into()),
+            term: Term::Constant(Constant::Integer(11.into()).into()),
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();

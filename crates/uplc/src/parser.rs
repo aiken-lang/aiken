@@ -1,4 +1,4 @@
-use std::{rc::Rc, str::FromStr};
+use std::{ops::Neg, rc::Rc, str::FromStr};
 
 use crate::{
     ast::{Constant, Name, Program, Term, Type},
@@ -6,6 +6,7 @@ use crate::{
 };
 
 use interner::Interner;
+use num_bigint::BigInt;
 use pallas_primitives::{alonzo::PlutusData, Fragment};
 use peg::{error::ParseError, str::LineCol};
 
@@ -157,8 +158,8 @@ peg::parser! {
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
-        rule big_number() -> i128
-          = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("i128")) }
+        rule big_number() -> BigInt
+          = n:$("-"* ['0'..='9']+) {? (if n.starts_with('-') { BigInt::parse_bytes(&n.as_bytes()[1..], 10).map(|i| i.neg()) } else { BigInt::parse_bytes(n.as_bytes(), 10) }).ok_or("BigInt") }
 
         rule boolean() -> bool
           = b:$("True" / "False") { b == "True" }
@@ -257,6 +258,8 @@ peg::parser! {
 
 #[cfg(test)]
 mod test {
+    use num_bigint::BigInt;
+
     use crate::ast::{Constant, Name, Program, Term, Type, Unique};
     use crate::builtins::DefaultFunction;
     use std::rc::Rc;
@@ -277,7 +280,7 @@ mod test {
                         parameter_name: x.clone().into(),
                         body: Rc::new(Term::Var(x.into())),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::Integer(0).into()))
+                    argument: Rc::new(Term::Constant(Constant::Integer(0.into()).into()))
                 }
             }
         )
@@ -344,7 +347,7 @@ mod test {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (11, 22, 33),
-                term: Term::Constant(Constant::Integer(11).into()),
+                term: Term::Constant(Constant::Integer(11.into()).into()),
             }
         );
     }
@@ -492,7 +495,7 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(DefaultFunction::ConsByteString)),
-                        argument: Rc::new(Term::Constant(Constant::Integer(256).into())),
+                        argument: Rc::new(Term::Constant(Constant::Integer(256.into()).into())),
                     }),
                     argument: Rc::new(Term::Constant(Constant::ByteString(vec![]).into()))
                 }
@@ -511,9 +514,9 @@ mod test {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Apply {
                             function: Rc::new(Term::Builtin(DefaultFunction::SliceByteString)),
-                            argument: Rc::new(Term::Constant(Constant::Integer(1).into())),
+                            argument: Rc::new(Term::Constant(Constant::Integer(1.into()).into())),
                         }),
-                        argument: Rc::new(Term::Constant(Constant::Integer(2).into())),
+                        argument: Rc::new(Term::Constant(Constant::Integer(2.into()).into())),
                     }),
                     argument: Rc::new(Term::Constant(
                         Constant::ByteString(vec![0x00, 0xFF, 0xAA]).into()
@@ -553,7 +556,10 @@ mod test {
                         argument: Rc::new(Term::Constant(Constant::ByteString(vec![0x00]).into()))
                     }),
                     argument: Rc::new(Term::Constant(
-                        Constant::Integer(9223372036854775808).into()
+                        Constant::Integer(
+                            BigInt::parse_bytes("9223372036854775808".as_bytes(), 10).unwrap()
+                        )
+                        .into()
                     )),
                 }
             }
@@ -704,9 +710,12 @@ mod test {
                         vec![
                             Constant::ProtoList(
                                 Type::Integer,
-                                vec![Constant::Integer(14), Constant::Integer(42)]
+                                vec![Constant::Integer(14.into()), Constant::Integer(42.into())]
                             ),
-                            Constant::ProtoList(Type::Integer, vec![Constant::Integer(1337)])
+                            Constant::ProtoList(
+                                Type::Integer,
+                                vec![Constant::Integer(1337.into())]
+                            )
                         ]
                     )
                     .into()
@@ -733,7 +742,7 @@ mod test {
                 term: Term::Constant(
                     Constant::ProtoList(
                         Type::Integer,
-                        vec![Constant::Integer(14), Constant::Integer(42)],
+                        vec![Constant::Integer(14.into()), Constant::Integer(42.into())],
                     )
                     .into()
                 )
@@ -776,7 +785,7 @@ mod test {
                         Constant::ProtoPair(
                             Type::Integer,
                             Type::ByteString,
-                            Constant::Integer(14).into(),
+                            Constant::Integer(14.into()).into(),
                             Constant::ByteString(vec![0x42]).into(),
                         )
                         .into()
@@ -801,7 +810,7 @@ mod test {
                         Constant::String(String::from("foo")).into(),
                         Constant::ProtoList(
                             Type::Integer,
-                            vec![Constant::Integer(14), Constant::Integer(42)],
+                            vec![Constant::Integer(14.into()), Constant::Integer(42.into())],
                         )
                         .into()
                     )
@@ -828,8 +837,8 @@ mod test {
                     Constant::ProtoPair(
                         Type::Integer,
                         Type::Integer,
-                        Constant::Integer(14).into(),
-                        Constant::Integer(42).into()
+                        Constant::Integer(14.into()).into(),
+                        Constant::Integer(42.into()).into()
                     )
                     .into()
                 )
@@ -859,9 +868,9 @@ mod test {
                 term: Term::Apply {
                     function: Rc::new(Term::Apply {
                         function: Rc::new(Term::Builtin(default_function)),
-                        argument: Rc::new(Term::Constant(Constant::Integer(x).into())),
+                        argument: Rc::new(Term::Constant(Constant::Integer(x.into()).into())),
                     }),
-                    argument: Rc::new(Term::Constant(Constant::Integer(y).into()))
+                    argument: Rc::new(Term::Constant(Constant::Integer(y.into()).into()))
                 }
             }
         )
