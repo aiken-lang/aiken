@@ -889,6 +889,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 return Err(Error::NotExhaustivePatternMatch {
                     location,
                     unmatched,
+                    is_let: true,
                 });
             }
         } else if !value_is_data
@@ -2054,6 +2055,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             return Err(Error::NotExhaustivePatternMatch {
                 location,
                 unmatched,
+                is_let: false,
             });
         }
 

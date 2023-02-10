@@ -389,15 +389,26 @@ If you really meant to return that last expression, try to replace it with the f
         tipo: Arc<Type>,
     },
 
-    #[error("I realized that a given 'when/is' expression is non-exhaustive.\n")]
+    #[error("{}\n", if *is_let {
+          "I noticed a let assignment matching a value with more than one constructor.".to_string()
+      } else {
+          format!(
+              "I realized that a given '{keyword_when}/{keyword_is}' expression is non-exhaustive.",
+              keyword_is = "is".purple(),
+              keyword_when = "when".purple()
+          )
+      }
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
     #[diagnostic(code("non_exhaustive_pattern_match"))]
-    #[diagnostic(help(r#"When clauses must be exhaustive -- that is, they must cover all possible cases of the type they match. While it is recommended to have an explicit branch for each constructor, you can also use the wildcard '{discard}' as a last branch to match any remaining result.
+    #[diagnostic(help(r#"Let bindings and when clauses must be exhaustive -- that is, they must cover all possible cases of the type they match. In {keyword_when}/{keyword_is} pattern-match, it is recommended to have an explicit branch for each constructor as it prevents future silly mistakes when adding new constructors to a type. However, you can also use the wildcard '{discard}' as a last branch to match any remaining result.
 
-In this particular instance, the following cases are missing:
+In this particular instance, the following cases are unmatched:
 
 {missing}"#
         , discard = "_".yellow()
+        , keyword_is = "is".purple()
+        , keyword_when = "when".purple()
         , missing = unmatched
             .iter()
             .map(|s| format!("─▶ {s}"))
@@ -405,9 +416,10 @@ In this particular instance, the following cases are missing:
             .join("")
     ))]
     NotExhaustivePatternMatch {
-        #[label]
+        #[label("{}", if *is_let { "use when/is" } else { "non-exhaustive" })]
         location: Span,
         unmatched: Vec<String>,
+        is_let: bool,
     },
 
     #[error("I tripped over a call attempt on something that isn't a function.\n")]
