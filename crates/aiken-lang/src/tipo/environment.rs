@@ -1386,6 +1386,10 @@ impl<'a> Environment<'a> {
                     Some(module.clone())
                 };
 
+                if type_name == "List" && module.is_empty() {
+                    return self.check_list_pattern_exhaustiveness(patterns);
+                }
+
                 if let Ok(constructors) = self.get_constructors_for_type(&m, type_name, location) {
                     let mut unmatched_constructors: HashSet<String> =
                         constructors.iter().cloned().collect();
@@ -1423,6 +1427,75 @@ impl<'a> Environment<'a> {
                 Ok(())
             }
             _ => Ok(()),
+        }
+    }
+
+    pub fn check_list_pattern_exhaustiveness(
+        &mut self,
+        patterns: Vec<Pattern<PatternConstructor, Arc<Type>>>,
+    ) -> Result<(), Vec<String>> {
+        let mut cover_empty = false;
+        let mut cover_tail = false;
+
+        let patterns = patterns.iter().map(|p| match p {
+            Pattern::Assign { pattern, .. } => pattern,
+            _ => p,
+        });
+
+        // TODO: We could also warn on redundant patterns. As soon as we've matched the entire
+        // list, any new pattern is redundant. For example:
+        //
+        // when xs is {
+        //   [] => ...
+        //   [x, ..] => ...
+        //   [y] => ...
+        // }
+        //
+        // That last pattern is actually redundant / unreachable.
+        for p in patterns {
+            match p {
+                Pattern::Var { .. } => {
+                    cover_empty = true;
+                    cover_tail = true;
+                }
+                Pattern::Discard { .. } => {
+                    cover_empty = true;
+                    cover_tail = true;
+                }
+                Pattern::List { elements, tail, .. } => {
+                    if elements.is_empty() {
+                        cover_empty = true;
+                    }
+                    match tail {
+                        None => {}
+                        Some(p) => match **p {
+                            Pattern::Discard { .. } => {
+                                cover_tail = true;
+                            }
+                            Pattern::Var { .. } => {
+                                cover_tail = true;
+                            }
+                            _ => {
+                                unreachable!()
+                            }
+                        },
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if cover_empty && cover_tail {
+            Ok(())
+        } else {
+            let mut missing = vec![];
+            if !cover_empty {
+                missing.push("[]".to_owned());
+            }
+            if !cover_tail {
+                missing.push("[_, ..]".to_owned());
+            }
+            Err(missing)
         }
     }
 

@@ -1454,8 +1454,6 @@ impl<'comments> Formatter<'comments> {
         let doc = match pattern {
             Pattern::Int { value, .. } => value.to_doc(),
 
-            Pattern::String { value, .. } => self.string(value),
-
             Pattern::Var { name, .. } => name.to_doc(),
 
             Pattern::Assign { name, pattern, .. } => {

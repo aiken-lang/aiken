@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     ast::{CallArg, Pattern, Span, TypedPattern, UntypedMultiPattern, UntypedPattern},
-    builtins::{int, list, string, tuple},
+    builtins::{int, list, tuple},
 };
 
 pub struct PatternTyper<'a, 'b> {
@@ -284,12 +284,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 self.environment.unify(tipo, int(), location, false)?;
 
                 Ok(Pattern::Int { location, value })
-            }
-
-            Pattern::String { location, value } => {
-                self.environment.unify(tipo, string(), location, false)?;
-
-                Ok(Pattern::String { location, value })
             }
 
             Pattern::List {

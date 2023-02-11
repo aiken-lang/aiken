@@ -871,7 +871,6 @@ impl<'a> CodeGenerator<'a> {
 
                 pattern_vec.append(values);
             }
-            Pattern::String { .. } => todo!("String matching in whens not yet implemented"),
             Pattern::Var { name, .. } => {
                 pattern_vec.push(Air::Void {
                     scope: scope.clone(),
@@ -1060,7 +1059,6 @@ impl<'a> CodeGenerator<'a> {
     ) {
         match pattern {
             Pattern::Int { .. } => unreachable!(),
-            Pattern::String { .. } => unreachable!(),
             Pattern::Var { .. } => unreachable!(),
             Pattern::Assign { .. } => todo!("Nested assign not yet implemented"),
             Pattern::Discard { .. } => {
@@ -1536,8 +1534,7 @@ impl<'a> CodeGenerator<'a> {
                 Some(item_name)
             }
             Pattern::Assign { .. } => todo!("Nested assign is not yet done"),
-            Pattern::Int { .. } => unimplemented!(),
-            Pattern::String { .. } => unimplemented!(),
+            Pattern::Int { .. } => todo!("Nested pattern-match on integers isn't implemented yet. Use when clause-guard as an alternative, or break down the pattern."),
         }
     }
 
@@ -1569,7 +1566,7 @@ impl<'a> CodeGenerator<'a> {
             )
         }
         match pattern {
-            Pattern::Int { .. } | Pattern::String { .. } => unreachable!(),
+            Pattern::Int { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
                 pattern_vec.push(Air::Let {
                     name: name.clone(),
@@ -1690,7 +1687,6 @@ impl<'a> CodeGenerator<'a> {
     ) {
         match pattern {
             Pattern::Int { .. } => todo!(),
-            Pattern::String { .. } => todo!(),
             Pattern::Var { .. } => todo!(),
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => todo!(),
@@ -1736,7 +1732,6 @@ impl<'a> CodeGenerator<'a> {
                             );
                         }
                         Pattern::Int { .. } => todo!(),
-                        Pattern::String { .. } => todo!(),
                         Pattern::Assign { .. } => todo!(),
                         Pattern::Discard { .. } => {
                             names.push("_".to_string());
@@ -1904,7 +1899,6 @@ impl<'a> CodeGenerator<'a> {
     ) {
         match pattern {
             Pattern::Int { .. } => unreachable!(),
-            Pattern::String { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
                 pattern_vec.append(value_vec);
 
@@ -2651,7 +2645,6 @@ impl<'a> CodeGenerator<'a> {
                     (false, tuple_name)
                 }
                 Pattern::Int { .. } => todo!(),
-                Pattern::String { .. } => todo!(),
                 Pattern::Assign { .. } => todo!(),
             };
 
