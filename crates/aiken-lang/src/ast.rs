@@ -717,11 +717,6 @@ pub enum Pattern<Constructor, Type> {
         value: String,
     },
 
-    String {
-        location: Span,
-        value: String,
-    },
-
     /// The creation of a variable.
     /// e.g. `assert [this_is_a_var, .._] = x`
     Var {
@@ -776,7 +771,6 @@ impl<A, B> Pattern<A, B> {
             | Pattern::Var { location, .. }
             | Pattern::List { location, .. }
             | Pattern::Discard { location, .. }
-            | Pattern::String { location, .. }
             | Pattern::Tuple { location, .. }
             // | Pattern::Concatenate { location, .. }
             | Pattern::Constructor { location, .. } => *location,

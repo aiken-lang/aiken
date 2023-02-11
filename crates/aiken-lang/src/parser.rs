@@ -1689,12 +1689,6 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     location: span,
                 }
             }),
-            select! {Token::String {value} => value}.map_with_span(|value, span| {
-                ast::UntypedPattern::String {
-                    location: span,
-                    value,
-                }
-            }),
             select! {Token::Int {value} => value}.map_with_span(|value, span| {
                 ast::UntypedPattern::Int {
                     location: span,
