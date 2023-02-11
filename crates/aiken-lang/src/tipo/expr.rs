@@ -893,6 +893,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 });
             }
         } else if !value_is_data
+            && !value_typ.is_list()
             && self
                 .environment
                 .check_exhaustiveness(
