@@ -1534,7 +1534,7 @@ impl<'a> CodeGenerator<'a> {
                 Some(item_name)
             }
             Pattern::Assign { .. } => todo!("Nested assign is not yet done"),
-            Pattern::Int { .. } => unimplemented!(),
+            Pattern::Int { .. } => todo!("Nested pattern-match on integers isn't implemented yet. Use when clause-guard as an alternative, or break down the pattern."),
         }
     }
 
