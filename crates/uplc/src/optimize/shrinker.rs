@@ -151,22 +151,8 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
                     | Term::Delay(_)
                     | Term::Lambda { .. }) = argument.as_ref()
                     {
-                        if occurrences == 1 {
-                            *term = substitute_term(
-                                body.as_ref(),
-                                parameter_name.clone(),
-                                replace_term,
-                            );
-                        }
-                    }
-                } else if occurrences == 0 {
-                    error_occurrences(argument.as_ref(), &mut occurrences);
-                    if occurrences == 0 {
-                        *term = substitute_term(
-                            body.as_ref(),
-                            parameter_name.clone(),
-                            argument.as_ref(),
-                        );
+                        *term =
+                            substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
                     }
                 }
             }
@@ -208,27 +194,27 @@ fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>, occurrences: &mut us
     }
 }
 
-fn error_occurrences(term: &Term<Name>, occurrences: &mut usize) {
-    match term {
-        Term::Delay(body) => {
-            error_occurrences(body.as_ref(), occurrences);
-        }
-        Term::Lambda { body, .. } => {
-            error_occurrences(body.as_ref(), occurrences);
-        }
-        Term::Apply { function, argument } => {
-            error_occurrences(function.as_ref(), occurrences);
-            error_occurrences(argument.as_ref(), occurrences);
-        }
-        Term::Force(x) => {
-            error_occurrences(x.as_ref(), occurrences);
-        }
-        Term::Error => {
-            *occurrences += 1;
-        }
-        _ => {}
-    }
-}
+// fn error_occurrences(term: &Term<Name>, occurrences: &mut usize) {
+//     match term {
+//         Term::Delay(body) => {
+//             error_occurrences(body.as_ref(), occurrences);
+//         }
+//         Term::Lambda { body, .. } => {
+//             error_occurrences(body.as_ref(), occurrences);
+//         }
+//         Term::Apply { function, argument } => {
+//             error_occurrences(function.as_ref(), occurrences);
+//             error_occurrences(argument.as_ref(), occurrences);
+//         }
+//         Term::Force(x) => {
+//             error_occurrences(x.as_ref(), occurrences);
+//         }
+//         Term::Error => {
+//             *occurrences += 1;
+//         }
+//         _ => {}
+//     }
+// }
 
 fn lambda_reduce(term: &mut Term<Name>) {
     match term {
