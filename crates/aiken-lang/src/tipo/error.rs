@@ -424,7 +424,7 @@ In this particular instance, the following cases are unmatched:
             .iter()
             .map(|s| format!("─▶ {s}"))
             .collect::<Vec<_>>()
-            .join("")
+            .join("\n")
     ))]
     NotExhaustivePatternMatch {
         #[label("{}", if *is_let { "use when/is" } else { "non-exhaustive" })]
@@ -1247,5 +1247,5 @@ fn format_suggestion(sample: &UntypedExpr) -> String {
             }
         })
         .collect::<Vec<_>>()
-        .join("")
+        .join("\n")
 }
