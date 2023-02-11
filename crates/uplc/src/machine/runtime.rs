@@ -1042,7 +1042,7 @@ impl DefaultFunction {
                     )
                     .into()),
                     v => Err(Error::DeserialisationError(
-                        "UnMapData".to_string(),
+                        "UnListData".to_string(),
                         Value::Con(v.clone().into()),
                     )),
                 },
@@ -1057,7 +1057,7 @@ impl DefaultFunction {
                         Ok(Value::Con(Constant::Integer(from_pallas_bigint(b)).into()).into())
                     }
                     v => Err(Error::DeserialisationError(
-                        "UnMapData".to_string(),
+                        "UnIData".to_string(),
                         Value::Con(v.clone().into()),
                     )),
                 },
@@ -1072,7 +1072,7 @@ impl DefaultFunction {
                         Ok(Value::Con(Constant::ByteString(b.to_vec()).into()).into())
                     }
                     v => Err(Error::DeserialisationError(
-                        "UnMapData".to_string(),
+                        "UnBData".to_string(),
                         Value::Con(v.clone().into()),
                     )),
                 },
