@@ -401,9 +401,11 @@ impl<'a> CodeGenerator<'a> {
 
                         final_scope.push(self.id_gen.next());
 
-                        pattern_vec.push(Air::Finally {
-                            scope: final_scope.clone(),
-                        });
+                        if !matches!(clause_properties, ClauseProperties::TupleClause { .. }) {
+                            pattern_vec.push(Air::Finally {
+                                scope: final_scope.clone(),
+                            });
+                        }
 
                         let mut final_clause_vec = vec![];
 
@@ -412,6 +414,8 @@ impl<'a> CodeGenerator<'a> {
                             &mut final_clause_vec,
                             final_scope.clone(),
                         );
+
+                        *clause_properties.is_final_clause() = true;
 
                         self.when_ir(
                             last_pattern,
@@ -1079,6 +1083,7 @@ impl<'a> CodeGenerator<'a> {
                         &mut nested_pattern,
                         items_type,
                         scope.clone(),
+                        *clause_properties.is_final_clause(),
                     );
 
                     names.push(name.unwrap_or_else(|| "_".to_string()))
@@ -1190,6 +1195,7 @@ impl<'a> CodeGenerator<'a> {
                                     .into(),
                                 ),
                                 scope.clone(),
+                                *clause_properties.is_final_clause(),
                             );
 
                             var_name.map_or(
@@ -1233,6 +1239,7 @@ impl<'a> CodeGenerator<'a> {
                                 &mut nested_pattern,
                                 type_map.get(&index).unwrap(),
                                 scope.clone(),
+                                *clause_properties.is_final_clause(),
                             );
 
                             var_name.map_or(Some(("_".to_string(), index)), |var_name| {
@@ -1271,6 +1278,7 @@ impl<'a> CodeGenerator<'a> {
                         &mut nested_pattern,
                         &items_type[index],
                         scope.clone(),
+                        *clause_properties.is_final_clause(),
                     );
 
                     names.push((name.unwrap_or_else(|| "_".to_string()), index))
@@ -1343,6 +1351,7 @@ impl<'a> CodeGenerator<'a> {
         pattern_vec: &mut Vec<Air>,
         pattern_type: &Arc<Type>,
         scope: Vec<u64>,
+        final_clause: bool,
     ) -> Option<String> {
         match pattern {
             Pattern::Var { name, .. } => Some(name.clone()),
@@ -1375,6 +1384,7 @@ impl<'a> CodeGenerator<'a> {
                             is_complex_clause: false,
                             original_subject_name: item_name.clone(),
                             current_index: index as i64,
+                            final_clause
                         };
 
                         let tail_name = format!("{new_tail_name}_{index}");
@@ -1465,12 +1475,16 @@ impl<'a> CodeGenerator<'a> {
                 let constr_var_name = format!("{constr_name}_{id}");
                 let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                if data_type.constructors.len() > 1 {
+                if data_type.constructors.len() > 1  {
+                    if final_clause{
+                        pattern_vec.push(Air::Finally { scope: scope.clone() });
+                    } else {
                     pattern_vec.push(Air::ClauseGuard {
                         scope: scope.clone(),
                         tipo: tipo.clone(),
                         subject_name: constr_var_name.clone(),
                     });
+                }
                 }
 
                 let mut clause_properties = ClauseProperties::ConstrClause {
@@ -1478,6 +1492,7 @@ impl<'a> CodeGenerator<'a> {
                     needs_constr_var: false,
                     is_complex_clause: false,
                     original_subject_name: constr_var_name.clone(),
+                    final_clause
                 };
 
                 self.when_ir(
@@ -1500,6 +1515,7 @@ impl<'a> CodeGenerator<'a> {
                     is_complex_clause: false,
                     original_subject_name: item_name.clone(),
                     defined_tuple_indices: IndexSet::new(),
+                    final_clause
                 };
 
                 let mut inner_pattern_vec = vec![];
