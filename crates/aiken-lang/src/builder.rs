@@ -67,6 +67,7 @@ pub enum ClauseProperties {
         needs_constr_var: bool,
         is_complex_clause: bool,
         original_subject_name: String,
+        final_clause: bool,
     },
     ListClause {
         clause_var_name: String,
@@ -74,6 +75,7 @@ pub enum ClauseProperties {
         is_complex_clause: bool,
         original_subject_name: String,
         current_index: i64,
+        final_clause: bool,
     },
     TupleClause {
         clause_var_name: String,
@@ -81,6 +83,7 @@ pub enum ClauseProperties {
         is_complex_clause: bool,
         original_subject_name: String,
         defined_tuple_indices: IndexSet<(usize, String)>,
+        final_clause: bool,
     },
 }
 
@@ -93,6 +96,7 @@ impl ClauseProperties {
                 is_complex_clause: false,
                 original_subject_name: subject_name,
                 current_index: -1,
+                final_clause: false,
             }
         } else if t.is_tuple() {
             ClauseProperties::TupleClause {
@@ -101,6 +105,7 @@ impl ClauseProperties {
                 is_complex_clause: false,
                 original_subject_name: subject_name,
                 defined_tuple_indices: IndexSet::new(),
+                final_clause: false,
             }
         } else {
             ClauseProperties::ConstrClause {
@@ -108,6 +113,7 @@ impl ClauseProperties {
                 needs_constr_var: false,
                 is_complex_clause: false,
                 original_subject_name: subject_name,
+                final_clause: false,
             }
         }
     }
@@ -136,6 +142,14 @@ impl ClauseProperties {
             | ClauseProperties::TupleClause {
                 needs_constr_var, ..
             } => needs_constr_var,
+        }
+    }
+
+    pub fn is_final_clause(&mut self) -> &mut bool {
+        match self {
+            ClauseProperties::ConstrClause { final_clause, .. }
+            | ClauseProperties::ListClause { final_clause, .. }
+            | ClauseProperties::TupleClause { final_clause, .. } => final_clause,
         }
     }
 
