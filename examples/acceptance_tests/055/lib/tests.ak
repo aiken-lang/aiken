@@ -1,7 +1,16 @@
 use aiken/bytearray
+use aiken/dict
 use aiken/hash.{Hash, Sha2_256, sha2_256}
+use aiken/interval.{Interval, IntervalBound, PositiveInfinity}
 use aiken/list
 use aiken/string
+use aiken/transaction.{
+  InlineDatum, Input, Output, OutputReference, Transaction, TransactionId,
+}
+use aiken/transaction/credential.{
+  Address, PublicKeyCredential, ScriptCredential, StakeCredential,
+}
+use aiken/transaction/value
 
 //  MerkleTree in Aiken (ported from: https://github.com/input-output-hk/hydra/blob/master/plutus-merkle-tree/src/Plutus/MerkleTree.hs)
 
@@ -63,4 +72,85 @@ test foo() {
   let items = [#"aa", #"bb", #"cc"]
   let mt = from_list(items)
   size(mt) == 3
+}
+
+// const keyhash = #"010203040506"
+
+// const scripthash = #"060504030201"
+
+// pub fn keyhash_address(with_stake_credential: Option<StakeCredential>) {
+//   Address {
+//     payment_credential: PublicKeyCredential(keyhash),
+//     stake_credential: with_stake_credential,
+//   }
+// }
+
+// pub fn scripthash_address(with_stake_credential: Option<StakeCredential>) {
+//   Address {
+//     payment_credential: ScriptCredential(scripthash),
+//     stake_credential: with_stake_credential,
+//   }
+// }
+
+// type SampleData {
+//   a: Int,
+//   b: ByteArray,
+// }
+
+// pub fn tx_1() -> Transaction {
+//   let sample_datum = SampleData { a: 1, b: #"01" }
+//   // let sample_data: Data = sample_datum
+//   let tx =
+//     Transaction {
+//       inputs: [
+//         Input {
+//           output_reference: OutputReference {
+//             transaction_id: TransactionId { hash: #"" },
+//             output_index: 0,
+//           },
+//           output: Output {
+//             address: scripthash_address(None),
+//             value: value.zero(),
+//             datum: InlineDatum(sample_datum),
+//             reference_script: None,
+//           },
+//         },
+//       ],
+//       reference_inputs: [],
+//       outputs: [
+//         Output {
+//           address: keyhash_address(None),
+//           value: value.from_lovelace(10000),
+//           datum: InlineDatum(sample_datum),
+//           reference_script: None,
+//         },
+//       ],
+//       fee: value.zero(),
+//       mint: value.from_asset(#"000000", #"00", -1),
+//       certificates: [],
+//       withdrawals: dict.new(),
+//       validity_range: Interval {
+//         lower_bound: IntervalBound {
+//           bound_type: PositiveInfinity,
+//           is_inclusive: True,
+//         },
+//         upper_bound: IntervalBound {
+//           bound_type: PositiveInfinity,
+//           is_inclusive: True,
+//         },
+//       },
+//       extra_signatories: [keyhash],
+//       redeemers: dict.new(),
+//       datums: dict.new(),
+//       id: TransactionId { hash: #"" },
+//     }
+//   tx
+// }
+
+// test some_test2() {
+//   tx_1() == tx_1()
+// }
+
+test some_test1() {
+  InlineDatum(Void) == InlineDatum(Void)
 }

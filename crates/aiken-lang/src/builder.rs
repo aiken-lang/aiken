@@ -4,7 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{apply_wrap, delayed_choose_list, if_else},
+        builder::{apply_wrap, delayed_choose_list, delayed_if_else, if_else},
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -190,6 +190,18 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(DefaultFunction::BData.into(), term)
     } else if field_type.is_int() {
         apply_wrap(DefaultFunction::IData.into(), term)
+    } else if field_type.is_void() {
+        apply_wrap(
+            apply_wrap(Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(), term),
+            Term::Constant(
+                UplcConstant::Data(PlutusData::Constr(Constr {
+                    tag: convert_constr_to_tag(0).unwrap(),
+                    any_constructor: None,
+                    fields: vec![],
+                }))
+                .into(),
+            ),
+        )
     } else if field_type.is_map() {
         apply_wrap(DefaultFunction::MapData.into(), term)
     } else if field_type.is_string() {
@@ -279,6 +291,23 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(DefaultFunction::UnIData.into(), term)
     } else if field_type.is_bytearray() {
         apply_wrap(DefaultFunction::UnBData.into(), term)
+    } else if field_type.is_void() {
+        delayed_if_else(
+            apply_wrap(
+                apply_wrap(
+                    DefaultFunction::EqualsInteger.into(),
+                    Term::Constant(UplcConstant::Integer(0.into()).into()),
+                ),
+                apply_wrap(
+                    Term::Builtin(DefaultFunction::FstPair)
+                        .force_wrap()
+                        .force_wrap(),
+                    apply_wrap(DefaultFunction::UnConstrData.into(), term),
+                ),
+            ),
+            Term::Constant(UplcConstant::Unit.into()),
+            Term::Error,
+        )
     } else if field_type.is_map() {
         apply_wrap(DefaultFunction::UnMapData.into(), term)
     } else if field_type.is_string() {
@@ -1289,7 +1318,11 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                 )])))
             }
             d @ UplcConstant::Data(_) => d.clone(),
-            _ => unreachable!(),
+            UplcConstant::Unit => UplcConstant::Data(PlutusData::Constr(Constr {
+                tag: convert_constr_to_tag(0).unwrap(),
+                any_constructor: None,
+                fields: vec![],
+            })),
         };
         new_constants.push(constant);
     }
