@@ -427,17 +427,19 @@ impl<'a> CodeGenerator<'a> {
                                 scope: scope.clone(),
                                 name: constr_var.clone(),
                             });
+                            let mut subject_scope = scope.clone();
+                            subject_scope.push(self.id_gen.next());
 
-                            self.build_ir(&subject, ir_stack, scope.clone());
+                            self.build_ir(&subject, ir_stack, subject_scope.clone());
+
+                            let mut scope = scope;
+                            scope.push(self.id_gen.next());
 
                             ir_stack.push(Air::When {
                                 scope: scope.clone(),
                                 subject_name,
                                 tipo: subject_tipo.clone(),
                             });
-
-                            let mut scope = scope;
-                            scope.push(self.id_gen.next());
 
                             ir_stack.push(Air::Var {
                                 scope,
