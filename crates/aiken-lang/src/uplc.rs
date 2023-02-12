@@ -253,12 +253,22 @@ impl<'a> CodeGenerator<'a> {
                                 count: args.len(),
                             });
 
-                            for arg in args {
-                                let mut scope = scope.clone();
-                                scope.push(self.id_gen.next());
-                                self.build_ir(&arg.value, ir_stack, scope);
+                            if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                    let mut scope = scope.clone();
+                                    scope.push(self.id_gen.next());
+
+                                    if func_type.is_data() && !arg.value.tipo().is_data() {
+                                        ir_stack.push(Air::WrapData {
+                                            scope: scope.clone(),
+                                            tipo: arg.value.tipo(),
+                                        })
+                                    }
+
+                                    self.build_ir(&arg.value, ir_stack, scope);
+                                }
+                                return;
                             }
-                            return;
                         }
                     }
                 }
