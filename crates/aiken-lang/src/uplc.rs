@@ -1753,7 +1753,7 @@ impl<'a> CodeGenerator<'a> {
                         tail: tail.is_some(),
                         scope,
                         tipo: tipo.clone().into(),
-                        check_last_item: false,
+                        check_last_item: true,
                     });
                 } else {
                     pattern_vec.push(Air::Let {
@@ -1768,7 +1768,8 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Constructor {
                 arguments,
                 constructor,
-                tipo,
+                tipo: constr_tipo,
+                name: constr_name,
                 ..
             } => {
                 let mut nested_pattern = vec![];
@@ -1779,7 +1780,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
-                for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                for (index, arg) in constr_tipo.arg_types().unwrap().iter().enumerate() {
                     let field_type = arg.clone();
                     type_map.insert(index, field_type);
                 }
@@ -1816,17 +1817,68 @@ impl<'a> CodeGenerator<'a> {
                                 (*index, var_name.clone(), field_type.clone())
                             })
                             .collect_vec(),
-                        scope,
+                        scope: scope.clone(),
                         check_last_item: false,
                     });
                 } else {
                     pattern_vec.push(Air::Let {
-                        scope,
+                        scope: scope.clone(),
                         name: "_".to_string(),
                     });
                 }
 
-                pattern_vec.append(values);
+                if matches!(assignment_properties.kind, AssignmentKind::Expect) {
+                    let data_type =
+                        lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+
+                    let (index, _) = data_type
+                        .constructors
+                        .iter()
+                        .enumerate()
+                        .find(|(_, constr)| &constr.name == constr_name)
+                        .unwrap();
+
+                    let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
+
+                    pattern_vec.push(Air::Let {
+                        scope: scope.clone(),
+                        name: constr_name.clone(),
+                    });
+
+                    pattern_vec.append(values);
+
+                    pattern_vec.push(Air::AssertConstr {
+                        scope: scope.clone(),
+                        constr_index: index,
+                    });
+
+                    pattern_vec.push(Air::Var {
+                        scope: scope.clone(),
+                        constructor: ValueConstructor::public(
+                            tipo.clone().into(),
+                            ValueConstructorVariant::LocalVariable {
+                                location: Span::empty(),
+                            },
+                        ),
+                        name: constr_name.clone(),
+                        variant_name: String::new(),
+                    });
+
+                    pattern_vec.push(Air::Var {
+                        scope,
+                        constructor: ValueConstructor::public(
+                            tipo.clone().into(),
+                            ValueConstructorVariant::LocalVariable {
+                                location: Span::empty(),
+                            },
+                        ),
+                        name: constr_name,
+                        variant_name: String::new(),
+                    });
+                } else {
+                    pattern_vec.append(values);
+                }
+
                 pattern_vec.append(&mut nested_pattern);
             }
             Pattern::Tuple { elems, .. } => {
