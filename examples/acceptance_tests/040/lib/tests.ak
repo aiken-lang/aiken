@@ -55,3 +55,11 @@ test expect_list2() {
   expect [a, ..d] = initial_car
   a == 5 && d == [6, 7]
 }
+
+
+
+test expect_list3() {
+  let initial_car = builtin.list_data([builtin.i_data(5), builtin.i_data(6), builtin.i_data(7)])
+  expect [a, ..d]: List<Int> = initial_car
+  a == 5 && d == [6, 7]
+}
