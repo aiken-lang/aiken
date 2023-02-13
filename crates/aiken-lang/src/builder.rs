@@ -192,7 +192,10 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(DefaultFunction::IData.into(), term)
     } else if field_type.is_void() {
         apply_wrap(
-            apply_wrap(Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(), term),
+            apply_wrap(
+                Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(),
+                term,
+            ),
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
                     tag: convert_constr_to_tag(0).unwrap(),
