@@ -24,7 +24,7 @@ then
     exit 1
 fi
 
-aiken build
+cargo run --quiet -- build
 if [ $? -ne 0 ]; then
   exit $?
 fi
@@ -35,8 +35,8 @@ VALIDATOR_HASH=$(echo $BLUEPRINT | jq .hash | sed s/\"//g)
 VALIDATOR=$(echo $BLUEPRINT | jq .compiledCode | sed s/\"//g)
 VALIDATOR=$(cbor-diag --to hex --from diag <<< "h'$VALIDATOR'")
 
-cp data/$TITLE/inputs.cbor.template data/$TITLE/inputs.cbor
-sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" data/$TITLE/outputs.cbor.template > data/$TITLE/outputs.cbor
-sed "s/{{ VALIDATOR }}/$VALIDATOR/" data/$TITLE/tx.cbor.template > data/$TITLE/tx.cbor
+cp ctx/$TITLE/inputs.cbor.template ctx/$TITLE/inputs.cbor
+sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" ctx/$TITLE/outputs.cbor.template > ctx/$TITLE/outputs.cbor
+sed "s/{{ VALIDATOR }}/$VALIDATOR/" ctx/$TITLE/tx.cbor.template > ctx/$TITLE/tx.cbor
 
-cargo run -- tx simulate data/$TITLE/tx.cbor data/$TITLE/inputs.cbor data/$TITLE/outputs.cbor
+cargo run --quiet -- tx simulate ctx/$TITLE/tx.cbor ctx/$TITLE/inputs.cbor ctx/$TITLE/outputs.cbor
