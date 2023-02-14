@@ -21,7 +21,7 @@ const lucid = await Lucid.new(
 
 lucid.selectWalletFromPrivateKey(await Deno.readTextFile("./key.sk"));
 
-const validator = await readValidator("./assets/hello_world/spend/script.cbor");
+const validator = await readValidator();
 
 const utxo = { txHash: Deno.args[0], outputIndex: 0 };
 
@@ -55,9 +55,10 @@ async function unlock(ref, { from, using }): Promise<TxHash> {
   return signedTx.submit();
 }
 
-async function readValidator(filepath: String): Promise<SpendingValidator> {
+async function readValidator(): Promise<SpendingValidator> {
+  const validator = JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
   return {
-      type: "PlutusV2",
-      script: toHex(cbor.encode(fromHex(await Deno.readTextFile(filepath)))),
+    type: "PlutusV2",
+    script: toHex(cbor.encode(fromHex(validator.compiledCode))),
   };
 }
