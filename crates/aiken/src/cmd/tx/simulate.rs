@@ -1,11 +1,11 @@
 use miette::IntoDiagnostic;
+use owo_colors::OwoColorize;
 use pallas_primitives::{
-    babbage::{TransactionInput, TransactionOutput},
+    babbage::{Redeemer, TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
-use std::fs;
-use std::path::PathBuf;
+use std::{fmt, fs, path::PathBuf, process};
 use uplc::{
     machine::cost_model::ExBudget,
     tx::{
@@ -54,6 +54,8 @@ pub fn exec(
         zero_slot,
     }: Args,
 ) -> miette::Result<()> {
+    eprintln!("{} script context", "      Parsing".bold().purple(),);
+
     let (tx_bytes, inputs_bytes, outputs_bytes) = if cbor {
         (
             fs::read(input).into_diagnostic()?,
@@ -76,6 +78,8 @@ pub fn exec(
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .into_diagnostic()?;
 
+    eprintln!("{} {}", "   Simulating".bold().purple(), tx.hash());
+
     let inputs = Vec::<TransactionInput>::decode_fragment(&inputs_bytes).unwrap();
     let outputs = Vec::<TransactionOutput>::decode_fragment(&outputs_bytes).unwrap();
 
@@ -88,8 +92,6 @@ pub fn exec(
         })
         .collect();
 
-    println!("Simulating: {}", tx.hash());
-
     if let Some(tx_babbage) = tx.as_babbage() {
         let slot_config = SlotConfig {
             zero_time,
@@ -97,13 +99,27 @@ pub fn exec(
             slot_length,
         };
 
-        let result =
-            tx::eval_phase_two(tx_babbage, &resolved_inputs, None, None, &slot_config, true);
+        let with_redeemer = |redeemer: &Redeemer| {
+            println!(
+                "{} {:?} → {}",
+                "     Redeemer".bold().purple(),
+                redeemer.tag,
+                redeemer.index
+            )
+        };
+
+        let result = tx::eval_phase_two(
+            tx_babbage,
+            &resolved_inputs,
+            None,
+            None,
+            &slot_config,
+            true,
+            with_redeemer,
+        );
 
         match result {
             Ok(redeemers) => {
-                println!("\nTotal Budget Used\n-----------------\n");
-
                 let total_budget_used =
                     redeemers
                         .iter()
@@ -112,11 +128,16 @@ pub fn exec(
                             cpu: accum.cpu + curr.ex_units.steps as i64,
                         });
 
-                println!("mem: {}", total_budget_used.mem);
-                println!("cpu: {}", total_budget_used.cpu);
+                println!(
+                    "\n{}",
+                    serde_json::to_string(&total_budget_used)
+                        .map_err(|_| fmt::Error)
+                        .into_diagnostic()?
+                );
             }
             Err(err) => {
-                eprintln!("\nError\n-----\n\n{err}\n");
+                eprintln!("{} {}", "        Error".bold().red(), err.red());
+                process::exit(1);
             }
         }
     }

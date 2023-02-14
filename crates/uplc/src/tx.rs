@@ -35,6 +35,7 @@ pub fn eval_phase_two(
     initial_budget: Option<&ExBudget>,
     slot_config: &SlotConfig,
     run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
 ) -> Result<Vec<Redeemer>, Error> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
@@ -52,6 +53,8 @@ pub fn eval_phase_two(
             let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
             for redeemer in rs.iter() {
+                with_redeemer(redeemer);
+
                 let redeemer = eval::eval_redeemer(
                     tx,
                     utxos,
@@ -87,6 +90,7 @@ pub fn eval_phase_two_raw(
     initial_budget: (u64, u64),
     slot_config: (u64, u64, u32),
     run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
 ) -> Result<Vec<Vec<u8>>, Error> {
     let multi_era_tx = MultiEraTx::decode(Era::Babbage, tx_bytes)
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, tx_bytes))?;
@@ -122,6 +126,7 @@ pub fn eval_phase_two_raw(
                 Some(&budget),
                 &sc,
                 run_phase_one,
+                with_redeemer,
             ) {
                 Ok(redeemers) => Ok(redeemers
                     .iter()

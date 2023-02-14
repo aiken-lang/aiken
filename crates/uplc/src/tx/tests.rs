@@ -246,6 +246,7 @@ fn test_eval() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -516,6 +517,7 @@ fn test_eval_1() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -621,6 +623,7 @@ fn test_eval_2() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -885,6 +888,7 @@ fn test_eval_3() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -987,6 +991,7 @@ fn test_eval_4() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .is_err());
         }
@@ -1069,6 +1074,7 @@ fn test_eval_5() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -1173,6 +1179,7 @@ fn test_eval_6() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -1277,6 +1284,7 @@ fn test_eval_7() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -1532,6 +1540,7 @@ fn test_eval_8() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
 
@@ -1632,6 +1641,7 @@ fn eval_missing_redeemer() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .unwrap();
         }
@@ -1711,6 +1721,7 @@ fn eval_extraneous_redeemer() {
                 Some(&initial_budget),
                 &slot_config,
                 false,
+                |_| (),
             )
             .is_err());
         }
