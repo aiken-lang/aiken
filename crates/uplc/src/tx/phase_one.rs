@@ -283,15 +283,13 @@ fn build_redeemer_ptr(
             for (idx, x) in reward_accounts.iter().enumerate() {
                 let cred = match Address::from_bytes(x).unwrap() {
                     Address::Stake(a) => match a.payload() {
-                        StakePayload::Script(sh) => StakeCredential::Scripthash(*sh),
-                        StakePayload::Stake(_) => {
-                            return Err(Error::ScriptKeyHash);
-                        }
+                        StakePayload::Script(sh) => Some(StakeCredential::Scripthash(*sh)),
+                        StakePayload::Stake(_) => None,
                     },
                     _ => return Err(Error::BadWithdrawalAddress),
                 };
 
-                if cred == *racnt {
+                if cred == Some(racnt.to_owned()) {
                     maybe_idx = Some(idx);
                 }
             }
