@@ -1,5 +1,3 @@
-for scenario in $(find . -maxdepth 1 -mindepth 1 -type d)
-do
-	./run $scenario
+for scenario in $(find . -maxdepth 1 -mindepth 1 -regex ".*[0-9]\{3\}" -type d); do
+    ./run $scenario
 done
-

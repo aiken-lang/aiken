@@ -39,4 +39,4 @@ cp data/$TITLE/inputs.cbor.template data/$TITLE/inputs.cbor
 sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" data/$TITLE/outputs.cbor.template > data/$TITLE/outputs.cbor
 sed "s/{{ VALIDATOR }}/$VALIDATOR/" data/$TITLE/tx.cbor.template > data/$TITLE/tx.cbor
 
-aiken tx simulate data/$TITLE/tx.cbor data/$TITLE/inputs.cbor data/$TITLE/outputs.cbor
+cargo run -- tx simulate data/$TITLE/tx.cbor data/$TITLE/inputs.cbor data/$TITLE/outputs.cbor
