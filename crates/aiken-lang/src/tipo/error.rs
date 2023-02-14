@@ -1209,6 +1209,14 @@ pub enum Warning {
         location: Span,
         name: String,
     },
+
+    #[error("I came across a validator in a {} module\nwhich means I'm going to ignore it.\n", "lib/".purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to move it to a\n{} module or remove it to get rid of that warning.",
+        "validators/".purple()
+    ))]
+    #[diagnostic(code("unused::validator"))]
+    ValidatorInLibraryModule { location: Span },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

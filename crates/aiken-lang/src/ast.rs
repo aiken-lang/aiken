@@ -265,7 +265,7 @@ pub type UntypedValidator = Validator<(), UntypedExpr>;
 pub struct Validator<T, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
-    pub function: Function<T, Expr>,
+    pub fun: Function<T, Expr>,
     pub location: Span,
     pub params: Vec<Arg<T>>,
 }
