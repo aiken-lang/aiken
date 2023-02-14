@@ -4,7 +4,7 @@ use crate::{
     ast::{
         DataType, Definition, Function, Layer, ModuleConstant, ModuleKind, RecordConstructor,
         RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedModule, UntypedDefinition,
-        UntypedModule, Use,
+        UntypedModule, Use, Validator,
     },
     builtins,
     builtins::function,
@@ -72,6 +72,8 @@ impl UntypedModule {
         for def in self.definitions().cloned() {
             match def {
                 Definition::ModuleConstant { .. } => consts.push(def),
+                Definition::Validator { .. } if kind.is_validator() => not_consts.push(def),
+                Definition::Validator { .. } => (),
                 Definition::Fn { .. }
                 | Definition::Test { .. }
                 | Definition::TypeAlias { .. }
@@ -248,14 +250,58 @@ fn infer_definition(
             }))
         }
 
+        Definition::Validator(Validator {
+            doc,
+            location,
+            end_position,
+            mut fun,
+            mut params,
+        }) => {
+            let params_length = params.len();
+            params.append(&mut fun.arguments);
+            fun.arguments = params;
+
+            if let Definition::Fn(mut typed_fun) = infer_definition(
+                Definition::Fn(fun),
+                module_name,
+                hydrators,
+                environment,
+                kind,
+            )? {
+                // Do we want to do this here?
+                // or should we remove this and keep the later check
+                // the later check has a much more specific error message
+                // we may want to not do this here
+                environment.unify(
+                    typed_fun.return_type.clone(),
+                    builtins::bool(),
+                    typed_fun.location,
+                    false,
+                )?;
+
+                let typed_params = typed_fun.arguments.drain(0..params_length).collect();
+
+                Ok(Definition::Validator(Validator {
+                    doc,
+                    end_position,
+                    fun: typed_fun,
+                    location,
+                    params: typed_params,
+                }))
+            } else {
+                unreachable!("validator definition inferred as something other than a function?")
+            }
+        }
+
         Definition::Test(f) => {
             if let Definition::Fn(f) =
                 infer_definition(Definition::Fn(f), module_name, hydrators, environment, kind)?
             {
                 environment.unify(f.return_type.clone(), builtins::bool(), f.location, false)?;
+
                 Ok(Definition::Test(f))
             } else {
-                unreachable!("test defintion inferred as something else than a function?")
+                unreachable!("test definition inferred as something other than a function?")
             }
         }
 

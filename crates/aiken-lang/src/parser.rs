@@ -284,12 +284,12 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
                 )
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
-        .map_with_span(|((name, (params, params_span)), mut function), span| {
-            function.name = name;
+        .map_with_span(|((name, (params, params_span)), mut fun), span| {
+            fun.name = name;
 
             ast::UntypedDefinition::Validator(ast::Validator {
                 doc: None,
-                function,
+                fun,
                 location: Span {
                     start: span.start,
                     end: params_span.end,

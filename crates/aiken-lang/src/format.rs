@@ -238,7 +238,7 @@ impl<'comments> Formatter<'comments> {
 
             Definition::Validator(Validator {
                 end_position,
-                function,
+                fun: function,
                 params,
                 ..
             }) => self.definition_validator(params, function, *end_position),
@@ -560,26 +560,26 @@ impl<'comments> Formatter<'comments> {
     fn definition_validator<'a>(
         &mut self,
         params: &'a [UntypedArg],
-        function: &'a UntypedFunction,
+        fun: &'a UntypedFunction,
         end_position: usize,
     ) -> Document<'a> {
         // Fn and args
         let head = "fn".to_doc().append(wrap_args(
-            function.arguments.iter().map(|e| (self.fn_arg(e), false)),
+            fun.arguments.iter().map(|e| (self.fn_arg(e), false)),
         ));
 
         // Add return annotation
-        let head = match &function.return_annotation {
+        let head = match &fun.return_annotation {
             Some(anno) => head.append(" -> ").append(self.annotation(anno)),
             None => head,
         }
         .group();
 
         // Format body
-        let body = self.expr(&function.body);
+        let body = self.expr(&fun.body);
 
         // Add any trailing comments
-        let body = match printed_comments(self.pop_comments(function.end_position), false) {
+        let body = match printed_comments(self.pop_comments(fun.end_position), false) {
             Some(comments) => body.append(line()).append(comments),
             None => body,
         };
@@ -588,7 +588,7 @@ impl<'comments> Formatter<'comments> {
         let v_head = "validator"
             .to_doc()
             .append(" ")
-            .append(function.name.as_str())
+            .append(fun.name.as_str())
             .append(wrap_args(params.iter().map(|e| (self.fn_arg(e), false))));
 
         // Stick it all together

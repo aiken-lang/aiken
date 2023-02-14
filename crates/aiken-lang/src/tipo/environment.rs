@@ -10,11 +10,11 @@ use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind, Pattern,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
-        UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
+        UnqualifiedImport, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
     builtins::{self, function, generic_var, tuple, unbound_var},
     tipo::fields::FieldMap,
-    IdGenerator, VALIDATOR_NAMES,
+    IdGenerator,
 };
 
 use super::{
@@ -247,6 +247,7 @@ impl<'a> Environment<'a> {
             | Definition::DataType { .. }
             | Definition::Use { .. }
             | Definition::Test { .. }
+            | Definition::Validator { .. }
             | Definition::ModuleConstant { .. }) => definition,
         }
     }
@@ -1070,9 +1071,71 @@ impl<'a> Environment<'a> {
                     tipo,
                 );
 
-                if !public && (kind.is_lib() || !VALIDATOR_NAMES.contains(&name.as_str())) {
+                if !public && kind.is_lib() {
                     self.init_usage(name.clone(), EntityKind::PrivateFunction, *location);
                 }
+            }
+
+            Definition::Validator(Validator {
+                fun,
+                location,
+                params,
+                ..
+            }) if kind.is_validator() => {
+                assert_unique_value_name(names, &fun.name, location)?;
+
+                // Create the field map so we can reorder labels for usage of this function
+                let mut field_map = FieldMap::new(fun.arguments.len() + params.len(), true);
+
+                // Chain together extra params and function.arguments
+                for (i, arg) in params.iter().chain(fun.arguments.iter()).enumerate() {
+                    field_map.insert(arg.arg_name.get_label().clone(), i, &arg.location)?;
+                }
+
+                let field_map = field_map.into_option();
+
+                // Construct type from annotations
+                let mut hydrator = Hydrator::new();
+
+                hydrator.permit_holes(false);
+
+                let mut arg_types = Vec::new();
+
+                for arg in params.iter().chain(fun.arguments.iter()) {
+                    let tipo = hydrator.type_from_option_annotation(&arg.annotation, self)?;
+
+                    arg_types.push(tipo);
+                }
+
+                let return_type =
+                    hydrator.type_from_option_annotation(&fun.return_annotation, self)?;
+
+                let tipo = function(arg_types, return_type);
+
+                // Keep track of which types we create from annotations so we can know
+                // which generic types not to instantiate later when performing
+                // inference of the function body.
+                hydrators.insert(fun.name.clone(), hydrator);
+
+                // Insert the function into the environment
+                self.insert_variable(
+                    fun.name.clone(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: fun.name.clone(),
+                        field_map,
+                        module: module_name.to_owned(),
+                        arity: params.len() + fun.arguments.len(),
+                        location: fun.location,
+                        builtin: None,
+                    },
+                    tipo,
+                );
+            }
+
+            Definition::Validator(Validator { location, .. }) => {
+                self.warnings.push(Warning::ValidatorInLibraryModule {
+                    location: *location,
+                })
             }
 
             Definition::Test(Function { name, location, .. }) => {
