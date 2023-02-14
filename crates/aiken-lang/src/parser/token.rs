@@ -76,6 +76,7 @@ pub enum Token {
     Type,
     When,
     Trace,
+    Validator,
 }
 
 impl fmt::Display for Token {
@@ -156,6 +157,7 @@ impl fmt::Display for Token {
             Token::Type => "type",
             Token::Test => "test",
             Token::ErrorTerm => "error",
+            Token::Validator => "validator",
         };
         write!(f, "\"{s}\"")
     }

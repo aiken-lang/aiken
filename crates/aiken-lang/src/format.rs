@@ -9,7 +9,7 @@ use crate::{
         Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
         RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
         TypedConstant, UnOp, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
-        UntypedDefinition, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use,
+        UntypedDefinition, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
         CAPTURE_VARIABLE,
     },
     docvec,
@@ -235,6 +235,13 @@ impl<'comments> Formatter<'comments> {
                 body,
                 *end_position,
             ),
+
+            Definition::Validator(Validator {
+                end_position,
+                function,
+                params,
+                ..
+            }) => self.definition_validator(params, function, *end_position),
 
             Definition::Test(Function {
                 name,
@@ -546,6 +553,59 @@ impl<'comments> Formatter<'comments> {
         // Stick it all together
         head.append(" {")
             .append(line().append(body).nest(INDENT).group())
+            .append(line())
+            .append("}")
+    }
+
+    fn definition_validator<'a>(
+        &mut self,
+        params: &'a [UntypedArg],
+        function: &'a UntypedFunction,
+        end_position: usize,
+    ) -> Document<'a> {
+        // Fn and args
+        let head = "fn".to_doc().append(wrap_args(
+            function.arguments.iter().map(|e| (self.fn_arg(e), false)),
+        ));
+
+        // Add return annotation
+        let head = match &function.return_annotation {
+            Some(anno) => head.append(" -> ").append(self.annotation(anno)),
+            None => head,
+        }
+        .group();
+
+        // Format body
+        let body = self.expr(&function.body);
+
+        // Add any trailing comments
+        let body = match printed_comments(self.pop_comments(function.end_position), false) {
+            Some(comments) => body.append(line()).append(comments),
+            None => body,
+        };
+
+        // validator name(params)
+        let v_head = "validator"
+            .to_doc()
+            .append(" ")
+            .append(function.name.as_str())
+            .append(wrap_args(params.iter().map(|e| (self.fn_arg(e), false))));
+
+        // Stick it all together
+        let inner_fn = head
+            .append(" {")
+            .append(line().append(body).nest(INDENT).group())
+            .append(line())
+            .append("}");
+
+        let inner_fn = match printed_comments(self.pop_comments(end_position), false) {
+            Some(comments) => inner_fn.append(line()).append(comments),
+            None => inner_fn,
+        };
+
+        v_head
+            .append(" {")
+            .append(line().append(inner_fn).nest(INDENT).group())
             .append(line())
             .append("}")
     }

@@ -39,6 +39,28 @@ fn windows_newline() {
 }
 
 #[test]
+fn validator() {
+    let code = indoc! {r#"
+        validator foo {
+          fn(datum, rdmr, ctx) {
+            True
+          }
+        }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Use(Use {
+            location: Span::new((), 0..12),
+            module: vec!["std".to_string(), "list".to_string()],
+            as_name: None,
+            unqualified: vec![],
+            package: (),
+        })],
+    )
+}
+
+#[test]
 fn import() {
     let code = indoc! {r#"
         use std/list
