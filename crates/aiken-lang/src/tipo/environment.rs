@@ -884,6 +884,7 @@ impl<'a> Environment<'a> {
                                 })
                             }
                             Definition::Fn { .. }
+                            | Definition::Validator { .. }
                             | Definition::Use { .. }
                             | Definition::ModuleConstant { .. }
                             | Definition::Test { .. } => None,
@@ -995,6 +996,7 @@ impl<'a> Environment<'a> {
             }
 
             Definition::Fn { .. }
+            | Definition::Validator { .. }
             | Definition::Test { .. }
             | Definition::Use { .. }
             | Definition::ModuleConstant { .. } => {}

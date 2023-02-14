@@ -258,6 +258,18 @@ pub struct ModuleConstant<T, ConstantRecordTag> {
     pub tipo: T,
 }
 
+pub type TypedValidator = Validator<Arc<Type>, TypedExpr>;
+pub type UntypedValidator = Validator<(), UntypedExpr>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Validator<T, Expr> {
+    pub doc: Option<String>,
+    pub end_position: usize,
+    pub function: Function<T, Expr>,
+    pub location: Span,
+    pub params: Vec<Arg<T>>,
+}
+
 pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
 
@@ -274,6 +286,8 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
     ModuleConstant(ModuleConstant<T, ConstantRecordTag>),
 
     Test(Function<T, Expr>),
+
+    Validator(Validator<T, Expr>),
 }
 
 impl<A, B, C, E> Definition<A, B, C, E> {
@@ -284,6 +298,7 @@ impl<A, B, C, E> Definition<A, B, C, E> {
             | Definition::TypeAlias(TypeAlias { location, .. })
             | Definition::DataType(DataType { location, .. })
             | Definition::ModuleConstant(ModuleConstant { location, .. })
+            | Definition::Validator(Validator { location, .. })
             | Definition::Test(Function { location, .. }) => *location,
         }
     }
@@ -295,6 +310,7 @@ impl<A, B, C, E> Definition<A, B, C, E> {
             | Definition::TypeAlias(TypeAlias { doc, .. })
             | Definition::DataType(DataType { doc, .. })
             | Definition::ModuleConstant(ModuleConstant { doc, .. })
+            | Definition::Validator(Validator { doc, .. })
             | Definition::Test(Function { doc, .. }) => {
                 let _ = std::mem::replace(doc, Some(new_doc));
             }

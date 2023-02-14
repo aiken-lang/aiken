@@ -83,6 +83,7 @@ fn module_parser() -> impl Parser<Token, Vec<UntypedDefinition>, Error = ParseEr
         import_parser(),
         data_parser(),
         type_alias_parser(),
+        validator_parser(),
         fn_parser(),
         test_parser(),
         constant_parser(),
@@ -228,6 +229,73 @@ pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error =
                 parameters: parameters.unwrap_or_default(),
                 public: opt_pub.is_some(),
                 tipo: (),
+            })
+        })
+}
+
+pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
+    just(Token::Validator)
+        .ignore_then(select! {Token::Name {name} => name})
+        .then(
+            fn_param_parser()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                .or_not()
+                .map_with_span(|arguments, span| (arguments.unwrap_or_default(), span)),
+        )
+        .then(
+            just(Token::Fn)
+                .ignore_then(
+                    fn_param_parser()
+                        .separated_by(just(Token::Comma))
+                        .allow_trailing()
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                        .map_with_span(|arguments, span| (arguments, span)),
+                )
+                .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
+                .then(
+                    expr_seq_parser()
+                        .or_not()
+                        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+                )
+                .map_with_span(
+                    |(((arguments, args_span), return_annotation), body), span| ast::Function {
+                        arguments,
+                        body: body.unwrap_or(expr::UntypedExpr::Todo {
+                            kind: TodoKind::EmptyFunction,
+                            location: span,
+                            label: None,
+                        }),
+                        doc: None,
+                        location: Span {
+                            start: span.start,
+                            end: return_annotation
+                                .as_ref()
+                                .map(|l| l.location().end)
+                                .unwrap_or_else(|| args_span.end),
+                        },
+                        end_position: span.end - 1,
+                        name: "".to_string(),
+                        public: false,
+                        return_annotation,
+                        return_type: (),
+                    },
+                )
+                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+        )
+        .map_with_span(|((name, (params, params_span)), mut function), span| {
+            function.name = name;
+
+            ast::UntypedDefinition::Validator(ast::Validator {
+                doc: None,
+                function,
+                location: Span {
+                    start: span.start,
+                    end: params_span.end,
+                },
+                params,
+                end_position: span.end - 1,
             })
         })
 }
