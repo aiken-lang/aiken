@@ -714,21 +714,28 @@ impl<'a> CodeGenerator<'a> {
                 *clause_properties.is_complex_clause() = true;
                 let clause_guard_name = format!("__clause_guard_{}", self.id_gen.next());
 
+                let mut clause_guard_scope = scope.clone();
+                clause_guard_scope.push(self.id_gen.next());
+
                 clause_guard_vec.push(Air::Let {
-                    scope: scope.clone(),
+                    scope: clause_guard_scope.clone(),
                     name: clause_guard_name.clone(),
                 });
 
-                handle_clause_guard(clause_guard, &mut clause_guard_vec, scope.clone());
+                handle_clause_guard(
+                    clause_guard,
+                    &mut clause_guard_vec,
+                    clause_guard_scope.clone(),
+                );
 
                 clause_guard_vec.push(Air::ClauseGuard {
-                    scope: scope.clone(),
+                    scope: clause_guard_scope.clone(),
                     subject_name: clause_guard_name,
                     tipo: bool(),
                 });
 
                 clause_guard_vec.push(Air::Bool {
-                    scope: scope.clone(),
+                    scope: clause_guard_scope.clone(),
                     value: true,
                 });
 
@@ -1875,6 +1882,9 @@ impl<'a> CodeGenerator<'a> {
 
                     pattern_vec.append(values);
 
+                    let mut scope = scope;
+                    scope.push(self.id_gen.next());
+
                     pattern_vec.push(Air::AssertConstr {
                         scope: scope.clone(),
                         constr_index: index,
@@ -2124,6 +2134,9 @@ impl<'a> CodeGenerator<'a> {
                 });
 
                 pattern_vec.append(value_vec);
+
+                let mut scope = scope;
+                scope.push(self.id_gen.next());
 
                 pattern_vec.push(Air::AssertConstr {
                     scope: scope.clone(),
