@@ -1469,13 +1469,7 @@ impl<'a> CodeGenerator<'a> {
                                 );
                             }
                         } else {
-                            let tail_name = match *tail.clone().unwrap() {
-                                Pattern::Var { name, .. } => name,
-                                Pattern::Discard { .. } => "_".to_string(),
-                                _ => unreachable!(),
-                            };
-
-                            pattern_vec.push(Air::ListClauseGuard {
+                                pattern_vec.push(Air::ListClauseGuard {
                                 scope: scope.clone(),
                                 tipo: pattern_type.clone(),
                                 tail_name: prev_tail_name,
@@ -1483,14 +1477,9 @@ impl<'a> CodeGenerator<'a> {
                                 inverse: true,
                             });
 
-                            self.when_ir(
-                                a,
-                                pattern_vec,
-                                &mut vec![],
-                                pattern_type,
-                                &mut clause_properties,
-                                scope.clone(),
-                            );
+
+                            pattern_vec.push(Air::Void { scope: scope.clone() });
+                            
                         };
                     }
                 }
