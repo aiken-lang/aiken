@@ -57,12 +57,12 @@ fn assert_first_output(output) {
 fn assert_second_output(output) {
   [
     output.address.stake_credential == Some(
-    Inline(
-    VerificationKeyCredential(
-      #"66666666666666666666666666666666666666666666666666666666",
-    ))
-    )
-    ,
+      Inline(
+        VerificationKeyCredential(
+          #"66666666666666666666666666666666666666666666666666666666",
+        ),
+      ),
+    ),
     when output.datum is {
       InlineDatum(_) -> True
       _ -> error("expected inline datum")

@@ -20,10 +20,10 @@ for convenience.
 ## Test Coverage
 
 - [ ] Purpose
-  - [x] Spend
-  - [x] Mint
-  - [x] Withdraw
-  - [ ] Publish
+  - [x] spend
+  - [x] mint
+  - [x] withdraw
+  - [ ] publish
 
 - [ ] Transaction
   - [ ] inputs
@@ -35,15 +35,15 @@ for convenience.
 	- [ ] pointer
     - [x] value
     - [x] datum
-        - [x] None
-        - [x] Hash
-        - [x] Inline
+        - [x] none
+        - [x] hash
+        - [x] inline
     - [x] script
-        - [x] None
-	- [x] Reference
+        - [x] none
+	- [x] reference
   - [x] values
-	- [x] Pure Ada
-	- [x] Native assets
+	- [x] pure ada
+	- [x] native assets
   - [x] fee
   - [x] mint
   - [ ] certificates

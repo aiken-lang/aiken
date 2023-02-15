@@ -843,30 +843,12 @@ impl<'comments> Formatter<'comments> {
             false
         };
 
-        match args {
-            [arg] if is_breakable_expr(&arg.value) => self
-                .expr(fun)
-                .append(if needs_curly {
-                    break_(" {", " { ")
-                } else {
-                    break_("(", "(")
-                })
-                .append(self.call_arg(arg, needs_curly))
-                .append(if needs_curly {
-                    break_("}", " }")
-                } else {
-                    break_(")", ")")
-                })
-                .group(),
-
-            _ => self
-                .expr(fun)
-                .append(wrap_args(
-                    args.iter()
-                        .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
-                ))
-                .group(),
-        }
+        self.expr(fun)
+            .append(wrap_args(
+                args.iter()
+                    .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
+            ))
+            .group()
     }
 
     pub fn if_expr<'a>(

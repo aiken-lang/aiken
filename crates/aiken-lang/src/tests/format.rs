@@ -305,3 +305,46 @@ fn test_format_bytearray_literals() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn test_nested_function_calls() {
+    let src = indoc! {r#"
+        fn foo(output) {
+          [
+            output.address.stake_credential == Some(
+            Inline(
+            VerificationKeyCredential(
+              #"66666666666666666666666666666666666666666666666666666666",
+            ))
+            )
+            ,
+            when output.datum is {
+              InlineDatum(_) -> True
+              _ -> error("expected inline datum")
+            },
+          ]
+          |> list.and
+        }
+    "#};
+
+    let expected = indoc! {r#"
+        fn foo(output) {
+          [
+            output.address.stake_credential == Some(
+              Inline(
+                VerificationKeyCredential(
+                  #"66666666666666666666666666666666666666666666666666666666",
+                ),
+              ),
+            ),
+            when output.datum is {
+              InlineDatum(_) -> True
+              _ -> error("expected inline datum")
+            },
+          ]
+          |> list.and
+        }
+    "#};
+
+    assert_fmt(src, expected);
+}
