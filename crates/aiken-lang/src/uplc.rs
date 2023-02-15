@@ -411,7 +411,7 @@ impl<'a> CodeGenerator<'a> {
 
                         final_scope.push(self.id_gen.next());
 
-                        if !matches!(clause_properties, ClauseProperties::TupleClause { .. }) {
+                        if !matches!(last_pattern, Pattern::Tuple { .. }) {
                             pattern_vec.push(Air::Finally {
                                 scope: final_scope.clone(),
                             });
@@ -773,8 +773,14 @@ impl<'a> CodeGenerator<'a> {
                     let current_clause_index =
                         if let Pattern::List { elements, .. } = &clause.pattern[0] {
                             elements.len()
+                        } else if let Pattern::Assign { pattern, .. } = &clause.pattern[0] {
+                            if let Pattern::List { elements, .. } = pattern.as_ref() {
+                                elements.len()
+                            } else {
+                                unreachable!("{:#?}", pattern)
+                            }
                         } else {
-                            unreachable!()
+                            unreachable!("{:#?}", &clause.pattern[0])
                         };
 
                     let prev_index = *current_index;
@@ -801,6 +807,14 @@ impl<'a> CodeGenerator<'a> {
                             &clauses[index + 1].pattern[0]
                         {
                             elements.len()
+                        } else if let Pattern::Assign { pattern, .. } =
+                            &clauses[index + 1].pattern[0]
+                        {
+                            if let Pattern::List { elements, .. } = pattern.as_ref() {
+                                elements.len()
+                            } else {
+                                unreachable!("{:#?}", pattern)
+                            }
                         } else {
                             unreachable!()
                         };
@@ -2755,33 +2769,55 @@ impl<'a> CodeGenerator<'a> {
 
         let recursion_func_map = IndexMap::new();
 
-        self.define_recurse_ir(
+        self.define_ir_recurse(
             ir_stack,
             &mut func_components,
             &mut func_index_map,
             recursion_func_map,
+            false,
         );
 
         let mut final_func_dep_ir = IndexMap::new();
-        let mut zero_arg_defined_functions = IndexMap::new();
         let mut to_be_defined = IndexMap::new();
 
         let mut dependency_map = IndexMap::new();
         let mut dependency_vec = vec![];
 
-        let mut func_keys = func_components.keys().cloned().collect_vec();
+        let mut func_keys = func_components
+            .clone()
+            .into_iter()
+            .filter(|(_, val)| !val.defined_by_zero_arg)
+            .map(|(key, val)| (key, val.defined_by_zero_arg))
+            .collect_vec();
 
         // deal with function dependencies by sorting order in which we iter over them.
         while let Some(function) = func_keys.pop() {
-            let funct_comp = func_components.get(&function).unwrap();
-            if dependency_map.contains_key(&function) {
-                dependency_map.shift_remove(&function);
+            let funct_comp = func_components.get(&function.0).unwrap();
+            if dependency_map.contains_key(&function.0) {
+                dependency_map.shift_remove(&function.0);
             }
-            dependency_map.insert(function, ());
-            func_keys.extend(funct_comp.dependencies.clone().into_iter());
+            dependency_map.insert(function.0, function.1);
+            func_keys.extend(
+                funct_comp
+                    .dependencies
+                    .iter()
+                    .map(|key| {
+                        (
+                            key.clone(),
+                            func_components.get(key).unwrap().defined_by_zero_arg,
+                        )
+                    })
+                    .collect_vec(),
+            );
         }
 
-        dependency_vec.extend(dependency_map.keys().cloned());
+        dependency_vec.extend(
+            dependency_map
+                .iter()
+                .filter(|(_, defined_in_zero_arg)| !**defined_in_zero_arg)
+                .map(|(key, _)| key.clone())
+                .collect_vec(),
+        );
 
         for func in dependency_vec {
             if self.defined_functions.contains_key(&func) {
@@ -2808,6 +2844,7 @@ impl<'a> CodeGenerator<'a> {
                 // since zero arg functions are run at compile time we need to pull all deps
                 // note anon functions are not included in the above. They exist in a function anyway
                 let mut defined_functions = IndexMap::new();
+
                 // deal with function dependencies in zero arg functions
                 handle_func_dependencies_ir(
                     &mut dep_ir,
@@ -2816,7 +2853,7 @@ impl<'a> CodeGenerator<'a> {
                     &mut defined_functions,
                     &func_index_map,
                     func_scope,
-                    &mut IndexMap::new(),
+                    &mut to_be_defined,
                 );
 
                 let mut final_zero_arg_ir = dep_ir;
@@ -2827,18 +2864,33 @@ impl<'a> CodeGenerator<'a> {
                 self.zero_arg_functions.insert(func, final_zero_arg_ir);
                 // zero arg functions don't contain the dependencies since they are pre-evaluated
                 // As such we add functions to defined only after dependencies for all other functions are calculated
-                for (key, val) in defined_functions.into_iter() {
-                    zero_arg_defined_functions.insert(key, val);
-                }
             }
         }
 
-        // handle functions that are used in zero arg funcs but also used by the validator
-        // or a func used by the validator
-        for (key, val) in zero_arg_defined_functions.into_iter() {
-            if !to_be_defined.contains_key(&key) {
-                self.defined_functions.insert(key, val);
-            }
+        while let Some(func) = to_be_defined.pop() {
+            let mut dep_ir = vec![];
+            let mut defined_functions = IndexMap::new();
+            // deal with function dependencies in zero arg functions
+
+            let funt_comp = func_components.get(&func.0).unwrap();
+            let func_scope = func_index_map.get(&func.0).unwrap();
+
+            handle_func_dependencies_ir(
+                &mut dep_ir,
+                funt_comp,
+                &func_components,
+                &mut defined_functions,
+                &func_index_map,
+                func_scope,
+                &mut to_be_defined,
+            );
+
+            let mut final_zero_arg_ir = dep_ir;
+            final_zero_arg_ir.extend(funt_comp.ir.clone());
+
+            self.convert_opaque_type_to_inner_ir(&mut final_zero_arg_ir);
+
+            self.zero_arg_functions.insert(func.0, final_zero_arg_ir);
         }
 
         for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
@@ -2850,6 +2902,7 @@ impl<'a> CodeGenerator<'a> {
                         get_common_ancestor(&func.1, &ir.scope()) == ir.scope()
                             && !self.defined_functions.contains_key(&func.0)
                             && !self.zero_arg_functions.contains_key(&func.0)
+                            && !(*dependency_map.get(&func.0).unwrap())
                     })
                     .collect_vec();
 
@@ -2894,14 +2947,15 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn define_recurse_ir(
+    fn define_ir_recurse(
         &mut self,
         ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
         mut recursion_func_map: IndexMap<FunctionAccessKey, ()>,
+        in_zero_arg_func: bool,
     ) {
-        self.process_define_ir(ir_stack, func_components, func_index_map);
+        self.define_ir_processor(ir_stack, func_components, func_index_map, in_zero_arg_func);
 
         let mut recursion_func_map_to_add = recursion_func_map.clone();
 
@@ -2910,6 +2964,7 @@ impl<'a> CodeGenerator<'a> {
 
             let function_components = func_components.get_mut(func).unwrap();
             let mut function_ir = function_components.ir.clone();
+            let in_zero_arg = function_components.args.is_empty() || in_zero_arg_func;
             let mut skip = false;
 
             for ir in function_ir.clone() {
@@ -2965,18 +3020,22 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut inner_func_index_map = IndexMap::new();
 
-                self.define_recurse_ir(
+                self.define_ir_recurse(
                     &mut function_ir,
                     &mut inner_func_components,
                     &mut inner_func_index_map,
                     recursion_func_map.clone(),
+                    in_zero_arg,
                 );
 
                 function_components.ir = function_ir;
 
                 //now unify
                 for item in inner_func_components {
-                    if !func_components.contains_key(&item.0) {
+                    if let Some(entry) = func_components.get_mut(&item.0) {
+                        entry.defined_by_zero_arg =
+                            entry.defined_by_zero_arg && item.1.defined_by_zero_arg
+                    } else {
                         func_components.insert(item.0, item.1);
                     }
                 }
@@ -2992,11 +3051,12 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn process_define_ir(
+    fn define_ir_processor(
         &mut self,
         ir_stack: &mut [Air],
         func_components: &mut IndexMap<FunctionAccessKey, FuncComponents>,
         func_index_map: &mut IndexMap<FunctionAccessKey, Vec<u64>>,
+        in_zero_arg_func: bool,
     ) {
         let mut to_be_defined_map: IndexMap<FunctionAccessKey, Vec<u64>> = IndexMap::new();
         for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
@@ -3172,6 +3232,7 @@ impl<'a> CodeGenerator<'a> {
                                         dependencies: func_calls.keys().cloned().collect_vec(),
                                         recursive,
                                         args,
+                                        defined_by_zero_arg: in_zero_arg_func,
                                     },
                                 );
                             }
