@@ -175,16 +175,19 @@ where
 
     pub fn dump_uplc(&self, blueprint: &Blueprint<Schema>) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
+
         self.event_listener
             .handle_event(Event::DumpingUPLC { path: dir.clone() });
+
         fs::create_dir_all(&dir)?;
+
         for validator in &blueprint.validators {
-            let path = dir
-                .clone()
-                .join(format!("{}::{}>.uplc", validator.title, validator.purpose));
+            let path = dir.clone().join(format!("{}.uplc", validator.title));
+
             fs::write(&path, validator.program.to_pretty())
                 .map_err(|error| Error::FileIo { error, path })?;
         }
+
         Ok(())
     }
 

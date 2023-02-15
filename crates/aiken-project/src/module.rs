@@ -1,13 +1,13 @@
 use crate::error::Error;
 use aiken_lang::{
     ast::{
-        DataType, Definition, ModuleKind, TypedDataType, TypedFunction, TypedModule, UntypedModule,
+        DataType, Definition, ModuleKind, TypedDataType, TypedFunction, TypedModule,
+        TypedValidator, UntypedModule,
     },
     builder::{DataTypeKey, FunctionAccessKey},
     parser::extra::{comments_before, Comment, ModuleExtra},
     tipo::TypeInfo,
     uplc::CodeGenerator,
-    VALIDATOR_NAMES,
 };
 use indexmap::IndexMap;
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
@@ -251,17 +251,17 @@ impl CheckedModules {
         modules
     }
 
-    pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedFunction)> {
+    pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedValidator)> {
         let mut items = vec![];
-        for validator in self.0.values().filter(|module| module.kind.is_validator()) {
-            for some_definition in validator.ast.definitions() {
-                if let Definition::Fn(def) = some_definition {
-                    if VALIDATOR_NAMES.contains(&def.name.as_str()) {
-                        items.push((validator, def));
-                    }
+
+        for validator_module in self.0.values().filter(|module| module.kind.is_validator()) {
+            for some_definition in validator_module.ast.definitions() {
+                if let Definition::Validator(def) = some_definition {
+                    items.push((validator_module, def));
                 }
             }
         }
+
         items.into_iter()
     }
 
@@ -313,6 +313,7 @@ impl CheckedModules {
                     Definition::TypeAlias(_)
                     | Definition::ModuleConstant(_)
                     | Definition::Test(_)
+                    | Definition::Validator { .. }
                     | Definition::Use(_) => {}
                 }
             }

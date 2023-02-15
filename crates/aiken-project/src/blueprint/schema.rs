@@ -580,6 +580,7 @@ fn find_definition<'a>(
         match def {
             Definition::DataType(data_type) if name == data_type.name => return Some(data_type),
             Definition::Fn { .. }
+            | Definition::Validator { .. }
             | Definition::DataType { .. }
             | Definition::TypeAlias { .. }
             | Definition::Use { .. }
