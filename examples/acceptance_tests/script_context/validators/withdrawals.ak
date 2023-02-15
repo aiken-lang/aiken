@@ -16,7 +16,7 @@ fn spend(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
   let bob =
     Inline(
     ScriptCredential(
-      #"5e1e8fa84f2b557ddc362329413caa3fd89a1be26bfd24be05ce0a02",
+      #"afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
     ))
     
 
