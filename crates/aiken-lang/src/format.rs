@@ -589,7 +589,11 @@ impl<'comments> Formatter<'comments> {
             .to_doc()
             .append(" ")
             .append(fun.name.as_str())
-            .append(wrap_args(params.iter().map(|e| (self.fn_arg(e), false))));
+            .append(if !params.is_empty() {
+                wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
+            } else {
+                "".to_doc()
+            });
 
         // Stick it all together
         let inner_fn = head
