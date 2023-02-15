@@ -16,3 +16,40 @@ for convenience.
 ```
 ./test.sh [VALIDATOR_TITLE]
 ```
+
+## Test Coverage
+
+- [ ] Purpose
+  - [x] Spend
+  - [x] Mint
+  - [ ] Withdraw
+  - [ ] Publish
+
+- [ ] Transaction
+  - [ ] inputs
+  - [ ] reference inputs
+  - [ ] outputs
+    - [ ] address
+    	- [x] verification key
+	- [ ] script
+    - [x] value
+    - [ ] datum
+        - [x] None
+        - [ ] Hash
+        - [ ] Inline
+    - [ ] script
+        - [x] None
+	- [ ] Reference
+  - [x] values
+	- [x] Pure Ada
+	- [x] Native assets
+  - [x] fee
+  - [x] mint
+  - [ ] certificates
+  - [x] withdrawals
+    - [x] verification key
+    - [x] script
+  - [ ] validity range
+  - [x] extra signatories
+  - [x] redeemers
+  - [ ] datums

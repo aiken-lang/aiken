@@ -1,16 +1,23 @@
 use aiken/list
 use aiken/option
-use aiken/transaction.{ScriptContext, Spend, TransactionId}
+use aiken/transaction.{NoDatum, ScriptContext, Spend, TransactionId}
 use aiken/transaction/credential.{VerificationKeyCredential}
 use aiken/transaction/value
 
 fn spend(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
   [
+    assert_id(ctx.transaction),
     assert_purpose(ctx.purpose),
     assert_outputs(ctx.transaction),
     assert_fee(ctx.transaction),
   ]
   |> list.and
+}
+
+fn assert_id(transaction) {
+  transaction.id != TransactionId(
+    #"0000000000000000000000000000000000000000000000000000000000000000",
+  )
 }
 
 fn assert_purpose(purpose) {
@@ -36,6 +43,8 @@ fn assert_outputs(transaction) {
           #"11111111111111111111111111111111111111111111111111111111",
         ),
         option.is_none(output.address.stake_credential),
+        output.datum == NoDatum,
+        output.reference_script == None,
       ]
       |> list.and
     _ -> error("unexpected number of outputs")

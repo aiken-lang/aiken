@@ -37,6 +37,6 @@ VALIDATOR=$(cbor-diag --to hex --from diag <<< "h'$VALIDATOR'")
 
 cp ctx/$TITLE/inputs.cbor.template ctx/$TITLE/inputs.cbor
 sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" ctx/$TITLE/outputs.cbor.template > ctx/$TITLE/outputs.cbor
-sed "s/{{ VALIDATOR }}/$VALIDATOR/" ctx/$TITLE/tx.cbor.template > ctx/$TITLE/tx.cbor
+sed "s/{{ VALIDATOR }}/$VALIDATOR/" ctx/$TITLE/tx.cbor.template | sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" > ctx/$TITLE/tx.cbor
 
 cargo run --quiet -- tx simulate ctx/$TITLE/tx.cbor ctx/$TITLE/inputs.cbor ctx/$TITLE/outputs.cbor
