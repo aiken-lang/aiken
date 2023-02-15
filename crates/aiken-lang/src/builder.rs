@@ -31,6 +31,7 @@ pub struct FuncComponents {
     pub dependencies: Vec<FunctionAccessKey>,
     pub args: Vec<String>,
     pub recursive: bool,
+    pub defined_by_zero_arg: bool,
 }
 
 #[derive(Clone, Eq, Debug, PartialEq, Hash)]
@@ -1862,8 +1863,7 @@ pub fn handle_func_dependencies_ir(
     dependency_vec.reverse();
 
     while let Some(dependency) = dependency_vec.pop() {
-        if (defined_functions.contains_key(&dependency) && !funt_comp.args.is_empty())
-            || func_components.get(&dependency).is_none()
+        if defined_functions.contains_key(&dependency) || func_components.get(&dependency).is_none()
         {
             continue;
         }
@@ -1874,31 +1874,27 @@ pub fn handle_func_dependencies_ir(
         if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec()
             || funt_comp.args.is_empty()
         {
-            // we handle zero arg functions and their dependencies in a unique way
-            if !depend_comp.args.is_empty() {
-                let mut recursion_ir = vec![];
-                handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
+            let mut recursion_ir = vec![];
+            handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
 
-                let mut temp_ir = vec![Air::DefineFunc {
-                    scope: func_scope.to_vec(),
-                    func_name: dependency.function_name.clone(),
-                    module_name: dependency.module_name.clone(),
-                    params: depend_comp.args.clone(),
-                    recursive: depend_comp.recursive,
-                    variant_name: dependency.variant_name.clone(),
-                }];
+            let mut temp_ir = vec![Air::DefineFunc {
+                scope: func_scope.to_vec(),
+                func_name: dependency.function_name.clone(),
+                module_name: dependency.module_name.clone(),
+                params: depend_comp.args.clone(),
+                recursive: depend_comp.recursive,
+                variant_name: dependency.variant_name.clone(),
+            }];
 
-                temp_ir.append(&mut recursion_ir);
+            temp_ir.append(&mut recursion_ir);
 
-                temp_ir.append(dependencies_ir);
+            temp_ir.append(dependencies_ir);
 
-                *dependencies_ir = temp_ir;
-                if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
-                    defined_functions.insert(dependency, ());
-                }
+            *dependencies_ir = temp_ir;
+            if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
+                defined_functions.insert(dependency, ());
             }
-        } else {
-            // Dependency will need to be defined somewhere in the main body
+        } else if depend_comp.args.is_empty() {
             to_be_defined.insert(dependency, ());
         }
     }
