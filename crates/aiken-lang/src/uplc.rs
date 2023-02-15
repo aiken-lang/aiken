@@ -1389,7 +1389,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Discard { .. } => None,
             a @ Pattern::List { elements, tail, .. } => {
                 let item_name = format!("__list_item_id_{}", self.id_gen.next());
-                let new_tail_name = "__list_tail".to_string();
+                let new_tail_name = "__tail".to_string();
 
                 if elements.is_empty() {
                     pattern_vec.push(Air::ListClauseGuard {
@@ -1477,9 +1477,7 @@ impl<'a> CodeGenerator<'a> {
                                 inverse: true,
                             });
 
-
                             pattern_vec.push(Air::Void { scope: scope.clone() });
-                            
                         };
                     }
                 }
