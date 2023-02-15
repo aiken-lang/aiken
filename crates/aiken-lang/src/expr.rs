@@ -5,7 +5,8 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
-        Pattern, RecordUpdateSpread, Span, TypedRecordUpdateArg, UnOp, UntypedRecordUpdateArg,
+        Pattern, RecordUpdateSpread, Span, TraceKind, TypedRecordUpdateArg, UnOp,
+        UntypedRecordUpdateArg,
     },
     builtins::void,
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
@@ -375,6 +376,7 @@ pub enum UntypedExpr {
     },
 
     Trace {
+        kind: TraceKind,
         location: Span,
         then: Box<Self>,
         text: Box<Self>,
@@ -435,6 +437,7 @@ impl UntypedExpr {
     pub fn todo(location: Span, reason: Option<Self>) -> Self {
         UntypedExpr::Trace {
             location,
+            kind: TraceKind::Todo,
             then: Box::new(UntypedExpr::ErrorTerm { location }),
             text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
                 location,

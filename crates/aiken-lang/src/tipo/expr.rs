@@ -5,7 +5,7 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
-        RecordUpdateSpread, Span, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
+        RecordUpdateSpread, Span, TraceKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
         TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
         UntypedPattern, UntypedRecordUpdateArg,
@@ -299,7 +299,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 then,
                 text,
-            } => self.infer_trace(*then, location, *text),
+                kind,
+            } => self.infer_trace(kind, *then, location, *text),
 
             UntypedExpr::When {
                 location,
@@ -1855,6 +1856,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_trace(
         &mut self,
+        kind: TraceKind,
         then: UntypedExpr,
         location: Span,
         text: UntypedExpr,
@@ -1865,12 +1867,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let then = self.infer(then)?;
         let tipo = then.tipo();
 
-        // TODO: reinstate once we can distinguish traces
-        //
-        // self.environment.warnings.push(Warning::Todo {
-        //     location,
-        //     tipo: tipo.clone(),
-        // })
+        if let TraceKind::Todo = kind {
+            self.environment.warnings.push(Warning::Todo {
+                location,
+                tipo: tipo.clone(),
+            })
+        }
 
         Ok(TypedExpr::Trace {
             location,

@@ -7,7 +7,7 @@ pub mod lexer;
 pub mod token;
 
 use crate::{
-    ast::{self, BinOp, Span, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
+    ast::{self, BinOp, Span, TraceKind, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
     expr,
 };
 
@@ -586,6 +586,7 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                 .ignore_then(expr_parser(r.clone()))
                 .then(r.clone())
                 .map_with_span(|(text, then_), span| expr::UntypedExpr::Trace {
+                    kind: TraceKind::Trace,
                     location: span,
                     then: Box::new(then_),
                     text: Box::new(text),
@@ -605,17 +606,22 @@ pub fn todo_parser(
 ) -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> + '_ {
     just(keyword.clone())
         .ignore_then(expr_parser(r.clone()).or_not())
-        .map_with_span(move |text, span| expr::UntypedExpr::Trace {
-            location: span,
-            then: Box::new(expr::UntypedExpr::ErrorTerm { location: span }),
-            text: Box::new(text.unwrap_or_else(|| expr::UntypedExpr::String {
+        .map_with_span(move |text, span| {
+            let (kind, value) = match keyword {
+                Token::ErrorTerm => (TraceKind::Error, expr::DEFAULT_ERROR_STR.to_string()),
+                Token::Todo => (TraceKind::Todo, expr::DEFAULT_TODO_STR.to_string()),
+                _ => unreachable!(),
+            };
+
+            expr::UntypedExpr::Trace {
+                kind,
                 location: span,
-                value: match keyword {
-                    Token::ErrorTerm => expr::DEFAULT_ERROR_STR.to_string(),
-                    Token::Todo => expr::DEFAULT_TODO_STR.to_string(),
-                    _ => unreachable!(),
-                },
-            })),
+                then: Box::new(expr::UntypedExpr::ErrorTerm { location: span }),
+                text: Box::new(text.unwrap_or(expr::UntypedExpr::String {
+                    location: span,
+                    value,
+                })),
+            }
         })
 }
 

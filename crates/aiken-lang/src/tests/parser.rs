@@ -309,6 +309,7 @@ fn empty_function() {
         vec![ast::UntypedDefinition::Fn(Function {
             arguments: vec![],
             body: expr::UntypedExpr::Trace {
+                kind: ast::TraceKind::Todo,
                 location: Span::new((), 0..15),
                 text: Box::new(expr::UntypedExpr::String {
                     value: "aiken::todo".to_string(),
@@ -1787,6 +1788,7 @@ fn function_def() {
             doc: None,
             arguments: vec![],
             body: expr::UntypedExpr::Trace {
+                kind: ast::TraceKind::Todo,
                 location: Span::new((), 0..11),
                 text: Box::new(expr::UntypedExpr::String {
                     value: "aiken::todo".to_string(),
@@ -2630,12 +2632,16 @@ fn trace_expressions() {
                         annotation: None,
                     },
                     expr::UntypedExpr::Trace {
+                        kind: ast::TraceKind::Trace,
                         location: Span::new((), 32..128),
                         then: Box::new(expr::UntypedExpr::Trace {
+                            kind: ast::TraceKind::Trace,
                             location: Span::new((), 49..128),
                             then: Box::new(expr::UntypedExpr::Trace {
+                                kind: ast::TraceKind::Trace,
                                 location: Span::new((), 62..128),
                                 then: Box::new(expr::UntypedExpr::Trace {
+                                    kind: ast::TraceKind::Trace,
                                     location: Span::new((), 97..128),
                                     then: Box::new(expr::UntypedExpr::Var {
                                         location: Span::new((), 124..128),
@@ -2735,6 +2741,7 @@ fn parse_keyword_error() {
             ast::Definition::Fn(Function {
                 arguments: vec![],
                 body: expr::UntypedExpr::Trace {
+                    kind: ast::TraceKind::Error,
                     location: Span::new((), 13..36),
                     then: Box::new(expr::UntypedExpr::ErrorTerm {
                         location: Span::new((), 13..36),
@@ -2789,6 +2796,7 @@ fn parse_keyword_error() {
                             alternative_patterns: vec![],
                             guard: None,
                             then: expr::UntypedExpr::Trace {
+                                kind: ast::TraceKind::Error,
                                 location: Span::new((), 100..105),
                                 then: Box::new(expr::UntypedExpr::ErrorTerm {
                                     location: Span::new((), 100..105),
@@ -2833,6 +2841,7 @@ fn parse_keyword_todo() {
             ast::Definition::Fn(Function {
                 arguments: vec![],
                 body: expr::UntypedExpr::Trace {
+                    kind: ast::TraceKind::Todo,
                     location: Span::new((), 13..35),
                     then: Box::new(expr::UntypedExpr::ErrorTerm {
                         location: Span::new((), 13..35),
@@ -2887,6 +2896,7 @@ fn parse_keyword_todo() {
                             alternative_patterns: vec![],
                             guard: None,
                             then: expr::UntypedExpr::Trace {
+                                kind: ast::TraceKind::Todo,
                                 location: Span::new((), 99..103),
                                 then: Box::new(expr::UntypedExpr::ErrorTerm {
                                     location: Span::new((), 99..103),
