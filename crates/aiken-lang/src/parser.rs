@@ -235,14 +235,14 @@ pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error =
 
 pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     just(Token::Validator)
-        .ignore_then(select! {Token::Name {name} => name})
+        .ignore_then(select! {Token::Name {name} => name}.map_with_span(|name, span| (name, span)))
         .then(
             fn_param_parser()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                .or_not()
-                .map_with_span(|arguments, span| (arguments.unwrap_or_default(), span)),
+                .map_with_span(|arguments, span| (arguments, span))
+                .or_not(),
         )
         .then(
             just(Token::Fn)
@@ -284,8 +284,10 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
                 )
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
-        .map_with_span(|((name, (params, params_span)), mut fun), span| {
-            fun.name = name;
+        .map_with_span(|((name, opt_extra_params), mut fun), span| {
+            fun.name = name.0;
+
+            let (params, params_span) = opt_extra_params.unwrap_or((vec![], name.1));
 
             ast::UntypedDefinition::Validator(ast::Validator {
                 doc: None,

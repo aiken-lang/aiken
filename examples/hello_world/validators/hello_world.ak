@@ -12,11 +12,14 @@ type Redeemer {
   msg: ByteArray,
 }
 
-fn spend(datum: Datum, redeemer: Redeemer, context: ScriptContext) -> Bool {
-  let must_say_hello = string.from_bytearray(redeemer.msg) == "Hello, World!"
+validator spend {
+  fn(datum: Datum, redeemer: Redeemer, context: ScriptContext) -> Bool {
+    let must_say_hello = string.from_bytearray(redeemer.msg) == "Hello, World!"
 
-  let must_be_signed =
-    list.has(context.transaction.extra_signatories, datum.owner)
+    let must_be_signed =
+      list.has(context.transaction.extra_signatories, datum.owner)
 
-  must_say_hello && must_be_signed
+    must_say_hello && must_be_signed
+  }
 }
+
