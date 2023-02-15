@@ -20,7 +20,9 @@ jobs:
       run: cargo test --verbose --workspace
     - name: Run acceptance tests
       working-directory: examples/acceptance_tests
-      run: bash ci
+      run: |
+        cargo install cbor-diag-cli
+        bash ci
       shell: bash
     - name: Format
       run: cargo fmt --all -- --check
