@@ -5644,8 +5644,9 @@ impl<'a> CodeGenerator<'a> {
                             .into(),
                         ),
                     ),
-                    term,
-                );
+                    Term::Delay(term.into()),
+                )
+                .force_wrap();
 
                 arg_stack.push(term);
             }
