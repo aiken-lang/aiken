@@ -995,9 +995,10 @@ pub struct RecordUpdateSpread {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TodoKind {
-    Keyword,
-    EmptyFunction,
+pub enum TraceKind {
+    Trace,
+    Todo,
+    Error,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]

@@ -320,7 +320,7 @@ fn test_nested_function_calls() {
             ,
             when output.datum is {
               InlineDatum(_) -> True
-              _ -> error("expected inline datum")
+              _ -> error "expected inline datum"
             },
           ]
           |> list.and
@@ -339,7 +339,7 @@ fn test_nested_function_calls() {
             ),
             when output.datum is {
               InlineDatum(_) -> True
-              _ -> error("expected inline datum")
+              _ -> error "expected inline datum"
             },
           ]
           |> list.and
@@ -347,4 +347,35 @@ fn test_nested_function_calls() {
     "#};
 
     assert_fmt(src, expected);
+}
+
+#[test]
+fn format_trace_todo_error() {
+    let src = indoc! {r#"
+        fn foo_1() {
+          todo
+        }
+
+        fn foo_2() {
+          todo "my custom message"
+        }
+
+        fn foo_3() {
+          when x is {
+            Foo -> True
+            _ -> error
+          }
+        }
+
+        fn foo_4() {
+          if 14 == 42 {
+            error "I don't think so"
+          } else {
+            trace "been there"
+            True
+          }
+        }
+    "#};
+
+    assert_fmt(src, src);
 }

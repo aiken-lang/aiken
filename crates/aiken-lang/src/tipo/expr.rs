@@ -5,7 +5,7 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
-        RecordUpdateSpread, Span, TodoKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
+        RecordUpdateSpread, Span, TraceKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
         TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
         UntypedPattern, UntypedRecordUpdateArg,
@@ -221,7 +221,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             | UntypedExpr::RecordUpdate { .. }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::String { .. }
-            | UntypedExpr::Todo { .. }
             | UntypedExpr::Tuple { .. }
             | UntypedExpr::TupleIndex { .. }
             | UntypedExpr::UnOp { .. }
@@ -249,16 +248,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     /// returning an error.
     pub fn infer(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
         match expr {
-            UntypedExpr::Todo {
-                location,
-                label,
-                kind,
-                ..
-            } => Ok(self.infer_todo(location, kind, label)),
-
-            UntypedExpr::ErrorTerm { location, label } => {
-                Ok(self.infer_error_term(location, label))
-            }
+            UntypedExpr::ErrorTerm { location } => Ok(self.infer_error_term(location)),
 
             UntypedExpr::Var { location, name, .. } => self.infer_var(name, location),
 
@@ -309,7 +299,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 then,
                 text,
-            } => self.infer_trace(*then, location, text),
+                kind,
+            } => self.infer_trace(kind, *then, location, *text),
 
             UntypedExpr::When {
                 location,
@@ -1857,47 +1848,37 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn infer_todo(&mut self, location: Span, kind: TodoKind, label: Option<String>) -> TypedExpr {
+    fn infer_error_term(&mut self, location: Span) -> TypedExpr {
         let tipo = self.new_unbound_var();
 
-        self.environment.warnings.push(Warning::Todo {
-            kind,
-            location,
-            tipo: tipo.clone(),
-        });
-
-        TypedExpr::Todo {
-            location,
-            label,
-            tipo,
-        }
-    }
-
-    fn infer_error_term(&mut self, location: Span, label: Option<String>) -> TypedExpr {
-        let tipo = self.new_unbound_var();
-
-        TypedExpr::ErrorTerm {
-            location,
-            tipo,
-            label,
-        }
+        TypedExpr::ErrorTerm { location, tipo }
     }
 
     fn infer_trace(
         &mut self,
+        kind: TraceKind,
         then: UntypedExpr,
         location: Span,
-        text: Option<String>,
+        text: UntypedExpr,
     ) -> Result<TypedExpr, Error> {
-        let then = self.infer(then)?;
+        let text = self.infer(text)?;
+        self.unify(text.tipo(), string(), text.location(), false)?;
 
+        let then = self.infer(then)?;
         let tipo = then.tipo();
+
+        if let TraceKind::Todo = kind {
+            self.environment.warnings.push(Warning::Todo {
+                location,
+                tipo: tipo.clone(),
+            })
+        }
 
         Ok(TypedExpr::Trace {
             location,
             tipo,
             then: Box::new(then),
-            text,
+            text: Box::new(text),
         })
     }
 

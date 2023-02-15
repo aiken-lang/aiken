@@ -5,7 +5,7 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
-        Pattern, RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UnOp,
+        Pattern, RecordUpdateSpread, Span, TraceKind, TypedRecordUpdateArg, UnOp,
         UntypedRecordUpdateArg,
     },
     builtins::void,
@@ -96,7 +96,7 @@ pub enum TypedExpr {
         location: Span,
         tipo: Arc<Type>,
         then: Box<Self>,
-        text: Option<String>,
+        text: Box<Self>,
     },
 
     When {
@@ -143,16 +143,9 @@ pub enum TypedExpr {
         tuple: Box<Self>,
     },
 
-    Todo {
-        location: Span,
-        label: Option<String>,
-        tipo: Arc<Type>,
-    },
-
     ErrorTerm {
         location: Span,
         tipo: Arc<Type>,
-        label: Option<String>,
     },
 
     RecordUpdate {
@@ -177,7 +170,6 @@ impl TypedExpr {
             Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
             | Self::Int { tipo, .. }
-            | Self::Todo { tipo, .. }
             | Self::ErrorTerm { tipo, .. }
             | Self::When { tipo, .. }
             | Self::List { tipo, .. }
@@ -223,7 +215,6 @@ impl TypedExpr {
             | TypedExpr::List { .. }
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
-            | TypedExpr::Todo { .. }
             | TypedExpr::ErrorTerm { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Tuple { .. }
@@ -262,7 +253,6 @@ impl TypedExpr {
             | Self::Int { location, .. }
             | Self::Var { location, .. }
             | Self::Trace { location, .. }
-            | Self::Todo { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
@@ -298,7 +288,6 @@ impl TypedExpr {
             | Self::Int { location, .. }
             | Self::Trace { location, .. }
             | Self::Var { location, .. }
-            | Self::Todo { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
@@ -387,9 +376,10 @@ pub enum UntypedExpr {
     },
 
     Trace {
+        kind: TraceKind,
         location: Span,
         then: Box<Self>,
-        text: Option<String>,
+        text: Box<Self>,
     },
 
     When {
@@ -421,15 +411,8 @@ pub enum UntypedExpr {
         tuple: Box<Self>,
     },
 
-    Todo {
-        kind: TodoKind,
-        location: Span,
-        label: Option<String>,
-    },
-
     ErrorTerm {
         location: Span,
-        label: Option<String>,
     },
 
     RecordUpdate {
@@ -446,7 +429,35 @@ pub enum UntypedExpr {
     },
 }
 
+pub const DEFAULT_TODO_STR: &str = "aiken::todo";
+
+pub const DEFAULT_ERROR_STR: &str = "aiken::error";
+
 impl UntypedExpr {
+    pub fn todo(location: Span, reason: Option<Self>) -> Self {
+        UntypedExpr::Trace {
+            location,
+            kind: TraceKind::Todo,
+            then: Box::new(UntypedExpr::ErrorTerm { location }),
+            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+                location,
+                value: DEFAULT_TODO_STR.to_string(),
+            })),
+        }
+    }
+
+    pub fn error(location: Span, reason: Option<Self>) -> Self {
+        UntypedExpr::Trace {
+            location,
+            kind: TraceKind::Error,
+            then: Box::new(UntypedExpr::ErrorTerm { location }),
+            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+                location,
+                value: DEFAULT_ERROR_STR.to_string(),
+            })),
+        }
+    }
+
     pub fn append_in_sequence(self, next: Self) -> Self {
         let location = Span {
             start: self.location().start,
@@ -502,7 +513,6 @@ impl UntypedExpr {
             Self::Fn { location, .. }
             | Self::Var { location, .. }
             | Self::Int { location, .. }
-            | Self::Todo { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }

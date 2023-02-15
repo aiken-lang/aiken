@@ -7,12 +7,13 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
         Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition,
-        UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, CAPTURE_VARIABLE,
+        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
+        TypedConstant, UnOp, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
+        UntypedDefinition, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use,
+        CAPTURE_VARIABLE,
     },
     docvec,
-    expr::UntypedExpr,
+    expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
     parser::extra::{Comment, ModuleExtra},
     pretty::{break_, concat, flex_break, join, line, lines, nil, Document, Documentable},
     tipo::{self, Type},
@@ -654,9 +655,6 @@ impl<'comments> Formatter<'comments> {
                 final_else,
                 ..
             } => self.if_expr(branches, final_else),
-            UntypedExpr::Todo { label: None, .. } => "todo".to_doc(),
-
-            UntypedExpr::Todo { label: Some(l), .. } => docvec!["todo(\"", l, "\")"],
 
             UntypedExpr::PipeLine { expressions, .. } => self.pipeline(expressions),
 
@@ -706,27 +704,8 @@ impl<'comments> Formatter<'comments> {
             } => self.assignment(pattern, value, None, Some(*kind), annotation),
 
             UntypedExpr::Trace {
-                text: None, then, ..
-            } => "trace"
-                .to_doc()
-                .append(if self.pop_empty_lines(then.start_byte_index()) {
-                    lines(2)
-                } else {
-                    line()
-                })
-                .append(self.expr(then)),
-
-            UntypedExpr::Trace {
-                text: Some(l),
-                then,
-                ..
-            } => docvec!["trace(\"", l, "\")"]
-                .append(if self.pop_empty_lines(then.start_byte_index()) {
-                    lines(2)
-                } else {
-                    line()
-                })
-                .append(self.expr(then)),
+                kind, text, then, ..
+            } => self.trace(kind, text, then),
 
             UntypedExpr::When {
                 subjects, clauses, ..
@@ -755,9 +734,7 @@ impl<'comments> Formatter<'comments> {
                     .append(suffix)
             }
 
-            UntypedExpr::ErrorTerm { label: None, .. } => "error".to_doc(),
-
-            UntypedExpr::ErrorTerm { label: Some(l), .. } => docvec!["error(\"", l, "\")"],
+            UntypedExpr::ErrorTerm { .. } => "error".to_doc(),
         };
 
         commented(document, comments)
@@ -769,6 +746,41 @@ impl<'comments> Formatter<'comments> {
             doc.force_break()
         } else {
             doc
+        }
+    }
+
+    pub fn trace<'a>(
+        &mut self,
+        kind: &'a TraceKind,
+        text: &'a UntypedExpr,
+        then: &'a UntypedExpr,
+    ) -> Document<'a> {
+        let (keyword, default_text) = match kind {
+            TraceKind::Trace => ("trace", None),
+            TraceKind::Error => ("error", Some(DEFAULT_ERROR_STR.to_string())),
+            TraceKind::Todo => ("todo", Some(DEFAULT_TODO_STR.to_string())),
+        };
+
+        let body = match text {
+            UntypedExpr::String { value, .. } if Some(value) == default_text.as_ref() => {
+                keyword.to_doc()
+            }
+            _ => keyword
+                .to_doc()
+                .append(" ")
+                .append(self.wrap_expr(text))
+                .group(),
+        };
+
+        match kind {
+            TraceKind::Error | TraceKind::Todo => body,
+            TraceKind::Trace => body
+                .append(if self.pop_empty_lines(then.start_byte_index()) {
+                    lines(2)
+                } else {
+                    line()
+                })
+                .append(self.expr(then)),
         }
     }
 
@@ -1322,7 +1334,10 @@ impl<'comments> Formatter<'comments> {
 
     fn wrap_expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Trace { .. }
+            UntypedExpr::Trace {
+                kind: TraceKind::Trace,
+                ..
+            }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => "{"
                 .to_doc()
@@ -1361,7 +1376,10 @@ impl<'comments> Formatter<'comments> {
 
     fn case_clause_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Trace { .. }
+            UntypedExpr::Trace {
+                kind: TraceKind::Trace,
+                ..
+            }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => " {"
                 .to_doc()
