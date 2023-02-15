@@ -591,38 +591,17 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                     then: Box::new(then_),
                     text: Box::new(text),
                 }),
-            todo_parser(r.clone(), Token::ErrorTerm),
-            todo_parser(r.clone(), Token::Todo),
+            just(Token::ErrorTerm)
+                .ignore_then(expr_parser(r.clone()).or_not())
+                .map_with_span(|reason, span| expr::UntypedExpr::error(span, reason)),
+            just(Token::Todo)
+                .ignore_then(expr_parser(r.clone()).or_not())
+                .map_with_span(|reason, span| expr::UntypedExpr::todo(span, reason)),
             expr_parser(r.clone())
                 .then(r.repeated())
                 .foldl(|current, next| current.append_in_sequence(next)),
         ))
     })
-}
-
-pub fn todo_parser(
-    r: Recursive<'_, Token, expr::UntypedExpr, ParseError>,
-    keyword: Token,
-) -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> + '_ {
-    just(keyword.clone())
-        .ignore_then(expr_parser(r.clone()).or_not())
-        .map_with_span(move |text, span| {
-            let (kind, value) = match keyword {
-                Token::ErrorTerm => (TraceKind::Error, expr::DEFAULT_ERROR_STR.to_string()),
-                Token::Todo => (TraceKind::Todo, expr::DEFAULT_TODO_STR.to_string()),
-                _ => unreachable!(),
-            };
-
-            expr::UntypedExpr::Trace {
-                kind,
-                location: span,
-                then: Box::new(expr::UntypedExpr::ErrorTerm { location: span }),
-                text: Box::new(text.unwrap_or(expr::UntypedExpr::String {
-                    location: span,
-                    value,
-                })),
-            }
-        })
 }
 
 pub fn expr_parser(
@@ -934,8 +913,6 @@ pub fn expr_parser(
                 choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
                 just(Token::RightParen),
             ),
-            just(Token::ErrorTerm).rewind().ignore_then(seq_r.clone()),
-            just(Token::Todo).rewind().ignore_then(seq_r.clone()),
         ));
 
         let anon_fn_parser = just(Token::Fn)
@@ -983,7 +960,23 @@ pub fn expr_parser(
                     }),
             )))
             // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
-            .then(r.clone())
+            .then(choice((
+                r.clone(),
+                just(Token::Todo)
+                    .ignore_then(
+                        r.clone()
+                            .then_ignore(one_of(Token::RArrow).not().rewind())
+                            .or_not(),
+                    )
+                    .map_with_span(|reason, span| expr::UntypedExpr::todo(span, reason)),
+                just(Token::ErrorTerm)
+                    .ignore_then(
+                        r.clone()
+                            .then_ignore(just(Token::RArrow).not().rewind())
+                            .or_not(),
+                    )
+                    .map_with_span(|reason, span| expr::UntypedExpr::error(span, reason)),
+            )))
             .map_with_span(
                 |(((patterns, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
                     location: span,

@@ -2830,8 +2830,9 @@ fn parse_keyword_todo() {
 
           fn bar() {
             when x is {
-                Something -> Void
-                _ -> todo
+                Foo -> todo
+                Bar -> True
+                _ -> False
             }
           }
         "#};
@@ -2862,18 +2863,44 @@ fn parse_keyword_todo() {
             ast::Definition::Fn(Function {
                 arguments: vec![],
                 body: expr::UntypedExpr::When {
-                    location: Span::new((), 52..107),
+                    location: Span::new((), 52..120),
                     subjects: vec![expr::UntypedExpr::Var {
                         location: Span::new((), 57..58),
                         name: "x".to_string(),
                     }],
                     clauses: vec![
                         ast::Clause {
-                            location: Span::new((), 70..87),
+                            location: Span::new((), 70..81),
                             pattern: vec![ast::Pattern::Constructor {
                                 is_record: false,
-                                location: Span::new((), 70..79),
-                                name: "Something".to_string(),
+                                location: Span::new((), 70..73),
+                                name: "Foo".to_string(),
+                                arguments: vec![],
+                                module: None,
+                                constructor: (),
+                                with_spread: false,
+                                tipo: (),
+                            }],
+                            alternative_patterns: vec![],
+                            guard: None,
+                            then: expr::UntypedExpr::Trace {
+                                kind: ast::TraceKind::Todo,
+                                location: Span::new((), 77..81),
+                                then: Box::new(expr::UntypedExpr::ErrorTerm {
+                                    location: Span::new((), 77..81),
+                                }),
+                                text: Box::new(expr::UntypedExpr::String {
+                                    location: Span::new((), 77..81),
+                                    value: "aiken::todo".to_string(),
+                                }),
+                            },
+                        },
+                        ast::Clause {
+                            location: Span::new((), 88..99),
+                            pattern: vec![ast::Pattern::Constructor {
+                                is_record: false,
+                                location: Span::new((), 88..91),
+                                name: "Bar".to_string(),
                                 arguments: vec![],
                                 module: None,
                                 constructor: (),
@@ -2883,28 +2910,21 @@ fn parse_keyword_todo() {
                             alternative_patterns: vec![],
                             guard: None,
                             then: expr::UntypedExpr::Var {
-                                location: Span::new((), 83..87),
-                                name: "Void".to_string(),
+                                location: Span::new((), 95..99),
+                                name: "True".to_string(),
                             },
                         },
                         ast::Clause {
-                            location: Span::new((), 94..103),
+                            location: Span::new((), 106..116),
                             pattern: vec![ast::Pattern::Discard {
                                 name: "_".to_string(),
-                                location: Span::new((), 94..95),
+                                location: Span::new((), 106..107),
                             }],
                             alternative_patterns: vec![],
                             guard: None,
-                            then: expr::UntypedExpr::Trace {
-                                kind: ast::TraceKind::Todo,
-                                location: Span::new((), 99..103),
-                                then: Box::new(expr::UntypedExpr::ErrorTerm {
-                                    location: Span::new((), 99..103),
-                                }),
-                                text: Box::new(expr::UntypedExpr::String {
-                                    location: Span::new((), 99..103),
-                                    value: "aiken::todo".to_string(),
-                                }),
+                            then: expr::UntypedExpr::Var {
+                                location: Span::new((), 111..116),
+                                name: "False".to_string(),
                             },
                         },
                     ],
@@ -2915,7 +2935,7 @@ fn parse_keyword_todo() {
                 public: false,
                 return_annotation: None,
                 return_type: (),
-                end_position: 108,
+                end_position: 121,
             }),
         ],
     )

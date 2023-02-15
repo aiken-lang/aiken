@@ -446,6 +446,18 @@ impl UntypedExpr {
         }
     }
 
+    pub fn error(location: Span, reason: Option<Self>) -> Self {
+        UntypedExpr::Trace {
+            location,
+            kind: TraceKind::Error,
+            then: Box::new(UntypedExpr::ErrorTerm { location }),
+            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+                location,
+                value: DEFAULT_ERROR_STR.to_string(),
+            })),
+        }
+    }
+
     pub fn append_in_sequence(self, next: Self) -> Self {
         let location = Span {
             start: self.location().start,
