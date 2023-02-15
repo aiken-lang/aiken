@@ -50,12 +50,56 @@ fn validator() {
 
     assert_definitions(
         code,
-        vec![ast::UntypedDefinition::Use(Use {
-            location: Span::new((), 0..12),
-            module: vec!["std".to_string(), "list".to_string()],
-            as_name: None,
-            unqualified: vec![],
-            package: (),
+        vec![ast::UntypedDefinition::Validator(ast::Validator {
+            doc: None,
+            end_position: 54,
+            fun: Function {
+                arguments: vec![
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "datum".to_string(),
+                            label: "datum".to_string(),
+                            location: Span::new((), 21..26),
+                        },
+                        location: Span::new((), 21..26),
+                        annotation: None,
+                        tipo: (),
+                    },
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "rdmr".to_string(),
+                            label: "rdmr".to_string(),
+                            location: Span::new((), 28..32),
+                        },
+                        location: Span::new((), 28..32),
+                        annotation: None,
+                        tipo: (),
+                    },
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "ctx".to_string(),
+                            label: "ctx".to_string(),
+                            location: Span::new((), 34..37),
+                        },
+                        location: Span::new((), 34..37),
+                        annotation: None,
+                        tipo: (),
+                    },
+                ],
+                body: expr::UntypedExpr::Var {
+                    location: Span::new((), 45..49),
+                    name: "True".to_string(),
+                },
+                doc: None,
+                location: Span::new((), 18..38),
+                name: "foo".to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 52,
+            },
+            location: Span::new((), 0..13),
+            params: vec![],
         })],
     )
 }
