@@ -1,8 +1,5 @@
 use crate::{
-    blueprint::{error as blueprint, validator},
-    deps::manifest::Package,
-    package_name::PackageName,
-    pretty,
+    blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName, pretty,
     script::EvalHint,
 };
 use aiken_lang::{
@@ -136,12 +133,12 @@ pub enum Error {
 
     #[error("I didn't find any validator matching your criteria.")]
     NoValidatorNotFound {
-        known_validators: Vec<(String, validator::Purpose)>,
+        known_validators: Vec<(String, String)>,
     },
 
     #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
     MoreThanOneValidatorFound {
-        known_validators: Vec<(String, validator::Purpose)>,
+        known_validators: Vec<(String, String)>,
     },
 }
 

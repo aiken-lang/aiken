@@ -1,9 +1,9 @@
 use super::{
-    error::{assert_min_arity, assert_return_bool, Error},
+    error::Error,
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
-use aiken_lang::{ast::TypedFunction, uplc::CodeGenerator};
+use aiken_lang::{ast::TypedValidator, uplc::CodeGenerator};
 use miette::NamedSource;
 use serde;
 use std::{
@@ -15,7 +15,8 @@ use uplc::ast::{DeBruijn, Program, Term};
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T> {
     pub title: String,
-    pub purpose: Purpose,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<Purpose>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,30 +49,21 @@ impl Validator<Schema> {
     pub fn from_checked_module(
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
-        validator: &CheckedModule,
-        def: &TypedFunction,
+        module: &CheckedModule,
+        def: &TypedValidator,
     ) -> Result<Validator<Schema>, Error> {
-        let purpose: Purpose = def
-            .name
-            .clone()
-            .try_into()
-            .expect("unexpected validator name");
+        let mut args = def.fun.arguments.iter().rev();
+        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
-        assert_return_bool(validator, def)?;
-        assert_min_arity(validator, def, purpose.min_arity())?;
+        let mut arguments = Vec::with_capacity(def.params.len() + def.fun.arguments.len());
 
-        let mut args = def.arguments.iter().rev();
-        let (_, redeemer) = (args.next(), args.next().unwrap());
-        let datum = if purpose.min_arity() > 2 {
-            args.next()
-        } else {
-            None
-        };
+        arguments.extend(def.params.clone());
+        arguments.extend(def.fun.arguments.clone());
 
         Ok(Validator {
-            title: validator.name.clone(),
+            title: format!("{}-{}", &module.name, &def.fun.name),
             description: None,
-            purpose,
+            purpose: None,
             parameters: args
                 .rev()
                 .map(|param| {
@@ -81,8 +73,8 @@ impl Validator<Schema> {
                                 error,
                                 location: param.location,
                                 source_code: NamedSource::new(
-                                    validator.input_path.display().to_string(),
-                                    validator.code.clone(),
+                                    module.input_path.display().to_string(),
+                                    module.code.clone(),
                                 ),
                             },
                         );
@@ -101,8 +93,8 @@ impl Validator<Schema> {
                             error,
                             location: datum.location,
                             source_code: NamedSource::new(
-                                validator.input_path.display().to_string(),
-                                validator.code.clone(),
+                                module.input_path.display().to_string(),
+                                module.code.clone(),
                             ),
                         },
                     )
@@ -113,12 +105,12 @@ impl Validator<Schema> {
                     error,
                     location: redeemer.location,
                     source_code: NamedSource::new(
-                        validator.input_path.display().to_string(),
-                        validator.code.clone(),
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
                     ),
                 })?,
             program: generator
-                .generate(&def.body, &def.arguments, true)
+                .generate(&def.fun.body, &arguments, true)
                 .try_into()
                 .unwrap(),
         })

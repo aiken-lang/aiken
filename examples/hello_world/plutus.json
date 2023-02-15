@@ -6,8 +6,7 @@
   },
   "validators": [
     {
-      "title": "hello_world",
-      "purpose": "spend",
+      "title": "hello_world-spend",
       "datum": {
         "title": "Datum",
         "anyOf": [

@@ -65,7 +65,7 @@ where
         let mut validator = None;
         for v in self.validators.iter() {
             let match_title = Some(&v.title) == title.or(Some(&v.title));
-            let match_purpose = Some(&v.purpose) == purpose.or(Some(&v.purpose));
+            let match_purpose = v.purpose.as_ref() == purpose.or(v.purpose.as_ref());
             if match_title && match_purpose {
                 validator = Some(if validator.is_none() {
                     LookupResult::One(v)
@@ -81,8 +81,8 @@ where
         &self,
         title: Option<&String>,
         purpose: Option<&Purpose>,
-        when_missing: fn(Vec<(String, Purpose)>) -> E,
-        when_too_many: fn(Vec<(String, Purpose)>) -> E,
+        when_missing: fn(Vec<(String, String)>) -> E,
+        when_too_many: fn(Vec<(String, String)>) -> E,
         action: F,
     ) -> Result<A, E>
     where
@@ -93,13 +93,27 @@ where
             Some(LookupResult::Many) => Err(when_too_many(
                 self.validators
                     .iter()
-                    .map(|v| (v.title.clone(), v.purpose.clone()))
+                    .map(|v| {
+                        let mut title = v.title.split('-');
+
+                        (
+                            title.next().unwrap().to_string(),
+                            title.next().unwrap().to_string(),
+                        )
+                    })
                     .collect(),
             )),
             None => Err(when_missing(
                 self.validators
                     .iter()
-                    .map(|v| (v.title.clone(), v.purpose.clone()))
+                    .map(|v| {
+                        let mut title = v.title.split('-');
+
+                        (
+                            title.next().unwrap().to_string(),
+                            title.next().unwrap().to_string(),
+                        )
+                    })
                     .collect(),
             )),
         }
