@@ -651,19 +651,21 @@ impl<'a> CodeGenerator<'a> {
 
                 ir_stack.append(&mut elems_air);
             }
+
             TypedExpr::Trace {
                 tipo, then, text, ..
             } => {
                 let mut scope = scope;
 
                 ir_stack.push(Air::Trace {
-                    text: text.clone(),
                     tipo: tipo.clone(),
                     scope: scope.clone(),
                 });
 
                 scope.push(self.id_gen.next());
+                self.build_ir(text, ir_stack, scope.clone());
 
+                scope.push(self.id_gen.next());
                 self.build_ir(then, ir_stack, scope);
             }
 
@@ -3504,13 +3506,12 @@ impl<'a> CodeGenerator<'a> {
                         label,
                     };
                 }
-                Air::Trace { tipo, scope, text } => {
+                Air::Trace { tipo, scope } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
                     ir_stack[index] = Air::Trace {
                         scope,
-                        text,
                         tipo: replaced_type,
                     };
                 }
@@ -5631,19 +5632,13 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Trace { text, .. } => {
+            Air::Trace { .. } => {
+                let text = arg_stack.pop().unwrap();
+
                 let term = arg_stack.pop().unwrap();
 
                 let term = apply_wrap(
-                    apply_wrap(
-                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                        Term::Constant(
-                            UplcConstant::String(
-                                text.unwrap_or_else(|| "aiken::trace".to_string()),
-                            )
-                            .into(),
-                        ),
-                    ),
+                    apply_wrap(Term::Builtin(DefaultFunction::Trace).force_wrap(), text),
                     Term::Delay(term.into()),
                 )
                 .force_wrap();

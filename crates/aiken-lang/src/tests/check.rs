@@ -126,3 +126,35 @@ fn list_pattern_6() {
     "#;
     assert!(check(parse(source_code)).is_ok())
 }
+
+#[test]
+fn trace_strings() {
+    let source_code = r#"
+        fn bar() {
+            "BAR"
+        }
+
+        test foo() {
+            let msg1 = "FOO"
+            trace("INLINE")
+            trace(msg1)
+            trace(bar())
+            True
+        }
+    "#;
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn trace_non_strings() {
+    let source_code = r#"
+        test foo() {
+            trace(14 + 42)
+            True
+        }
+    "#;
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}

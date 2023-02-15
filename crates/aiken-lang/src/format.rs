@@ -705,22 +705,10 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.assignment(pattern, value, None, Some(*kind), annotation),
 
-            UntypedExpr::Trace {
-                text: None, then, ..
-            } => "trace"
+            UntypedExpr::Trace { text, then, .. } => "trace"
                 .to_doc()
-                .append(if self.pop_empty_lines(then.start_byte_index()) {
-                    lines(2)
-                } else {
-                    line()
-                })
-                .append(self.expr(then)),
-
-            UntypedExpr::Trace {
-                text: Some(l),
-                then,
-                ..
-            } => docvec!["trace(\"", l, "\")"]
+                .append(wrap_args([(self.wrap_expr(text), false)]))
+                .group()
                 .append(if self.pop_empty_lines(then.start_byte_index()) {
                     lines(2)
                 } else {

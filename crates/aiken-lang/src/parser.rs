@@ -592,15 +592,14 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
         choice((
             just(Token::Trace)
                 .ignore_then(
-                    select! {Token::String {value} => value}
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                        .or_not(),
+                    expr_parser(r.clone())
+                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
                 )
                 .then(r.clone())
                 .map_with_span(|(text, then_), span| expr::UntypedExpr::Trace {
                     location: span,
                     then: Box::new(then_),
-                    text,
+                    text: Box::new(text),
                 }),
             expr_parser(r.clone())
                 .then(r.repeated())

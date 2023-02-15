@@ -1685,12 +1685,12 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::Trace { scope, text, tipo } => {
+            Air::Trace { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::Trace { scope, tipo, text };
+                    new_air[index] = Air::Trace { scope, tipo };
                     needs_variant = true;
                 }
             }

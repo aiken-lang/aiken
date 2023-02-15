@@ -249,7 +249,6 @@ pub enum Air {
 
     Trace {
         scope: Vec<u64>,
-        text: Option<String>,
         tipo: Arc<Type>,
     },
 }

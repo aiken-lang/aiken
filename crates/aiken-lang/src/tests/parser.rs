@@ -2586,3 +2586,121 @@ fn scope_logical_expression() {
         })],
     )
 }
+
+#[test]
+fn trace_expressions() {
+    let code = indoc! {r#"
+          fn foo() {
+            let msg1 = "FOO"
+            trace "INLINE"
+            trace msg1
+            trace string.concat(msg1, "BAR")
+            trace ( 14 + 42 * 1337 )
+            Void
+          }
+        "#};
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 13..128),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 13..29),
+                        value: Box::new(expr::UntypedExpr::String {
+                            location: Span::new((), 24..29),
+                            value: "FOO".to_string(),
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..21),
+                            name: "msg1".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Trace {
+                        location: Span::new((), 32..128),
+                        then: Box::new(expr::UntypedExpr::Trace {
+                            location: Span::new((), 49..128),
+                            then: Box::new(expr::UntypedExpr::Trace {
+                                location: Span::new((), 62..128),
+                                then: Box::new(expr::UntypedExpr::Trace {
+                                    location: Span::new((), 97..128),
+                                    then: Box::new(expr::UntypedExpr::Var {
+                                        location: Span::new((), 124..128),
+                                        name: "Void".to_string(),
+                                    }),
+                                    text: Box::new(expr::UntypedExpr::BinOp {
+                                        location: Span::new((), 105..119),
+                                        name: ast::BinOp::AddInt,
+                                        left: Box::new(expr::UntypedExpr::Int {
+                                            location: Span::new((), 105..107),
+                                            value: "14".to_string(),
+                                        }),
+                                        right: Box::new(expr::UntypedExpr::BinOp {
+                                            location: Span::new((), 110..119),
+                                            name: ast::BinOp::MultInt,
+                                            left: Box::new(expr::UntypedExpr::Int {
+                                                location: Span::new((), 110..112),
+                                                value: "42".to_string(),
+                                            }),
+                                            right: Box::new(expr::UntypedExpr::Int {
+                                                location: Span::new((), 115..119),
+                                                value: "1337".to_string(),
+                                            }),
+                                        }),
+                                    }),
+                                }),
+                                text: Box::new(expr::UntypedExpr::Call {
+                                    arguments: vec![
+                                        ast::CallArg {
+                                            label: None,
+                                            location: Span::new((), 82..86),
+                                            value: expr::UntypedExpr::Var {
+                                                location: Span::new((), 82..86),
+                                                name: "msg1".to_string(),
+                                            },
+                                        },
+                                        ast::CallArg {
+                                            label: None,
+                                            location: Span::new((), 88..93),
+                                            value: expr::UntypedExpr::String {
+                                                location: Span::new((), 88..93),
+                                                value: "BAR".to_string(),
+                                            },
+                                        },
+                                    ],
+                                    fun: Box::new(expr::UntypedExpr::FieldAccess {
+                                        location: Span::new((), 68..81),
+                                        label: "concat".to_string(),
+                                        container: Box::new(expr::UntypedExpr::Var {
+                                            location: Span::new((), 68..74),
+                                            name: "string".to_string(),
+                                        }),
+                                    }),
+                                    location: Span::new((), 68..94),
+                                }),
+                            }),
+                            text: Box::new(expr::UntypedExpr::Var {
+                                location: Span::new((), 55..59),
+                                name: "msg1".to_string(),
+                            }),
+                        }),
+                        text: Box::new(expr::UntypedExpr::String {
+                            location: Span::new((), 38..46),
+                            value: "INLINE".to_string(),
+                        }),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 129,
+        })],
+    )
+}

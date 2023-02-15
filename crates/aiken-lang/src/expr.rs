@@ -96,7 +96,7 @@ pub enum TypedExpr {
         location: Span,
         tipo: Arc<Type>,
         then: Box<Self>,
-        text: Option<String>,
+        text: Box<Self>,
     },
 
     When {
@@ -389,7 +389,7 @@ pub enum UntypedExpr {
     Trace {
         location: Span,
         then: Box<Self>,
-        text: Option<String>,
+        text: Box<Self>,
     },
 
     When {

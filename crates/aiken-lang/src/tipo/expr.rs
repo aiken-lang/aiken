@@ -309,7 +309,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 then,
                 text,
-            } => self.infer_trace(*then, location, text),
+            } => self.infer_trace(*then, location, *text),
 
             UntypedExpr::When {
                 location,
@@ -1887,17 +1887,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         then: UntypedExpr,
         location: Span,
-        text: Option<String>,
+        text: UntypedExpr,
     ) -> Result<TypedExpr, Error> {
-        let then = self.infer(then)?;
+        let text = self.infer(text)?;
+        self.unify(text.tipo(), string(), text.location(), false)?;
 
+        let then = self.infer(then)?;
         let tipo = then.tipo();
 
         Ok(TypedExpr::Trace {
             location,
             tipo,
             then: Box::new(then),
-            text,
+            text: Box::new(text),
         })
     }
 
