@@ -679,11 +679,10 @@ impl<'a> CodeGenerator<'a> {
                 self.build_ir(tuple, ir_stack, scope);
             }
 
-            TypedExpr::ErrorTerm { tipo, label, .. } => {
+            TypedExpr::ErrorTerm { tipo, .. } => {
                 ir_stack.push(Air::ErrorTerm {
                     scope,
                     tipo: tipo.clone(),
-                    label: label.clone(),
                 });
             }
         }
@@ -2568,10 +2567,19 @@ impl<'a> CodeGenerator<'a> {
                 });
             }
 
+            assert_vec.push(Air::Trace {
+                scope: scope.clone(),
+                tipo: tipo.clone(),
+            });
+
+            assert_vec.push(Air::String {
+                scope: scope.clone(),
+                value: "Constr index did not match any type variant".to_string(),
+            });
+
             assert_vec.push(Air::ErrorTerm {
                 scope,
                 tipo: tipo.clone(),
-                label: Some("Constr index did not match any type variant".to_string()),
             });
         }
     }
@@ -3496,14 +3504,13 @@ impl<'a> CodeGenerator<'a> {
                         tipo: replaced_type,
                     };
                 }
-                Air::ErrorTerm { tipo, scope, label } => {
+                Air::ErrorTerm { tipo, scope } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
                     ir_stack[index] = Air::ErrorTerm {
                         scope,
                         tipo: replaced_type,
-                        label,
                     };
                 }
                 Air::Trace { tipo, scope } => {
@@ -5645,22 +5652,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::ErrorTerm { label, .. } => {
-                if let Some(label) = label {
-                    let term = apply_wrap(
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                            Term::Constant(UplcConstant::String(label).into()),
-                        ),
-                        Term::Delay(Term::Error.into()),
-                    )
-                    .force_wrap();
-
-                    arg_stack.push(term);
-                } else {
-                    arg_stack.push(Term::Error)
-                }
-            }
+            Air::ErrorTerm { .. } => arg_stack.push(Term::Error),
             Air::TupleClause {
                 tipo,
                 indices,

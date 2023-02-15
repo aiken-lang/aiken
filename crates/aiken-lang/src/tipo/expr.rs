@@ -256,9 +256,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } => Ok(self.infer_todo(location, kind, label)),
 
-            UntypedExpr::ErrorTerm { location, label } => {
-                Ok(self.infer_error_term(location, label))
-            }
+            UntypedExpr::ErrorTerm { location } => Ok(self.infer_error_term(location)),
 
             UntypedExpr::Var { location, name, .. } => self.infer_var(name, location),
 
@@ -1873,14 +1871,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
-    fn infer_error_term(&mut self, location: Span, label: Option<String>) -> TypedExpr {
+    fn infer_error_term(&mut self, location: Span) -> TypedExpr {
         let tipo = self.new_unbound_var();
 
-        TypedExpr::ErrorTerm {
-            location,
-            tipo,
-            label,
-        }
+        TypedExpr::ErrorTerm { location, tipo }
     }
 
     fn infer_trace(

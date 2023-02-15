@@ -591,21 +591,49 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
     recursive(|r| {
         choice((
             just(Token::Trace)
-                .ignore_then(
-                    expr_parser(r.clone())
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-                )
+                .ignore_then(expr_parser(r.clone()))
                 .then(r.clone())
                 .map_with_span(|(text, then_), span| expr::UntypedExpr::Trace {
                     location: span,
                     then: Box::new(then_),
                     text: Box::new(text),
                 }),
+            todo_parser(r.clone(), Token::ErrorTerm, "aiken::error"),
             expr_parser(r.clone())
                 .then(r.repeated())
                 .foldl(|current, next| current.append_in_sequence(next)),
         ))
     })
+}
+
+pub fn todo_parser<'a>(
+    r: Recursive<'a, Token, expr::UntypedExpr, ParseError>,
+    keyword: Token,
+    default_value: &'a str,
+) -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> + 'a {
+    just(keyword)
+        .ignore_then(expr_parser(r.clone()).or_not())
+        .then(r.clone().or_not())
+        .map_with_span(|(text, then_), span| match then_ {
+            None => expr::UntypedExpr::Trace {
+                location: span,
+                then: Box::new(expr::UntypedExpr::ErrorTerm { location: span }),
+                text: Box::new(text.unwrap_or_else(|| expr::UntypedExpr::String {
+                    location: span,
+                    value: default_value.to_string(),
+                })),
+            },
+            Some(e) => expr::UntypedExpr::Trace {
+                location: span,
+                then: Box::new(
+                    expr::UntypedExpr::ErrorTerm { location: span }.append_in_sequence(e),
+                ),
+                text: Box::new(text.unwrap_or_else(|| expr::UntypedExpr::String {
+                    location: span,
+                    value: default_value.to_string(),
+                })),
+            },
+        })
 }
 
 pub fn expr_parser(
@@ -870,29 +898,6 @@ pub fn expr_parser(
             name,
         });
 
-        let todo_parser = just(Token::Todo)
-            .ignore_then(
-                select! {Token::String {value} => value}
-                    .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                    .or_not(),
-            )
-            .map_with_span(|label, span| expr::UntypedExpr::Todo {
-                kind: TodoKind::Keyword,
-                location: span,
-                label,
-            });
-
-        let error_parser = just(Token::ErrorTerm)
-            .ignore_then(
-                select! {Token::String {value} => value}
-                    .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                    .or_not(),
-            )
-            .map_with_span(|label, span| expr::UntypedExpr::ErrorTerm {
-                location: span,
-                label,
-            });
-
         let tuple = r
             .clone()
             .separated_by(just(Token::Comma))
@@ -940,6 +945,7 @@ pub fn expr_parser(
                 choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
                 just(Token::RightParen),
             ),
+            just(Token::ErrorTerm).rewind().ignore_then(seq_r.clone()),
         ));
 
         let anon_fn_parser = just(Token::Fn)
@@ -1083,8 +1089,6 @@ pub fn expr_parser(
             record_parser,
             field_access_constructor,
             var_parser,
-            todo_parser,
-            error_parser,
             tuple,
             bytearray,
             list_parser,

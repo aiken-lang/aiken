@@ -433,11 +433,22 @@ pub fn rearrange_clauses(
             sorted_clauses[sorted_clauses.len() - 1].clone().then
         }
         Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
-        _ => TypedExpr::ErrorTerm {
-            location: Span::empty(),
-            tipo: sorted_clauses[sorted_clauses.len() - 1].then.tipo(),
-            label: Some("Clause not filled".to_string()),
-        },
+        _ => {
+            let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
+            TypedExpr::Trace {
+                location: Span::empty(),
+                tipo: tipo.clone(),
+                text: Box::new(TypedExpr::String {
+                    location: Span::empty(),
+                    tipo: crate::builtins::string(),
+                    value: "Clause not filled".to_string(),
+                }),
+                then: Box::new(TypedExpr::ErrorTerm {
+                    location: Span::empty(),
+                    tipo,
+                }),
+            }
+        }
     };
 
     for (index, clause) in sorted_clauses.iter().enumerate() {
@@ -1676,12 +1687,12 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::ErrorTerm { scope, label, tipo } => {
+            Air::ErrorTerm { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::ErrorTerm { scope, tipo, label };
+                    new_air[index] = Air::ErrorTerm { scope, tipo };
                     needs_variant = true;
                 }
             }
