@@ -22,7 +22,7 @@ for convenience.
 - [ ] Purpose
   - [x] Spend
   - [x] Mint
-  - [ ] Withdraw
+  - [x] Withdraw
   - [ ] Publish
 
 - [ ] Transaction
@@ -31,15 +31,16 @@ for convenience.
   - [ ] outputs
     - [ ] address
     	- [x] verification key
-	- [ ] script
+	- [x] script
+	- [ ] pointer
     - [x] value
-    - [ ] datum
+    - [x] datum
         - [x] None
-        - [ ] Hash
-        - [ ] Inline
-    - [ ] script
+        - [x] Hash
+        - [x] Inline
+    - [x] script
         - [x] None
-	- [ ] Reference
+	- [x] Reference
   - [x] values
 	- [x] Pure Ada
 	- [x] Native assets
@@ -52,4 +53,4 @@ for convenience.
   - [ ] validity range
   - [x] extra signatories
   - [x] redeemers
-  - [ ] datums
+  - [x] datums
