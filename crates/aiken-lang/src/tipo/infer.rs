@@ -268,18 +268,21 @@ fn infer_definition(
                 environment,
                 kind,
             )? {
-                // Do we want to do this here?
-                // or should we remove this and keep the later check
-                // the later check has a much more specific error message
-                // we may want to not do this here
-                environment.unify(
-                    typed_fun.return_type.clone(),
-                    builtins::bool(),
-                    typed_fun.location,
-                    false,
-                )?;
+                if !typed_fun.return_type.is_bool() {
+                    return Err(Error::ValidatorMustReturnBool {
+                        return_type: typed_fun.return_type.clone(),
+                        location: typed_fun.location,
+                    });
+                }
 
                 let typed_params = typed_fun.arguments.drain(0..params_length).collect();
+
+                if typed_fun.arguments.len() < 2 {
+                    return Err(Error::WrongValidatorArity {
+                        at_least: 2,
+                        location: typed_fun.location,
+                    });
+                }
 
                 Ok(Definition::Validator(Validator {
                     doc,

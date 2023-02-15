@@ -756,6 +756,30 @@ The best thing to do from here is to remove it."#))]
         location: Span,
         name: String,
     },
+
+    #[error("A validator must return {}", "Bool".bright_blue().bold())]
+    #[diagnostic(code("illegal::validator_return_type"))]
+    #[diagnostic(help(r#"While analyzing the return type of your validator, I found it to be:
+
+╰─▶ {signature}
+
+...but I expected this to be a {type_Bool}. If I am inferring the wrong type, you may want to add a type annotation to the function."#
+        , type_Bool = "Bool".bright_blue().bold()
+        , signature = return_type.to_pretty(0).red()
+    ))]
+    ValidatorMustReturnBool {
+        #[label("invalid return type")]
+        location: Span,
+        return_type: Arc<Type>,
+    },
+
+    #[error("Validators requires at least {} arguments.", at_least.to_string().purple().bold())]
+    #[diagnostic(code("illegal::validator_arity"))]
+    WrongValidatorArity {
+        at_least: u8,
+        #[label("not enough arguments")]
+        location: Span,
+    },
 }
 
 impl Error {
@@ -1210,13 +1234,16 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I came across a validator in a {} module\nwhich means I'm going to ignore it.\n", "lib/".purple())]
+    #[error("I came across a validator in a {} module which means\nI'm going to ignore it.\n", "lib/".purple())]
     #[diagnostic(help(
-        "No big deal, but you might want to move it to a\n{} module or remove it to get rid of that warning.",
+        "No big deal, but you might want to move it to a {} module\nor remove it to get rid of that warning.",
         "validators/".purple()
     ))]
     #[diagnostic(code("unused::validator"))]
-    ValidatorInLibraryModule { location: Span },
+    ValidatorInLibraryModule {
+        #[label("unused")]
+        location: Span,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
