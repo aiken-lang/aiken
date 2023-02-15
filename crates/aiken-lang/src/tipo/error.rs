@@ -1,6 +1,6 @@
 use super::Type;
 use crate::{
-    ast::{Annotation, BinOp, CallArg, Span, TodoKind, UntypedPattern},
+    ast::{Annotation, BinOp, CallArg, Span, UntypedPattern},
     expr::{self, UntypedExpr},
     format::Formatter,
     levenshtein,
@@ -1118,7 +1118,6 @@ pub enum Warning {
     #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
     #[diagnostic(code("todo"))]
     Todo {
-        kind: TodoKind,
         #[label]
         location: Span,
         tipo: Arc<Type>,

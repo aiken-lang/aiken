@@ -308,10 +308,15 @@ fn empty_function() {
         code,
         vec![ast::UntypedDefinition::Fn(Function {
             arguments: vec![],
-            body: expr::UntypedExpr::Todo {
-                kind: ast::TodoKind::EmptyFunction,
+            body: expr::UntypedExpr::Trace {
                 location: Span::new((), 0..15),
-                label: None,
+                text: Box::new(expr::UntypedExpr::String {
+                    value: "aiken::todo".to_string(),
+                    location: Span::new((), 0..15),
+                }),
+                then: Box::new(expr::UntypedExpr::ErrorTerm {
+                    location: Span::new((), 0..15),
+                }),
             },
             doc: None,
             location: Span::new((), 0..12),
@@ -1781,10 +1786,15 @@ fn function_def() {
         vec![ast::UntypedDefinition::Fn(Function {
             doc: None,
             arguments: vec![],
-            body: expr::UntypedExpr::Todo {
-                kind: ast::TodoKind::EmptyFunction,
+            body: expr::UntypedExpr::Trace {
                 location: Span::new((), 0..11),
-                label: None,
+                text: Box::new(expr::UntypedExpr::String {
+                    value: "aiken::todo".to_string(),
+                    location: Span::new((), 0..11),
+                }),
+                then: Box::new(expr::UntypedExpr::ErrorTerm {
+                    location: Span::new((), 0..11),
+                }),
             },
             location: Span::new((), 0..8),
             name: "foo".to_string(),
@@ -2710,7 +2720,6 @@ fn parse_keyword_error() {
     let code = indoc! {r#"
           fn foo() {
             error "not implemented"
-            Void
           }
 
           fn bar() {
@@ -2726,18 +2735,9 @@ fn parse_keyword_error() {
             ast::Definition::Fn(Function {
                 arguments: vec![],
                 body: expr::UntypedExpr::Trace {
-                    location: Span::new((), 13..43),
-                    then: Box::new(expr::UntypedExpr::Sequence {
-                        location: Span::new((), 13..43),
-                        expressions: vec![
-                            expr::UntypedExpr::ErrorTerm {
-                                location: Span::new((), 13..43),
-                            },
-                            expr::UntypedExpr::Var {
-                                location: Span::new((), 39..43),
-                                name: "Void".to_string(),
-                            },
-                        ],
+                    location: Span::new((), 13..36),
+                    then: Box::new(expr::UntypedExpr::ErrorTerm {
+                        location: Span::new((), 13..36),
                     }),
                     text: Box::new(expr::UntypedExpr::String {
                         location: Span::new((), 19..36),
@@ -2750,22 +2750,22 @@ fn parse_keyword_error() {
                 public: false,
                 return_annotation: None,
                 return_type: (),
-                end_position: 44,
+                end_position: 37,
             }),
             ast::Definition::Fn(Function {
                 arguments: vec![],
                 body: expr::UntypedExpr::When {
-                    location: Span::new((), 60..116),
+                    location: Span::new((), 53..109),
                     subjects: vec![expr::UntypedExpr::Var {
-                        location: Span::new((), 65..66),
+                        location: Span::new((), 58..59),
                         name: "x".to_string(),
                     }],
                     clauses: vec![
                         ast::Clause {
-                            location: Span::new((), 78..95),
+                            location: Span::new((), 71..88),
                             pattern: vec![ast::Pattern::Constructor {
                                 is_record: false,
-                                location: Span::new((), 78..87),
+                                location: Span::new((), 71..80),
                                 name: "Something".to_string(),
                                 arguments: vec![],
                                 module: None,
@@ -2776,25 +2776,25 @@ fn parse_keyword_error() {
                             alternative_patterns: vec![],
                             guard: None,
                             then: expr::UntypedExpr::Var {
-                                location: Span::new((), 91..95),
+                                location: Span::new((), 84..88),
                                 name: "Void".to_string(),
                             },
                         },
                         ast::Clause {
-                            location: Span::new((), 102..112),
+                            location: Span::new((), 95..105),
                             pattern: vec![ast::Pattern::Discard {
                                 name: "_".to_string(),
-                                location: Span::new((), 102..103),
+                                location: Span::new((), 95..96),
                             }],
                             alternative_patterns: vec![],
                             guard: None,
                             then: expr::UntypedExpr::Trace {
-                                location: Span::new((), 107..112),
+                                location: Span::new((), 100..105),
                                 then: Box::new(expr::UntypedExpr::ErrorTerm {
-                                    location: Span::new((), 107..112),
+                                    location: Span::new((), 100..105),
                                 }),
                                 text: Box::new(expr::UntypedExpr::String {
-                                    location: Span::new((), 107..112),
+                                    location: Span::new((), 100..105),
                                     value: "aiken::error".to_string(),
                                 }),
                             },
@@ -2802,12 +2802,110 @@ fn parse_keyword_error() {
                     ],
                 },
                 doc: None,
-                location: Span::new((), 47..55),
+                location: Span::new((), 40..48),
                 name: "bar".to_string(),
                 public: false,
                 return_annotation: None,
                 return_type: (),
-                end_position: 117,
+                end_position: 110,
+            }),
+        ],
+    )
+}
+
+#[test]
+fn parse_keyword_todo() {
+    let code = indoc! {r#"
+          fn foo() {
+            todo "not implemented"
+          }
+
+          fn bar() {
+            when x is {
+                Something -> Void
+                _ -> todo
+            }
+          }
+        "#};
+    assert_definitions(
+        code,
+        vec![
+            ast::Definition::Fn(Function {
+                arguments: vec![],
+                body: expr::UntypedExpr::Trace {
+                    location: Span::new((), 13..35),
+                    then: Box::new(expr::UntypedExpr::ErrorTerm {
+                        location: Span::new((), 13..35),
+                    }),
+                    text: Box::new(expr::UntypedExpr::String {
+                        location: Span::new((), 18..35),
+                        value: "not implemented".to_string(),
+                    }),
+                },
+                doc: None,
+                location: Span::new((), 0..8),
+                name: "foo".to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 36,
+            }),
+            ast::Definition::Fn(Function {
+                arguments: vec![],
+                body: expr::UntypedExpr::When {
+                    location: Span::new((), 52..107),
+                    subjects: vec![expr::UntypedExpr::Var {
+                        location: Span::new((), 57..58),
+                        name: "x".to_string(),
+                    }],
+                    clauses: vec![
+                        ast::Clause {
+                            location: Span::new((), 70..87),
+                            pattern: vec![ast::Pattern::Constructor {
+                                is_record: false,
+                                location: Span::new((), 70..79),
+                                name: "Something".to_string(),
+                                arguments: vec![],
+                                module: None,
+                                constructor: (),
+                                with_spread: false,
+                                tipo: (),
+                            }],
+                            alternative_patterns: vec![],
+                            guard: None,
+                            then: expr::UntypedExpr::Var {
+                                location: Span::new((), 83..87),
+                                name: "Void".to_string(),
+                            },
+                        },
+                        ast::Clause {
+                            location: Span::new((), 94..103),
+                            pattern: vec![ast::Pattern::Discard {
+                                name: "_".to_string(),
+                                location: Span::new((), 94..95),
+                            }],
+                            alternative_patterns: vec![],
+                            guard: None,
+                            then: expr::UntypedExpr::Trace {
+                                location: Span::new((), 99..103),
+                                then: Box::new(expr::UntypedExpr::ErrorTerm {
+                                    location: Span::new((), 99..103),
+                                }),
+                                text: Box::new(expr::UntypedExpr::String {
+                                    location: Span::new((), 99..103),
+                                    value: "aiken::todo".to_string(),
+                                }),
+                            },
+                        },
+                    ],
+                },
+                doc: None,
+                location: Span::new((), 39..47),
+                name: "bar".to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 108,
             }),
         ],
     )

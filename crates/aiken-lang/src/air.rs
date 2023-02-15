@@ -235,12 +235,6 @@ pub enum Air {
     },
 
     // Misc.
-    Todo {
-        scope: Vec<u64>,
-        label: Option<String>,
-        tipo: Arc<Type>,
-    },
-
     ErrorTerm {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -290,7 +284,6 @@ impl Air {
             | Air::ListExpose { scope, .. }
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
-            | Air::Todo { scope, .. }
             | Air::ErrorTerm { scope, .. }
             | Air::Trace { scope, .. } => scope.clone(),
         }
@@ -373,7 +366,6 @@ impl Air {
             | Air::ListExpose { tipo, .. }
             | Air::TupleAccessor { tipo, .. }
             | Air::TupleIndex { tipo, .. }
-            | Air::Todo { tipo, .. }
             | Air::ErrorTerm { tipo, .. }
             | Air::Trace { tipo, .. } => Some(tipo.clone()),
 

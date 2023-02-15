@@ -7,7 +7,7 @@ pub mod lexer;
 pub mod token;
 
 use crate::{
-    ast::{self, BinOp, Span, TodoKind, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
+    ast::{self, BinOp, Span, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
     expr,
 };
 
@@ -254,11 +254,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
             |((((opt_pub, name), (arguments, args_span)), return_annotation), body), span| {
                 ast::UntypedDefinition::Fn(ast::Function {
                     arguments,
-                    body: body.unwrap_or(expr::UntypedExpr::Todo {
-                        kind: TodoKind::EmptyFunction,
-                        location: span,
-                        label: None,
-                    }),
+                    body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
                     doc: None,
                     location: Span {
                         start: span.start,
@@ -291,11 +287,7 @@ pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
         .map_with_span(|((name, span_end), body), span| {
             ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
-                body: body.unwrap_or(expr::UntypedExpr::Todo {
-                    kind: TodoKind::EmptyFunction,
-                    location: span,
-                    label: None,
-                }),
+                body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
                 doc: None,
                 location: span_end,
                 end_position: span.end - 1,
@@ -598,7 +590,8 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                     then: Box::new(then_),
                     text: Box::new(text),
                 }),
-            todo_parser(r.clone(), Token::ErrorTerm, "aiken::error"),
+            todo_parser(r.clone(), Token::ErrorTerm),
+            todo_parser(r.clone(), Token::Todo),
             expr_parser(r.clone())
                 .then(r.repeated())
                 .foldl(|current, next| current.append_in_sequence(next)),
@@ -606,33 +599,23 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
     })
 }
 
-pub fn todo_parser<'a>(
-    r: Recursive<'a, Token, expr::UntypedExpr, ParseError>,
+pub fn todo_parser(
+    r: Recursive<'_, Token, expr::UntypedExpr, ParseError>,
     keyword: Token,
-    default_value: &'a str,
-) -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> + 'a {
-    just(keyword)
+) -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> + '_ {
+    just(keyword.clone())
         .ignore_then(expr_parser(r.clone()).or_not())
-        .then(r.clone().or_not())
-        .map_with_span(|(text, then_), span| match then_ {
-            None => expr::UntypedExpr::Trace {
+        .map_with_span(move |text, span| expr::UntypedExpr::Trace {
+            location: span,
+            then: Box::new(expr::UntypedExpr::ErrorTerm { location: span }),
+            text: Box::new(text.unwrap_or_else(|| expr::UntypedExpr::String {
                 location: span,
-                then: Box::new(expr::UntypedExpr::ErrorTerm { location: span }),
-                text: Box::new(text.unwrap_or_else(|| expr::UntypedExpr::String {
-                    location: span,
-                    value: default_value.to_string(),
-                })),
-            },
-            Some(e) => expr::UntypedExpr::Trace {
-                location: span,
-                then: Box::new(
-                    expr::UntypedExpr::ErrorTerm { location: span }.append_in_sequence(e),
-                ),
-                text: Box::new(text.unwrap_or_else(|| expr::UntypedExpr::String {
-                    location: span,
-                    value: default_value.to_string(),
-                })),
-            },
+                value: match keyword {
+                    Token::ErrorTerm => expr::DEFAULT_ERROR_STR.to_string(),
+                    Token::Todo => expr::DEFAULT_TODO_STR.to_string(),
+                    _ => unreachable!(),
+                },
+            })),
         })
 }
 
@@ -946,6 +929,7 @@ pub fn expr_parser(
                 just(Token::RightParen),
             ),
             just(Token::ErrorTerm).rewind().ignore_then(seq_r.clone()),
+            just(Token::Todo).rewind().ignore_then(seq_r.clone()),
         ));
 
         let anon_fn_parser = just(Token::Fn)

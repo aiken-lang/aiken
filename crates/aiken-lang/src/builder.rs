@@ -1678,15 +1678,6 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::Todo { scope, label, tipo } => {
-                if tipo.is_generic() {
-                    let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
-
-                    new_air[index] = Air::Todo { scope, tipo, label };
-                    needs_variant = true;
-                }
-            }
             Air::ErrorTerm { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();

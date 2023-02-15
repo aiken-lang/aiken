@@ -587,13 +587,6 @@ impl<'a> CodeGenerator<'a> {
                     constants_ir(literal, ir_stack, scope);
                 }
             },
-            TypedExpr::Todo { label, tipo, .. } => {
-                ir_stack.push(Air::Todo {
-                    scope,
-                    label: label.clone(),
-                    tipo: tipo.clone(),
-                });
-            }
             TypedExpr::RecordUpdate {
                 spread, args, tipo, ..
             } => {
@@ -3494,16 +3487,6 @@ impl<'a> CodeGenerator<'a> {
                         tuple_index,
                     };
                 }
-                Air::Todo { tipo, scope, label } => {
-                    let mut replaced_type = tipo.clone();
-                    replace_opaque_type(&mut replaced_type, self.data_types.clone());
-
-                    ir_stack[index] = Air::Todo {
-                        scope,
-                        label,
-                        tipo: replaced_type,
-                    };
-                }
                 Air::ErrorTerm { tipo, scope } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
@@ -5285,23 +5268,6 @@ impl<'a> CodeGenerator<'a> {
                     }
                     arg_stack.push(term);
                 }
-            }
-            Air::Todo { label, .. } => {
-                let term = apply_wrap(
-                    apply_wrap(
-                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
-                        Term::Constant(
-                            UplcConstant::String(
-                                label.unwrap_or_else(|| "aiken::todo".to_string()),
-                            )
-                            .into(),
-                        ),
-                    ),
-                    Term::Delay(Term::Error.into()),
-                )
-                .force_wrap();
-
-                arg_stack.push(term);
             }
             Air::RecordUpdate {
                 highest_index,

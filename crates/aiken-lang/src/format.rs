@@ -654,9 +654,6 @@ impl<'comments> Formatter<'comments> {
                 final_else,
                 ..
             } => self.if_expr(branches, final_else),
-            UntypedExpr::Todo { label: None, .. } => "todo".to_doc(),
-
-            UntypedExpr::Todo { label: Some(l), .. } => docvec!["todo(\"", l, "\")"],
 
             UntypedExpr::PipeLine { expressions, .. } => self.pipeline(expressions),
 
