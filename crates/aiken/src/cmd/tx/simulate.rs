@@ -128,19 +128,49 @@ pub fn exec(
                             cpu: accum.cpu + curr.ex_units.steps as i64,
                         });
 
+                eprintln!("\n");
                 println!(
-                    "\n{}",
+                    "{}",
                     serde_json::to_string(&total_budget_used)
                         .map_err(|_| fmt::Error)
                         .into_diagnostic()?
                 );
             }
             Err(err) => {
-                eprintln!("{} {}", "        Error".bold().red(), err.red());
+                eprintln!("{}", display_tx_error(&err));
                 process::exit(1);
             }
         }
     }
 
     Ok(())
+}
+
+fn display_tx_error(err: &tx::error::Error) -> String {
+    let mut msg = format!("{} {}", "        Error".bold().red(), err.red());
+    match err {
+        tx::error::Error::RedeemerError { err, .. } => {
+            msg.push_str(&format!(
+                "\n{}",
+                display_tx_error(err)
+                    .lines()
+                    .skip(1)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ));
+            msg
+        }
+        tx::error::Error::Machine(_, _, traces) => {
+            msg.push_str(
+                traces
+                    .iter()
+                    .map(|s| format!("\n{} {}", "        Trace".bold().yellow(), s.yellow()))
+                    .collect::<Vec<_>>()
+                    .join("")
+                    .as_str(),
+            );
+            msg
+        }
+        _ => msg,
+    }
 }

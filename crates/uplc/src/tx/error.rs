@@ -10,7 +10,7 @@ pub enum Error {
     FlatDecode(#[from] flat_rs::de::Error),
     #[error("{0}")]
     FragmentDecode(#[from] pallas_primitives::Error),
-    #[error("{}\n\n{:#?}\n\n{}", .0, .1, .2.join("\n"))]
+    #[error("{}", .0)]
     Machine(machine::Error, ExBudget, Vec<String>),
     #[error("Native script can't be executed in phase-two")]
     NativeScriptPhaseTwo,
