@@ -432,7 +432,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let typed_value = self.infer(value)?;
 
-        self.unify(typed_value.tipo(), bool(), typed_value.location(), false)?;
+        self.unify(bool(), typed_value.tipo(), typed_value.location(), false)?;
 
         match self.tracing {
             Tracing::NoTraces => Ok(typed_value),
@@ -1944,7 +1944,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         text: UntypedExpr,
     ) -> Result<TypedExpr, Error> {
         let text = self.infer(text)?;
-        self.unify(text.tipo(), string(), text.location(), false)?;
+        self.unify(string(), text.tipo(), text.location(), false)?;
 
         let then = self.infer(then)?;
         let tipo = then.tipo();
