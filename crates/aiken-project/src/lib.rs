@@ -12,7 +12,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::{schema::Schema, validator, Blueprint};
+use crate::blueprint::{schema::Schema, Blueprint};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -287,7 +287,6 @@ where
     pub fn address(
         &self,
         title: Option<&String>,
-        purpose: Option<&validator::Purpose>,
         stake_address: Option<&String>,
     ) -> Result<ShelleyAddress, Error> {
         // Parse stake address
@@ -318,7 +317,8 @@ where
         let when_too_many =
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
-        blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+
+        blueprint.with_validator(title, when_too_many, when_missing, |validator| {
             let n = validator.parameters.len();
             if n > 0 {
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
@@ -333,7 +333,6 @@ where
     pub fn apply_parameter(
         &self,
         title: Option<&String>,
-        purpose: Option<&validator::Purpose>,
         param: &Term<DeBruijn>,
     ) -> Result<Blueprint<serde_json::Value>, Error> {
         // Read blueprint
@@ -346,8 +345,9 @@ where
         let when_too_many =
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+
         let applied_validator =
-            blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+            blueprint.with_validator(title, when_too_many, when_missing, |validator| {
                 validator.apply(param).map_err(|e| e.into())
             })?;
 

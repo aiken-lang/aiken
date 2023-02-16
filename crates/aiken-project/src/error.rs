@@ -132,14 +132,10 @@ pub enum Error {
     },
 
     #[error("I didn't find any validator matching your criteria.")]
-    NoValidatorNotFound {
-        known_validators: Vec<(String, String)>,
-    },
+    NoValidatorNotFound { known_validators: Vec<String> },
 
     #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
-    MoreThanOneValidatorFound {
-        known_validators: Vec<(String, String)>,
-    },
+    MoreThanOneValidatorFound { known_validators: Vec<String> },
 }
 
 impl Error {
@@ -374,13 +370,13 @@ impl Diagnostic for Error {
             Error::NoValidatorNotFound { known_validators } => {
                 Some(Box::new(format!(
                     "Here's a list of all validators (and their purpose) I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
-                    known_validators.iter().map(|(name, purpose)| format!("→ {name} (purpose = {purpose})", name = name.purple().bold(), purpose = purpose.bright_blue())).collect::<Vec<String>>().join("\n")
+                    known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
             Error::MoreThanOneValidatorFound { known_validators } => {
                 Some(Box::new(format!(
                     "Here's a list of all validators (and their purpose) I've found in your project. Select one of them using the appropriate options:\n\n{}",
-                    known_validators.iter().map(|(name, purpose)| format!("→ {name} (purpose = {purpose})", name = name.purple().bold(), purpose = purpose.bright_blue())).collect::<Vec<String>>().join("\n")
+                    known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
         }

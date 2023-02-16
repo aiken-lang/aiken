@@ -7,7 +7,7 @@ use aiken_lang::uplc::CodeGenerator;
 use error::Error;
 use schema::Schema;
 use std::fmt::{self, Debug, Display};
-use validator::{Purpose, Validator};
+use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Blueprint<T: Default> {
@@ -57,16 +57,13 @@ impl<T> Blueprint<T>
 where
     T: Clone + Default,
 {
-    pub fn lookup(
-        &self,
-        title: Option<&String>,
-        purpose: Option<&Purpose>,
-    ) -> Option<LookupResult<Validator<T>>> {
+    pub fn lookup(&self, title: Option<&String>) -> Option<LookupResult<Validator<T>>> {
         let mut validator = None;
+
         for v in self.validators.iter() {
-            let match_title = Some(&v.title) == title.or(Some(&v.title));
-            let match_purpose = v.purpose.as_ref() == purpose.or(v.purpose.as_ref());
-            if match_title && match_purpose {
+            let match_title = title.map(|t| v.title.contains(t)).unwrap_or(false);
+
+            if match_title {
                 validator = Some(if validator.is_none() {
                     LookupResult::One(v)
                 } else {
@@ -74,47 +71,27 @@ where
                 })
             }
         }
+
         validator
     }
 
     pub fn with_validator<F, A, E>(
         &self,
         title: Option<&String>,
-        purpose: Option<&Purpose>,
-        when_missing: fn(Vec<(String, String)>) -> E,
-        when_too_many: fn(Vec<(String, String)>) -> E,
+        when_missing: fn(Vec<String>) -> E,
+        when_too_many: fn(Vec<String>) -> E,
         action: F,
     ) -> Result<A, E>
     where
         F: Fn(Validator<T>) -> Result<A, E>,
     {
-        match self.lookup(title, purpose) {
+        match self.lookup(title) {
             Some(LookupResult::One(validator)) => action(validator.to_owned()),
             Some(LookupResult::Many) => Err(when_too_many(
-                self.validators
-                    .iter()
-                    .map(|v| {
-                        let mut title = v.title.split('.');
-
-                        (
-                            title.next().unwrap().to_string(),
-                            title.next().unwrap().to_string(),
-                        )
-                    })
-                    .collect(),
+                self.validators.iter().map(|v| v.title.clone()).collect(),
             )),
             None => Err(when_missing(
-                self.validators
-                    .iter()
-                    .map(|v| {
-                        let mut title = v.title.split('-');
-
-                        (
-                            title.next().unwrap().to_string(),
-                            title.next().unwrap().to_string(),
-                        )
-                    })
-                    .collect(),
+                self.validators.iter().map(|v| v.title.clone()).collect(),
             )),
         }
     }
