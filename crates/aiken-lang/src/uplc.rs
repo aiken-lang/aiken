@@ -1424,7 +1424,7 @@ impl<'a> CodeGenerator<'a> {
                             is_complex_clause: false,
                             original_subject_name: item_name.clone(),
                             current_index: index as i64,
-                            final_clause
+                            final_clause,
                         };
 
                         let tail_name = format!("{new_tail_name}_{index}");
@@ -1478,7 +1478,7 @@ impl<'a> CodeGenerator<'a> {
                                 );
                             }
                         } else {
-                                pattern_vec.push(Air::ListClauseGuard {
+                            pattern_vec.push(Air::ListClauseGuard {
                                 scope: scope.clone(),
                                 tipo: pattern_type.clone(),
                                 tail_name: prev_tail_name,
@@ -1486,7 +1486,9 @@ impl<'a> CodeGenerator<'a> {
                                 inverse: true,
                             });
 
-                            pattern_vec.push(Air::Void { scope: scope.clone() });
+                            pattern_vec.push(Air::Void {
+                                scope: scope.clone(),
+                            });
                         };
                     }
                 }
@@ -1502,16 +1504,18 @@ impl<'a> CodeGenerator<'a> {
                 let constr_var_name = format!("{constr_name}_{id}");
                 let data_type = lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                if data_type.constructors.len() > 1  {
-                    if final_clause{
-                        pattern_vec.push(Air::Finally { scope: scope.clone() });
+                if data_type.constructors.len() > 1 {
+                    if final_clause {
+                        pattern_vec.push(Air::Finally {
+                            scope: scope.clone(),
+                        });
                     } else {
-                    pattern_vec.push(Air::ClauseGuard {
-                        scope: scope.clone(),
-                        tipo: tipo.clone(),
-                        subject_name: constr_var_name.clone(),
-                    });
-                }
+                        pattern_vec.push(Air::ClauseGuard {
+                            scope: scope.clone(),
+                            tipo: tipo.clone(),
+                            subject_name: constr_var_name.clone(),
+                        });
+                    }
                 }
 
                 let mut clause_properties = ClauseProperties::ConstrClause {
@@ -1519,7 +1523,7 @@ impl<'a> CodeGenerator<'a> {
                     needs_constr_var: false,
                     is_complex_clause: false,
                     original_subject_name: constr_var_name.clone(),
-                    final_clause
+                    final_clause,
                 };
 
                 self.when_ir(
@@ -1542,7 +1546,7 @@ impl<'a> CodeGenerator<'a> {
                     is_complex_clause: false,
                     original_subject_name: item_name.clone(),
                     defined_tuple_indices: IndexSet::new(),
-                    final_clause
+                    final_clause,
                 };
 
                 let mut inner_pattern_vec = vec![];
@@ -1578,20 +1582,38 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(item_name)
             }
-            Pattern::Assign { name,  pattern, .. } => {
- 
+            Pattern::Assign { name, pattern, .. } => {
+                let inner_name = self.nested_pattern_ir_and_label(
+                    pattern,
+                    pattern_vec,
+                    pattern_type,
+                    scope.clone(),
+                    final_clause,
+                );
 
-                let inner_name = self.nested_pattern_ir_and_label(pattern, pattern_vec, pattern_type, scope.clone(), final_clause);     
+                pattern_vec.push(Air::Let {
+                    scope: scope.clone(),
+                    name: name.clone(),
+                });
 
-                pattern_vec.push(Air::Let { scope: scope.clone(), name: name.clone() });
+                pattern_vec.push(Air::Var {
+                    scope,
+                    constructor: ValueConstructor::public(
+                        pattern_type.clone(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name: inner_name.clone().unwrap(),
+                    variant_name: String::new(),
+                });
 
-                pattern_vec.push(Air::Var { scope, constructor: ValueConstructor::public(pattern_type.clone(), ValueConstructorVariant::LocalVariable { location: Span::empty() }), name: inner_name.clone().unwrap(), variant_name: String::new() });
-
-                
-                           
                 inner_name
             }
-            Pattern::Int { .. } => todo!("Nested pattern-match on integers isn't implemented yet. Use when clause-guard as an alternative, or break down the pattern."),
+            Pattern::Int { .. } => {
+                let error_message = "Nested pattern-match on integers isn't implemented yet. Use when clause-guard as an alternative, or break down the pattern.";
+                todo!("{}", error_message)
+            }
         }
     }
 
