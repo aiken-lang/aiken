@@ -106,9 +106,10 @@ where
         })
     }
 
-    pub fn build(&mut self, uplc: bool) -> Result<(), Error> {
+    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Error> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
+            tracing,
         };
 
         self.compile(options)
@@ -130,7 +131,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules)?;
+        self.type_check(parsed_modules, Tracing::NoTraces)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -157,8 +158,10 @@ where
         match_tests: Option<Vec<String>>,
         verbose: bool,
         exact_match: bool,
+        tracing: Tracing,
     ) -> Result<(), Error> {
         let options = Options {
+            tracing,
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
@@ -209,7 +212,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules)?;
+        self.type_check(parsed_modules, options.tracing)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -391,7 +394,7 @@ where
 
             let parsed_modules = self.parse_sources(package.name)?;
 
-            self.type_check(parsed_modules)?;
+            self.type_check(parsed_modules, Tracing::NoTraces)?;
         }
 
         Ok(())
@@ -474,7 +477,11 @@ where
         }
     }
 
-    fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<(), Error> {
+    fn type_check(
+        &mut self,
+        mut parsed_modules: ParsedModules,
+        tracing: Tracing,
+    ) -> Result<(), Error> {
         let processing_sequence = parsed_modules.sequence()?;
 
         for name in processing_sequence {
@@ -496,8 +503,7 @@ where
                         kind,
                         &self.config.name.to_string(),
                         &self.module_types,
-                        // TODO: Make configurable
-                        Tracing::KeepTraces,
+                        tracing,
                         &mut type_warnings,
                     )
                     .map_err(|error| Error::Type {

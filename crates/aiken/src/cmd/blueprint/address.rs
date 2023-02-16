@@ -1,4 +1,5 @@
 use crate::with_project;
+use aiken_lang::ast::Tracing;
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -8,19 +9,19 @@ pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
-    /// Name of the validator's module within the project. Optional if there's only one validator.
+    /// Name of the validator's module within the project. Optional if there's only one validator
     #[clap(short, long)]
     module: Option<String>,
 
-    /// Name of the validator within the module. Optional if there's only one validator.
+    /// Name of the validator within the module. Optional if there's only one validator
     #[clap(short, long)]
     validator: Option<String>,
 
-    /// Stake address to attach, if any.
+    /// Stake address to attach, if any
     #[clap(long)]
     delegated_to: Option<String>,
 
-    /// Force the project to be rebuilt, otherwise relies on existing artifacts (i.e. plutus.json).
+    /// Force the project to be rebuilt, otherwise relies on existing artifacts (i.e. plutus.json)
     #[clap(long)]
     rebuild: bool,
 }
@@ -36,7 +37,7 @@ pub fn exec(
 ) -> miette::Result<()> {
     with_project(directory, |p| {
         if rebuild {
-            p.build(false)?;
+            p.build(false, Tracing::NoTraces)?;
         }
 
         let title = module.as_ref().map(|m| {
