@@ -400,3 +400,18 @@ fn format_trace_todo_error() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn test_trace_if_false() {
+    let src = indoc! {r#"
+        fn foo() {
+          my_expression?
+        }
+
+        fn bar() {
+          (True && False)? || foo()?
+        }
+    "#};
+
+    assert_fmt(src, src);
+}

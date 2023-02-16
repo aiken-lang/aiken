@@ -255,3 +255,46 @@ fn trace_non_strings() {
         Err((_, Error::CouldNotUnify { .. }))
     ))
 }
+
+#[test]
+fn trace_if_false_ok() {
+    let source_code = r#"
+        fn or(a: Bool, b: Bool) {
+           (a || b)?
+        }
+
+        test foo() {
+            or(True, False)?
+        }
+
+        test bar() {
+            let must_be_signed = True
+            must_be_signed?
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn trace_if_false_ko() {
+    let source_code = r#"
+        fn add(a: Int, b: Int) {
+           (a + b)?
+        }
+
+        test foo() {
+            add(14, 42) == 12
+        }
+
+        test bar() {
+            let must_be_signed = #"FF00"
+            must_be_signed? == #"FF00"
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}

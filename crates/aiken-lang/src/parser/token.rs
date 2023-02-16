@@ -39,8 +39,9 @@ pub enum Token {
     // Other Punctuation
     Colon,
     Comma,
-    Hash, // '#'
-    Bang, // '!'
+    Hash,     // '#'
+    Bang,     // '!'
+    Question, // '?'
     Equal,
     EqualEqual, // '=='
     NotEqual,   // '!='
@@ -125,6 +126,7 @@ impl fmt::Display for Token {
             Token::Hash => "#",
             Token::Bang => "!",
             Token::Equal => "=",
+            Token::Question => "?",
             Token::EqualEqual => "==",
             Token::NotEqual => "!=",
             Token::Vbar => "|",
