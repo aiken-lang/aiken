@@ -1058,7 +1058,11 @@ pub fn check_when_pattern_needs(
         Pattern::Discard { .. } => {
             *clause_properties.needs_constr_var() = true;
         }
-        _ => todo!("{pattern:#?}"),
+        Pattern::Assign { pattern, .. } => {
+            *clause_properties.needs_constr_var() = true;
+
+            check_when_pattern_needs(pattern, clause_properties)
+        }
     }
 }
 

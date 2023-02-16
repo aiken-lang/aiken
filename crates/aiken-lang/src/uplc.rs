@@ -1574,7 +1574,19 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(item_name)
             }
-            Pattern::Assign { .. } => todo!("Nested assign is not yet done"),
+            Pattern::Assign { name,  pattern, .. } => {
+ 
+
+                let inner_name = self.nested_pattern_ir_and_label(pattern, pattern_vec, pattern_type, scope.clone(), final_clause);     
+
+                pattern_vec.push(Air::Let { scope: scope.clone(), name: name.clone() });
+
+                pattern_vec.push(Air::Var { scope, constructor: ValueConstructor::public(pattern_type.clone(), ValueConstructorVariant::LocalVariable { location: Span::empty() }), name: inner_name.clone().unwrap(), variant_name: String::new() });
+
+                
+                           
+                inner_name
+            }
             Pattern::Int { .. } => todo!("Nested pattern-match on integers isn't implemented yet. Use when clause-guard as an alternative, or break down the pattern."),
         }
     }
