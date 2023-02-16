@@ -1023,6 +1023,16 @@ pub enum Tracing {
     KeepTraces,
 }
 
+impl From<bool> for Tracing {
+    fn from(keep: bool) -> Self {
+        if keep {
+            Tracing::KeepTraces
+        } else {
+            Tracing::NoTraces
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,

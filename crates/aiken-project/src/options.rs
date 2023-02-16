@@ -1,5 +1,8 @@
+use aiken_lang::ast::Tracing;
+
 pub struct Options {
     pub code_gen_mode: CodeGenMode,
+    pub tracing: Tracing,
 }
 
 pub enum CodeGenMode {
