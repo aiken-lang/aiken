@@ -5,13 +5,14 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
-        RecordUpdateSpread, Span, TraceKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
-        TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
-        UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
-        UntypedPattern, UntypedRecordUpdateArg,
+        IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg, TypedCallArg,
+        TypedClause, TypedClauseGuard, TypedConstant, TypedIfBranch, TypedMultiPattern,
+        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedConstant,
+        UntypedIfBranch, UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{TypedExpr, UntypedExpr},
+    format,
     tipo::fields::FieldMap,
 };
 
@@ -28,6 +29,10 @@ use super::{
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
     pub(crate) environment: &'a mut Environment<'b>,
+
+    // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
+    // typed AST depending on this setting.
+    pub(crate) tracing: Tracing,
 
     // Type hydrator for creating types from annotations
     pub(crate) hydrator: Hydrator,
@@ -374,6 +379,78 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             bytes,
             tipo: byte_array(),
+        }
+    }
+
+    fn infer_trace_if_false(
+        &mut self,
+        value: UntypedExpr,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let var_true = TypedExpr::Var {
+            location,
+            name: "True".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: "True".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 2,
+                },
+                tipo: bool(),
+            },
+        };
+
+        let var_false = TypedExpr::Var {
+            location,
+            name: "False".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: "False".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 2,
+                },
+                tipo: bool(),
+            },
+        };
+
+        let text = TypedExpr::String {
+            location,
+            tipo: string(),
+            value: format!(
+                "{} ? False",
+                format::Formatter::new().expr(&value).to_pretty_string(999)
+            ),
+        };
+
+        let typed_value = self.infer(value)?;
+
+        self.unify(typed_value.tipo(), bool(), typed_value.location(), false)?;
+
+        match self.tracing {
+            Tracing::NoTraces => Ok(typed_value),
+            Tracing::KeepTraces => Ok(TypedExpr::If {
+                location,
+                branches: vec1::vec1![IfBranch {
+                    condition: typed_value,
+                    body: var_true,
+                    location,
+                }],
+                final_else: Box::new(TypedExpr::Trace {
+                    location,
+                    tipo: bool(),
+                    text: Box::new(text),
+                    then: Box::new(var_false),
+                }),
+                tipo: bool(),
+            }),
         }
     }
 
@@ -1879,12 +1956,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })
         }
 
-        Ok(TypedExpr::Trace {
-            location,
-            tipo,
-            then: Box::new(then),
-            text: Box::new(text),
-        })
+        match self.tracing {
+            Tracing::NoTraces => Ok(then),
+            Tracing::KeepTraces => Ok(TypedExpr::Trace {
+                location,
+                tipo,
+                then: Box::new(then),
+                text: Box::new(text),
+            }),
+        }
     }
 
     fn infer_value_constructor(
@@ -2058,7 +2138,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.environment.instantiate(t, ids, &self.hydrator)
     }
 
-    pub fn new(environment: &'a mut Environment<'b>) -> Self {
+    pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
         let mut hydrator = Hydrator::new();
 
         hydrator.permit_holes(true);
@@ -2066,6 +2146,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Self {
             hydrator,
             environment,
+            tracing,
             ungeneralised_function_used: false,
         }
     }

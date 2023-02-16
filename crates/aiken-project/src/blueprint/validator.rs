@@ -177,7 +177,7 @@ mod test {
     use crate::{module::ParsedModule, PackageName};
     use aiken_lang::{
         self,
-        ast::{ModuleKind, TypedDataType, TypedFunction},
+        ast::{ModuleKind, Tracing, TypedDataType, TypedFunction},
         builder::{DataTypeKey, FunctionAccessKey},
         builtins, parser,
         tipo::TypeInfo,
@@ -253,6 +253,7 @@ mod test {
                     module.kind,
                     &self.package.to_string(),
                     &self.module_types,
+                    Tracing::NoTraces,
                     &mut warnings,
                 )
                 .expect("Failed to type-check module");

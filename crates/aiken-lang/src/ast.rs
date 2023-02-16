@@ -1017,6 +1017,12 @@ pub enum TraceKind {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tracing {
+    NoTraces,
+    KeepTraces,
+}
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
