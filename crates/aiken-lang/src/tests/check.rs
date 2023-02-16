@@ -12,9 +12,10 @@ fn parse(source_code: &str) -> UntypedModule {
     ast
 }
 
-fn check(ast: UntypedModule) -> Result<TypedModule, (Vec<Warning>, Error)> {
-    let kind = ModuleKind::Lib;
-
+fn check_module(
+    ast: UntypedModule,
+    kind: ModuleKind,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     let id_gen = IdGenerator::new();
 
     let mut warnings = vec![];
@@ -25,7 +26,82 @@ fn check(ast: UntypedModule) -> Result<TypedModule, (Vec<Warning>, Error)> {
 
     let result = ast.infer(&id_gen, kind, "test/project", &module_types, &mut warnings);
 
-    result.map_err(|e| (warnings, e))
+    result
+        .map(|o| (warnings.clone(), o))
+        .map_err(|e| (warnings, e))
+}
+
+fn check(ast: UntypedModule) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, ModuleKind::Lib)
+}
+
+fn check_validator(
+    ast: UntypedModule,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, ModuleKind::Validator)
+}
+
+#[test]
+fn validator_illegal_return_type() {
+    let source_code = r#"
+      validator foo {
+        fn(d, r, c) {
+          1
+        }
+      }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::ValidatorMustReturnBool { .. }))
+    ))
+}
+
+#[test]
+fn validator_illegal_arity() {
+    let source_code = r#"
+      validator foo {
+        fn(c) {
+          True
+        }
+      }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IncorrectValidatorArity { .. }))
+    ))
+}
+
+#[test]
+fn validator_correct_form() {
+    let source_code = r#"
+      validator foo {
+        fn(d, r, c) {
+          True
+        }
+      }
+    "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn validator_in_lib_warning() {
+    let source_code = r#"
+      validator foo {
+        fn(c) {
+          True
+        }
+      }
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::ValidatorInLibraryModule { .. }
+    ))
 }
 
 #[test]

@@ -775,7 +775,7 @@ The best thing to do from here is to remove it."#))]
 
     #[error("Validators requires at least {} arguments.", at_least.to_string().purple().bold())]
     #[diagnostic(code("illegal::validator_arity"))]
-    WrongValidatorArity {
+    IncorrectValidatorArity {
         at_least: u8,
         #[label("not enough arguments")]
         location: Span,

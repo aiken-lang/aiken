@@ -278,7 +278,7 @@ fn infer_definition(
                 let typed_params = typed_fun.arguments.drain(0..params_length).collect();
 
                 if typed_fun.arguments.len() < 2 {
-                    return Err(Error::WrongValidatorArity {
+                    return Err(Error::IncorrectValidatorArity {
                         at_least: 2,
                         location: typed_fun.location,
                     });
