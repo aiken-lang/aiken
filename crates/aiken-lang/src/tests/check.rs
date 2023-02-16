@@ -105,6 +105,27 @@ fn validator_in_lib_warning() {
 }
 
 #[test]
+fn if_scoping() {
+    let source_code = r#"
+        pub fn foo(c) {
+          if c {
+            let bar = 1
+            bar
+          } else if !c {
+            bar
+          } else {
+            bar
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnknownVariable { .. }))
+    ))
+}
+
+#[test]
 fn list_pattern_1() {
     let source_code = r#"
         test foo() {
