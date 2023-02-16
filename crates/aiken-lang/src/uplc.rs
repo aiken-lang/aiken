@@ -764,12 +764,12 @@ impl<'a> CodeGenerator<'a> {
                     current_index,
                     ..
                 } => {
-                    let current_clause_index =
-                        if let Pattern::List { elements, .. } = &clause.pattern[0] {
-                            elements.len()
+                    let (current_clause_index, has_tail) =
+                        if let Pattern::List { elements, tail, .. } = &clause.pattern[0] {
+                            (elements.len(), tail.is_some())
                         } else if let Pattern::Assign { pattern, .. } = &clause.pattern[0] {
-                            if let Pattern::List { elements, .. } = pattern.as_ref() {
-                                elements.len()
+                            if let Pattern::List { elements, tail, .. } = pattern.as_ref() {
+                                (elements.len(), tail.is_some())
                             } else {
                                 unreachable!("{:#?}", pattern)
                             }
@@ -820,7 +820,9 @@ impl<'a> CodeGenerator<'a> {
                         }
                     };
 
-                    if current_clause_index as i64 == prev_index {
+                    let minus_tail = if has_tail { 1 } else { 0 };
+
+                    if current_clause_index as i64 - minus_tail == prev_index {
                         ir_stack.push(Air::WrapClause { scope });
                     } else {
                         ir_stack.push(Air::ListClause {
@@ -1121,7 +1123,9 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => {
                             tail_name = name.clone();
                         }
-                        Pattern::Discard { .. } => {}
+                        Pattern::Discard { .. } => {
+                            tail_name = "_".to_string();
+                        }
                         _ => unreachable!("Patterns in tail of list should not allow this"),
                     }
                 }
@@ -1149,11 +1153,17 @@ impl<'a> CodeGenerator<'a> {
                         format!("__tail_{}", elements.len() - 2)
                     };
 
+                    let tail = if &tail_name == "_" {
+                        None
+                    } else {
+                        Some((tail_var, tail_name))
+                    };
+
                     pattern_vec.push(Air::ListExpose {
                         scope,
                         tipo: tipo.clone().into(),
                         tail_head_names,
-                        tail: Some((tail_var, tail_name)),
+                        tail,
                     });
                 } else if !elements.is_empty() {
                     pattern_vec.push(Air::ListExpose {
