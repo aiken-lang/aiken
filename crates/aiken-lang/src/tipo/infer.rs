@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         DataType, Definition, Function, Layer, ModuleConstant, ModuleKind, RecordConstructor,
-        RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedModule, UntypedDefinition,
-        UntypedModule, Use, Validator,
+        RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition, TypedModule,
+        UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
     builtins::function,
@@ -29,6 +29,7 @@ impl UntypedModule {
         kind: ModuleKind,
         package: &str,
         modules: &HashMap<String, TypeInfo>,
+        tracing: Tracing,
         warnings: &mut Vec<Warning>,
     ) -> Result<TypedModule, Error> {
         let name = self.name.clone();
@@ -83,7 +84,8 @@ impl UntypedModule {
         }
 
         for def in consts.into_iter().chain(not_consts) {
-            let definition = infer_definition(def, &name, &mut hydrators, &mut environment, kind)?;
+            let definition =
+                infer_definition(def, &name, &mut hydrators, &mut environment, tracing, kind)?;
             definitions.push(definition);
         }
 
@@ -148,6 +150,7 @@ fn infer_definition(
     module_name: &String,
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
+    tracing: Tracing,
     kind: ModuleKind,
 ) -> Result<TypedDefinition, Error> {
     match def {
@@ -192,7 +195,7 @@ fn infer_definition(
                         .map(|(arg_name, tipo)| arg_name.set_type(tipo.clone()))
                         .collect();
 
-                    let mut expr_typer = ExprTyper::new(environment);
+                    let mut expr_typer = ExprTyper::new(environment, tracing);
 
                     expr_typer.hydrator = hydrators
                         .remove(&name)
@@ -266,6 +269,7 @@ fn infer_definition(
                 module_name,
                 hydrators,
                 environment,
+                tracing,
                 kind,
             )? {
                 if !typed_fun.return_type.is_bool() {
@@ -297,9 +301,14 @@ fn infer_definition(
         }
 
         Definition::Test(f) => {
-            if let Definition::Fn(f) =
-                infer_definition(Definition::Fn(f), module_name, hydrators, environment, kind)?
-            {
+            if let Definition::Fn(f) = infer_definition(
+                Definition::Fn(f),
+                module_name,
+                hydrators,
+                environment,
+                tracing,
+                kind,
+            )? {
                 environment.unify(f.return_type.clone(), builtins::bool(), f.location, false)?;
 
                 Ok(Definition::Test(f))
@@ -505,7 +514,8 @@ fn infer_definition(
                 })
             }
 
-            let typed_expr = ExprTyper::new(environment).infer_const(&annotation, *value)?;
+            let typed_expr =
+                ExprTyper::new(environment, tracing).infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
 

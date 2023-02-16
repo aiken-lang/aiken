@@ -14,7 +14,7 @@ pub mod telemetry;
 
 use crate::blueprint::{schema::Schema, Blueprint};
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
+    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
     builtins,
     tipo::TypeInfo,
@@ -496,6 +496,8 @@ where
                         kind,
                         &self.config.name.to_string(),
                         &self.module_types,
+                        // TODO: Make configurable
+                        Tracing::KeepTraces,
                         &mut type_warnings,
                     )
                     .map_err(|error| Error::Type {

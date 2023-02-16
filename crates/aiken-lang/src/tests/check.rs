@@ -1,5 +1,5 @@
 use crate::{
-    ast::{ModuleKind, TypedModule, UntypedModule},
+    ast::{ModuleKind, Tracing, TypedModule, UntypedModule},
     builtins, parser,
     tipo::error::{Error, Warning},
     IdGenerator,
@@ -24,7 +24,14 @@ fn check_module(
     module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
     module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-    let result = ast.infer(&id_gen, kind, "test/project", &module_types, &mut warnings);
+    let result = ast.infer(
+        &id_gen,
+        kind,
+        "test/project",
+        &module_types,
+        Tracing::KeepTraces,
+        &mut warnings,
+    );
 
     result
         .map(|o| (warnings.clone(), o))
