@@ -61,11 +61,12 @@ impl Validator<Schema> {
         arguments.extend(def.fun.arguments.clone());
 
         Ok(Validator {
-            title: format!("{}-{}", &module.name, &def.fun.name),
+            title: format!("{}.{}", &module.name, &def.fun.name),
             description: None,
             purpose: None,
-            parameters: args
-                .rev()
+            parameters: def
+                .params
+                .iter()
                 .map(|param| {
                     let annotation =
                         Annotated::from_type(modules.into(), &param.tipo, &HashMap::new()).map_err(
@@ -296,13 +297,14 @@ mod test {
     fn validator_mint_basic() {
         assert_validator(
             r#"
-            fn mint(redeemer: Data, ctx: Data) {
+            validator mint {
+              fn(redeemer: Data, ctx: Data) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "mint",
+              "title": "test_module.mint",
               "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
               "redeemer": {
                 "title": "Data",
@@ -317,13 +319,14 @@ mod test {
     fn validator_mint_parameterized() {
         assert_validator(
             r#"
-            fn mint(utxo_ref: Int, redeemer: Data, ctx: Data) {
+            validator mint(utxo_ref: Int) {
+              fn(redeemer: Data, ctx: Data) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "mint",
+              "title": "test_module.mint",
               "hash": "a82df717fd39f5b273c4eb89ae5252e11cc272ac59d815419bf2e4c3",
               "parameters": [{
                 "title": "utxo_ref",
@@ -373,13 +376,14 @@ mod test {
                 Abort
             }
 
-            fn spend(datum: State, redeemer: Input, ctx: Data) {
+            validator spend {
+              fn(datum: State, redeemer: Input, ctx: Data) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "spend",
+              "title": "test_module.spend",
               "hash": "e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
               "datum": {
                 "title": "State",
@@ -456,13 +460,14 @@ mod test {
     fn validator_spend_2tuple() {
         assert_validator(
             r#"
-            fn spend(datum: (Int, ByteArray), redeemer: String, ctx: Void) {
+            validator spend {
+              fn(datum: (Int, ByteArray), redeemer: String, ctx: Void) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "spend",
+              "title": "test_module.spend",
               "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
               "datum": {
                 "dataType": "#pair",
@@ -485,13 +490,14 @@ mod test {
     fn validator_spend_tuples() {
         assert_validator(
             r#"
-            fn spend(datum: (Int, Int, Int), redeemer: Data, ctx: Void) {
+            validator spend {
+              fn(datum: (Int, Int, Int), redeemer: Data, ctx: Void) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "spend",
+              "title": "test_module.spend",
               "hash": "f335ce0436fd7df56e727a66ada7298534a27b98f887bc3b7947ee48",
               "datum": {
                 "title": "Tuple",
@@ -531,14 +537,15 @@ mod test {
                 Infinite
             }
 
-            fn withdraw(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+            validator withdraw {
+              fn(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
                 True
+              }
             }
             "#,
             json!(
                 {
-                  "title": "test_module",
-                  "purpose": "withdraw",
+                  "title": "test_module.withdraw",
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Either",
@@ -599,14 +606,15 @@ mod test {
 
             type UUID { UUID }
 
-            fn mint(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator mint {
+              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
+              }
             }
             "#,
             json!(
                 {
-                  "title": "test_module",
-                  "purpose": "mint",
+                  "title": "test_module.mint",
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
@@ -646,14 +654,15 @@ mod test {
 
             type UUID { UUID }
 
-            fn mint(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator mint {
+              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
+              }
             }
             "#,
             json!(
                 {
-                  "title": "test_module",
-                  "purpose": "mint",
+                  "title": "test_module.mint",
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
