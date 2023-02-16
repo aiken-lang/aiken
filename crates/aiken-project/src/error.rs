@@ -369,13 +369,13 @@ impl Diagnostic for Error {
             }))),
             Error::NoValidatorNotFound { known_validators } => {
                 Some(Box::new(format!(
-                    "Here's a list of all validators (and their purpose) I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
+                    "Here's a list of all validators I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
                     known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
             Error::MoreThanOneValidatorFound { known_validators } => {
                 Some(Box::new(format!(
-                    "Here's a list of all validators (and their purpose) I've found in your project. Select one of them using the appropriate options:\n\n{}",
+                    "Here's a list of all validators I've found in your project. Select one of them using the appropriate options:\n\n{}",
                     known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
