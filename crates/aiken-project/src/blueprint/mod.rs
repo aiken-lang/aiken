@@ -94,7 +94,7 @@ where
                 self.validators
                     .iter()
                     .map(|v| {
-                        let mut title = v.title.split('-');
+                        let mut title = v.title.split('.');
 
                         (
                             title.next().unwrap().to_string(),
