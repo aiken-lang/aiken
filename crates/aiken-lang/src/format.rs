@@ -800,6 +800,8 @@ impl<'comments> Formatter<'comments> {
             }
 
             UntypedExpr::ErrorTerm { .. } => "error".to_doc(),
+
+            UntypedExpr::TraceIfFalse { value, .. } => self.trace_if_false(value),
         };
 
         commented(document, comments)
@@ -812,6 +814,10 @@ impl<'comments> Formatter<'comments> {
         } else {
             doc
         }
+    }
+
+    pub fn trace_if_false<'a>(&mut self, value: &'a UntypedExpr) -> Document<'a> {
+        docvec![self.wrap_unary_op(value), "?"]
     }
 
     pub fn trace<'a>(
