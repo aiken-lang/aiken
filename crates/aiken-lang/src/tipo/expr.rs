@@ -225,6 +225,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             | UntypedExpr::TupleIndex { .. }
             | UntypedExpr::UnOp { .. }
             | UntypedExpr::Var { .. }
+            | UntypedExpr::TraceIfFalse { .. }
             | UntypedExpr::When { .. } => Ok(()),
         }
     }
@@ -361,6 +362,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 value,
                 op,
             } => self.infer_un_op(location, value, op),
+
+            UntypedExpr::TraceIfFalse { value, location } => {
+                self.infer_trace_if_false(*value, location)
+            }
         }
     }
 

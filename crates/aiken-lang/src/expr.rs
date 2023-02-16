@@ -382,6 +382,11 @@ pub enum UntypedExpr {
         text: Box<Self>,
     },
 
+    TraceIfFalse {
+        location: Span,
+        value: Box<Self>,
+    },
+
     When {
         location: Span,
         subjects: Vec<Self>,
@@ -510,7 +515,8 @@ impl UntypedExpr {
         match self {
             Self::PipeLine { expressions, .. } => expressions.last().location(),
             Self::Trace { then, .. } => then.location(),
-            Self::Fn { location, .. }
+            Self::TraceIfFalse { location, .. }
+            | Self::Fn { location, .. }
             | Self::Var { location, .. }
             | Self::Int { location, .. }
             | Self::ErrorTerm { location, .. }
