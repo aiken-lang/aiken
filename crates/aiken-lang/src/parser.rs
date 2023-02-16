@@ -262,11 +262,7 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
                 .map_with_span(
                     |(((arguments, args_span), return_annotation), body), span| ast::Function {
                         arguments,
-                        body: body.unwrap_or(expr::UntypedExpr::Todo {
-                            kind: TodoKind::EmptyFunction,
-                            location: span,
-                            label: None,
-                        }),
+                        body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
                         doc: None,
                         location: Span {
                             start: span.start,
