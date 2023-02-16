@@ -1556,7 +1556,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             false,
         )?;
 
-        let body = self.infer(first.body.clone())?;
+        let body = self.in_new_scope(|body_typer| body_typer.infer(first.body.clone()))?;
 
         let tipo = body.tipo();
 
@@ -1576,7 +1576,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 false,
             )?;
 
-            let body = self.infer(branch.body.clone())?;
+            let body = self.in_new_scope(|body_typer| body_typer.infer(branch.body.clone()))?;
 
             self.unify(
                 tipo.clone(),
@@ -1592,7 +1592,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             });
         }
 
-        let typed_final_else = self.infer(final_else)?;
+        let typed_final_else = self.in_new_scope(|body_typer| body_typer.infer(final_else))?;
 
         self.unify(
             tipo.clone(),
