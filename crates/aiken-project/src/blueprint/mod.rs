@@ -61,8 +61,7 @@ where
         let mut validator = None;
 
         for v in self.validators.iter() {
-            let match_title = title.map(|t| v.title.contains(t)).unwrap_or(false);
-
+            let match_title = Some(&v.title) == title.or(Some(&v.title));
             if match_title {
                 validator = Some(if validator.is_none() {
                     LookupResult::One(v)
@@ -78,8 +77,8 @@ where
     pub fn with_validator<F, A, E>(
         &self,
         title: Option<&String>,
-        when_missing: fn(Vec<String>) -> E,
         when_too_many: fn(Vec<String>) -> E,
+        when_missing: fn(Vec<String>) -> E,
         action: F,
     ) -> Result<A, E>
     where

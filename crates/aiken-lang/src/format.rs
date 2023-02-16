@@ -714,6 +714,7 @@ impl<'comments> Formatter<'comments> {
 
         let document = match expr {
             UntypedExpr::ByteArray { bytes, .. } => self.bytearray(bytes),
+
             UntypedExpr::If {
                 branches,
                 final_else,

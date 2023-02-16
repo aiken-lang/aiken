@@ -820,6 +820,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     };
 
+                    #[allow(clippy::bool_to_int_with_if)]
                     let minus_tail = if has_tail { 1 } else { 0 };
 
                     if current_clause_index as i64 - minus_tail == prev_index {

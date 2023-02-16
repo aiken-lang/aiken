@@ -45,7 +45,7 @@ pub fn exec(
                 validator
                     .as_ref()
                     .map(|v| format!(".{v}"))
-                    .unwrap_or("".to_string())
+                    .unwrap_or_default()
             )
         });
 
