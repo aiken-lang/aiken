@@ -507,6 +507,10 @@ impl<'a> CodeGenerator<'a> {
                         });
                     }
                     self.build_ir(&branch.condition, &mut if_ir, branch_scope.clone());
+
+                    let mut branch_scope = scope.clone();
+                    branch_scope.push(self.id_gen.next());
+
                     self.build_ir(&branch.body, &mut if_ir, branch_scope);
                 }
 
