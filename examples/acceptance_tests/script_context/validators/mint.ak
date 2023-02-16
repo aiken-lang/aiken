@@ -3,13 +3,15 @@ use aiken/list
 use aiken/transaction.{Mint, ScriptContext}
 use aiken/transaction/value
 
-fn mint(redeemer: Data, ctx: ScriptContext) {
-  [
-    assert_purpose(ctx),
-    assert_mint(ctx.purpose, ctx.transaction),
-    assert_redeemers(ctx, redeemer),
-  ]
-  |> list.and
+validator mint {
+  fn(redeemer: Data, ctx: ScriptContext) {
+    [
+      assert_purpose(ctx),
+      assert_mint(ctx.purpose, ctx.transaction),
+      assert_redeemers(ctx, redeemer),
+    ]
+    |> list.and
+  }
 }
 
 fn assert_purpose(ctx) {
@@ -27,7 +29,7 @@ fn assert_mint(purpose, transaction) {
   let tokens = value.tokens(transaction.mint, policy_id)
 
   when dict.get(tokens, #"666f6f") is {
-    None -> error("token not found")
+    None -> error "token not found"
     Some(quantity) -> quantity == 1337
   }
 }

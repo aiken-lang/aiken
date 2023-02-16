@@ -1,5 +1,7 @@
-fn spend(_datum: Void, _redeemer: Void, _ctx: Void) -> Bool {
-  True
+validator spend {
+  fn(_datum: Void, _redeemer: Void, _ctx: Void) -> Bool {
+    True
+  }
 }
 
 test foo() {

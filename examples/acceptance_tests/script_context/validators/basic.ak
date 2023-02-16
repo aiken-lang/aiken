@@ -4,14 +4,16 @@ use aiken/transaction.{NoDatum, ScriptContext, Spend, TransactionId}
 use aiken/transaction/credential.{VerificationKeyCredential}
 use aiken/transaction/value
 
-fn spend(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
-  [
-    assert_id(ctx.transaction),
-    assert_purpose(ctx.purpose),
-    assert_outputs(ctx.transaction),
-    assert_fee(ctx.transaction),
-  ]
-  |> list.and
+validator spend {
+  fn(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
+    [
+      assert_id(ctx.transaction),
+      assert_purpose(ctx.purpose),
+      assert_outputs(ctx.transaction),
+      assert_fee(ctx.transaction),
+    ]
+    |> list.and
+  }
 }
 
 fn assert_id(transaction) {
@@ -26,7 +28,7 @@ fn assert_purpose(purpose) {
       ref.transaction_id == TransactionId(
         #"0000000000000000000000000000000000000000000000000000000000000000",
       ) && ref.output_index == 0
-    _ -> error("script purpose isn't 'Spend'")
+    _ -> error "script purpose isn't 'Spend'"
   }
 }
 
@@ -47,6 +49,6 @@ fn assert_outputs(transaction) {
         output.reference_script == None,
       ]
       |> list.and
-    _ -> error("unexpected number of outputs")
+    _ -> error "unexpected number of outputs"
   }
 }

@@ -29,7 +29,7 @@ if [ $? -ne 0 ]; then
   exit $?
 fi
 
-BLUEPRINT=$(jq ".validators[] | select(.title == \"$TITLE\")" plutus.json)
+BLUEPRINT=$(jq ".validators[] | select(.title|contains(\"$TITLE\"))" plutus.json)
 
 VALIDATOR_HASH=$(echo $BLUEPRINT | jq .hash | sed s/\"//g)
 VALIDATOR=$(echo $BLUEPRINT | jq .compiledCode | sed s/\"//g)

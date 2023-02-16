@@ -12,23 +12,23 @@ pub fn has_policy_id(self: Output, policy_id: PolicyId) -> Bool {
   |> not
 }
 
-pub fn spend(_datum: Data, _redeemer: Data, ctx: ScriptContext) -> Bool {
-  ctx.transaction.outputs
-  |> list.any(has_policy_id(_, my_policy_id))
+validator spend {
+  fn(_datum: Data, _redeemer: Data, ctx: ScriptContext) -> Bool {
+    ctx.transaction.outputs
+    |> list.any(has_policy_id(_, my_policy_id))
+  }
 }
 
-fn mint(
-  output_reference: OutputReference,
-  _redeemer: Void,
-  ctx: ScriptContext,
-) -> Bool {
-  when
-    list.find(
-      ctx.transaction.inputs,
-      fn(input) { input.output_reference == output_reference },
-    )
-  is {
-    Some(_) -> True
-    None -> False
+validator mint(output_reference: OutputReference) {
+  fn(_redeemer: Void, ctx: ScriptContext) -> Bool {
+    when
+      list.find(
+        ctx.transaction.inputs,
+        fn(input) { input.output_reference == output_reference },
+      )
+    is {
+      Some(_) -> True
+      None -> False
+    }
   }
 }

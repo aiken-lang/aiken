@@ -5,8 +5,7 @@
   },
   "validators": [
     {
-      "title": "spend",
-      "purpose": "spend",
+      "title": "spend.spend",
       "datum": {
         "title": "Data",
         "description": "Any Plutus data."
@@ -19,8 +18,7 @@
       "hash": "3f46b921ead33594e1da4afa1f1ba31807c0d8deca029f96fe9fe394"
     },
     {
-      "title": "spend",
-      "purpose": "mint",
+      "title": "spend.mint",
       "redeemer": {
         "title": "Unit",
         "description": "The nullary constructor.",
