@@ -4,6 +4,8 @@ fn when_tuple(a: (Int, Int)) -> Int {
   }
 }
 
-pub fn spend(a: Data, b: Data, c) -> Bool {
-  when_tuple((4, 1)) == 4
+validator spend {
+  fn(a: Data, b: Data, c) -> Bool {
+    when_tuple((4, 1)) == 4
+  }
 }
