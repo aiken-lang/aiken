@@ -660,7 +660,10 @@ impl<'comments> Formatter<'comments> {
                         .append("]"),
                 )
                 .group(),
-            ByteArrayFormatPreference::Utf8String => todo!(),
+            ByteArrayFormatPreference::Utf8String => nil()
+                .append("\"")
+                .append(Document::String(String::from_utf8(bytes.to_vec()).unwrap()))
+                .append("\""),
         }
     }
 
@@ -767,7 +770,7 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn string<'a>(&self, string: &'a String) -> Document<'a> {
-        let doc = string.to_doc().surround("\"", "\"");
+        let doc = "@".to_doc().append(string.to_doc().surround("\"", "\""));
         if string.contains('\n') {
             doc.force_break()
         } else {

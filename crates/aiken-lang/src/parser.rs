@@ -447,9 +447,9 @@ pub fn bytearray_parser(
         )
         .map(|token| (ByteArrayFormatPreference::ArrayOfBytes, token));
 
-    let bytearray_hexstring_parser = just(Token::Hash)
-        .ignore_then(
-            select! {Token::String {value} => value}.validate(
+    let bytearray_hexstring_parser =
+        just(Token::Hash)
+            .ignore_then(select! {Token::ByteString {value} => value}.validate(
                 |value, span, emit| match hex::decode(value) {
                     Ok(bytes) => bytes,
                     Err(_) => {
@@ -457,11 +457,17 @@ pub fn bytearray_parser(
                         vec![]
                     }
                 },
-            ),
-        )
-        .map(|token| (ByteArrayFormatPreference::HexadecimalString, token));
+            ))
+            .map(|token| (ByteArrayFormatPreference::HexadecimalString, token));
 
-    choice((bytearray_list_parser, bytearray_hexstring_parser))
+    let bytearray_utf8_parser = select! {Token::ByteString {value} => value.into_bytes() }
+        .map(|token| (ByteArrayFormatPreference::Utf8String, token));
+
+    choice((
+        bytearray_list_parser,
+        bytearray_hexstring_parser,
+        bytearray_utf8_parser,
+    ))
 }
 
 pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {

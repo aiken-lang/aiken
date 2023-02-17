@@ -495,10 +495,14 @@ fn test_bytearray_literals() {
 
         const foo_const_hex = #"666f6f"
 
+        const foo_const_utf8 = "foo"
+
         fn foo() {
           let foo_const_array = #[102, 111, 111]
 
           let foo_const_hex = #"666f6f"
+
+          let foo_const_utf8 = "foo"
         }
     "#};
 

@@ -235,12 +235,12 @@ fn list_pattern_6() {
 fn trace_strings() {
     let source_code = r#"
         fn bar() {
-            "BAR"
+            @"BAR"
         }
 
         test foo() {
-            let msg1 = "FOO"
-            trace("INLINE")
+            let msg1 = @"FOO"
+            trace(@"INLINE")
             trace(msg1)
             trace(bar())
             True
