@@ -415,3 +415,91 @@ fn test_trace_if_false() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn test_newline_comments() {
+    let src = indoc! {r#"
+        // My comment
+        //
+        // has a newline.
+        fn foo() {
+          True
+        }
+
+        // My comments
+
+        // can live apart
+        fn bar() {
+          True
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
+
+#[test]
+fn test_newline_doc_comments() {
+    let src = indoc! {r#"
+        /// My doc comment
+        ///
+        /// has a newline.
+        fn foo() {
+          True
+        }
+
+        /// My doc comments
+
+        /// cannot be separated
+        fn bar() {
+          True
+        }
+    "#};
+
+    let out = indoc! {r#"
+        /// My doc comment
+        ///
+        /// has a newline.
+        fn foo() {
+          True
+        }
+
+        /// My doc comments
+        /// cannot be separated
+        fn bar() {
+          True
+        }
+    "#};
+
+    assert_fmt(src, out);
+}
+
+#[test]
+fn test_newline_module_comments() {
+    let src = indoc! {r#"
+        //// My module comment
+        ////
+        //// has a newline.
+
+        fn foo() {
+          True
+        }
+
+        //// My module comments
+
+        //// cannot be separated
+    "#};
+
+    let out = indoc! {r#"
+        //// My module comment
+        ////
+        //// has a newline.
+        //// My module comments
+        //// cannot be separated
+
+        fn foo() {
+          True
+        }
+    "#};
+
+    assert_fmt(src, out);
+}
