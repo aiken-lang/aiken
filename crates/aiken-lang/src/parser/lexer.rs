@@ -55,8 +55,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just('|').to(Token::Vbar),
         just("&&").to(Token::AmperAmper),
         just('#').to(Token::Hash),
-        choice((just("\n\n"), just("\r\n\r\n"))).to(Token::EmptyLine),
-        choice((just("\n"), just("\r\n"))).to(Token::NewLine),
     ));
 
     let grouping = choice((
@@ -126,29 +124,41 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         }
     });
 
-    let module_comments = just("////").ignore_then(
-        take_until(text::newline().rewind())
-            .to(Token::ModuleComment)
-            .map_with_span(|token, span| (token, span)),
-    );
+    fn comment_parser(token: Token) -> impl Parser<char, (Token, Span), Error = ParseError> {
+        let n = match token {
+            Token::ModuleComment => 4,
+            Token::DocComment => 3,
+            Token::Comment => 2,
+            _ => unreachable!(),
+        };
 
-    let doc_comments = just("///").ignore_then(
-        take_until(text::newline().rewind())
-            .to(Token::DocComment)
-            .map_with_span(|token, span| (token, span)),
-    );
+        choice((
+            // NOTE: The first case here work around a bug introduced with chumsky=0.9.0 which
+            // miscalculate the offset for empty comments.
+            just("/".repeat(n))
+                .ignore_then(text::newline().rewind())
+                .to(token.clone())
+                .map_with_span(move |token, span: Span| {
+                    (token, Span::new((), span.start + n..span.end))
+                }),
+            just("/".repeat(n)).ignore_then(
+                take_until(text::newline().rewind())
+                    .to(token)
+                    .map_with_span(|token, span| (token, span)),
+            ),
+        ))
+    }
 
-    let comments = just("//").ignore_then(
-        take_until(text::newline().rewind())
-            .to(Token::Comment)
-            .map_with_span(|token, span| (token, span)),
-    );
+    let newlines = choice((
+        choice((just("\n\n"), just("\r\n\r\n"))).to(Token::EmptyLine),
+        choice((just("\n"), just("\r\n"))).to(Token::NewLine),
+    ));
 
     choice((
-        module_comments,
-        doc_comments,
-        comments,
-        choice((ordinal, keyword, int, op, grouping, string))
+        comment_parser(Token::ModuleComment),
+        comment_parser(Token::DocComment),
+        comment_parser(Token::Comment),
+        choice((ordinal, keyword, int, op, newlines, grouping, string))
             .or(any().map(Token::Error).validate(|t, span, emit| {
                 emit(ParseError::expected_input_found(
                     span,
