@@ -7,7 +7,10 @@ pub mod lexer;
 pub mod token;
 
 use crate::{
-    ast::{self, BinOp, Span, TraceKind, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
+    ast::{
+        self, BinOp, ByteArrayFormatPreference, Span, TraceKind, UnOp, UntypedDefinition,
+        CAPTURE_VARIABLE,
+    },
     expr,
 };
 
@@ -402,9 +405,12 @@ fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseErr
         });
 
     let constant_bytearray_parser =
-        bytearray_parser().map_with_span(|bytes, span| ast::Constant::ByteArray {
-            location: span,
-            bytes,
+        bytearray_parser().map_with_span(|(preferred_format, bytes), span| {
+            ast::Constant::ByteArray {
+                location: span,
+                bytes,
+                preferred_format,
+            }
         });
 
     choice((
@@ -414,40 +420,46 @@ fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseErr
     ))
 }
 
-pub fn bytearray_parser() -> impl Parser<Token, Vec<u8>, Error = ParseError> {
-    let bytearray_list_parser = just(Token::Hash).ignore_then(
-        select! {Token::Int {value} => value}
-            .validate(|value, span, emit| {
-                let byte: u8 = match value.parse() {
-                    Ok(b) => b,
+pub fn bytearray_parser(
+) -> impl Parser<Token, (ByteArrayFormatPreference, Vec<u8>), Error = ParseError> {
+    let bytearray_list_parser = just(Token::Hash)
+        .ignore_then(
+            select! {Token::Int {value} => value}
+                .validate(|value, span, emit| {
+                    let byte: u8 = match value.parse() {
+                        Ok(b) => b,
+                        Err(_) => {
+                            emit(ParseError::expected_input_found(
+                                span,
+                                None,
+                                Some(error::Pattern::Byte),
+                            ));
+
+                            0
+                        }
+                    };
+
+                    byte
+                })
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
+        )
+        .map(|token| (ByteArrayFormatPreference::ArrayOfBytes, token));
+
+    let bytearray_hexstring_parser = just(Token::Hash)
+        .ignore_then(
+            select! {Token::String {value} => value}.validate(
+                |value, span, emit| match hex::decode(value) {
+                    Ok(bytes) => bytes,
                     Err(_) => {
-                        emit(ParseError::expected_input_found(
-                            span,
-                            None,
-                            Some(error::Pattern::Byte),
-                        ));
-
-                        0
+                        emit(ParseError::malformed_base16_string_literal(span));
+                        vec![]
                     }
-                };
-
-                byte
-            })
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
-    );
-
-    let bytearray_hexstring_parser =
-        just(Token::Hash).ignore_then(select! {Token::String {value} => value}.validate(
-            |value, span, emit| match hex::decode(value) {
-                Ok(bytes) => bytes,
-                Err(_) => {
-                    emit(ParseError::malformed_base16_string_literal(span));
-                    vec![]
-                }
-            },
-        ));
+                },
+            ),
+        )
+        .map(|token| (ByteArrayFormatPreference::HexadecimalString, token));
 
     choice((bytearray_list_parser, bytearray_hexstring_parser))
 }
@@ -816,11 +828,13 @@ pub fn expr_parser(
                 elems,
             });
 
-        let bytearray =
-            bytearray_parser().map_with_span(|bytes, span| expr::UntypedExpr::ByteArray {
+        let bytearray = bytearray_parser().map_with_span(|(preferred_format, bytes), span| {
+            expr::UntypedExpr::ByteArray {
                 location: span,
                 bytes,
-            });
+                preferred_format,
+            }
+        });
 
         let list_parser = just(Token::LeftSquare)
             .ignore_then(r.clone().separated_by(just(Token::Comma)))

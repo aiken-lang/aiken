@@ -350,9 +350,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } => self.infer_tuple_index(*tuple, index, location),
 
-            UntypedExpr::ByteArray { location, bytes } => {
-                Ok(self.infer_byte_array(bytes, location))
-            }
+            UntypedExpr::ByteArray {
+                location, bytes, ..
+            } => Ok(self.infer_byte_array(bytes, location)),
 
             UntypedExpr::RecordUpdate {
                 location,
@@ -1353,7 +1353,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location, value, ..
             } => Ok(Constant::String { location, value }),
 
-            Constant::ByteArray { location, bytes } => Ok(Constant::ByteArray { location, bytes }),
+            Constant::ByteArray {
+                location,
+                bytes,
+                preferred_format,
+            } => Ok(Constant::ByteArray {
+                location,
+                bytes,
+                preferred_format,
+            }),
         }?;
 
         // Check type annotation is accurate.

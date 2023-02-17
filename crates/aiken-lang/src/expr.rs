@@ -4,9 +4,9 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
-        Pattern, RecordUpdateSpread, Span, TraceKind, TypedRecordUpdateArg, UnOp,
-        UntypedRecordUpdateArg,
+        Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg, Clause,
+        DefinitionLocation, IfBranch, Pattern, RecordUpdateSpread, Span, TraceKind,
+        TypedRecordUpdateArg, UnOp, UntypedRecordUpdateArg,
     },
     builtins::void,
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
@@ -361,6 +361,7 @@ pub enum UntypedExpr {
     ByteArray {
         location: Span,
         bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
     },
 
     PipeLine {

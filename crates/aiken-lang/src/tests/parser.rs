@@ -1785,6 +1785,7 @@ fn plain_bytearray_literals() {
             value: Box::new(Constant::ByteArray {
                 location: Span::new((), 25..39),
                 bytes: vec![0, 170, 255],
+                preferred_format: ast::ByteArrayFormatPreference::ArrayOfBytes,
             }),
             tipo: (),
         })],
@@ -1813,6 +1814,7 @@ fn base16_bytearray_literals() {
                 value: Box::new(Constant::ByteArray {
                     location: Span::new((), 25..34),
                     bytes: vec![0, 170, 255],
+                    preferred_format: ast::ByteArrayFormatPreference::HexadecimalString,
                 }),
                 tipo: (),
             }),
@@ -1828,6 +1830,7 @@ fn base16_bytearray_literals() {
                     right: Box::new(expr::UntypedExpr::ByteArray {
                         location: Span::new((), 71..80),
                         bytes: vec![0, 170, 255],
+                        preferred_format: ast::ByteArrayFormatPreference::HexadecimalString,
                     }),
                 },
                 doc: None,

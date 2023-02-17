@@ -5,12 +5,12 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
-        Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition,
-        UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
-        CAPTURE_VARIABLE,
+        Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        ClauseGuard, Constant, DataType, Definition, Function, IfBranch, ModuleConstant, Pattern,
+        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
+        TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
+        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
+        Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -326,7 +326,11 @@ impl<'comments> Formatter<'comments> {
 
     fn const_expr<'a>(&mut self, value: &'a Constant) -> Document<'a> {
         match value {
-            Constant::ByteArray { bytes, .. } => self.bytearray(bytes),
+            Constant::ByteArray {
+                bytes,
+                preferred_format,
+                ..
+            } => self.bytearray(bytes, preferred_format),
             Constant::Int { value, .. } => value.to_doc(),
             Constant::String { value, .. } => self.string(value),
         }
@@ -635,18 +639,40 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    pub fn bytearray<'a>(&mut self, bytes: &'a [u8]) -> Document<'a> {
-        "#".to_doc()
-            .append("\"")
-            .append(Document::String(hex::encode(bytes)))
-            .append("\"")
+    pub fn bytearray<'a>(
+        &mut self,
+        bytes: &'a [u8],
+        preferred_format: &ByteArrayFormatPreference,
+    ) -> Document<'a> {
+        match preferred_format {
+            ByteArrayFormatPreference::HexadecimalString => "#"
+                .to_doc()
+                .append("\"")
+                .append(Document::String(hex::encode(bytes)))
+                .append("\""),
+            ByteArrayFormatPreference::ArrayOfBytes => "#"
+                .to_doc()
+                .append(
+                    flex_break("[", "[")
+                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .append("]"),
+                )
+                .group(),
+            ByteArrayFormatPreference::Utf8String => todo!(),
+        }
     }
 
     pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
-            UntypedExpr::ByteArray { bytes, .. } => self.bytearray(bytes),
+            UntypedExpr::ByteArray {
+                bytes,
+                preferred_format,
+                ..
+            } => self.bytearray(bytes, preferred_format),
 
             UntypedExpr::If {
                 branches,

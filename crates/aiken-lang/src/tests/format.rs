@@ -312,22 +312,6 @@ fn test_block_logical_expr() {
 }
 
 #[test]
-fn test_format_bytearray_literals() {
-    let src = indoc! {r#"
-        const foo = #"ff00"
-        const bar = #[0, 255]
-    "#};
-
-    let expected = indoc! { r#"
-        const foo = #"ff00"
-
-        const bar = #"00ff"
-    "#};
-
-    assert_fmt(src, expected);
-}
-
-#[test]
 fn test_nested_function_calls() {
     let src = indoc! {r#"
         fn foo(output) {
@@ -502,4 +486,21 @@ fn test_newline_module_comments() {
     "#};
 
     assert_fmt(src, out);
+}
+
+#[test]
+fn test_bytearray_literals() {
+    let src = indoc! {r#"
+        const foo_const_array = #[102, 111, 111]
+
+        const foo_const_hex = #"666f6f"
+
+        fn foo() {
+          let foo_const_array = #[102, 111, 111]
+
+          let foo_const_hex = #"666f6f"
+        }
+    "#};
+
+    assert_fmt(src, src);
 }
