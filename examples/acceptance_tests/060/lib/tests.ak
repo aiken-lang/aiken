@@ -1,15 +1,17 @@
-type Foo {
-  foo: Int,
+const int_constant = 42
+
+test int() {
+  int_constant == 42
 }
 
-const foo_constant = Foo { foo: 42 }
+const bytearray_constant = #"abcd"
 
-test foo() {
-  foo_constant == Foo { foo: 42 }
+test bytearray() {
+  bytearray_constant == #"abcd"
 }
 
-const tuple_constant = (1, 2, 3)
+const string_constant = "FOO"
 
-test bar() {
-  tuple_constant == (1, 2, 3)
+test string() {
+  string_constant == "FOO"
 }

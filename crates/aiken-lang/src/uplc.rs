@@ -689,7 +689,7 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         ir_stack: &mut Vec<Air>,
         clause_properties: &mut ClauseProperties,
-        clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>, String>],
+        clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>>],
         subject_type: &Arc<Type>,
         scope: Vec<u64>,
     ) {

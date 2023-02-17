@@ -386,162 +386,32 @@ fn constant_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
         })
 }
 
-fn constant_value_parser() -> impl Parser<Token, ast::UntypedConstant, Error = ParseError> {
-    recursive(|r| {
-        let constant_string_parser =
-            select! {Token::String {value} => value}.map_with_span(|value, span| {
-                ast::UntypedConstant::String {
-                    location: span,
-                    value,
-                }
-            });
-
-        let constant_int_parser =
-            select! {Token::Int {value} => value}.map_with_span(|value, span| {
-                ast::UntypedConstant::Int {
-                    location: span,
-                    value,
-                }
-            });
-
-        let constant_tuple_parser = r
-            .clone()
-            .separated_by(just(Token::Comma))
-            .at_least(2)
-            .allow_trailing()
-            .delimited_by(
-                choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
-                just(Token::RightParen),
-            )
-            .map_with_span(|elements, span| ast::UntypedConstant::Tuple {
+fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseError> {
+    let constant_string_parser =
+        select! {Token::String {value} => value}.map_with_span(|value, span| {
+            ast::Constant::String {
                 location: span,
-                elements,
-            });
+                value,
+            }
+        });
 
-        let constant_bytearray_parser =
-            bytearray_parser().map_with_span(|bytes, span| ast::UntypedConstant::ByteArray {
-                location: span,
-                bytes,
-            });
+    let constant_int_parser =
+        select! {Token::Int {value} => value}.map_with_span(|value, span| ast::Constant::Int {
+            location: span,
+            value,
+        });
 
-        let constant_list_parser = r
-            .clone()
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare))
-            .map_with_span(|elements, span| ast::UntypedConstant::List {
-                location: span,
-                elements,
-                tipo: (),
-            });
+    let constant_bytearray_parser =
+        bytearray_parser().map_with_span(|bytes, span| ast::Constant::ByteArray {
+            location: span,
+            bytes,
+        });
 
-        let constant_record_parser = choice((
-            choice((
-                select! {Token::Name { name } => name}
-                    .then_ignore(just(Token::Dot))
-                    .or_not()
-                    .then(select! {Token::UpName { name } => name})
-                    .then(
-                        select! {Token::Name {name} => name}
-                            .then_ignore(just(Token::Colon))
-                            .or_not()
-                            .then(r.clone())
-                            .validate(|(label_opt, value), span, emit| {
-                                let label = if label_opt.is_some() {
-                                    label_opt
-                                } else if let ast::UntypedConstant::Var { name, .. } = &value {
-                                    Some(name.clone())
-                                } else {
-                                    emit(ParseError::expected_input_found(
-                                        value.location(),
-                                        None,
-                                        Some(error::Pattern::RecordPunning),
-                                    ));
-
-                                    None
-                                };
-
-                                ast::CallArg {
-                                    location: span,
-                                    value,
-                                    label,
-                                }
-                            })
-                            .separated_by(just(Token::Comma))
-                            .allow_trailing()
-                            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-                    )
-                    .map_with_span(
-                        |((module, name), args), span| ast::UntypedConstant::Record {
-                            location: span,
-                            module,
-                            name,
-                            args,
-                            tag: (),
-                            tipo: (),
-                            field_map: None,
-                        },
-                    ),
-                select! {Token::Name { name } => name}
-                    .then_ignore(just(Token::Dot))
-                    .or_not()
-                    .then(select! {Token::UpName { name } => name})
-                    .then(
-                        r.clone()
-                            .map_with_span(|value, span| ast::CallArg {
-                                location: span,
-                                value,
-                                label: None,
-                            })
-                            .separated_by(just(Token::Comma))
-                            .allow_trailing()
-                            .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-                    )
-                    .map_with_span(
-                        |((module, name), args), span| ast::UntypedConstant::Record {
-                            location: span,
-                            module,
-                            name,
-                            args,
-                            tag: (),
-                            tipo: (),
-                            field_map: None,
-                        },
-                    ),
-            )),
-            select! {Token::Name { name } => name}
-                .then_ignore(just(Token::Dot))
-                .then(select! {Token::Name{name} => name})
-                .map_with_span(|(module, name), span: Span| ast::UntypedConstant::Var {
-                    location: span.union(span),
-                    module: Some(module),
-                    name,
-                    constructor: None,
-                    tipo: (),
-                }),
-        ));
-
-        let constant_var_parser =
-            select! {Token::Name {name} => name}.map_with_span(|name, span| {
-                ast::UntypedConstant::Var {
-                    location: span,
-                    module: None,
-                    name,
-                    constructor: None,
-                    tipo: (),
-                }
-            });
-
-        choice((
-            constant_string_parser,
-            constant_int_parser,
-            constant_bytearray_parser,
-            constant_tuple_parser,
-            constant_list_parser,
-            constant_record_parser,
-            constant_var_parser,
-        ))
-    })
+    choice((
+        constant_string_parser,
+        constant_int_parser,
+        constant_bytearray_parser,
+    ))
 }
 
 pub fn bytearray_parser() -> impl Parser<Token, Vec<u8>, Error = ParseError> {
@@ -1407,8 +1277,7 @@ pub fn expr_parser(
     })
 }
 
-pub fn when_clause_guard_parser() -> impl Parser<Token, ast::ClauseGuard<(), ()>, Error = ParseError>
-{
+pub fn when_clause_guard_parser() -> impl Parser<Token, ast::ClauseGuard<()>, Error = ParseError> {
     recursive(|r| {
         let var_parser = select! {
             Token::Name { name } => name,

@@ -7,10 +7,10 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
         Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
-        TypedConstant, UnOp, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
-        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
-        Use, Validator, CAPTURE_VARIABLE,
+        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
+        UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition,
+        UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
+        CAPTURE_VARIABLE,
     },
     docvec,
     expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -324,82 +324,15 @@ impl<'comments> Formatter<'comments> {
             })
     }
 
-    fn const_expr<'a, A, B>(&mut self, value: &'a Constant<A, B>) -> Document<'a> {
+    fn const_expr<'a>(&mut self, value: &'a Constant) -> Document<'a> {
         match value {
             Constant::ByteArray { bytes, .. } => self.bytearray(bytes),
             Constant::Int { value, .. } => value.to_doc(),
-
             Constant::String { value, .. } => self.string(value),
-
-            Constant::List { elements, .. } => {
-                let comma: fn() -> Document<'a> = if elements.iter().all(Constant::is_simple) {
-                    || flex_break(",", ", ")
-                } else {
-                    || break_(",", ", ")
-                };
-                let elements_document = join(elements.iter().map(|e| self.const_expr(e)), comma());
-                list(elements_document, elements.len(), None)
-            }
-
-            Constant::Record {
-                name,
-                args,
-                module: None,
-                ..
-            } if args.is_empty() => name.to_doc(),
-
-            Constant::Record {
-                name,
-                args,
-                module: Some(m),
-                ..
-            } if args.is_empty() => m.to_doc().append(".").append(name.as_str()),
-
-            Constant::Record {
-                name,
-                args,
-                module: None,
-                ..
-            } => name
-                .to_doc()
-                .append(wrap_args(
-                    args.iter()
-                        .map(|a| (self.constant_call_arg(a), a.label.is_some())),
-                ))
-                .group(),
-
-            Constant::Record {
-                name,
-                args,
-                module: Some(m),
-                ..
-            } => m
-                .to_doc()
-                .append(".")
-                .append(name.as_str())
-                .append(wrap_args(
-                    args.iter()
-                        .map(|a| (self.constant_call_arg(a), a.label.is_some())),
-                ))
-                .group(),
-
-            Constant::Var {
-                name, module: None, ..
-            } => name.to_doc(),
-
-            Constant::Var {
-                name,
-                module: Some(module),
-                ..
-            } => docvec![module, ".", name],
-
-            Constant::Tuple { elements, .. } => {
-                wrap_args(elements.iter().map(|e| (self.const_expr(e), false))).group()
-            }
         }
     }
 
-    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedConstant) -> Document<'a> {
+    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a Constant) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
         name.to_doc()
             .append(": ")
@@ -1628,13 +1561,6 @@ impl<'comments> Formatter<'comments> {
             ClauseGuard::Var { name, .. } => name.to_doc(),
 
             ClauseGuard::Constant(constant) => self.const_expr(constant),
-        }
-    }
-
-    fn constant_call_arg<'a, A, B>(&mut self, arg: &'a CallArg<Constant<A, B>>) -> Document<'a> {
-        match &arg.label {
-            None => self.const_expr(&arg.value),
-            Some(s) => s.to_doc().append(": ").append(self.const_expr(&arg.value)),
         }
     }
 

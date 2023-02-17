@@ -3,7 +3,7 @@ use std::{fmt, ops::Range, sync::Arc};
 use crate::{
     builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
-    tipo::{fields::FieldMap, PatternConstructor, Type, TypeInfo, ValueConstructor},
+    tipo::{PatternConstructor, Type, TypeInfo},
 };
 
 pub const ASSERT_VARIABLE: &str = "_try";
@@ -244,17 +244,17 @@ pub struct Use<PackageName> {
     pub unqualified: Vec<UnqualifiedImport>,
 }
 
-pub type TypedModuleConstant = ModuleConstant<Arc<Type>, String>;
-pub type UntypedModuleConstant = ModuleConstant<(), ()>;
+pub type TypedModuleConstant = ModuleConstant<Arc<Type>>;
+pub type UntypedModuleConstant = ModuleConstant<()>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ModuleConstant<T, ConstantRecordTag> {
+pub struct ModuleConstant<T> {
     pub doc: Option<String>,
     pub location: Span,
     pub public: bool,
     pub name: String,
     pub annotation: Option<Annotation>,
-    pub value: Box<Constant<T, ConstantRecordTag>>,
+    pub value: Box<Constant>,
     pub tipo: T,
 }
 
@@ -270,11 +270,11 @@ pub struct Validator<T, Expr> {
     pub params: Vec<Arg<T>>,
 }
 
-pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
-pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
+pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
+pub enum Definition<T, Expr, PackageName> {
     Fn(Function<T, Expr>),
 
     TypeAlias(TypeAlias<T>),
@@ -283,14 +283,14 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
 
     Use(Use<PackageName>),
 
-    ModuleConstant(ModuleConstant<T, ConstantRecordTag>),
+    ModuleConstant(ModuleConstant<T>),
 
     Test(Function<T, Expr>),
 
     Validator(Validator<T, Expr>),
 }
 
-impl<A, B, C, E> Definition<A, B, C, E> {
+impl<A, B, C> Definition<A, B, C> {
     pub fn location(&self) -> Span {
         match self {
             Definition::Fn(Function { location, .. })
@@ -324,90 +324,30 @@ pub struct DefinitionLocation<'module> {
     pub span: Span,
 }
 
-pub type TypedConstant = Constant<Arc<Type>, String>;
-pub type UntypedConstant = Constant<(), ()>;
-
 #[derive(Debug, Clone, PartialEq)]
-pub enum Constant<T, RecordTag> {
-    Int {
-        location: Span,
-        value: String,
-    },
+pub enum Constant {
+    Int { location: Span, value: String },
 
-    String {
-        location: Span,
-        value: String,
-    },
+    String { location: Span, value: String },
 
-    Tuple {
-        location: Span,
-        elements: Vec<Self>,
-    },
-
-    List {
-        location: Span,
-        elements: Vec<Self>,
-        tipo: T,
-    },
-
-    Record {
-        location: Span,
-        module: Option<String>,
-        name: String,
-        args: Vec<CallArg<Self>>,
-        tag: RecordTag,
-        tipo: T,
-        field_map: Option<FieldMap>,
-    },
-
-    ByteArray {
-        location: Span,
-        bytes: Vec<u8>,
-    },
-
-    Var {
-        location: Span,
-        module: Option<String>,
-        name: String,
-        constructor: Option<Box<ValueConstructor>>,
-        tipo: T,
-    },
+    ByteArray { location: Span, bytes: Vec<u8> },
 }
 
-impl TypedConstant {
+impl Constant {
     pub fn tipo(&self) -> Arc<Type> {
         match self {
             Constant::Int { .. } => builtins::int(),
             Constant::String { .. } => builtins::string(),
             Constant::ByteArray { .. } => builtins::byte_array(),
-            Constant::Tuple { elements, .. } => {
-                builtins::tuple(elements.iter().map(|e| e.tipo()).collect())
-            }
-            Constant::List { tipo, .. }
-            | Constant::Record { tipo, .. }
-            | Constant::Var { tipo, .. } => tipo.clone(),
         }
     }
-}
 
-impl<A, B> Constant<A, B> {
     pub fn location(&self) -> Span {
         match self {
             Constant::Int { location, .. }
-            | Constant::Tuple { location, .. }
-            | Constant::List { location, .. }
             | Constant::String { location, .. }
-            | Constant::Record { location, .. }
-            | Constant::ByteArray { location, .. }
-            | Constant::Var { location, .. } => *location,
+            | Constant::ByteArray { location, .. } => *location,
         }
-    }
-
-    pub fn is_simple(&self) -> bool {
-        matches!(
-            self,
-            Self::Int { .. } | Self::ByteArray { .. } | Self::String { .. }
-        )
     }
 }
 
@@ -836,15 +776,15 @@ pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor
 pub type UntypedMultiPattern = MultiPattern<(), ()>;
 pub type TypedMultiPattern = MultiPattern<PatternConstructor, Arc<Type>>;
 
-pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>, String>;
-pub type UntypedClause = Clause<UntypedExpr, (), (), ()>;
+pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>>;
+pub type UntypedClause = Clause<UntypedExpr, (), ()>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
+pub struct Clause<Expr, PatternConstructor, Type> {
     pub location: Span,
     pub pattern: MultiPattern<PatternConstructor, Type>,
     pub alternative_patterns: Vec<MultiPattern<PatternConstructor, Type>>,
-    pub guard: Option<ClauseGuard<Type, RecordTag>>,
+    pub guard: Option<ClauseGuard<Type>>,
     pub then: Expr,
 }
 
@@ -861,11 +801,11 @@ impl TypedClause {
     }
 }
 
-pub type UntypedClauseGuard = ClauseGuard<(), ()>;
-pub type TypedClauseGuard = ClauseGuard<Arc<Type>, String>;
+pub type UntypedClauseGuard = ClauseGuard<()>;
+pub type TypedClauseGuard = ClauseGuard<Arc<Type>>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClauseGuard<Type, RecordTag> {
+pub enum ClauseGuard<Type> {
     Not {
         location: Span,
         value: Box<Self>,
@@ -925,10 +865,10 @@ pub enum ClauseGuard<Type, RecordTag> {
         name: String,
     },
 
-    Constant(Constant<Type, RecordTag>),
+    Constant(Constant),
 }
 
-impl<A, B> ClauseGuard<A, B> {
+impl<A> ClauseGuard<A> {
     pub fn location(&self) -> Span {
         match self {
             ClauseGuard::Constant(constant) => constant.location(),
