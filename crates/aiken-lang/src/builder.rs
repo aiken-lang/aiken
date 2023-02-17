@@ -397,8 +397,8 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
 }
 
 pub fn rearrange_clauses(
-    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>>,
-) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>> {
+    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>>>,
+) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>>> {
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
@@ -1066,11 +1066,7 @@ pub fn check_when_pattern_needs(
     }
 }
 
-pub fn constants_ir(
-    literal: &Constant<Arc<Type>, String>,
-    ir_stack: &mut Vec<Air>,
-    scope: Vec<u64>,
-) {
+pub fn constants_ir(literal: &Constant, ir_stack: &mut Vec<Air>, scope: Vec<u64>) {
     match literal {
         Constant::Int { value, .. } => {
             ir_stack.push(Air::Int {
@@ -1084,32 +1080,12 @@ pub fn constants_ir(
                 value: value.clone(),
             });
         }
-        Constant::Tuple { .. } => {
-            todo!()
-        }
-        Constant::List { elements, tipo, .. } => {
-            ir_stack.push(Air::List {
-                scope: scope.clone(),
-                count: elements.len(),
-                tipo: tipo.clone(),
-                tail: false,
-            });
-
-            for element in elements {
-                constants_ir(element, ir_stack, scope.clone());
-            }
-        }
-        Constant::Record { .. } => {
-            // ir_stack.push(Air::Record { scope,  });
-            todo!()
-        }
         Constant::ByteArray { bytes, .. } => {
             ir_stack.push(Air::ByteArray {
                 scope,
                 bytes: bytes.clone(),
             });
         }
-        Constant::Var { .. } => todo!(),
     };
 }
 
@@ -2072,7 +2048,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
 }
 
 pub fn handle_clause_guard(
-    clause_guard: &ClauseGuard<Arc<Type>, String>,
+    clause_guard: &ClauseGuard<Arc<Type>>,
     clause_guard_vec: &mut Vec<Air>,
     scope: Vec<u64>,
 ) {

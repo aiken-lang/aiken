@@ -103,7 +103,7 @@ pub enum TypedExpr {
         location: Span,
         tipo: Arc<Type>,
         subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>, String>>,
+        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>>>,
     },
 
     If {
@@ -390,7 +390,7 @@ pub enum UntypedExpr {
     When {
         location: Span,
         subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, (), (), ()>>,
+        clauses: Vec<Clause<Self, (), ()>>,
     },
 
     If {

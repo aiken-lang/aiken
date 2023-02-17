@@ -6,9 +6,9 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
         IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg, TypedCallArg,
-        TypedClause, TypedClauseGuard, TypedConstant, TypedIfBranch, TypedMultiPattern,
-        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedConstant,
-        UntypedIfBranch, UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
+        TypedClause, TypedClauseGuard, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg,
+        UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedMultiPattern,
+        UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{TypedExpr, UntypedExpr},
@@ -22,8 +22,7 @@ use super::{
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
-    ModuleValueConstructor, PatternConstructor, RecordAccessor, Type, ValueConstructor,
-    ValueConstructorVariant,
+    PatternConstructor, RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
 };
 
 #[derive(Debug)]
@@ -48,7 +47,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         subjects_count: usize,
         subjects: &[Arc<Type>],
-        typed_clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>, String>],
+        typed_clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>>],
         location: Span,
     ) -> Result<(), Vec<String>> {
         // Because exhaustiveness checking in presence of multiple subjects is similar
@@ -1338,29 +1337,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((typed_pattern, typed_alternatives))
     }
 
-    fn infer_const_tuple(
-        &mut self,
-        untyped_elements: Vec<UntypedConstant>,
-        location: Span,
-    ) -> Result<TypedConstant, Error> {
-        let mut elements = Vec::with_capacity(untyped_elements.len());
-
-        for element in untyped_elements {
-            let element = self.infer_const(&None, element)?;
-
-            elements.push(element);
-        }
-
-        Ok(Constant::Tuple { elements, location })
-    }
-
     // TODO: extract the type annotation checking into a infer_module_const
     // function that uses this function internally
     pub fn infer_const(
         &mut self,
         annotation: &Option<Annotation>,
-        value: UntypedConstant,
-    ) -> Result<TypedConstant, Error> {
+        value: Constant,
+    ) -> Result<Constant, Error> {
         let inferred = match value {
             Constant::Int {
                 location, value, ..
@@ -1370,216 +1353,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location, value, ..
             } => Ok(Constant::String { location, value }),
 
-            Constant::Tuple {
-                elements, location, ..
-            } => self.infer_const_tuple(elements, location),
-
-            Constant::List {
-                elements, location, ..
-            } => self.infer_const_list(elements, location),
-
             Constant::ByteArray { location, bytes } => Ok(Constant::ByteArray { location, bytes }),
-
-            Constant::Record {
-                module,
-                location,
-                name,
-                args,
-                // field_map, is always None here because untyped not yet unified
-                ..
-            } if args.is_empty() => {
-                // Register the module as having been used if it was imported
-                if let Some(ref module) = &module {
-                    self.environment.unused_modules.remove(module);
-                }
-
-                // Type check the record constructor
-                let constructor = self.infer_value_constructor(&module, &name, &location)?;
-
-                let (tag, field_map) = match &constructor.variant {
-                    ValueConstructorVariant::Record {
-                        name, field_map, ..
-                    } => (name.clone(), field_map.clone()),
-
-                    ValueConstructorVariant::ModuleFn { .. }
-                    | ValueConstructorVariant::LocalVariable { .. } => {
-                        return Err(Error::NonLocalClauseGuardVariable { location, name })
-                    }
-
-                    // TODO: remove this clone. Could use an rc instead
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        return Ok(literal.clone())
-                    }
-                };
-
-                Ok(Constant::Record {
-                    module,
-                    location,
-                    name,
-                    args: vec![],
-                    tipo: constructor.tipo,
-                    tag,
-                    field_map,
-                })
-            }
-
-            Constant::Record {
-                module,
-                location,
-                name,
-                mut args,
-                // field_map, is always None here because untyped not yet unified
-                ..
-            } => {
-                // Register the module as having been used if it was imported
-                if let Some(ref module) = &module {
-                    self.environment.unused_modules.remove(module);
-                }
-
-                let constructor = self.infer_value_constructor(&module, &name, &location)?;
-
-                let (tag, field_map) = match &constructor.variant {
-                    ValueConstructorVariant::Record {
-                        name, field_map, ..
-                    } => (name.clone(), field_map.clone()),
-
-                    ValueConstructorVariant::ModuleFn { .. }
-                    | ValueConstructorVariant::LocalVariable { .. } => {
-                        return Err(Error::NonLocalClauseGuardVariable { location, name })
-                    }
-
-                    // TODO: remove this clone. Could be an rc instead
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        return Ok(literal.clone())
-                    }
-                };
-
-                // Pretty much all the other infer functions operate on UntypedExpr
-                // or TypedExpr rather than ClauseGuard. To make things easier we
-                // build the TypedExpr equivalent of the constructor and use that
-                // TODO: resvisit this. It is rather awkward at present how we
-                // have to convert to this other data structure.
-                let fun = match &module {
-                    Some(module_name) => {
-                        let tipo = Arc::clone(&constructor.tipo);
-
-                        let module_name = self
-                            .environment
-                            .imported_modules
-                            .get(module_name)
-                            .expect("Failed to find previously located module import")
-                            .1
-                            .name
-                            .clone();
-
-                        let module_value_constructor = ModuleValueConstructor::Record {
-                            name: name.clone(),
-                            field_map: field_map.clone(),
-                            arity: args.len(),
-                            tipo: Arc::clone(&tipo),
-                            location: constructor.variant.location(),
-                        };
-
-                        TypedExpr::ModuleSelect {
-                            label: name.clone(),
-                            module_alias: module_name.clone(),
-                            module_name,
-                            tipo,
-                            constructor: module_value_constructor,
-                            location,
-                        }
-                    }
-
-                    None => TypedExpr::Var {
-                        constructor,
-                        location,
-                        name: name.clone(),
-                    },
-                };
-
-                // This is basically the same code as do_infer_call_with_known_fun()
-                // except the args are typed with infer_clause_guard() here.
-                // This duplication is a bit awkward but it works!
-                // Potentially this could be improved later
-                match self.get_field_map(&fun, location)? {
-                    // The fun has a field map so labelled arguments may be present and need to be reordered.
-                    Some(field_map) => field_map.reorder(&mut args, location)?,
-
-                    // The fun has no field map and so we error if arguments have been labelled
-                    None => assert_no_labeled_arguments(&args)
-                        .map(|(location, label)| {
-                            Err(Error::UnexpectedLabeledArg { location, label })
-                        })
-                        .unwrap_or(Ok(()))?,
-                }
-
-                let (mut args_types, return_type) = self.environment.match_fun_type(
-                    fun.tipo(),
-                    args.len(),
-                    fun.location(),
-                    location,
-                )?;
-
-                let mut typed_args = Vec::new();
-
-                for (tipo, arg) in args_types.iter_mut().zip(args) {
-                    let CallArg {
-                        label,
-                        value,
-                        location,
-                    } = arg;
-
-                    let value = self.infer_const(&None, value)?;
-
-                    self.unify(tipo.clone(), value.tipo(), value.location(), tipo.is_data())?;
-
-                    typed_args.push(CallArg {
-                        label,
-                        value,
-                        location,
-                    });
-                }
-
-                Ok(Constant::Record {
-                    module,
-                    location,
-                    name,
-                    args: typed_args,
-                    tipo: return_type,
-                    tag,
-                    field_map,
-                })
-            }
-            Constant::Var {
-                location,
-                module,
-                name,
-                ..
-            } => {
-                // Register the module as having been used if it was imported
-                if let Some(ref module) = &module {
-                    self.environment.unused_modules.remove(module);
-                }
-
-                // Infer the type of this constant
-                let constructor = self.infer_value_constructor(&module, &name, &location)?;
-
-                match constructor.variant {
-                    ValueConstructorVariant::ModuleConstant { .. }
-                    | ValueConstructorVariant::ModuleFn { .. } => Ok(Constant::Var {
-                        location,
-                        module,
-                        name,
-                        tipo: Arc::clone(&constructor.tipo),
-                        constructor: Some(Box::from(constructor)),
-                    }),
-                    // constructor.variant cannot be a LocalVariable because module constants can
-                    // only be defined at module scope. It also cannot be a Record because then
-                    // this constant would have been parsed as a Constant::Record. Therefore this
-                    // code is unreachable.
-                    _ => unreachable!(),
-                }
-            }
         }?;
 
         // Check type annotation is accurate.
@@ -1595,30 +1369,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         Ok(inferred)
-    }
-
-    fn infer_const_list(
-        &mut self,
-        untyped_elements: Vec<UntypedConstant>,
-        location: Span,
-    ) -> Result<TypedConstant, Error> {
-        let tipo = self.new_unbound_var();
-
-        let mut elements = Vec::with_capacity(untyped_elements.len());
-
-        for element in untyped_elements {
-            let element = self.infer_const(&None, element)?;
-
-            self.unify(tipo.clone(), element.tipo(), element.location(), false)?;
-
-            elements.push(element);
-        }
-
-        Ok(Constant::List {
-            elements,
-            location,
-            tipo: list(tipo),
-        })
     }
 
     fn infer_if(
