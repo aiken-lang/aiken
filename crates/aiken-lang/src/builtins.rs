@@ -578,9 +578,13 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
+        DefaultFunction::ChooseData => {
+            let tipo = function(vec![data(), data(), data(), data(), data(), data()], data());
+            Some((tipo, 6))
+        }
+
         // Anything below has a direct syntax equivalent in Aiken, so
         // there's no need to support builtin for those.
-        DefaultFunction::ChooseData => None,
         DefaultFunction::MkPairData => None,
         DefaultFunction::MkNilData => None,
         DefaultFunction::MkNilPairData => None,
