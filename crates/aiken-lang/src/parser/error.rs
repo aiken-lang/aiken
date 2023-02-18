@@ -55,6 +55,16 @@ impl ParseError {
             label: None,
         }
     }
+
+    pub fn unexpected_bytearray_literal(span: Span, keyword: Token, literal: String) -> Self {
+        Self {
+            kind: ErrorKind::UnexpectedByteArrayLiteral(keyword, literal),
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: Some("use @"),
+        }
+    }
 }
 
 impl PartialEq for ParseError {
@@ -102,15 +112,18 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
 pub enum ErrorKind {
     #[error("I arrived at the end of the file unexpectedly.")]
     UnexpectedEnd,
+
     #[error("{0}")]
     #[diagnostic(help("{}", .0.help().unwrap_or_else(|| Box::new(""))))]
     Unexpected(Pattern),
+
     #[error("I discovered an invalid tuple index.")]
     #[diagnostic()]
     InvalidTupleIndex {
         #[help]
         hint: Option<String>,
     },
+
     #[error("I tripped over a malformed base16-encoded string literal.")]
     #[diagnostic(help("{}", formatdoc! {
         r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal) string literals.
@@ -123,6 +136,7 @@ pub enum ErrorKind {
         "#
     , "pub const".bright_blue(), "=".yellow(), "\"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50\"".bright_purple()}))]
     MalformedBase16StringLiteral,
+
     #[error("I failed to understand a when clause guard.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
     #[diagnostic(help("{}", formatdoc! {
@@ -145,6 +159,29 @@ pub enum ErrorKind {
         , bad = "✖️".red()
     }))]
     InvalidWhenClause,
+
+    #[error(
+        "I noticed a {} literal where I would expect a {}.",
+        "ByteArray".bold().bright_blue(),
+        "String".bold().bright_blue(),
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#string"))]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"The keyword {keyword} accepts a {type_String} as argument. A {type_String} literal is denoted by {syntax}. Simple double-quotes are interpreted as {type_ByteArray} of UTF-8 encoded bytes. Juggling between {type_ByteArray} and {type_String} can be a little confusing.
+
+           In this instance, you probably meant to write the following:
+
+           ╰─▶ {keyword} {symbol_at}{symbol_doublequotes}{literal}{symbol_doublequotes}
+        "#,
+        type_String = "String".bold().bright_blue(),
+        type_ByteArray = "ByteArray".bold().bright_blue(),
+        symbol_at = "@".purple(),
+        symbol_doublequotes = "\"".purple(),
+        syntax = format!("{}{}", "@".purple(), "\"...\"".purple()),
+        keyword = format!("{}", .0).replace('"', "").bold(),
+        literal = .1.purple(),
+    }))]
+    UnexpectedByteArrayLiteral(Token, String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]

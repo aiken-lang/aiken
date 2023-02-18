@@ -533,12 +533,70 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
     })
 }
 
+fn unexpected_bytearray_literal(
+    token: Token,
+    expr: &expr::UntypedExpr,
+) -> Option<(ParseError, String)> {
+    match expr {
+        expr::UntypedExpr::ByteArray {
+            bytes,
+            preferred_format: ByteArrayFormatPreference::Utf8String,
+            location,
+            ..
+        } => {
+            let literal = String::from_utf8(bytes.clone()).unwrap();
+
+            Some((
+                ParseError::unexpected_bytearray_literal(*location, token, literal.clone()),
+                literal,
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn validate_error_todo(
+    token: Token,
+    reason: Option<expr::UntypedExpr>,
+    emit: &mut dyn FnMut(ParseError),
+) -> Option<expr::UntypedExpr> {
+    if let Some(reason) = reason {
+        match unexpected_bytearray_literal(token, &reason) {
+            None => Some(reason),
+            Some((err, value)) => {
+                emit(err);
+                Some(expr::UntypedExpr::String {
+                    location: reason.location(),
+                    value,
+                })
+            }
+        }
+    } else {
+        reason
+    }
+}
+
 pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     recursive(|r| {
         choice((
             just(Token::Trace)
                 .ignore_then(expr_parser(r.clone()))
                 .then(r.clone())
+                .validate(|(text, then), _span, emit| {
+                    match unexpected_bytearray_literal(Token::Trace, &text) {
+                        None => (text, then),
+                        Some((err, value)) => {
+                            emit(err);
+                            (
+                                expr::UntypedExpr::String {
+                                    location: text.location(),
+                                    value,
+                                },
+                                then,
+                            )
+                        }
+                    }
+                })
                 .map_with_span(|(text, then_), span| expr::UntypedExpr::Trace {
                     kind: TraceKind::Trace,
                     location: span,
@@ -547,9 +605,11 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                 }),
             just(Token::ErrorTerm)
                 .ignore_then(expr_parser(r.clone()).or_not())
+                .validate(|reason, _span, emit| validate_error_todo(Token::ErrorTerm, reason, emit))
                 .map_with_span(|reason, span| expr::UntypedExpr::error(span, reason)),
             just(Token::Todo)
                 .ignore_then(expr_parser(r.clone()).or_not())
+                .validate(|reason, _span, emit| validate_error_todo(Token::Todo, reason, emit))
                 .map_with_span(|reason, span| expr::UntypedExpr::todo(span, reason)),
             expr_parser(r.clone())
                 .then(r.repeated())
@@ -924,6 +984,7 @@ pub fn expr_parser(
                             .then_ignore(one_of(Token::RArrow).not().rewind())
                             .or_not(),
                     )
+                    .validate(|reason, _span, emit| validate_error_todo(Token::Todo, reason, emit))
                     .map_with_span(|reason, span| expr::UntypedExpr::todo(span, reason)),
                 just(Token::ErrorTerm)
                     .ignore_then(
@@ -931,6 +992,9 @@ pub fn expr_parser(
                             .then_ignore(just(Token::RArrow).not().rewind())
                             .or_not(),
                     )
+                    .validate(|reason, _span, emit| {
+                        validate_error_todo(Token::ErrorTerm, reason, emit)
+                    })
                     .map_with_span(|reason, span| expr::UntypedExpr::error(span, reason)),
             )))
             .map_with_span(
