@@ -67,7 +67,7 @@ where
     module_types: HashMap<String, TypeInfo>,
     root: PathBuf,
     sources: Vec<Source>,
-    pub warnings: Vec<Warning>,
+    warnings: Vec<Warning>,
     event_listener: T,
     functions: IndexMap<FunctionAccessKey, TypedFunction>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
@@ -78,6 +78,14 @@ where
     T: EventListener,
 {
     pub fn new(root: PathBuf, event_listener: T) -> Result<Project<T>, Error> {
+        let config = Config::load(&root)?;
+
+        let project = Project::new_with_config(config, root, event_listener);
+
+        Ok(project)
+    }
+
+    pub fn new_with_config(config: Config, root: PathBuf, event_listener: T) -> Project<T> {
         let id_gen = IdGenerator::new();
 
         let mut module_types = HashMap::new();
@@ -89,9 +97,7 @@ where
 
         let data_types = builtins::prelude_data_types(&id_gen);
 
-        let config = Config::load(&root)?;
-
-        Ok(Project {
+        Project {
             config,
             checked_modules: CheckedModules::default(),
             defined_modules: HashMap::new(),
@@ -103,10 +109,30 @@ where
             event_listener,
             functions,
             data_types,
-        })
+        }
     }
 
-    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Error> {
+    pub fn warnings(&mut self) -> Vec<Warning> {
+        std::mem::take(&mut self.warnings)
+    }
+
+    pub fn modules(&self) -> Vec<CheckedModule> {
+        self.checked_modules.values().cloned().collect()
+    }
+
+    pub fn checkpoint(&self) -> Checkpoint {
+        Checkpoint {
+            module_types: self.module_types.clone(),
+            defined_modules: self.defined_modules.clone(),
+        }
+    }
+
+    pub fn restore(&mut self, checkpoint: Checkpoint) {
+        self.module_types = checkpoint.module_types;
+        self.defined_modules = checkpoint.defined_modules;
+    }
+
+    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
@@ -115,7 +141,7 @@ where
         self.compile(options)
     }
 
-    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Error> {
+    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Vec<Error>> {
         self.compile_deps()?;
 
         self.event_listener
@@ -145,8 +171,8 @@ where
 
         for file in doc_files {
             let path = destination.join(file.path);
-            fs::create_dir_all(path.parent().unwrap())?;
-            fs::write(&path, file.content)?;
+            fs::create_dir_all(path.parent().unwrap()).map_err(Error::from)?;
+            fs::write(&path, file.content).map_err(Error::from)?;
         }
 
         Ok(())
@@ -159,7 +185,7 @@ where
         verbose: bool,
         exact_match: bool,
         tracing: Tracing,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
             code_gen_mode: if skip_tests {
@@ -198,7 +224,7 @@ where
         self.root.join("plutus.json")
     }
 
-    pub fn compile(&mut self, options: Options) -> Result<(), Error> {
+    pub fn compile(&mut self, options: Options) -> Result<(), Vec<Error>> {
         self.compile_deps()?;
 
         self.event_listener
@@ -239,9 +265,13 @@ where
                 }
 
                 let json = serde_json::to_string_pretty(&blueprint).unwrap();
-                fs::write(self.blueprint_path(), json).map_err(|error| Error::FileIo {
-                    error,
-                    path: self.blueprint_path(),
+
+                fs::write(self.blueprint_path(), json).map_err(|error| {
+                    Error::FileIo {
+                        error,
+                        path: self.blueprint_path(),
+                    }
+                    .into()
                 })
             }
             CodeGenMode::Test {
@@ -278,7 +308,7 @@ where
                     .handle_event(Event::FinishedTests { tests: results });
 
                 if !errors.is_empty() {
-                    Err(Error::List(errors))
+                    Err(errors)
                 } else {
                     Ok(())
                 }
@@ -372,7 +402,7 @@ where
         Ok(blueprint)
     }
 
-    fn compile_deps(&mut self) -> Result<(), Error> {
+    fn compile_deps(&mut self) -> Result<(), Vec<Error>> {
         let manifest = deps::download(
             &self.event_listener,
             UseManifest::Yes,
@@ -416,7 +446,7 @@ where
         Ok(())
     }
 
-    fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Error> {
+    fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Vec<Error>> {
         let mut errors = Vec::new();
         let mut parsed_modules = HashMap::with_capacity(self.sources.len());
 
@@ -450,7 +480,8 @@ where
                             module: module.name.clone(),
                             first,
                             second: module.path,
-                        });
+                        }
+                        .into());
                     }
 
                     module.attach_doc_and_module_comments();
@@ -473,7 +504,7 @@ where
         if errors.is_empty() {
             Ok(parsed_modules.into())
         } else {
-            Err(Error::List(errors))
+            Err(errors)
         }
     }
 

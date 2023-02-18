@@ -69,10 +69,6 @@ pub enum Error {
     #[error("I just found a cycle in module hierarchy!")]
     ImportCycle { modules: Vec<String> },
 
-    /// Useful for returning many [`Error::Parse`] at once
-    #[error("A list of errors")]
-    List(Vec<Self>),
-
     #[error("While parsing files...")]
     Parse {
         path: PathBuf,
@@ -139,25 +135,11 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn len(&self) -> usize {
-        match self {
-            Error::List(errors) => errors.len(),
-            _ => 1,
-        }
-    }
-
     pub fn report(&self) {
-        match self {
-            Error::List(errors) => {
-                for error in errors {
-                    eprintln!("Error: {error:?}")
-                }
-            }
-            rest => eprintln!("Error: {rest:?}"),
-        }
+        eprintln!("Error: {self:?}")
     }
 
-    pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Self {
+    pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Vec<Self> {
         let mut errors = Vec::with_capacity(errs.len());
 
         for error in errs {
@@ -209,7 +191,6 @@ impl Error {
             Error::MissingManifest { path } => Some(path.to_path_buf()),
             Error::TomlLoading { path, .. } => Some(path.to_path_buf()),
             Error::ImportCycle { .. } => None,
-            Error::List(_) => None,
             Error::Parse { path, .. } => Some(path.to_path_buf()),
             Error::Type { path, .. } => Some(path.to_path_buf()),
             Error::ValidatorMustReturnBool { path, .. } => Some(path.to_path_buf()),
@@ -226,7 +207,7 @@ impl Error {
         }
     }
 
-    pub fn src(&self) -> Option<String> {
+    fn src(&self) -> Option<String> {
         match self {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
@@ -236,7 +217,6 @@ impl Error {
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { src, .. } => Some(src.to_string()),
             Error::ImportCycle { .. } => None,
-            Error::List(_) => None,
             Error::Parse { src, .. } => Some(src.to_string()),
             Error::Type { src, .. } => Some(src.to_string()),
             Error::ValidatorMustReturnBool { src, .. } => Some(src.to_string()),
@@ -284,7 +264,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::Blueprint(e) => e.code(),
             Error::ImportCycle { .. } => Some(Box::new("aiken::module::cyclical")),
-            Error::List(_) => None,
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::Type { error, .. } => Some(Box::new(format!(
                 "aiken::check{}",
@@ -321,7 +300,6 @@ impl Diagnostic for Error {
                 "Try moving the shared code to a separate module that the others can depend on\n- {}",
                 modules.join("\n- ")
             ))),
-            Error::List(_) => None,
             Error::Parse { error, .. } => error.kind.help(),
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
@@ -388,7 +366,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::Blueprint(e) => e.labels(),
-            Error::List(_) => None,
             Error::Parse { error, .. } => error.labels(),
             Error::MissingManifest { .. } => None,
             Error::Type { error, .. } => error.labels(),
@@ -427,7 +404,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::Blueprint(e) => e.source_code(),
-            Error::List(_) => None,
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
@@ -454,7 +430,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::Blueprint(e) => e.url(),
-            Error::List { .. } => None,
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.url(),
             Error::StandardIo(_) => None,
@@ -481,7 +456,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::Blueprint(e) => e.related(),
             Error::ImportCycle { .. } => None,
-            Error::List { .. } => None,
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.related(),
             Error::StandardIo(_) => None,

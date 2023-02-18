@@ -21,10 +21,12 @@ pub fn exec(
         files,
     }: Args,
 ) -> miette::Result<()> {
-    if let Err(err) = aiken_project::format::run(stdin, check, files) {
-        err.report();
+    if let Err(errs) = aiken_project::format::run(stdin, check, files) {
+        for err in &errs {
+            err.report();
+        }
 
-        miette::bail!("failed: {} error(s)", err.len());
+        miette::bail!("failed: {} error(s)", errs.len());
     };
 
     Ok(())

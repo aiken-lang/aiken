@@ -3,6 +3,10 @@ use crate::{error::Error, package_name::PackageName};
 use reqwest::Client;
 use std::path::PathBuf;
 
+pub fn project_config() -> PathBuf {
+    PathBuf::from("aiken.toml")
+}
+
 pub fn manifest() -> PathBuf {
     PathBuf::from("aiken.lock")
 }
