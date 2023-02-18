@@ -1,10 +1,10 @@
-use crate::{package_name::PackageName, Error};
+use crate::{package_name::PackageName, paths, Error};
 use aiken_lang::ast::Span;
 use miette::NamedSource;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, fs, io, path::Path};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
     pub name: PackageName,
     pub version: String,
@@ -16,7 +16,7 @@ pub struct Config {
     pub dependencies: Vec<Dependency>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Repository {
     pub user: String,
     pub project: String,
@@ -72,13 +72,13 @@ impl Config {
     }
 
     pub fn save(&self, dir: &Path) -> Result<(), io::Error> {
-        let aiken_toml_path = dir.join("aiken.toml");
+        let aiken_toml_path = dir.join(paths::project_config());
         let aiken_toml = toml::to_string_pretty(self).unwrap();
         fs::write(aiken_toml_path, aiken_toml)
     }
 
     pub fn load(dir: &Path) -> Result<Config, Error> {
-        let config_path = dir.join("aiken.toml");
+        let config_path = dir.join(paths::project_config());
         let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
             path: dir.to_path_buf(),
         })?;

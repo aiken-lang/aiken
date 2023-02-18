@@ -12,7 +12,7 @@ use crate::{
     is_aiken_path,
 };
 
-pub fn run(stdin: bool, check: bool, files: Vec<String>) -> Result<(), Error> {
+pub fn run(stdin: bool, check: bool, files: Vec<String>) -> Result<(), Vec<Error>> {
     if stdin {
         process_stdin(check)
     } else {
@@ -20,7 +20,7 @@ pub fn run(stdin: bool, check: bool, files: Vec<String>) -> Result<(), Error> {
     }
 }
 
-fn process_stdin(check: bool) -> Result<(), Error> {
+fn process_stdin(check: bool) -> Result<(), Vec<Error>> {
     let src = read_stdin()?;
 
     let mut out = String::new();
@@ -36,20 +36,20 @@ fn process_stdin(check: bool) -> Result<(), Error> {
     }
 
     if src != out {
-        return Err(Error::Format {
+        return Err(vec![Error::Format {
             problem_files: vec![Unformatted {
                 source: PathBuf::from("<standard input>"),
                 destination: PathBuf::from("<standard output>"),
                 input: src,
                 output: out,
             }],
-        });
+        }]);
     }
 
     Ok(())
 }
 
-fn process_files(check: bool, files: Vec<String>) -> Result<(), Error> {
+fn process_files(check: bool, files: Vec<String>) -> Result<(), Vec<Error>> {
     if check {
         check_files(files)
     } else {
@@ -57,39 +57,39 @@ fn process_files(check: bool, files: Vec<String>) -> Result<(), Error> {
     }
 }
 
-fn check_files(files: Vec<String>) -> Result<(), Error> {
+fn check_files(files: Vec<String>) -> Result<(), Vec<Error>> {
     let problem_files = unformatted_files(files)?;
 
     if problem_files.is_empty() {
         Ok(())
     } else {
-        Err(Error::Format { problem_files })
+        Err(Error::Format { problem_files }.into())
     }
 }
 
-fn format_files(files: Vec<String>) -> Result<(), Error> {
+fn format_files(files: Vec<String>) -> Result<(), Vec<Error>> {
     for file in unformatted_files(files)? {
-        fs::write(file.destination, file.output)?;
+        fs::write(file.destination, file.output).map_err(Error::from)?;
     }
 
     Ok(())
 }
 
-fn unformatted_files(files: Vec<String>) -> Result<Vec<Unformatted>, Error> {
+fn unformatted_files(files: Vec<String>) -> Result<Vec<Unformatted>, Vec<Error>> {
     let mut problem_files = Vec::with_capacity(files.len());
-    let mut errors = Error::List(vec![]);
+    let mut errors = vec![];
 
     for file_path in files {
         let path = PathBuf::from_str(&file_path).unwrap();
 
         if path.is_dir() {
             for path in aiken_files_excluding_gitignore(&path) {
-                if let Err(err) = format_file(&mut problem_files, path) {
-                    errors = errors.append(err);
+                if let Err(mut errs) = format_file(&mut problem_files, path) {
+                    errors.append(&mut errs);
                 };
             }
-        } else if let Err(err) = format_file(&mut problem_files, path) {
-            errors = errors.append(err);
+        } else if let Err(mut errs) = format_file(&mut problem_files, path) {
+            errors.append(&mut errs);
         }
     }
 
@@ -100,7 +100,7 @@ fn unformatted_files(files: Vec<String>) -> Result<Vec<Unformatted>, Error> {
     }
 }
 
-fn format_file(problem_files: &mut Vec<Unformatted>, path: PathBuf) -> Result<(), Error> {
+fn format_file(problem_files: &mut Vec<Unformatted>, path: PathBuf) -> Result<(), Vec<Error>> {
     let src = fs::read_to_string(&path).map_err(|error| Error::FileIo {
         error,
         path: path.clone(),

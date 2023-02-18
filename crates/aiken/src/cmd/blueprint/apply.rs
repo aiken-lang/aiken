@@ -56,9 +56,12 @@ pub fn exec(
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
 
-        fs::write(p.blueprint_path(), json).map_err(|error| Error::FileIo {
-            error,
-            path: p.blueprint_path(),
+        fs::write(p.blueprint_path(), json).map_err(|error| {
+            Error::FileIo {
+                error,
+                path: p.blueprint_path(),
+            }
+            .into()
         })
     })
 }
