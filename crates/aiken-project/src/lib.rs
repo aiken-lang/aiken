@@ -56,6 +56,11 @@ pub struct Source {
     pub kind: ModuleKind,
 }
 
+pub struct Checkpoint {
+    module_types: HashMap<String, TypeInfo>,
+    defined_modules: HashMap<String, PathBuf>,
+}
+
 pub struct Project<T>
 where
     T: EventListener,

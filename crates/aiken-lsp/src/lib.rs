@@ -1,12 +1,17 @@
+use std::env;
+
+use aiken_project::{config::Config, paths};
 use lsp_server::Connection;
 use lsp_types::{
     OneOf, SaveOptions, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
 };
 
+mod cast;
 pub mod error;
 mod line_numbers;
 pub mod server;
+mod utils;
 
 use error::Error;
 
@@ -14,6 +19,18 @@ use crate::server::Server;
 
 pub fn start() -> Result<(), Error> {
     tracing::info!("Aiken language server starting");
+
+    let root = env::current_dir()?;
+
+    let config = if paths::project_config().exists() {
+        tracing::info!("Aiken project detected");
+
+        Some(Config::load(&root).expect("failed to load aiken.toml"))
+    } else {
+        tracing::info!("Aiken project config not found");
+
+        None
+    };
 
     // Create the transport. Includes the stdio (stdin and stdout) versions but this could
     // also be implemented to use sockets or HTTP.
@@ -25,7 +42,7 @@ pub fn start() -> Result<(), Error> {
     let initialization_params = connection.initialize(server_capabilities)?;
     let initialize_params = serde_json::from_value(initialization_params)?;
 
-    let mut server = Server::new(initialize_params, None);
+    let mut server = Server::new(initialize_params, config, root);
 
     server.listen(connection)?;
 

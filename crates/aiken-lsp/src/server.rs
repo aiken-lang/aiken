@@ -1,26 +1,44 @@
 use std::{
     collections::{HashMap, HashSet},
-    error::Error,
     fs,
     path::{Path, PathBuf},
 };
 
 use aiken_lang::{ast::ModuleKind, parser};
-use aiken_project::{config, error::Error as ProjectError};
+use aiken_project::{
+    config,
+    error::{Error as ProjectError, GetSource},
+};
 use lsp_server::{Connection, Message};
 use lsp_types::{
     notification::{
-        DidChangeTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics, ShowMessage,
+        DidChangeTextDocument, DidSaveTextDocument, Notification, Progress, PublishDiagnostics,
+        ShowMessage,
     },
-    request::{Formatting, Request},
+    request::{Formatting, Request, WorkDoneProgressCreate},
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
 use miette::Diagnostic;
 
-use crate::{error::Error as ServerError, line_numbers::LineNumbers};
+use crate::{
+    cast::{cast_notification, cast_request},
+    error::Error as ServerError,
+    line_numbers::LineNumbers,
+    utils::{
+        path_to_uri, text_edit_replace, COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
+    },
+};
+
+use self::lsp_project::LspProject;
+
+mod lsp_project;
+pub mod telemetry;
 
 #[allow(dead_code)]
 pub struct Server {
+    // Project root directory
+    root: PathBuf,
+
     config: Option<config::Config>,
 
     /// Files that have been edited in memory
@@ -39,114 +57,114 @@ pub struct Server {
     /// to the client. These are likely locationless Aiken diagnostics, as LSP
     /// diagnostics always need a location.
     stored_messages: Vec<lsp_types::ShowMessageParams>,
+
+    /// An instance of a LspProject
+    compiler: Option<LspProject>,
 }
 
 impl Server {
-    pub fn new(initialize_params: InitializeParams, config: Option<config::Config>) -> Self {
-        Self {
-            config,
-            edited: HashMap::new(),
-            initialize_params,
-            published_diagnostics: HashSet::new(),
-            stored_diagnostics: HashMap::new(),
-            stored_messages: Vec::new(),
-        }
-    }
+    /// Clear all diagnostics that have been previously published to the client
+    fn clear_all_diagnostics(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        for file in self.published_diagnostics.drain() {
+            let params = lsp_types::PublishDiagnosticsParams {
+                uri: file,
+                diagnostics: vec![],
+                version: None,
+            };
 
-    pub fn listen(&mut self, connection: Connection) -> Result<(), ServerError> {
-        self.publish_stored_diagnostics(&connection)?;
+            let notification = lsp_server::Notification {
+                method: PublishDiagnostics::METHOD.to_string(),
+                params: serde_json::to_value(params)?,
+            };
 
-        for msg in &connection.receiver {
-            tracing::debug!("Got message: {:#?}", msg);
-
-            match msg {
-                Message::Request(req) => {
-                    if connection.handle_shutdown(&req)? {
-                        return Ok(());
-                    }
-
-                    tracing::debug!("Get request: {:#?}", req);
-
-                    let response = self.handle_request(req)?;
-
-                    self.publish_stored_diagnostics(&connection)?;
-
-                    connection.sender.send(Message::Response(response))?;
-                }
-                Message::Response(_) => todo!(),
-                Message::Notification(notification) => {
-                    self.handle_notification(&connection, notification)?
-                }
-            }
+            connection
+                .sender
+                .send(lsp_server::Message::Notification(notification))?;
         }
 
         Ok(())
     }
 
-    fn handle_request(
-        &mut self,
-        request: lsp_server::Request,
-    ) -> Result<lsp_server::Response, ServerError> {
-        let id = request.id.clone();
+    /// Compile the project if we are in one. Otherwise do nothing.
+    fn compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        self.notify_client_of_compilation_start(connection)?;
 
-        match request.method.as_str() {
-            Formatting::METHOD => {
-                let params = cast_request::<Formatting>(request)?;
+        eprintln!("{:?}", self.compiler.is_some());
+        if let Some(compiler) = self.compiler.as_mut() {
+            let result = compiler.compile();
 
-                let result = self.format(params);
+            for warning in compiler.project.warnings() {
+                self.process_diagnostic(warning)?;
+            }
 
-                match result {
-                    Ok(text_edit) => {
-                        let result = serde_json::to_value(text_edit)?;
-
-                        Ok(lsp_server::Response {
-                            id,
-                            error: None,
-                            result: Some(result),
-                        })
-                    }
-                    Err(err) => match err {
-                        ProjectError::List(errors) => {
-                            for error in errors {
-                                if error.source_code().is_some() {
-                                    self.process_diagnostic(error)?;
-                                }
-                            }
-
-                            Ok(lsp_server::Response {
-                                id,
-                                error: None,
-                                result: Some(serde_json::json!(null)),
-                            })
-                        }
-                        error => {
-                            if error.source_code().is_some() {
-                                self.process_diagnostic(error)?;
-
-                                Ok(lsp_server::Response {
-                                    id,
-                                    error: None,
-                                    result: Some(serde_json::json!(null)),
-                                })
-                            } else {
-                                Ok(lsp_server::Response {
-                                    id,
-                                    error: Some(lsp_server::ResponseError {
-                                        code: 1, // We should assign a code to each error.
-                                        message: format!("{error:?}"),
-                                        data: None,
-                                    }),
-                                    result: None,
-                                })
-                            }
-                        }
-                    },
+            if let Err(errs) = result {
+                for err in errs {
+                    self.process_diagnostic(err)?;
                 }
             }
-            unsupported => Err(ServerError::UnsupportedLspRequest {
-                request: unsupported.to_string(),
-            }),
         }
+
+        self.notify_client_of_compilation_end(connection)?;
+
+        Ok(())
+    }
+
+    fn create_compilation_progress_token(
+        &mut self,
+        connection: &lsp_server::Connection,
+    ) -> Result<(), ServerError> {
+        let params = lsp_types::WorkDoneProgressCreateParams {
+            token: lsp_types::NumberOrString::String(COMPILING_PROGRESS_TOKEN.into()),
+        };
+
+        let request = lsp_server::Request {
+            id: CREATE_COMPILING_PROGRESS_TOKEN.to_string().into(),
+            method: WorkDoneProgressCreate::METHOD.into(),
+            params: serde_json::to_value(&params)?,
+        };
+
+        connection
+            .sender
+            .send(lsp_server::Message::Request(request))?;
+
+        Ok(())
+    }
+
+    fn create_new_compiler(&mut self) {
+        if let Some(config) = self.config.as_ref() {
+            let compiler = LspProject::new(config.clone(), self.root.clone(), telemetry::Lsp);
+
+            self.compiler = Some(compiler);
+        }
+    }
+
+    fn format(
+        &mut self,
+        params: DocumentFormattingParams,
+    ) -> Result<Vec<TextEdit>, Vec<ProjectError>> {
+        let path = params.text_document.uri.path();
+        let mut new_text = String::new();
+
+        match self.edited.get(path) {
+            Some(src) => {
+                let (module, extra) = parser::module(src, ModuleKind::Lib).map_err(|errs| {
+                    aiken_project::error::Error::from_parse_errors(errs, Path::new(path), src)
+                })?;
+
+                aiken_lang::format::pretty(&mut new_text, module, extra, src);
+            }
+            None => {
+                let src = fs::read_to_string(path).map_err(ProjectError::from)?;
+
+                let (module, extra) = parser::module(&src, ModuleKind::Lib).map_err(|errs| {
+                    aiken_project::error::Error::from_parse_errors(errs, Path::new(path), &src)
+                })?;
+
+                aiken_lang::format::pretty(&mut new_text, module, extra, &src);
+            }
+        }
+
+        Ok(vec![text_edit_replace(new_text)])
     }
 
     fn handle_notification(
@@ -178,96 +196,123 @@ impl Server {
         }
     }
 
-    fn format(&mut self, params: DocumentFormattingParams) -> Result<Vec<TextEdit>, ProjectError> {
-        let path = params.text_document.uri.path();
-        let mut new_text = String::new();
+    fn handle_request(
+        &mut self,
+        request: lsp_server::Request,
+    ) -> Result<lsp_server::Response, ServerError> {
+        let id = request.id.clone();
 
-        match self.edited.get(path) {
-            Some(src) => {
-                let (module, extra) = parser::module(src, ModuleKind::Lib).map_err(|errs| {
-                    aiken_project::error::Error::from_parse_errors(errs, Path::new(path), src)
-                })?;
+        match request.method.as_str() {
+            Formatting::METHOD => {
+                let params = cast_request::<Formatting>(request)?;
 
-                aiken_lang::format::pretty(&mut new_text, module, extra, src);
+                let result = self.format(params);
+
+                match result {
+                    Ok(text_edit) => {
+                        let result = serde_json::to_value(text_edit)?;
+
+                        Ok(lsp_server::Response {
+                            id,
+                            error: None,
+                            result: Some(result),
+                        })
+                    }
+                    Err(errors) => {
+                        for error in errors {
+                            self.process_diagnostic(error)?;
+                        }
+
+                        Ok(lsp_server::Response {
+                            id,
+                            error: None,
+                            result: Some(serde_json::json!(null)),
+                        })
+                    }
+                }
             }
-            None => {
-                let src = fs::read_to_string(path)?;
-
-                let (module, extra) = parser::module(&src, ModuleKind::Lib).map_err(|errs| {
-                    aiken_project::error::Error::from_parse_errors(errs, Path::new(path), &src)
-                })?;
-
-                aiken_lang::format::pretty(&mut new_text, module, extra, &src);
-            }
+            unsupported => Err(ServerError::UnsupportedLspRequest {
+                request: unsupported.to_string(),
+            }),
         }
-
-        Ok(vec![text_edit_replace(new_text)])
     }
 
-    /// Publish all stored diagnostics to the client.
-    /// Any previously publish diagnostics are cleared before the new set are
-    /// published to the client.
-    fn publish_stored_diagnostics(&mut self, connection: &Connection) -> Result<(), ServerError> {
-        self.clear_all_diagnostics(connection)?;
+    pub fn listen(&mut self, connection: Connection) -> Result<(), ServerError> {
+        self.create_compilation_progress_token(&connection)?;
+        self.start_watching_aiken_toml(&connection)?;
 
-        for (path, diagnostics) in self.stored_diagnostics.drain() {
-            let uri = path_to_uri(path)?;
+        // Compile the project once so we have all the state and any initial errors
+        self.compile(&connection)?;
+        self.publish_stored_diagnostics(&connection)?;
 
-            // Record that we have published diagnostics to this file so we can
-            // clear it later when they are outdated.
-            self.published_diagnostics.insert(uri.clone());
+        for msg in &connection.receiver {
+            tracing::debug!("Got message: {:#?}", msg);
 
-            // Publish the diagnostics
-            let params = lsp_types::PublishDiagnosticsParams {
-                uri,
-                diagnostics,
-                version: None,
-            };
+            match msg {
+                Message::Request(req) => {
+                    if connection.handle_shutdown(&req)? {
+                        return Ok(());
+                    }
 
-            let notification = lsp_server::Notification {
-                method: PublishDiagnostics::METHOD.to_string(),
-                params: serde_json::to_value(params)?,
-            };
+                    tracing::debug!("Get request: {:#?}", req);
 
-            connection
-                .sender
-                .send(lsp_server::Message::Notification(notification))?;
-        }
+                    let response = self.handle_request(req)?;
 
-        for message in self.stored_messages.drain(..) {
-            let notification = lsp_server::Notification {
-                method: ShowMessage::METHOD.to_string(),
-                params: serde_json::to_value(message)?,
-            };
+                    self.publish_stored_diagnostics(&connection)?;
 
-            connection
-                .sender
-                .send(lsp_server::Message::Notification(notification))?;
+                    connection.sender.send(Message::Response(response))?;
+                }
+                Message::Response(_) => (),
+                Message::Notification(notification) => {
+                    self.handle_notification(&connection, notification)?
+                }
+            }
         }
 
         Ok(())
     }
 
-    /// Clear all diagnostics that have been previously published to the client
-    fn clear_all_diagnostics(&mut self, connection: &Connection) -> Result<(), ServerError> {
-        for file in self.published_diagnostics.drain() {
-            let params = lsp_types::PublishDiagnosticsParams {
-                uri: file,
-                diagnostics: vec![],
-                version: None,
-            };
+    pub fn new(
+        initialize_params: InitializeParams,
+        config: Option<config::Config>,
+        root: PathBuf,
+    ) -> Self {
+        let mut server = Server {
+            root,
+            config,
+            edited: HashMap::new(),
+            initialize_params,
+            published_diagnostics: HashSet::new(),
+            stored_diagnostics: HashMap::new(),
+            stored_messages: Vec::new(),
+            compiler: None,
+        };
 
-            let notification = lsp_server::Notification {
-                method: PublishDiagnostics::METHOD.to_string(),
-                params: serde_json::to_value(params)?,
-            };
+        server.create_new_compiler();
 
-            connection
-                .sender
-                .send(lsp_server::Message::Notification(notification))?;
-        }
+        server
+    }
 
-        Ok(())
+    fn notify_client_of_compilation_end(&self, connection: &Connection) -> Result<(), ServerError> {
+        self.send_work_done_notification(
+            connection,
+            lsp_types::WorkDoneProgress::End(lsp_types::WorkDoneProgressEnd { message: None }),
+        )
+    }
+
+    fn notify_client_of_compilation_start(
+        &self,
+        connection: &Connection,
+    ) -> Result<(), ServerError> {
+        self.send_work_done_notification(
+            connection,
+            lsp_types::WorkDoneProgress::Begin(lsp_types::WorkDoneProgressBegin {
+                title: "Compiling Aiken".into(),
+                cancellable: Some(false),
+                message: None,
+                percentage: None,
+            }),
+        )
     }
 
     /// Convert Aiken diagnostics into 1 or more LSP diagnostics and store them
@@ -277,7 +322,10 @@ impl Server {
     /// If the Aiken diagnostic cannot be converted to LSP diagnostic (due to it
     /// not having a location) it is stored as a message suitable for use with
     /// the `showMessage` notification instead.
-    fn process_diagnostic(&mut self, error: ProjectError) -> Result<(), ServerError> {
+    fn process_diagnostic<E>(&mut self, error: E) -> Result<(), ServerError>
+    where
+        E: Diagnostic + GetSource,
+    {
         let (severity, typ) = match error.severity() {
             Some(severity) => match severity {
                 miette::Severity::Error => (
@@ -369,56 +417,126 @@ impl Server {
         Ok(())
     }
 
+    /// Publish all stored diagnostics to the client.
+    /// Any previously publish diagnostics are cleared before the new set are
+    /// published to the client.
+    fn publish_stored_diagnostics(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        self.clear_all_diagnostics(connection)?;
+
+        for (path, diagnostics) in self.stored_diagnostics.drain() {
+            let uri = path_to_uri(path)?;
+
+            // Record that we have published diagnostics to this file so we can
+            // clear it later when they are outdated.
+            self.published_diagnostics.insert(uri.clone());
+
+            // Publish the diagnostics
+            let params = lsp_types::PublishDiagnosticsParams {
+                uri,
+                diagnostics,
+                version: None,
+            };
+
+            let notification = lsp_server::Notification {
+                method: PublishDiagnostics::METHOD.to_string(),
+                params: serde_json::to_value(params)?,
+            };
+
+            connection
+                .sender
+                .send(lsp_server::Message::Notification(notification))?;
+        }
+
+        for message in self.stored_messages.drain(..) {
+            let notification = lsp_server::Notification {
+                method: ShowMessage::METHOD.to_string(),
+                params: serde_json::to_value(message)?,
+            };
+
+            connection
+                .sender
+                .send(lsp_server::Message::Notification(notification))?;
+        }
+
+        Ok(())
+    }
+
     fn push_diagnostic(&mut self, path: PathBuf, diagnostic: lsp_types::Diagnostic) {
         self.stored_diagnostics
             .entry(path)
             .or_default()
             .push(diagnostic);
     }
-}
 
-fn cast_request<R>(request: lsp_server::Request) -> Result<R::Params, ServerError>
-where
-    R: lsp_types::request::Request,
-    R::Params: serde::de::DeserializeOwned,
-{
-    let (_, params) = request.extract(R::METHOD)?;
+    fn send_work_done_notification(
+        &self,
+        connection: &Connection,
+        work_done: lsp_types::WorkDoneProgress,
+    ) -> Result<(), ServerError> {
+        tracing::info!("sending {:?}", work_done);
 
-    Ok(params)
-}
+        let params = lsp_types::ProgressParams {
+            token: lsp_types::NumberOrString::String(COMPILING_PROGRESS_TOKEN.to_string()),
+            value: lsp_types::ProgressParamsValue::WorkDone(work_done),
+        };
 
-fn cast_notification<N>(notification: lsp_server::Notification) -> Result<N::Params, ServerError>
-where
-    N: lsp_types::notification::Notification,
-    N::Params: serde::de::DeserializeOwned,
-{
-    let params = notification.extract::<N::Params>(N::METHOD)?;
+        let notification = lsp_server::Notification {
+            method: Progress::METHOD.into(),
+            params: serde_json::to_value(&params)?,
+        };
 
-    Ok(params)
-}
+        connection
+            .sender
+            .send(lsp_server::Message::Notification(notification))?;
 
-fn text_edit_replace(new_text: String) -> TextEdit {
-    TextEdit {
-        range: lsp_types::Range {
-            start: lsp_types::Position {
-                line: 0,
-                character: 0,
-            },
-            end: lsp_types::Position {
-                line: u32::MAX,
-                character: 0,
-            },
-        },
-        new_text,
+        Ok(())
     }
-}
 
-fn path_to_uri(path: PathBuf) -> Result<lsp_types::Url, ServerError> {
-    let mut file: String = "file://".into();
+    fn start_watching_aiken_toml(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        let supports_watch_files = self
+            .initialize_params
+            .capabilities
+            .workspace
+            .as_ref()
+            .and_then(|w| w.did_change_watched_files)
+            .map(|wf| wf.dynamic_registration == Some(true))
+            .unwrap_or(false);
 
-    file.push_str(&path.as_os_str().to_string_lossy());
+        if !supports_watch_files {
+            tracing::warn!("lsp_client_cannot_watch_gleam_toml");
 
-    let uri = lsp_types::Url::parse(&file)?;
+            return Ok(());
+        }
 
-    Ok(uri)
+        // Register gleam.toml as a watched file so we get a notification when
+        // it changes and thus know that we need to rebuild the entire project.
+        let register_options =
+            serde_json::value::to_value(lsp_types::DidChangeWatchedFilesRegistrationOptions {
+                watchers: vec![lsp_types::FileSystemWatcher {
+                    glob_pattern: "aiken.toml".into(),
+                    kind: Some(lsp_types::WatchKind::Change),
+                }],
+            })?;
+
+        let watch_config = lsp_types::Registration {
+            id: "watch-aiken-toml".into(),
+            method: "workspace/didChangeWatchedFiles".into(),
+            register_options: Some(register_options),
+        };
+
+        let request = lsp_server::Request {
+            id: 1.into(),
+            method: "client/registerCapability".into(),
+            params: serde_json::value::to_value(lsp_types::RegistrationParams {
+                registrations: vec![watch_config],
+            })
+            .expect("client/registerCapability to json"),
+        };
+
+        connection
+            .sender
+            .send(lsp_server::Message::Request(request))?;
+
+        Ok(())
+    }
 }

@@ -151,37 +151,42 @@ impl Error {
             });
         }
 
-        Error::List(errors)
+        errors
     }
+}
 
-    pub fn append(self, next: Self) -> Self {
-        match (self, next) {
-            (Error::List(mut errors), Error::List(mut next_errors)) => {
-                errors.append(&mut next_errors);
+impl Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let miette_handler = MietteHandlerOpts::new()
+            // For better support of terminal themes use the ANSI coloring
+            .rgb_colors(RgbColors::Never)
+            // If ansi support is disabled in the config disable the eye-candy
+            .color(true)
+            .unicode(true)
+            .terminal_links(true)
+            .build();
 
-                Error::List(errors)
-            }
-            (Error::List(mut errors), rest) => {
-                errors.push(rest);
+        // Ignore error to prevent format! panics. This can happen if span points at some
+        // inaccessible location, for example by calling `report_error()` with wrong working set.
+        let _ = miette_handler.debug(self, f);
 
-                Error::List(errors)
-            }
-            (rest, Error::List(mut next_errors)) => {
-                let mut errors = vec![rest];
-
-                errors.append(&mut next_errors);
-
-                Error::List(errors)
-            }
-            (error, next_error) => Error::List(vec![error, next_error]),
-        }
+        Ok(())
     }
+}
 
-    pub fn is_empty(&self) -> bool {
-        matches!(self, Error::List(errors) if errors.is_empty())
+impl From<Error> for Vec<Error> {
+    fn from(value: Error) -> Self {
+        vec![value]
     }
+}
 
-    pub fn path(&self) -> Option<PathBuf> {
+pub trait GetSource {
+    fn path(&self) -> Option<PathBuf>;
+    fn src(&self) -> Option<String>;
+}
+
+impl GetSource for Error {
+    fn path(&self) -> Option<PathBuf> {
         match self {
             Error::DuplicateModule { second, .. } => Some(second.to_path_buf()),
             Error::FileIo { .. } => None,
@@ -231,25 +236,6 @@ impl Error {
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
         }
-    }
-}
-
-impl Debug for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let miette_handler = MietteHandlerOpts::new()
-            // For better support of terminal themes use the ANSI coloring
-            .rgb_colors(RgbColors::Never)
-            // If ansi support is disabled in the config disable the eye-candy
-            .color(true)
-            .unicode(true)
-            .terminal_links(true)
-            .build();
-
-        // Ignore error to prevent format! panics. This can happen if span points at some
-        // inaccessible location, for example by calling `report_error()` with wrong working set.
-        let _ = miette_handler.debug(self, f);
-
-        Ok(())
     }
 }
 
@@ -491,6 +477,24 @@ pub enum Warning {
     },
     #[error("{name} is already a dependency.")]
     DependencyAlreadyExists { name: PackageName },
+}
+
+impl GetSource for Warning {
+    fn path(&self) -> Option<PathBuf> {
+        match self {
+            Warning::NoValidators => None,
+            Warning::Type { path, .. } => Some(path.clone()),
+            Warning::DependencyAlreadyExists { .. } => None,
+        }
+    }
+
+    fn src(&self) -> Option<String> {
+        match self {
+            Warning::NoValidators => None,
+            Warning::Type { src, .. } => Some(src.clone()),
+            Warning::DependencyAlreadyExists { .. } => None,
+        }
+    }
 }
 
 impl Diagnostic for Warning {
