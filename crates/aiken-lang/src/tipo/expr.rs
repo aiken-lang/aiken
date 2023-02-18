@@ -4,11 +4,11 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
-        IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg, TypedCallArg,
-        TypedClause, TypedClauseGuard, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg,
-        UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedMultiPattern,
-        UntypedPattern, UntypedRecordUpdateArg,
+        Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        Clause, ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing,
+        TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedMultiPattern,
+        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
+        UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{TypedExpr, UntypedExpr},
@@ -351,8 +351,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             } => self.infer_tuple_index(*tuple, index, location),
 
             UntypedExpr::ByteArray {
-                location, bytes, ..
-            } => Ok(self.infer_byte_array(bytes, location)),
+                bytes,
+                preferred_format,
+                location,
+            } => self.infer_bytearray(bytes, preferred_format, location),
 
             UntypedExpr::RecordUpdate {
                 location,
@@ -373,12 +375,27 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
-    fn infer_byte_array(&mut self, bytes: Vec<u8>, location: Span) -> TypedExpr {
-        TypedExpr::ByteArray {
+    fn infer_bytearray(
+        &mut self,
+        bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        if let ByteArrayFormatPreference::Utf8String = preferred_format {
+            let value = String::from_utf8(bytes.clone()).unwrap();
+            let is_hex_string = hex::decode(&value).is_ok();
+            if bytes.len() >= 56 && is_hex_string {
+                self.environment
+                    .warnings
+                    .push(Warning::Utf8ByteArrayIsValidHexString { location, value });
+            }
+        }
+
+        Ok(TypedExpr::ByteArray {
             location,
             bytes,
             tipo: byte_array(),
-        }
+        })
     }
 
     fn infer_trace_if_false(
@@ -1357,11 +1374,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 bytes,
                 preferred_format,
-            } => Ok(Constant::ByteArray {
-                location,
-                bytes,
-                preferred_format,
-            }),
+            } => {
+                let _ = self.infer_bytearray(bytes.clone(), preferred_format, location)?;
+                Ok(Constant::ByteArray {
+                    location,
+                    bytes,
+                    preferred_format,
+                })
+            }
         }?;
 
         // Check type annotation is accurate.

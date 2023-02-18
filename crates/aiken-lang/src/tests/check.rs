@@ -305,3 +305,17 @@ fn trace_if_false_ko() {
         Err((_, Error::CouldNotUnify { .. }))
     ))
 }
+
+#[test]
+fn utf8_hex_literal_warning() {
+    let source_code = r#"
+        pub const policy_id = "f43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535"
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::Utf8ByteArrayIsValidHexString { .. }
+    ))
+}
