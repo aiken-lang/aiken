@@ -63,3 +63,13 @@ test expect_list3() {
   expect [a, ..d]: List<Int> = initial_car
   a == 5 && d == [6, 7]
 }
+
+type Redeemer {
+  CreateVoteBatch { id: ByteArray }
+}
+
+test single_field_expect() {
+  let redeemer = CreateVoteBatch { id: #"" }
+  expect CreateVoteBatch { id } = redeemer
+  id == #""
+}
