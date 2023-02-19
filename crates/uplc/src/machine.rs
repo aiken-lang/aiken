@@ -449,12 +449,12 @@ fn discharge_value(value: Rc<Value>) -> Rc<Term<NamedDeBruijn>> {
                     stack.push(DischargeStep::DischargeValueEnv(
                         lam_cnt,
                         env.clone(),
-                        function.to_owned(),
+                        argument.to_owned(),
                     ));
                     stack.push(DischargeStep::DischargeValueEnv(
                         lam_cnt,
                         env,
-                        argument.to_owned(),
+                        function.to_owned(),
                     ));
                 }
                 Term::Delay(body) => {
