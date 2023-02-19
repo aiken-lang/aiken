@@ -55,16 +55,6 @@ impl ParseError {
             label: None,
         }
     }
-
-    pub fn unexpected_bytearray_literal(span: Span, keyword: Token, literal: String) -> Self {
-        Self {
-            kind: ErrorKind::UnexpectedByteArrayLiteral(keyword, literal),
-            span,
-            while_parsing: None,
-            expected: HashSet::new(),
-            label: Some("use @"),
-        }
-    }
 }
 
 impl PartialEq for ParseError {
@@ -159,29 +149,6 @@ pub enum ErrorKind {
         , bad = "✖️".red()
     }))]
     InvalidWhenClause,
-
-    #[error(
-        "I noticed a {} literal where I would expect a {}.",
-        "ByteArray".bold().bright_blue(),
-        "String".bold().bright_blue(),
-    )]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#string"))]
-    #[diagnostic(help("{}", formatdoc! {
-        r#"The keyword {keyword} accepts a {type_String} as argument. A {type_String} literal is denoted by {syntax}. Simple double-quotes are interpreted as {type_ByteArray} of UTF-8 encoded bytes. Juggling between {type_ByteArray} and {type_String} can be a little confusing.
-
-           In this instance, you probably meant to write the following:
-
-           ╰─▶ {keyword} {symbol_at}{symbol_doublequotes}{literal}{symbol_doublequotes}
-        "#,
-        type_String = "String".bold().bright_blue(),
-        type_ByteArray = "ByteArray".bold().bright_blue(),
-        symbol_at = "@".purple(),
-        symbol_doublequotes = "\"".purple(),
-        syntax = format!("{}{}", "@".purple(), "\"...\"".purple()),
-        keyword = format!("{}", .0).replace('"', "").bold(),
-        literal = .1.purple(),
-    }))]
-    UnexpectedByteArrayLiteral(Token, String),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
