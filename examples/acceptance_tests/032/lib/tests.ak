@@ -10,10 +10,10 @@ fn concat(left: String, right: String) -> String {
 
 fn is_negative(i: Int) -> Bool {
   if i < 0 {
-    trace "is negative"
+    trace @"is negative"
     True
   } else {
-    trace concat("is", concat(" ", "non-negative"))
+    trace concat(@"is", concat(@" ", @"non-negative"))
     False
   }
 }

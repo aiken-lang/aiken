@@ -312,22 +312,6 @@ fn test_block_logical_expr() {
 }
 
 #[test]
-fn test_format_bytearray_literals() {
-    let src = indoc! {r#"
-        const foo = #"ff00"
-        const bar = #[0, 255]
-    "#};
-
-    let expected = indoc! { r#"
-        const foo = #"ff00"
-
-        const bar = #"00ff"
-    "#};
-
-    assert_fmt(src, expected);
-}
-
-#[test]
 fn test_nested_function_calls() {
     let src = indoc! {r#"
         fn foo(output) {
@@ -360,7 +344,7 @@ fn test_nested_function_calls() {
             ),
             when output.datum is {
               InlineDatum(_) -> True
-              _ -> error "expected inline datum"
+              _ -> error @"expected inline datum"
             },
           ]
           |> list.and
@@ -398,7 +382,33 @@ fn format_trace_todo_error() {
         }
     "#};
 
-    assert_fmt(src, src);
+    let out = indoc! {r#"
+        fn foo_1() {
+          todo
+        }
+
+        fn foo_2() {
+          todo @"my custom message"
+        }
+
+        fn foo_3() {
+          when x is {
+            Foo -> True
+            _ -> error
+          }
+        }
+
+        fn foo_4() {
+          if 14 == 42 {
+            error @"I don't think so"
+          } else {
+            trace @"been there"
+            True
+          }
+        }
+    "#};
+
+    assert_fmt(src, out);
 }
 
 #[test]
@@ -502,4 +512,38 @@ fn test_newline_module_comments() {
     "#};
 
     assert_fmt(src, out);
+}
+
+#[test]
+fn test_bytearray_literals() {
+    let src = indoc! {r#"
+        const foo_const_array = #[102, 111, 111]
+
+        const foo_const_hex = #"666f6f"
+
+        const foo_const_utf8 = "foo"
+
+        fn foo() {
+          let foo_const_array = #[102, 111, 111]
+
+          let foo_const_hex = #"666f6f"
+
+          let foo_const_utf8 = "foo"
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
+
+#[test]
+fn test_string_literal() {
+    let src = indoc! {r#"
+        const foo_const: String = @"foo"
+
+        fn foo() {
+          let foo_var: String = @"foo"
+        }
+    "#};
+
+    assert_fmt(src, src);
 }

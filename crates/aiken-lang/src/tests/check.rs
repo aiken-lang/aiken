@@ -235,12 +235,12 @@ fn list_pattern_6() {
 fn trace_strings() {
     let source_code = r#"
         fn bar() {
-            "BAR"
+            @"BAR"
         }
 
         test foo() {
-            let msg1 = "FOO"
-            trace("INLINE")
+            let msg1 = @"FOO"
+            trace(@"INLINE")
             trace(msg1)
             trace(bar())
             True
@@ -303,5 +303,19 @@ fn trace_if_false_ko() {
     assert!(matches!(
         check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn utf8_hex_literal_warning() {
+    let source_code = r#"
+        pub const policy_id = "f43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535"
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::Utf8ByteArrayIsValidHexString { .. }
     ))
 }

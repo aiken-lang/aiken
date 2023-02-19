@@ -77,12 +77,20 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             .or(just('t').to('\t')),
     );
 
-    let string = just('"')
+    let string = just('@')
+        .ignore_then(just('"'))
         .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
         .then_ignore(just('"'))
         .collect::<String>()
         .map(|value| Token::String { value })
         .labelled("string");
+
+    let bytestring = just('"')
+        .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
+        .then_ignore(just('"'))
+        .collect::<String>()
+        .map(|value| Token::ByteString { value })
+        .labelled("bytestring");
 
     let keyword = text::ident().map(|s: String| match s.as_str() {
         "trace" => Token::Trace,
@@ -158,16 +166,18 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         comment_parser(Token::ModuleComment),
         comment_parser(Token::DocComment),
         comment_parser(Token::Comment),
-        choice((ordinal, keyword, int, op, newlines, grouping, string))
-            .or(any().map(Token::Error).validate(|t, span, emit| {
-                emit(ParseError::expected_input_found(
-                    span,
-                    None,
-                    Some(t.clone()),
-                ));
-                t
-            }))
-            .map_with_span(|token, span| (token, span)),
+        choice((
+            ordinal, keyword, int, op, newlines, grouping, bytestring, string,
+        ))
+        .or(any().map(Token::Error).validate(|t, span, emit| {
+            emit(ParseError::expected_input_found(
+                span,
+                None,
+                Some(t.clone()),
+            ));
+            t
+        }))
+        .map_with_span(|token, span| (token, span)),
     ))
     .padded_by(one_of(" \t").ignored().repeated())
     .recover_with(skip_then_retry_until([]))

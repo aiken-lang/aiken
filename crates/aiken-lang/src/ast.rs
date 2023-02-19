@@ -326,11 +326,21 @@ pub struct DefinitionLocation<'module> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
-    Int { location: Span, value: String },
+    Int {
+        location: Span,
+        value: String,
+    },
 
-    String { location: Span, value: String },
+    String {
+        location: Span,
+        value: String,
+    },
 
-    ByteArray { location: Span, bytes: Vec<u8> },
+    ByteArray {
+        location: Span,
+        bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
+    },
 }
 
 impl Constant {
@@ -746,6 +756,13 @@ impl<A, B> Pattern<A, B> {
     pub fn is_var(&self) -> bool {
         matches!(self, Self::Var { .. })
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ByteArrayFormatPreference {
+    HexadecimalString,
+    ArrayOfBytes,
+    Utf8String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]

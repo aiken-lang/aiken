@@ -1244,6 +1244,31 @@ pub enum Warning {
         #[label("unused")]
         location: Span,
     },
+
+    #[error(
+        "I noticed a suspicious {type_ByteArray} UTF-8 literal which resembles a hash digest.",
+        type_ByteArray = "ByteArray".bold().bright_blue()
+    )]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"When you specify a {type_ByteArray} literal using plain double-quotes, it's interpreted as an array of UTF-8 bytes. For example, the literal {literal_foo} is interpreted as the byte sequence {foo_bytes}.
+
+           However here, you have specified a literal that resembles a hash digest encoded as an hexadecimal string. This is a common case, but you probably want to capture the raw bytes represented by this sequence, and not the hexadecimal sequence. Fear not! Aiken provides a convenient syntax for that: just prefix the literal with {symbol_hash}. This will decode the hexadecimal string for you and capture the non-encoded bytes as a {type_ByteArray}.
+
+           ╰─▶ {symbol_hash}{value}
+        "#,
+        type_ByteArray = "ByteArray".bold().bright_blue(),
+        literal_foo = "\"foo\"".purple(),
+        foo_bytes = "#[102, 111, 111]".purple(),
+        value = "\"{value}\"".purple(),
+        symbol_hash = "#".purple(),
+    }))]
+    #[diagnostic(code("syntax::bytearray_literal_is_hex_string"))]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]
+    Utf8ByteArrayIsValidHexString {
+        #[label("missing '#' to decode hex string")]
+        location: Span,
+        value: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

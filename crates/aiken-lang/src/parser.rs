@@ -7,7 +7,10 @@ pub mod lexer;
 pub mod token;
 
 use crate::{
-    ast::{self, BinOp, Span, TraceKind, UnOp, UntypedDefinition, CAPTURE_VARIABLE},
+    ast::{
+        self, BinOp, ByteArrayFormatPreference, Span, TraceKind, UnOp, UntypedDefinition,
+        CAPTURE_VARIABLE,
+    },
     expr,
 };
 
@@ -402,9 +405,12 @@ fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseErr
         });
 
     let constant_bytearray_parser =
-        bytearray_parser().map_with_span(|bytes, span| ast::Constant::ByteArray {
-            location: span,
-            bytes,
+        bytearray_parser().map_with_span(|(preferred_format, bytes), span| {
+            ast::Constant::ByteArray {
+                location: span,
+                bytes,
+                preferred_format,
+            }
         });
 
     choice((
@@ -414,42 +420,54 @@ fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseErr
     ))
 }
 
-pub fn bytearray_parser() -> impl Parser<Token, Vec<u8>, Error = ParseError> {
-    let bytearray_list_parser = just(Token::Hash).ignore_then(
-        select! {Token::Int {value} => value}
-            .validate(|value, span, emit| {
-                let byte: u8 = match value.parse() {
-                    Ok(b) => b,
-                    Err(_) => {
-                        emit(ParseError::expected_input_found(
-                            span,
-                            None,
-                            Some(error::Pattern::Byte),
-                        ));
+pub fn bytearray_parser(
+) -> impl Parser<Token, (ByteArrayFormatPreference, Vec<u8>), Error = ParseError> {
+    let bytearray_list_parser = just(Token::Hash)
+        .ignore_then(
+            select! {Token::Int {value} => value}
+                .validate(|value, span, emit| {
+                    let byte: u8 = match value.parse() {
+                        Ok(b) => b,
+                        Err(_) => {
+                            emit(ParseError::expected_input_found(
+                                span,
+                                None,
+                                Some(error::Pattern::Byte),
+                            ));
 
-                        0
-                    }
-                };
+                            0
+                        }
+                    };
 
-                byte
-            })
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
-    );
+                    byte
+                })
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
+        )
+        .map(|token| (ByteArrayFormatPreference::ArrayOfBytes, token));
 
     let bytearray_hexstring_parser =
-        just(Token::Hash).ignore_then(select! {Token::String {value} => value}.validate(
-            |value, span, emit| match hex::decode(value) {
-                Ok(bytes) => bytes,
-                Err(_) => {
-                    emit(ParseError::malformed_base16_string_literal(span));
-                    vec![]
-                }
-            },
-        ));
+        just(Token::Hash)
+            .ignore_then(select! {Token::ByteString {value} => value}.validate(
+                |value, span, emit| match hex::decode(value) {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
+                        emit(ParseError::malformed_base16_string_literal(span));
+                        vec![]
+                    }
+                },
+            ))
+            .map(|token| (ByteArrayFormatPreference::HexadecimalString, token));
 
-    choice((bytearray_list_parser, bytearray_hexstring_parser))
+    let bytearray_utf8_parser = select! {Token::ByteString {value} => value.into_bytes() }
+        .map(|token| (ByteArrayFormatPreference::Utf8String, token));
+
+    choice((
+        bytearray_list_parser,
+        bytearray_hexstring_parser,
+        bytearray_utf8_parser,
+    ))
 }
 
 pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
@@ -515,6 +533,25 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
     })
 }
 
+// Interpret bytearray string literals written as utf-8 strings, as strings.
+//
+// This is mostly convenient so that todo & error works with either @"..." or plain "...".
+// In this particular context, there's actually no ambiguity about the right-hand-side, so
+// we can provide this syntactic sugar.
+fn flexible_string_literal(expr: expr::UntypedExpr) -> expr::UntypedExpr {
+    match expr {
+        expr::UntypedExpr::ByteArray {
+            preferred_format: ByteArrayFormatPreference::Utf8String,
+            bytes,
+            location,
+        } => expr::UntypedExpr::String {
+            location,
+            value: String::from_utf8(bytes).unwrap(),
+        },
+        _ => expr,
+    }
+}
+
 pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseError> {
     recursive(|r| {
         choice((
@@ -525,14 +562,18 @@ pub fn expr_seq_parser() -> impl Parser<Token, expr::UntypedExpr, Error = ParseE
                     kind: TraceKind::Trace,
                     location: span,
                     then: Box::new(then_),
-                    text: Box::new(text),
+                    text: Box::new(flexible_string_literal(text)),
                 }),
             just(Token::ErrorTerm)
                 .ignore_then(expr_parser(r.clone()).or_not())
-                .map_with_span(|reason, span| expr::UntypedExpr::error(span, reason)),
+                .map_with_span(|reason, span| {
+                    expr::UntypedExpr::error(span, reason.map(flexible_string_literal))
+                }),
             just(Token::Todo)
                 .ignore_then(expr_parser(r.clone()).or_not())
-                .map_with_span(|reason, span| expr::UntypedExpr::todo(span, reason)),
+                .map_with_span(|reason, span| {
+                    expr::UntypedExpr::todo(span, reason.map(flexible_string_literal))
+                }),
             expr_parser(r.clone())
                 .then(r.repeated())
                 .foldl(|current, next| current.append_in_sequence(next)),
@@ -816,11 +857,13 @@ pub fn expr_parser(
                 elems,
             });
 
-        let bytearray =
-            bytearray_parser().map_with_span(|bytes, span| expr::UntypedExpr::ByteArray {
+        let bytearray = bytearray_parser().map_with_span(|(preferred_format, bytes), span| {
+            expr::UntypedExpr::ByteArray {
                 location: span,
                 bytes,
-            });
+                preferred_format,
+            }
+        });
 
         let list_parser = just(Token::LeftSquare)
             .ignore_then(r.clone().separated_by(just(Token::Comma)))
@@ -904,14 +947,18 @@ pub fn expr_parser(
                             .then_ignore(one_of(Token::RArrow).not().rewind())
                             .or_not(),
                     )
-                    .map_with_span(|reason, span| expr::UntypedExpr::todo(span, reason)),
+                    .map_with_span(|reason, span| {
+                        expr::UntypedExpr::todo(span, reason.map(flexible_string_literal))
+                    }),
                 just(Token::ErrorTerm)
                     .ignore_then(
                         r.clone()
                             .then_ignore(just(Token::RArrow).not().rewind())
                             .or_not(),
                     )
-                    .map_with_span(|reason, span| expr::UntypedExpr::error(span, reason)),
+                    .map_with_span(|reason, span| {
+                        expr::UntypedExpr::error(span, reason.map(flexible_string_literal))
+                    }),
             )))
             .map_with_span(
                 |(((patterns, alternative_patterns_opt), guard), then), span| ast::UntypedClause {

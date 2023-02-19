@@ -8,6 +8,7 @@ pub enum Token {
     UpName { name: String },
     DiscardName { name: String },
     Int { value: String },
+    ByteString { value: String },
     String { value: String },
     // Groupings
     NewLineLeftParen, // ↳(
@@ -97,6 +98,7 @@ impl fmt::Display for Token {
             Token::DiscardName { name } => name,
             Token::Int { value } => value,
             Token::String { value } => value,
+            Token::ByteString { value } => value,
             Token::NewLineLeftParen => "↳(",
             Token::LeftParen => "(",
             Token::RightParen => ")",

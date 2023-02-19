@@ -1,7 +1,7 @@
 fn must_be_signed(signatories) {
   when signatories is {
     [] -> {
-      trace "no signatories"
+      trace @"no signatories"
       False
     }
     [sig, ..] -> (sig == "#ffff")?
