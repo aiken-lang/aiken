@@ -785,7 +785,7 @@ The best thing to do from here is to remove it."#))]
             if missing > 1 {
                 arguments.push('s');
             }
-            
+
             format!("please add the {} missing {arguments}", missing.to_string().yellow())
         } else {
             let extra = count - 3;
@@ -795,7 +795,7 @@ The best thing to do from here is to remove it."#))]
             if extra > 1 {
                 arguments.push('s');
             }
-            
+
             format!("please remove the {} extra {arguments}", extra.to_string().yellow())
         }
     ))]
