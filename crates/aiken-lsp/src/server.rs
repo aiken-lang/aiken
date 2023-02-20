@@ -5,23 +5,26 @@ use std::{
 };
 
 use aiken_lang::{
-    ast::{Located, ModuleKind, Span},
+    ast::{Definition, Located, ModuleKind, Span, Use},
     parser,
     tipo::pretty::Printer,
 };
 use aiken_project::{
-    config,
+    config::{self, Config},
     error::{Error as ProjectError, GetSource},
     module::CheckedModule,
 };
 use indoc::formatdoc;
+use itertools::Itertools;
 use lsp_server::{Connection, Message};
 use lsp_types::{
     notification::{
-        DidChangeTextDocument, DidSaveTextDocument, Notification, Progress, PublishDiagnostics,
-        ShowMessage,
+        DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidSaveTextDocument,
+        Notification, Progress, PublishDiagnostics, ShowMessage,
     },
-    request::{Formatting, GotoDefinition, HoverRequest, Request, WorkDoneProgressCreate},
+    request::{
+        Completion, Formatting, GotoDefinition, HoverRequest, Request, WorkDoneProgressCreate,
+    },
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
 use miette::Diagnostic;
@@ -175,7 +178,7 @@ impl Server {
 
     fn handle_notification(
         &mut self,
-        _connection: &lsp_server::Connection,
+        connection: &lsp_server::Connection,
         notification: lsp_server::Notification,
     ) -> Result<(), ServerError> {
         match notification.method.as_str() {
@@ -184,8 +187,13 @@ impl Server {
 
                 self.edited.remove(params.text_document.uri.path());
 
+                self.compile(connection)?;
+
+                self.publish_stored_diagnostics(connection)?;
+
                 Ok(())
             }
+
             DidChangeTextDocument::METHOD => {
                 let params = cast_notification::<DidChangeTextDocument>(notification)?;
 
@@ -198,6 +206,32 @@ impl Server {
 
                 Ok(())
             }
+
+            DidCloseTextDocument::METHOD => {
+                let params = cast_notification::<DidCloseTextDocument>(notification)?;
+
+                self.edited.remove(params.text_document.uri.path());
+
+                Ok(())
+            }
+
+            DidChangeWatchedFiles::METHOD => {
+                if let Ok(config) = Config::load(&self.root) {
+                    self.config = Some(config);
+                    self.create_new_compiler();
+                    self.compile(connection)?;
+                } else {
+                    self.stored_messages.push(lsp_types::ShowMessageParams {
+                        typ: lsp_types::MessageType::ERROR,
+                        message: "Failed to reload aiken.toml".to_string(),
+                    });
+                }
+
+                self.publish_stored_diagnostics(connection)?;
+
+                Ok(())
+            }
+
             _ => Ok(()),
         }
     }
