@@ -89,7 +89,6 @@ impl Server {
     fn compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
         self.notify_client_of_compilation_start(connection)?;
 
-        eprintln!("{:?}", self.compiler.is_some());
         if let Some(compiler) = self.compiler.as_mut() {
             let result = compiler.compile();
 
