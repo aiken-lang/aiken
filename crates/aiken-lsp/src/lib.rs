@@ -51,14 +51,15 @@ pub fn start() -> Result<(), Error> {
 
 fn capabilities() -> lsp_types::ServerCapabilities {
     lsp_types::ServerCapabilities {
-        completion_provider: Some(lsp_types::CompletionOptions {
-            resolve_provider: None,
-            trigger_characters: Some(vec![".".into(), " ".into()]),
-            all_commit_characters: None,
-            work_done_progress_options: lsp_types::WorkDoneProgressOptions {
-                work_done_progress: None,
-            },
-        }),
+        // THIS IS STILL WEIRD, ONLY ENABLE IF DEVELOPING
+        // completion_provider: Some(lsp_types::CompletionOptions {
+        //     resolve_provider: None,
+        //     trigger_characters: Some(vec![".".into(), " ".into()]),
+        //     all_commit_characters: None,
+        //     work_done_progress_options: lsp_types::WorkDoneProgressOptions {
+        //         work_done_progress: None,
+        //     },
+        // }),
         document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
         definition_provider: Some(lsp_types::OneOf::Left(true)),
         hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),

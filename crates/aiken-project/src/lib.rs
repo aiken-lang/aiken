@@ -125,6 +125,10 @@ where
         self.checked_modules.values().cloned().collect()
     }
 
+    pub fn importable_modules(&self) -> Vec<String> {
+        self.module_types.keys().cloned().collect()
+    }
+
     pub fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
             module_types: self.module_types.clone(),
