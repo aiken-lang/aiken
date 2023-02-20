@@ -7,7 +7,7 @@ use urlencoding::decode;
 
 use crate::{error::Error, line_numbers::LineNumbers};
 
-pub const COMPILING_PROGRESS_TOKEN: &str = "compiling-aiken```
+pub const COMPILING_PROGRESS_TOKEN: &str = "compiling-aiken";
 pub const CREATE_COMPILING_PROGRESS_TOKEN: &str = "create-compiling-progress-token";
 
 pub fn text_edit_replace(new_text: String) -> TextEdit {
