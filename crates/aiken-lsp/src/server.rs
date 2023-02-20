@@ -354,6 +354,22 @@ impl Server {
             Located::Definition(_) => return Ok(None),
         };
 
+        let doc = expression
+            .definition_location()
+            .and_then(|loc| loc.module.map(|m| (m, loc.span)))
+            .and_then(|(m, span)| {
+                self.compiler
+                    .as_ref()
+                    .and_then(|compiler| compiler.modules.get(m))
+                    .map(|checked_module| (checked_module, span))
+            })
+            .and_then(|(checked_module, span)| checked_module.ast.find_node(span.start))
+            .and_then(|node| match node {
+                Located::Expression(_) => None,
+                Located::Definition(def) => def.doc(),
+            })
+            .unwrap_or_default();
+
         // Show the type of the hovered node to the user
         let type_ = Printer::new().pretty_print(expression.tipo().as_ref(), 0);
 
@@ -361,6 +377,7 @@ impl Server {
             ```aiken
             {type_}
             ```
+            {doc}
         "#};
 
         Ok(Some(lsp_types::Hover {
