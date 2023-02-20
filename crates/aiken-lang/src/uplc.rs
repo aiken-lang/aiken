@@ -756,27 +756,35 @@ impl<'a> CodeGenerator<'a> {
                         scope.clone(),
                     );
 
-                    let data_type =
-                        lookup_data_type_by_tipo(self.data_types.clone(), subject_type).unwrap();
+                    let data_type = lookup_data_type_by_tipo(self.data_types.clone(), subject_type);
 
-                    if data_type.constructors.len() > 1 {
-                        ir_stack.push(Air::Clause {
-                            scope,
-                            tipo: subject_type.clone(),
-                            complex_clause: *clause_properties.is_complex_clause(),
-                            subject_name,
-                        });
+                    if let Some(data_type) = data_type {
+                        if data_type.constructors.len() > 1 {
+                            ir_stack.push(Air::Clause {
+                                scope,
+                                tipo: subject_type.clone(),
+                                complex_clause: *clause_properties.is_complex_clause(),
+                                subject_name,
+                            });
+                        } else {
+                            ir_stack.push(Air::Clause {
+                                scope: scope.clone(),
+                                tipo: subject_type.clone(),
+                                complex_clause: *clause_properties.is_complex_clause(),
+                                subject_name,
+                            });
+
+                            ir_stack.push(Air::Int {
+                                scope,
+                                value: "0".to_string(),
+                            });
+                        }
                     } else {
                         ir_stack.push(Air::Clause {
                             scope: scope.clone(),
                             tipo: subject_type.clone(),
                             complex_clause: *clause_properties.is_complex_clause(),
                             subject_name,
-                        });
-
-                        ir_stack.push(Air::Int {
-                            scope,
-                            value: "0".to_string(),
                         });
                     }
                 }

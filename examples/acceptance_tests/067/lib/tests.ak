@@ -54,7 +54,7 @@ test to_list_1() {
 // Function returning a hash of a given Merkle Tree element
 pub fn root_hash(self: MerkleTree<a>) -> Hash<Sha2_256, ByteArray> {
   when self is {
-    Empty -> #""
+    Empty -> ""
     Leaf { hash, .. } -> hash
     Node { hash, .. } -> hash
   }
@@ -579,6 +579,6 @@ fn get_proof_item_value(proof_item: ProofItem) -> Hash<Sha2_256, ByteArray> {
   }
 }
 
-fn create_string_item_hash_fn() -> fn(String) -> Hash<Sha2_256, String> {
-  fn(x: String) { sha2_256(from_string(x)) }
+fn create_string_item_hash_fn() -> fn(ByteArray) -> Hash<Sha2_256, String> {
+  fn(x: ByteArray) { sha2_256(x) }
 }
