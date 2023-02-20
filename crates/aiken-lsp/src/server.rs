@@ -261,10 +261,68 @@ impl Server {
                 })
             }
 
+            Completion::METHOD => {
+                let params = cast_request::<Completion>(request).expect("cast Completion");
+
+                let completions = self.completion(params);
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(completions)?),
+                })
+            }
+
             unsupported => Err(ServerError::UnsupportedLspRequest {
                 request: unsupported.to_string(),
             }),
         }
+    }
+
+    fn completion(
+        &self,
+        params: lsp_types::CompletionParams,
+    ) -> Option<Vec<lsp_types::CompletionItem>> {
+        let found = self
+            .node_at_position(&params.text_document_position)
+            .map(|(_, found)| found);
+
+        match found {
+            // TODO: test
+            None | Some(Located::Definition(Definition::Use(Use { .. }))) => {
+                self.completion_for_import()
+            }
+
+            // TODO: autocompletion for other definitions
+            Some(Located::Definition(_expression)) => None,
+
+            // TODO: autocompletion for expressions
+            Some(Located::Expression(_expression)) => None,
+        }
+    }
+
+    fn completion_for_import(&self) -> Option<Vec<lsp_types::CompletionItem>> {
+        let compiler = self.compiler.as_ref()?;
+
+        // TODO: Test
+        let dependencies_modules = compiler.project.importable_modules();
+
+        // TODO: Test
+        let project_modules = compiler.modules.keys().cloned();
+
+        let modules = dependencies_modules
+            .into_iter()
+            .chain(project_modules)
+            .sorted()
+            .map(|label| lsp_types::CompletionItem {
+                label,
+                kind: None,
+                documentation: None,
+                ..Default::default()
+            })
+            .collect();
+
+        Some(modules)
     }
 
     fn goto_definition(
