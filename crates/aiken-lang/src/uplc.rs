@@ -757,7 +757,7 @@ impl<'a> CodeGenerator<'a> {
                     );
 
                     let data_type =
-                        lookup_data_type_by_tipo(self.data_types.clone(), &subject_type).unwrap();
+                        lookup_data_type_by_tipo(self.data_types.clone(), subject_type).unwrap();
 
                     if data_type.constructors.len() > 1 {
                         ir_stack.push(Air::Clause {
