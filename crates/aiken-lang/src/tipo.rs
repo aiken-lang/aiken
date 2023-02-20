@@ -715,7 +715,7 @@ pub enum PatternConstructor {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ModuleValueConstructor {
     Record {
         name: String,

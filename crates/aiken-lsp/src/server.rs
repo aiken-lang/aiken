@@ -4,18 +4,24 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aiken_lang::{ast::ModuleKind, parser};
+use aiken_lang::{
+    ast::{Located, ModuleKind, Span},
+    parser,
+    tipo::pretty::Printer,
+};
 use aiken_project::{
     config,
     error::{Error as ProjectError, GetSource},
+    module::CheckedModule,
 };
+use indoc::formatdoc;
 use lsp_server::{Connection, Message};
 use lsp_types::{
     notification::{
         DidChangeTextDocument, DidSaveTextDocument, Notification, Progress, PublishDiagnostics,
         ShowMessage,
     },
-    request::{Formatting, Request, WorkDoneProgressCreate},
+    request::{Formatting, GotoDefinition, HoverRequest, Request, WorkDoneProgressCreate},
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
 use miette::Diagnostic;
@@ -25,7 +31,8 @@ use crate::{
     error::Error as ServerError,
     line_numbers::LineNumbers,
     utils::{
-        path_to_uri, text_edit_replace, COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
+        path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
+        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
     },
 };
 
@@ -230,10 +237,136 @@ impl Server {
                     }
                 }
             }
+            HoverRequest::METHOD => {
+                let params = cast_request::<HoverRequest>(request)?;
+
+                let opt_hover = self.hover(params)?;
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(opt_hover)?),
+                })
+            }
+
+            GotoDefinition::METHOD => {
+                let params = cast_request::<GotoDefinition>(request)?;
+
+                let location = self.goto_definition(params)?;
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(location)?),
+                })
+            }
+
             unsupported => Err(ServerError::UnsupportedLspRequest {
                 request: unsupported.to_string(),
             }),
         }
+    }
+
+    fn goto_definition(
+        &self,
+        params: lsp_types::GotoDefinitionParams,
+    ) -> Result<Option<lsp_types::Location>, ServerError> {
+        let params = params.text_document_position_params;
+
+        let (line_numbers, node) = match self.node_at_position(&params) {
+            Some(location) => location,
+            None => return Ok(None),
+        };
+
+        let location = match node.definition_location() {
+            Some(location) => location,
+            None => return Ok(None),
+        };
+
+        let (uri, line_numbers) = match location.module {
+            None => (params.text_document.uri, &line_numbers),
+            Some(name) => {
+                let module = match self
+                    .compiler
+                    .as_ref()
+                    .and_then(|compiler| compiler.sources.get(name))
+                {
+                    Some(module) => module,
+
+                    None => return Ok(None),
+                };
+
+                let url = url::Url::parse(&format!("file:///{}", &module.path))
+                    .expect("goto definition URL parse");
+
+                (url, &module.line_numbers)
+            }
+        };
+
+        let range = span_to_lsp_range(location.span, line_numbers);
+
+        Ok(Some(lsp_types::Location { uri, range }))
+    }
+
+    fn node_at_position(
+        &self,
+        params: &lsp_types::TextDocumentPositionParams,
+    ) -> Option<(LineNumbers, Located<'_>)> {
+        let module = self.module_for_uri(&params.text_document.uri);
+
+        let module = module?;
+
+        let line_numbers = LineNumbers::new(&module.code);
+
+        let byte_index = line_numbers.byte_index(
+            params.position.line as usize,
+            params.position.character as usize,
+        );
+
+        let node = module.find_node(byte_index);
+
+        let node = node?;
+
+        Some((line_numbers, node))
+    }
+
+    fn module_for_uri(&self, uri: &url::Url) -> Option<&CheckedModule> {
+        self.compiler.as_ref().and_then(|compiler| {
+            let module_name = uri_to_module_name(uri, &self.root).expect("uri to module name");
+
+            compiler.modules.get(&module_name)
+        })
+    }
+
+    fn hover(
+        &self,
+        params: lsp_types::HoverParams,
+    ) -> Result<Option<lsp_types::Hover>, ServerError> {
+        let params = params.text_document_position_params;
+
+        let (line_numbers, found) = match self.node_at_position(&params) {
+            Some(value) => value,
+            None => return Ok(None),
+        };
+
+        let expression = match found {
+            Located::Expression(expression) => expression,
+            Located::Definition(_) => return Ok(None),
+        };
+
+        // Show the type of the hovered node to the user
+        let type_ = Printer::new().pretty_print(expression.tipo().as_ref(), 0);
+
+        let contents = formatdoc! {r#"
+            ```aiken
+            {type_}
+            ```
+        "#};
+
+        Ok(Some(lsp_types::Hover {
+            contents: lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(contents)),
+            range: Some(span_to_lsp_range(expression.location(), &line_numbers)),
+        }))
     }
 
     pub fn listen(&mut self, connection: Connection) -> Result<(), ServerError> {
@@ -366,21 +499,13 @@ impl Server {
 
                 let line_numbers = LineNumbers::new(&src);
 
-                let start = line_numbers.line_and_column_number(labeled_span.inner().offset());
-                let end = line_numbers.line_and_column_number(
-                    labeled_span.inner().offset() + labeled_span.inner().len(),
-                );
-
                 let lsp_diagnostic = lsp_types::Diagnostic {
-                    range: lsp_types::Range::new(
-                        lsp_types::Position {
-                            line: start.line as u32 - 1,
-                            character: start.column as u32 - 1,
+                    range: span_to_lsp_range(
+                        Span {
+                            start: labeled_span.inner().offset(),
+                            end: labeled_span.inner().offset() + labeled_span.inner().len(),
                         },
-                        lsp_types::Position {
-                            line: end.line as u32 - 1,
-                            character: end.column as u32 - 1,
-                        },
+                        &line_numbers,
                     ),
                     severity: Some(severity),
                     code: error

@@ -230,7 +230,8 @@ mod test {
             let (mut ast, extra) =
                 parser::module(source_code, kind).expect("Failed to parse module");
             ast.name = name.clone();
-            let mut module = ParsedModule {
+
+            ParsedModule {
                 kind,
                 ast,
                 code: source_code.to_string(),
@@ -238,9 +239,7 @@ mod test {
                 path: PathBuf::new(),
                 extra,
                 package: self.package.to_string(),
-            };
-            module.attach_doc_and_module_comments();
-            module
+            }
         }
 
         fn check(&mut self, module: ParsedModule) -> CheckedModule {
@@ -261,7 +260,7 @@ mod test {
             self.module_types
                 .insert(module.name.clone(), ast.type_info.clone());
 
-            CheckedModule {
+            let mut checked_module = CheckedModule {
                 kind: module.kind,
                 extra: module.extra,
                 name: module.name,
@@ -269,7 +268,11 @@ mod test {
                 package: module.package,
                 input_path: module.path,
                 ast,
-            }
+            };
+
+            checked_module.attach_doc_and_module_comments();
+
+            checked_module
         }
     }
 

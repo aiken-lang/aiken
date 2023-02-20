@@ -12,7 +12,7 @@ use crate::{
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypedExpr {
     Int {
         location: Span,
@@ -305,6 +305,96 @@ impl TypedExpr {
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
             | Self::RecordUpdate { location, .. } => *location,
+        }
+    }
+
+    // This could be optimised in places to exit early if the first of a series
+    // of expressions is after the byte index.
+    pub fn find_node(&self, byte_index: usize) -> Option<&Self> {
+        if !self.location().contains(byte_index) {
+            return None;
+        }
+
+        match self {
+            TypedExpr::ErrorTerm { .. }
+            | TypedExpr::Var { .. }
+            | TypedExpr::Int { .. }
+            | TypedExpr::String { .. }
+            | TypedExpr::ByteArray { .. }
+            | TypedExpr::ModuleSelect { .. } => Some(self),
+
+            TypedExpr::Trace { text, then, .. } => text
+                .find_node(byte_index)
+                .or_else(|| then.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
+                expressions.iter().find_map(|e| e.find_node(byte_index))
+            }
+
+            TypedExpr::Fn { body, .. } => body.find_node(byte_index).or(Some(self)),
+
+            TypedExpr::Tuple {
+                elems: elements, ..
+            }
+            | TypedExpr::List { elements, .. } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::Call { fun, args, .. } => args
+                .iter()
+                .find_map(|arg| arg.find_node(byte_index))
+                .or_else(|| fun.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::BinOp { left, right, .. } => left
+                .find_node(byte_index)
+                .or_else(|| right.find_node(byte_index)),
+
+            TypedExpr::Assignment { value, .. } => value.find_node(byte_index),
+
+            TypedExpr::When {
+                subjects, clauses, ..
+            } => subjects
+                .iter()
+                .find_map(|subject| subject.find_node(byte_index))
+                .or_else(|| {
+                    clauses
+                        .iter()
+                        .find_map(|clause| clause.find_node(byte_index))
+                })
+                .or(Some(self)),
+
+            TypedExpr::RecordAccess {
+                record: expression, ..
+            }
+            | TypedExpr::TupleIndex {
+                tuple: expression, ..
+            } => expression.find_node(byte_index).or(Some(self)),
+
+            TypedExpr::RecordUpdate { spread, args, .. } => args
+                .iter()
+                .find_map(|arg| arg.find_node(byte_index))
+                .or_else(|| spread.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => branches
+                .iter()
+                .find_map(|branch| {
+                    branch
+                        .condition
+                        .find_node(byte_index)
+                        .or_else(|| branch.body.find_node(byte_index))
+                })
+                .or_else(|| final_else.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::UnOp { value, .. } => value.find_node(byte_index).or(Some(self)),
         }
     }
 }

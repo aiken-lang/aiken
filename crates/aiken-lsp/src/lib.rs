@@ -2,10 +2,6 @@ use std::env;
 
 use aiken_project::{config::Config, paths};
 use lsp_server::Connection;
-use lsp_types::{
-    OneOf, SaveOptions, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
-};
 
 mod cast;
 pub mod error;
@@ -53,21 +49,32 @@ pub fn start() -> Result<(), Error> {
     Ok(())
 }
 
-fn capabilities() -> ServerCapabilities {
-    ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Options(
-            TextDocumentSyncOptions {
+fn capabilities() -> lsp_types::ServerCapabilities {
+    lsp_types::ServerCapabilities {
+        completion_provider: Some(lsp_types::CompletionOptions {
+            resolve_provider: None,
+            trigger_characters: Some(vec![".".into(), " ".into()]),
+            all_commit_characters: None,
+            work_done_progress_options: lsp_types::WorkDoneProgressOptions {
+                work_done_progress: None,
+            },
+        }),
+        document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
+        definition_provider: Some(lsp_types::OneOf::Left(true)),
+        hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
+        text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Options(
+            lsp_types::TextDocumentSyncOptions {
                 open_close: None,
-                change: Some(TextDocumentSyncKind::FULL),
+                change: Some(lsp_types::TextDocumentSyncKind::FULL),
                 will_save: None,
                 will_save_wait_until: None,
-                save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
-                    include_text: Some(false),
-                })),
+                save: Some(lsp_types::TextDocumentSyncSaveOptions::SaveOptions(
+                    lsp_types::SaveOptions {
+                        include_text: Some(false),
+                    },
+                )),
             },
         )),
-        // definition_provider: Some(OneOf::Left(true)),
-        document_formatting_provider: Some(OneOf::Left(true)),
         ..Default::default()
     }
 }

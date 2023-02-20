@@ -1,7 +1,7 @@
 use crate::error::Error;
 use aiken_lang::{
     ast::{
-        DataType, Definition, ModuleKind, TypedDataType, TypedFunction, TypedModule,
+        DataType, Definition, Located, ModuleKind, TypedDataType, TypedFunction, TypedModule,
         TypedValidator, UntypedModule,
     },
     builder::{DataTypeKey, FunctionAccessKey},
@@ -40,55 +40,6 @@ impl ParsedModule {
             .collect();
 
         (name, deps)
-    }
-
-    pub fn attach_doc_and_module_comments(&mut self) {
-        // Module Comments
-        self.ast.docs = self
-            .extra
-            .module_comments
-            .iter()
-            .map(|span| {
-                Comment::from((span, self.code.as_str()))
-                    .content
-                    .to_string()
-            })
-            .collect();
-
-        // Order definitions to avoid dissociating doc comments from them
-        let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
-        definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
-
-        // Doc Comments
-        let mut doc_comments = self.extra.doc_comments.iter().peekable();
-        for def in &mut definitions {
-            let docs: Vec<&str> =
-                comments_before(&mut doc_comments, def.location().start, &self.code);
-            if !docs.is_empty() {
-                let doc = docs.join("\n");
-                def.put_doc(doc);
-            }
-
-            if let Definition::DataType(DataType { constructors, .. }) = def {
-                for constructor in constructors {
-                    let docs: Vec<&str> =
-                        comments_before(&mut doc_comments, constructor.location.start, &self.code);
-                    if !docs.is_empty() {
-                        let doc = docs.join("\n");
-                        constructor.put_doc(doc);
-                    }
-
-                    for argument in constructor.arguments.iter_mut() {
-                        let docs: Vec<&str> =
-                            comments_before(&mut doc_comments, argument.location.start, &self.code);
-                        if !docs.is_empty() {
-                            let doc = docs.join("\n");
-                            argument.put_doc(doc);
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -221,6 +172,61 @@ pub struct CheckedModule {
     pub package: String,
     pub ast: TypedModule,
     pub extra: ModuleExtra,
+}
+
+impl CheckedModule {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
+        self.ast.find_node(byte_index)
+    }
+
+    pub fn attach_doc_and_module_comments(&mut self) {
+        // Module Comments
+        self.ast.docs = self
+            .extra
+            .module_comments
+            .iter()
+            .map(|span| {
+                Comment::from((span, self.code.as_str()))
+                    .content
+                    .to_string()
+            })
+            .collect();
+
+        // Order definitions to avoid dissociating doc comments from them
+        let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
+        definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
+
+        // Doc Comments
+        let mut doc_comments = self.extra.doc_comments.iter().peekable();
+        for def in &mut definitions {
+            let docs: Vec<&str> =
+                comments_before(&mut doc_comments, def.location().start, &self.code);
+            if !docs.is_empty() {
+                let doc = docs.join("\n");
+                def.put_doc(doc);
+            }
+
+            if let Definition::DataType(DataType { constructors, .. }) = def {
+                for constructor in constructors {
+                    let docs: Vec<&str> =
+                        comments_before(&mut doc_comments, constructor.location.start, &self.code);
+                    if !docs.is_empty() {
+                        let doc = docs.join("\n");
+                        constructor.put_doc(doc);
+                    }
+
+                    for argument in constructor.arguments.iter_mut() {
+                        let docs: Vec<&str> =
+                            comments_before(&mut doc_comments, argument.location.start, &self.code);
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            argument.put_doc(doc);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone)]

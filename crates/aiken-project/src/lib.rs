@@ -467,7 +467,7 @@ where
                     // Store the name
                     ast.name = name.clone();
 
-                    let mut module = ParsedModule {
+                    let module = ParsedModule {
                         kind,
                         ast,
                         code,
@@ -488,8 +488,6 @@ where
                         }
                         .into());
                     }
-
-                    module.attach_doc_and_module_comments();
 
                     parsed_modules.insert(module.name.clone(), module);
                 }
@@ -561,18 +559,19 @@ where
                 self.module_types
                     .insert(name.clone(), ast.type_info.clone());
 
-                self.checked_modules.insert(
-                    name.clone(),
-                    CheckedModule {
-                        kind,
-                        extra,
-                        name,
-                        code,
-                        ast,
-                        package,
-                        input_path: path,
-                    },
-                );
+                let mut checked_module = CheckedModule {
+                    kind,
+                    extra,
+                    name: name.clone(),
+                    code,
+                    ast,
+                    package,
+                    input_path: path,
+                };
+
+                checked_module.attach_doc_and_module_comments();
+
+                self.checked_modules.insert(name, checked_module);
             }
         }
 
