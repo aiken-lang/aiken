@@ -87,24 +87,6 @@ pub enum Error {
         error: tipo::error::Error,
     },
 
-    #[error("Validator functions must return Bool")]
-    ValidatorMustReturnBool {
-        path: PathBuf,
-        src: String,
-        named: NamedSource,
-        location: Span,
-    },
-
-    #[error("Validator\n\n{name}\n\nrequires at least {at_least} arguments")]
-    WrongValidatorArity {
-        name: String,
-        at_least: u8,
-        location: Span,
-        path: PathBuf,
-        src: String,
-        named: Box<NamedSource>,
-    },
-
     #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
     TestFailure {
         name: String,
@@ -259,8 +241,6 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => Some(Box::new("aiken::loading::toml")),
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
-            Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
             Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
             Error::Http(_) => Some(Box::new("aiken::packages::download")),
             Error::ZipExtract(_) => None,
@@ -292,8 +272,6 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
-            Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
             Error::TestFailure { evaluation_hint, .. }  =>{
                 match evaluation_hint {
                     None => None,
@@ -366,12 +344,6 @@ impl Diagnostic for Error {
                 }
             }
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { location, .. } => Some(Box::new(
-                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
-            )),
-            Error::WrongValidatorArity { location, .. } => Some(Box::new(
-                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
-            )),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
@@ -396,8 +368,6 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { named, .. } => Some(named.deref()),
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { named, .. } => Some(named),
-            Error::WrongValidatorArity { named, .. } => Some(named.deref()),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
@@ -422,8 +392,6 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => None,
-            Error::WrongValidatorArity { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http { .. } => None,
             Error::ZipExtract { .. } => None,
@@ -448,8 +416,6 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => None,
-            Error::WrongValidatorArity { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http { .. } => None,
             Error::ZipExtract { .. } => None,
