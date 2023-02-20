@@ -324,6 +324,18 @@ impl<A, B, C> Definition<A, B, C> {
             }
         }
     }
+
+    pub fn doc(&self) -> Option<String> {
+        match self {
+            Definition::Use { .. } => None,
+            Definition::Fn(Function { doc, .. })
+            | Definition::TypeAlias(TypeAlias { doc, .. })
+            | Definition::DataType(DataType { doc, .. })
+            | Definition::ModuleConstant(ModuleConstant { doc, .. })
+            | Definition::Validator(Validator { doc, .. })
+            | Definition::Test(Function { doc, .. }) => doc.clone(),
+        }
+    }
 }
 
 impl TypedDefinition {
