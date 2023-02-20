@@ -239,6 +239,7 @@ impl Server {
     fn handle_request(
         &mut self,
         request: lsp_server::Request,
+        connection: &Connection,
     ) -> Result<lsp_server::Response, ServerError> {
         let id = request.id.clone();
 
@@ -262,6 +263,8 @@ impl Server {
                         for error in errors {
                             self.process_diagnostic(error)?;
                         }
+
+                        self.publish_stored_diagnostics(connection)?;
 
                         Ok(lsp_server::Response {
                             id,
@@ -497,9 +500,7 @@ impl Server {
 
                     tracing::debug!("Get request: {:#?}", req);
 
-                    let response = self.handle_request(req)?;
-
-                    self.publish_stored_diagnostics(&connection)?;
+                    let response = self.handle_request(req, &connection)?;
 
                     connection.sender.send(Message::Response(response))?;
                 }
