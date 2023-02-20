@@ -763,7 +763,7 @@ The best thing to do from here is to remove it."#))]
 
 ╰─▶ {signature}
 
-...but I expected this to be a {type_Bool}. If I am inferring the wrong type, you may want to add a type annotation to the function."#
+...but I expected this to be a {type_Bool}. If I am inferring the wrong type, try annotating the validator's return type with Bool"#
         , type_Bool = "Bool".bright_blue().bold()
         , signature = return_type.to_pretty(0).red()
     ))]
@@ -773,11 +773,35 @@ The best thing to do from here is to remove it."#))]
         return_type: Arc<Type>,
     },
 
-    #[error("Validators requires at least {} arguments.", at_least.to_string().purple().bold())]
+    #[error("Validators require at least 2 arguments and at most 3 arguments.")]
     #[diagnostic(code("illegal::validator_arity"))]
+    #[diagnostic(help(
+        "Validators require either 2 or 3 arguments {}.\nIf you don't need one of the required arguments use an underscore `_datum`.",
+        if *count < 2 {
+            let missing = 2 - count;
+
+            let mut arguments = "argument".to_string();
+
+            if missing > 1 {
+                arguments.push('s');
+            }
+            
+            format!("please add the {} missing {arguments}", missing.to_string().yellow())
+        } else {
+            let extra = count - 3;
+
+            let mut arguments = "argument".to_string();
+
+            if extra > 1 {
+                arguments.push('s');
+            }
+            
+            format!("please remove the {} extra {arguments}", extra.to_string().yellow())
+        }
+    ))]
     IncorrectValidatorArity {
-        at_least: u8,
-        #[label("not enough arguments")]
+        count: u32,
+        #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
         location: Span,
     },
 }
