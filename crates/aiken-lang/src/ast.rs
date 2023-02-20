@@ -66,6 +66,14 @@ impl UntypedModule {
     }
 }
 
+impl TypedModule {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
+        self.definitions
+            .iter()
+            .find_map(|definition| definition.find_node(byte_index))
+    }
+}
+
 pub type TypedFunction = Function<Arc<Type>, TypedExpr>;
 pub type UntypedFunction = Function<(), UntypedExpr>;
 
@@ -318,6 +326,48 @@ impl<A, B, C> Definition<A, B, C> {
     }
 }
 
+impl TypedDefinition {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
+        // Note that the fn span covers the function head, not
+        // the entire statement.
+        if let Definition::Fn(Function { body, .. })
+        | Definition::Validator(Validator {
+            fun: Function { body, .. },
+            ..
+        })
+        | Definition::Test(Function { body, .. }) = self
+        {
+            if let Some(expression) = body.find_node(byte_index) {
+                return Some(Located::Expression(expression));
+            }
+        }
+
+        if self.location().contains(byte_index) {
+            Some(Located::Definition(self))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Located<'a> {
+    Expression(&'a TypedExpr),
+    Definition(&'a TypedDefinition),
+}
+
+impl<'a> Located<'a> {
+    pub fn definition_location(&self) -> Option<DefinitionLocation<'_>> {
+        match self {
+            Self::Expression(expression) => expression.definition_location(),
+            Self::Definition(definition) => Some(DefinitionLocation {
+                module: None,
+                span: definition.location(),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DefinitionLocation<'module> {
     pub module: Option<&'module str>,
@@ -376,6 +426,12 @@ impl CallArg<UntypedExpr> {
             UntypedExpr::Var { ref name, .. } => name.contains(CAPTURE_VARIABLE),
             _ => false,
         }
+    }
+}
+
+impl TypedCallArg {
+    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+        self.value.find_node(byte_index)
     }
 }
 
@@ -816,6 +872,10 @@ impl TypedClause {
             end: self.then.location().end,
         }
     }
+
+    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+        self.then.find_node(byte_index)
+    }
 }
 
 pub type UntypedClauseGuard = ClauseGuard<()>;
@@ -946,12 +1006,18 @@ pub struct IfBranch<Expr> {
     pub location: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedRecordUpdateArg {
     pub label: String,
     pub location: Span,
     pub value: TypedExpr,
     pub index: usize,
+}
+
+impl TypedRecordUpdateArg {
+    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+        self.value.find_node(byte_index)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1022,6 +1088,10 @@ impl Span {
             start: self.start().min(other.start()),
             end: self.end().max(other.end()),
         }
+    }
+
+    pub fn contains(&self, byte_index: usize) -> bool {
+        byte_index >= self.start && byte_index < self.end
     }
 }
 

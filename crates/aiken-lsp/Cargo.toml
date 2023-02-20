@@ -13,6 +13,8 @@ authors = ["Lucas Rosa <x@rvcas.dev>"]
 aiken-lang = { path = '../aiken-lang', version = "0.0.28" }
 aiken-project = { path = '../aiken-project', version = "0.0.28" }
 crossbeam-channel = "0.5.6"
+indoc = "2.0.0"
+itertools = "0.10.5"
 lsp-server = "0.6.0"
 lsp-types = "0.93.2"
 miette = "5.4.1"
@@ -21,3 +23,4 @@ serde_json = "1.0.87"
 thiserror = "1.0.37"
 tracing = "0.1.37"
 url = "2.3.1"
+urlencoding = "2.1.2"
