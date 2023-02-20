@@ -737,12 +737,12 @@ impl Server {
             .unwrap_or(false);
 
         if !supports_watch_files {
-            tracing::warn!("lsp_client_cannot_watch_gleam_toml");
+            tracing::warn!("lsp_client_cannot_watch_aiken_toml");
 
             return Ok(());
         }
 
-        // Register gleam.toml as a watched file so we get a notification when
+        // Register aiken.toml as a watched file so we get a notification when
         // it changes and thus know that we need to rebuild the entire project.
         let register_options =
             serde_json::value::to_value(lsp_types::DidChangeWatchedFilesRegistrationOptions {
