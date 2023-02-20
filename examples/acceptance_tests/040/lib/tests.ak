@@ -73,3 +73,12 @@ test single_field_expect() {
   expect CreateVoteBatch { id } = redeemer
   id == #""
 }
+
+test single_when() {
+  let redeemer = CreateVoteBatch { id: #"" }
+  let x = when redeemer is {
+    CreateVoteBatch { id } -> id == #""
+    _ -> False
+  }
+  x == True
+}
