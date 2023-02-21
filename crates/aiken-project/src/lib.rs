@@ -399,8 +399,7 @@ where
             .into_iter()
             .map(|validator| {
                 let same_title = validator.title == applied_validator.title;
-                let same_purpose = validator.purpose == applied_validator.purpose;
-                if same_title && same_purpose {
+                if same_title {
                     applied_validator.to_owned()
                 } else {
                     validator

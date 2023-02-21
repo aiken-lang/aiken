@@ -16,8 +16,6 @@ use uplc::ast::{DeBruijn, Program, Term};
 pub struct Validator<T> {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub purpose: Option<Purpose>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datum: Option<Annotated<T>>,
@@ -27,15 +25,6 @@ pub struct Validator<T> {
     pub parameters: Vec<Annotated<T>>,
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Purpose {
-    Spend,
-    Mint,
-    Withdraw,
-    Publish,
 }
 
 impl Display for Validator<Schema> {
@@ -63,7 +52,6 @@ impl Validator<Schema> {
         Ok(Validator {
             title: format!("{}.{}", &module.name, &def.fun.name),
             description: None,
-            purpose: None,
             parameters: def
                 .params
                 .iter()
@@ -133,40 +121,6 @@ where
                     ..self
                 })
             }
-        }
-    }
-}
-
-impl Purpose {
-    pub fn min_arity(&self) -> u8 {
-        match self {
-            Purpose::Spend => 3,
-            Purpose::Mint | Purpose::Withdraw | Purpose::Publish => 2,
-        }
-    }
-}
-
-impl Display for Purpose {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
-            Purpose::Spend => "spend",
-            Purpose::Mint => "mint",
-            Purpose::Withdraw => "withdraw",
-            Purpose::Publish => "publish",
-        })
-    }
-}
-
-impl TryFrom<String> for Purpose {
-    type Error = String;
-
-    fn try_from(purpose: String) -> Result<Purpose, Self::Error> {
-        match &purpose[..] {
-            "spend" => Ok(Purpose::Spend),
-            "mint" => Ok(Purpose::Mint),
-            "withdraw" => Ok(Purpose::Withdraw),
-            "publish" => Ok(Purpose::Publish),
-            unexpected => Err(format!("Can't turn '{unexpected}' into any Purpose")),
         }
     }
 }
