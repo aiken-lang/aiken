@@ -474,13 +474,11 @@ mod test {
               "title": "test_module.spend",
               "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
               "datum": {
-                "dataType": "#pair",
-                "left": {
-                  "dataType": "integer"
-                },
-                "right": {
-                  "dataType": "bytes"
-                }
+                "dataType": "list",
+                "items": [
+                  { "dataType": "integer" },
+                  { "dataType": "bytes" }
+                ]
               },
               "redeemer": {
                 "dataType": "#string"
@@ -505,7 +503,7 @@ mod test {
               "hash": "f335ce0436fd7df56e727a66ada7298534a27b98f887bc3b7947ee48",
               "datum": {
                 "title": "Tuple",
-                "dataType": "#list",
+                "dataType": "list",
                 "items": [
                   {
                     "dataType": "integer"
