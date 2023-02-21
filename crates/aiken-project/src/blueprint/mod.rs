@@ -16,13 +16,26 @@ pub struct Blueprint<T: Default> {
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preamble {
     pub title: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
     pub version: String,
+
+    pub plutus_version: PlutusVersion,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlutusVersion {
+    V1,
+    V2,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -112,6 +125,7 @@ impl From<&Config> for Preamble {
             } else {
                 Some(config.description.clone())
             },
+            plutus_version: PlutusVersion::V2,
             version: config.version.clone(),
             license: config.license.clone(),
         }
@@ -130,6 +144,7 @@ mod test {
                 title: "Foo".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                plutus_version: PlutusVersion::V2,
                 license: Some("Apache-2.0".to_string()),
             },
             validators: vec![],
@@ -140,6 +155,7 @@ mod test {
                 "preamble": {
                     "title": "Foo",
                     "version": "1.0.0",
+                    "plutusVersion": "v2",
                     "license": "Apache-2.0"
                 },
                 "validators": []
@@ -154,6 +170,7 @@ mod test {
                 title: "Foo".to_string(),
                 description: Some("Lorem ipsum".to_string()),
                 version: "1.0.0".to_string(),
+                plutus_version: PlutusVersion::V2,
                 license: None,
             },
             validators: vec![],
@@ -165,6 +182,7 @@ mod test {
                     "title": "Foo",
                     "description": "Lorem ipsum",
                     "version": "1.0.0",
+                    "plutusVersion": "v2"
                 },
                 "validators": []
             }),
