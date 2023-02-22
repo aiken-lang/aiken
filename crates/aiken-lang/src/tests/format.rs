@@ -547,3 +547,16 @@ fn test_string_literal() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn test_unicode() {
+    let src = indoc! {r#"
+        /// ∞ ★ ♩ ♫ ✓
+        fn foo() {
+          trace @"∀💩"
+          Void
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
