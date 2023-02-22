@@ -521,17 +521,6 @@ You can help me by providing a type-annotation for 'x', as such:
         location: Span,
     },
 
-    #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n", name.purple())]
-    #[diagnostic(code("illegal::module_name"))]
-    #[diagnostic(help(r#"Some module names are reserved for internal use. This the case of:
-
-- aiken: where the prelude is located;
-- aiken/builtin: where I store low-level Plutus builtins.
-
-Note that 'aiken' is also imported by default; but you can refer to it explicitly to disambiguate with a local value that would clash with one from that module."#
-    ))]
-    ReservedModuleName { name: String },
-
     #[error(
         "I discovered an attempt to access the {} element of a {}-tuple.\n",
         Ordinal(*index + 1).to_string().purple(),

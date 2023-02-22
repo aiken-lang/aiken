@@ -166,7 +166,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, Tracing::NoTraces)?;
+        self.type_check(parsed_modules, Tracing::NoTraces, false)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -247,7 +247,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, options.tracing)?;
+        self.type_check(parsed_modules, options.tracing, true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -432,7 +432,7 @@ where
 
             let parsed_modules = self.parse_sources(package.name)?;
 
-            self.type_check(parsed_modules, Tracing::NoTraces)?;
+            self.type_check(parsed_modules, Tracing::NoTraces, true)?;
         }
 
         Ok(())
@@ -518,6 +518,7 @@ where
         &mut self,
         mut parsed_modules: ParsedModules,
         tracing: Tracing,
+        validate_module_name: bool,
     ) -> Result<(), Error> {
         let processing_sequence = parsed_modules.sequence()?;
 
@@ -549,6 +550,10 @@ where
                         named: NamedSource::new(path.display().to_string(), code.clone()),
                         error,
                     })?;
+
+                if validate_module_name {
+                    ast.validate_module_name()?;
+                }
 
                 // Register any warnings emitted as type warnings
                 let type_warnings = type_warnings

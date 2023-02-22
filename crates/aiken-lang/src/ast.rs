@@ -3,8 +3,11 @@ use std::{fmt, ops::Range, sync::Arc};
 use crate::{
     builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
+    parser::token::Token,
     tipo::{PatternConstructor, Type, TypeInfo},
 };
+use miette::Diagnostic;
+use owo_colors::OwoColorize;
 
 pub const ASSERT_VARIABLE: &str = "_try";
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -71,6 +74,51 @@ impl TypedModule {
         self.definitions
             .iter()
             .find_map(|definition| definition.find_node(byte_index))
+    }
+
+    pub fn validate_module_name(&self) -> Result<(), Error> {
+        if self.name == "aiken" || self.name == "aiken/builtin" {
+            return Err(Error::ReservedModuleName {
+                name: self.name.to_string(),
+            });
+        };
+
+        for segment in self.name.split('/') {
+            if str_to_keyword(segment).is_some() {
+                return Err(Error::KeywordInModuleName {
+                    name: self.name.to_string(),
+                    keyword: segment.to_string(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn str_to_keyword(word: &str) -> Option<Token> {
+    // Alphabetical keywords:
+    match word {
+        "assert" => Some(Token::Expect),
+        "expect" => Some(Token::Expect),
+        "else" => Some(Token::Else),
+        "is" => Some(Token::Is),
+        "as" => Some(Token::As),
+        "when" => Some(Token::When),
+        "const" => Some(Token::Const),
+        "fn" => Some(Token::Fn),
+        "if" => Some(Token::If),
+        "use" => Some(Token::Use),
+        "let" => Some(Token::Let),
+        "opaque" => Some(Token::Opaque),
+        "pub" => Some(Token::Pub),
+        "todo" => Some(Token::Todo),
+        "type" => Some(Token::Type),
+        "trace" => Some(Token::Trace),
+        "test" => Some(Token::Test),
+        "error" => Some(Token::ErrorTerm),
+        "validator" => Some(Token::Validator),
+        _ => None,
     }
 }
 
@@ -1136,4 +1184,30 @@ impl chumsky::Span for Span {
     fn end(&self) -> Self::Offset {
         self.end
     }
+}
+
+#[derive(Debug, thiserror::Error, Diagnostic)]
+pub enum Error {
+    #[error(
+      "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
+      name.purple(),
+      keyword.purple()
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
+    #[diagnostic(code("illegal::module_name"))]
+    #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
+
+    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
+    KeywordInModuleName { name: String, keyword: String },
+
+    #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n", name.purple())]
+    #[diagnostic(code("illegal::module_name"))]
+    #[diagnostic(help(r#"Some module names are reserved for internal use. This the case of:
+
+- aiken: where the prelude is located;
+- aiken/builtin: where I store low-level Plutus builtins.
+
+Note that 'aiken' is also imported by default; but you can refer to it explicitly to disambiguate with a local value that would clash with one from that module."#
+    ))]
+    ReservedModuleName { name: String },
 }

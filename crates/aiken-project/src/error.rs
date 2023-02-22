@@ -3,7 +3,7 @@ use crate::{
     script::EvalHint,
 };
 use aiken_lang::{
-    ast::{BinOp, Span},
+    ast::{self, BinOp, Span},
     parser::error::ParseError,
     tipo,
 };
@@ -53,6 +53,9 @@ pub enum Error {
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Module(#[from] ast::Error),
 
     #[error("{help}")]
     TomlLoading {
@@ -189,6 +192,7 @@ impl GetSource for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module { .. } => None,
         }
     }
 
@@ -213,6 +217,7 @@ impl GetSource for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module { .. } => None,
         }
     }
 }
@@ -246,6 +251,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.code(),
         }
     }
 
@@ -317,6 +323,7 @@ impl Diagnostic for Error {
                     known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
+            Error::Module(e) => e.help(),
         }
     }
 
@@ -349,6 +356,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.labels(),
         }
     }
 
@@ -373,6 +381,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.source_code(),
         }
     }
 
@@ -397,6 +406,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.url(),
         }
     }
 
@@ -421,6 +431,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.related(),
         }
     }
 }

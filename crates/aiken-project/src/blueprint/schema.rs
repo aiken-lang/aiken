@@ -277,7 +277,7 @@ impl Annotated<Schema> {
                     Ok(Annotated {
                         title: Some("Tuple".to_owned()),
                         description: None,
-                        annotated: Schema::Data(Some(Data::List(Items::Many(elems)))).into(),
+                        annotated: Schema::Data(Some(Data::List(Items::Many(elems)))),
                     })
                 }
             },

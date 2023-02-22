@@ -8,7 +8,6 @@ use crate::{
     },
     builtins,
     builtins::function,
-    parser::token::Token,
     IdGenerator,
 };
 
@@ -35,8 +34,6 @@ impl UntypedModule {
         let name = self.name.clone();
         let docs = std::mem::take(&mut self.docs);
         let mut environment = Environment::new(id_gen.clone(), &name, modules, warnings);
-
-        validate_module_name(&name)?;
 
         let mut type_names = HashMap::with_capacity(self.definitions.len());
         let mut value_names = HashMap::with_capacity(self.definitions.len());
@@ -547,50 +544,5 @@ fn infer_definition(
                 tipo,
             }))
         }
-    }
-}
-
-fn validate_module_name(name: &str) -> Result<(), Error> {
-    if name == "aiken" || name == "aiken/builtin" {
-        return Err(Error::ReservedModuleName {
-            name: name.to_string(),
-        });
-    };
-
-    for segment in name.split('/') {
-        if str_to_keyword(segment).is_some() {
-            return Err(Error::KeywordInModuleName {
-                name: name.to_string(),
-                keyword: segment.to_string(),
-            });
-        }
-    }
-
-    Ok(())
-}
-
-fn str_to_keyword(word: &str) -> Option<Token> {
-    // Alphabetical keywords:
-    match word {
-        "assert" => Some(Token::Expect),
-        "expect" => Some(Token::Expect),
-        "else" => Some(Token::Else),
-        "is" => Some(Token::Is),
-        "as" => Some(Token::As),
-        "when" => Some(Token::When),
-        "const" => Some(Token::Const),
-        "fn" => Some(Token::Fn),
-        "if" => Some(Token::If),
-        "use" => Some(Token::Use),
-        "let" => Some(Token::Let),
-        "opaque" => Some(Token::Opaque),
-        "pub" => Some(Token::Pub),
-        "todo" => Some(Token::Todo),
-        "type" => Some(Token::Type),
-        "trace" => Some(Token::Trace),
-        "test" => Some(Token::Test),
-        "error" => Some(Token::ErrorTerm),
-        "validator" => Some(Token::Validator),
-        _ => None,
     }
 }
