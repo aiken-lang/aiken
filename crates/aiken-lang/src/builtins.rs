@@ -579,21 +579,65 @@ pub fn from_default_function(
             Some((tipo, 1))
         }
         DefaultFunction::ChooseData => {
-            let tipo = function(vec![data(), data(), data(), data(), data(), data()], data());
+            let a = generic_var(id_gen.next());
+            let tipo = function(
+                vec![
+                    data(),
+                    a.clone(),
+                    a.clone(),
+                    a.clone(),
+                    a.clone(),
+                    a.clone(),
+                ],
+                a,
+            );
             Some((tipo, 6))
         }
-
-        // Anything below has a direct syntax equivalent in Aiken, so
-        // there's no need to support builtin for those.
-        DefaultFunction::MkPairData => None,
-        DefaultFunction::MkNilData => None,
-        DefaultFunction::MkNilPairData => None,
-        DefaultFunction::ChooseUnit => None,
-        DefaultFunction::Trace => None,
-        DefaultFunction::FstPair => None,
-        DefaultFunction::SndPair => None,
-        DefaultFunction::ChooseList => None,
-        DefaultFunction::MkCons => None,
+        DefaultFunction::MkPairData => {
+            let tipo = function(vec![data(), data()], tuple(vec![data(), data()]));
+            Some((tipo, 2))
+        }
+        DefaultFunction::MkNilData => {
+            let tipo = function(vec![], list(data()));
+            Some((tipo, 0))
+        }
+        DefaultFunction::MkNilPairData => {
+            let tipo = function(vec![], list(tuple(vec![data(), data()])));
+            Some((tipo, 0))
+        }
+        DefaultFunction::ChooseUnit => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(vec![data(), a.clone()], a);
+            Some((tipo, 2))
+        }
+        DefaultFunction::Trace => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(vec![string(), a.clone()], a);
+            Some((tipo, 2))
+        }
+        DefaultFunction::FstPair => {
+            let a = generic_var(id_gen.next());
+            let b = generic_var(id_gen.next());
+            let tipo = function(vec![tuple(vec![a.clone(), b])], a);
+            Some((tipo, 1))
+        }
+        DefaultFunction::SndPair => {
+            let a = generic_var(id_gen.next());
+            let b = generic_var(id_gen.next());
+            let tipo = function(vec![tuple(vec![a, b.clone()])], b);
+            Some((tipo, 1))
+        }
+        DefaultFunction::ChooseList => {
+            let a = generic_var(id_gen.next());
+            let b = generic_var(id_gen.next());
+            let tipo = function(vec![list(a), b.clone(), b.clone()], b);
+            Some((tipo, 3))
+        }
+        DefaultFunction::MkCons => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(vec![a.clone(), list(a.clone())], list(a));
+            Some((tipo, 2))
+        }
     };
 
     info.map(|(tipo, arity)| {
