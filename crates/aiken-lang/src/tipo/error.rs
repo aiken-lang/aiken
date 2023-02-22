@@ -875,11 +875,12 @@ fn suggest_neighbor<'a>(
     items: impl Iterator<Item = &'a String>,
     default: &'a str,
 ) -> String {
+    let threshold = (name.len() as f64).sqrt().round() as usize;
     items
         .map(|s| (s, levenshtein::distance(name, s)))
         .min_by(|(_, a), (_, b)| a.cmp(b))
         .and_then(|(suggestion, distance)| {
-            if distance <= 4 {
+            if distance <= threshold {
                 Some(format!("Did you mean '{}'?", suggestion.yellow()))
             } else {
                 None
