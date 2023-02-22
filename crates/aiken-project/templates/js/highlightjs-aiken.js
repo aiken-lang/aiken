@@ -1,6 +1,6 @@
 hljs.registerLanguage("aiken", function (hljs) {
   const KEYWORDS =
-    "as assert when is const fn if let use opaque pub assert check todo type";
+    "as when is const validator fn if else let use opaque pub expect trace todo error type";
   const COMMAS = {
     scope: "ponctuation",
     begin: "[, ]+",
@@ -30,11 +30,17 @@ hljs.registerLanguage("aiken", function (hljs) {
   };
   const STRING = {
     scope: "string",
-    variants: [{ begin: /"/, end: /"/ }],
+    variants: [{ begin: /@"/, end: /"/ }],
     contains: [hljs.BACKSLASH_ESCAPE],
     relevance: 0,
   };
-  const BYTE_STRING = {
+  const BYTESTRING = {
+    scope: "string",
+    variants: [{ begin: /#?"/, end: /"/ }],
+    contains: [hljs.BACKSLASH_ESCAPE],
+    relevance: 0,
+  };
+  const BYTEARRAY = {
     scope: "string",
     variants: [{ begin: /#\[/, end: /\]/ }],
     contains: [
@@ -78,7 +84,8 @@ hljs.registerLanguage("aiken", function (hljs) {
     contains: [
       hljs.C_LINE_COMMENT_MODE,
       STRING,
-      BYTE_STRING,
+      BYTESTRING,
+      BYTEARRAY,
       {
         scope: "function",
         beginKeywords: "fn",
