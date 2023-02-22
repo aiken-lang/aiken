@@ -3750,6 +3750,7 @@ in
       pallas_traverse = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas-traverse."0.16.0" { inherit profileName; };
       peg = rustPackages."registry+https://github.com/rust-lang/crates.io-index".peg."0.8.1" { inherit profileName; };
       pretty = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pretty."0.11.3" { inherit profileName; };
+      pretty_assertions = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pretty_assertions."1.3.0" { inherit profileName; };
       secp256k1 = rustPackages."registry+https://github.com/rust-lang/crates.io-index".secp256k1."0.26.0" { inherit profileName; };
       serde = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde."1.0.151" { inherit profileName; };
       serde_json = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde_json."1.0.91" { inherit profileName; };
