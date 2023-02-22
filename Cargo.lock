@@ -2658,6 +2658,7 @@ dependencies = [
  "pallas-traverse",
  "peg",
  "pretty",
+ "pretty_assertions",
  "proptest",
  "secp256k1",
  "serde",

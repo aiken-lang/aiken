@@ -58,7 +58,7 @@ impl std::ops::Sub for ExBudget {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct CostModel {
     pub machine_costs: MachineCosts,
     pub builtin_costs: BuiltinCosts,
@@ -75,6 +75,7 @@ impl CostModel {
 
 /// There's no entry for Error since we'll be exiting anyway; also, what would
 /// happen if calling 'Error' caused the budget to be exceeded?
+#[derive(Debug, PartialEq)]
 pub struct MachineCosts {
     startup: ExBudget,
     var: ExBudget,
@@ -174,6 +175,7 @@ impl Default for MachineCosts {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct BuiltinCosts {
     pub add_integer: CostingFun<TwoArguments>,
     pub subtract_integer: CostingFun<TwoArguments>,
@@ -441,14 +443,14 @@ impl BuiltinCosts {
                 }),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
-                mem: ThreeArguments::ConstantCost(20000000000),
-                cpu: ThreeArguments::ConstantCost(20000000000),
+                mem: ThreeArguments::ConstantCost(30000000000),
+                cpu: ThreeArguments::ConstantCost(30000000000),
             },
             verify_schnorr_secp256k1_signature: CostingFun {
-                mem: ThreeArguments::ConstantCost(20000000000),
+                mem: ThreeArguments::ConstantCost(30000000000),
                 cpu: ThreeArguments::LinearInY(LinearSize {
-                    intercept: 20000000000,
-                    slope: 0,
+                    intercept: 30000000000,
+                    slope: 30000000000,
                 }),
             },
             append_string: CostingFun {
@@ -595,11 +597,11 @@ impl BuiltinCosts {
             serialise_data: CostingFun {
                 mem: OneArgument::LinearCost(LinearSize {
                     intercept: 30000000000,
-                    slope: 2,
+                    slope: 30000000000,
                 }),
                 cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 1159724,
-                    slope: 392670,
+                    intercept: 30000000000,
+                    slope: 30000000000,
                 }),
             },
         }
@@ -807,14 +809,14 @@ impl Default for BuiltinCosts {
                 }),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
-                mem: ThreeArguments::ConstantCost(20000000000),
-                cpu: ThreeArguments::ConstantCost(20000000000),
+                mem: ThreeArguments::ConstantCost(10),
+                cpu: ThreeArguments::ConstantCost(35892428),
             },
             verify_schnorr_secp256k1_signature: CostingFun {
-                mem: ThreeArguments::ConstantCost(20000000000),
+                mem: ThreeArguments::ConstantCost(10),
                 cpu: ThreeArguments::LinearInY(LinearSize {
-                    intercept: 20000000000,
-                    slope: 0,
+                    intercept: 38887044,
+                    slope: 32947,
                 }),
             },
             append_string: CostingFun {
@@ -3024,11 +3026,13 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct CostingFun<T> {
     pub mem: T,
     pub cpu: T,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum OneArgument {
     ConstantCost(i64),
     LinearCost(LinearSize),
@@ -3042,7 +3046,7 @@ impl OneArgument {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TwoArguments {
     ConstantCost(i64),
     LinearInX(LinearSize),
@@ -3094,6 +3098,7 @@ impl TwoArguments {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ThreeArguments {
     ConstantCost(i64),
     AddedSizes(AddedSizes),
@@ -3114,6 +3119,7 @@ impl ThreeArguments {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum SixArguments {
     ConstantCost(i64),
 }
@@ -3126,51 +3132,51 @@ impl SixArguments {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LinearSize {
     pub intercept: i64,
     pub slope: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AddedSizes {
     pub intercept: i64,
     pub slope: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SubtractedSizes {
     pub intercept: i64,
     pub slope: i64,
     pub minimum: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MultipliedSizes {
     pub intercept: i64,
     pub slope: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MinSize {
     pub intercept: i64,
     pub slope: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MaxSize {
     pub intercept: i64,
     pub slope: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ConstantOrLinear {
     pub constant: i64,
     pub intercept: i64,
     pub slope: i64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ConstantOrTwoArguments {
     pub constant: i64,
     pub model: Box<TwoArguments>,
@@ -3203,5 +3209,54 @@ impl TryFrom<u8> for StepKind {
             6 => Ok(StepKind::Builtin),
             v => Err(super::error::Error::InvalidStepKind(v)),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn assert_default_cost_model_v1_mainnet_2023_02_23() {
+        let costs = vec![
+            205665, 812, 1, 1, 1000, 571, 0, 1, 1000, 24177, 4, 1, 1000, 32, 117366, 10475, 4,
+            23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 100, 100,
+            23000, 100, 19537, 32, 175354, 32, 46417, 4, 221973, 511, 0, 1, 89141, 32, 497525,
+            14068, 4, 2, 196500, 453240, 220, 0, 1, 1, 1000, 28662, 4, 2, 245000, 216773, 62, 1,
+            1060367, 12586, 1, 208512, 421, 1, 187000, 1000, 52998, 1, 80436, 32, 43249, 32, 1000,
+            32, 80556, 1, 57667, 4, 1000, 10, 197145, 156, 1, 197145, 156, 1, 204924, 473, 1,
+            208896, 511, 1, 52467, 32, 64832, 32, 65493, 32, 22558, 32, 16563, 32, 76511, 32,
+            196500, 453240, 220, 0, 1, 1, 69522, 11687, 0, 1, 60091, 32, 196500, 453240, 220, 0, 1,
+            1, 196500, 453240, 220, 0, 1, 1, 806990, 30482, 4, 1927926, 82523, 4, 265318, 0, 4, 0,
+            85931, 32, 205665, 812, 1, 1, 41182, 32, 212342, 32, 31220, 32, 32696, 32, 43357, 32,
+            32247, 32, 38314, 32, 57996947, 18975, 10,
+        ];
+
+        let cost_model = initialize_cost_model(&Language::PlutusV1, &costs);
+
+        assert_eq!(CostModel::v1(), cost_model);
+    }
+
+    #[test]
+    fn assert_default_cost_model_v2_mainnet_2023_02_23() {
+        let costs = vec![
+            205665, 812, 1, 1, 1000, 571, 0, 1, 1000, 24177, 4, 1, 1000, 32, 117366, 10475, 4,
+            23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 100, 100,
+            23000, 100, 19537, 32, 175354, 32, 46417, 4, 221973, 511, 0, 1, 89141, 32, 497525,
+            14068, 4, 2, 196500, 453240, 220, 0, 1, 1, 1000, 28662, 4, 2, 245000, 216773, 62, 1,
+            1060367, 12586, 1, 208512, 421, 1, 187000, 1000, 52998, 1, 80436, 32, 43249, 32, 1000,
+            32, 80556, 1, 57667, 4, 1000, 10, 197145, 156, 1, 197145, 156, 1, 204924, 473, 1,
+            208896, 511, 1, 52467, 32, 64832, 32, 65493, 32, 22558, 32, 16563, 32, 76511, 32,
+            196500, 453240, 220, 0, 1, 1, 69522, 11687, 0, 1, 60091, 32, 196500, 453240, 220, 0, 1,
+            1, 196500, 453240, 220, 0, 1, 1, 1159724, 392670, 0, 2, 806990, 30482, 4, 1927926,
+            82523, 4, 265318, 0, 4, 0, 85931, 32, 205665, 812, 1, 1, 41182, 32, 212342, 32, 31220,
+            32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 35892428, 10, 57996947, 18975, 10,
+            38887044, 32947, 10,
+        ];
+
+        let cost_model = initialize_cost_model(&Language::PlutusV2, &costs);
+
+        assert_eq!(<CostModel as Default>::default(), cost_model);
     }
 }
