@@ -1,18 +1,35 @@
 # Changelog
 
-## [next] - 2023-MM-DD
+## [v0.0.29] - 2023-MM-DD
 
 ### Added
 
 - **aiken-project**: new dep rayon for parallel test execution
+- **aiken**: new blueprint command
+- **aiken-lang**: new syntax for defining validators
+- **aiken**: new address command for deriving addresses out of `plutus.json`
+- **aiken-lang**: Add missing Plutus builtins to Aiken's lang.
+- **aiken**: fancy nix stuff
+- **aiken-lsp**: go to definition
+- **aiken-lsp**: docs on hover
+- **aiken-lsp**: enable compiler a project
 
 ### Changed
 
-N/A
+- **aiken-lang**: `assert` renamed to `expect`
+- **aiken-lang**: new syntax for strings and byte array literals
+- **aiken-lang**: lots of code gen improvements
+- **aiken-lang**: validator checks now happen during infer instead of in project
+- **aiken-lang**: fixed unicode parsing
+- **aiken-lang**: update default costs models
+- **aiken-lang**: Use variable-length threshold for levenshtein distance
+- **aiken-project**: Move module name validation outside of type-checking
+- **aiken-project**: Add 'plutusVersion' to blueprints
 
 ### Removed
 
-N/A
+- **aiken-project**: remove assets folder in favor of `plutus.json`
+- **aiken-lang**: removed some unused constant related data types
 
 ## [v0.0.28] - 2023-01-06
 
@@ -109,7 +126,7 @@ N/A
 - **aiken**: Inject `aiken/builtin` module with some functions from `DefaultFunction` in UPLC directly exposed
 - **aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
 - **uplc**: Expose various Pallas primitives from UPLC to make constructing
-            UPLC types possible for consumers
+  UPLC types possible for consumers
 
 ### Changed
 

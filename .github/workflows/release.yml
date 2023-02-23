@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-20.04
+    outputs:
+      tag_name: ${{ steps.release_info.outputs.tag_name }}
+      release_name: ${{ steps.release_info.outputs.release_name }}
+      release_notes: ${{ steps.extract_release_notes.outputs.release_notes }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Compute release name and tag
+        id: release_info
+        run: |
+          echo "::set-output name=tag_name::${GITHUB_REF_NAME}"
+          echo "::set-output name=release_name::${GITHUB_REF_NAME}"
+
+      - name: Extract release notes
+        id: extract_release_notes
+        run: |
+          release_notes=$(sed -n '/^## .*$/,$p' CHANGELOG.md | sed '1d;/^## /,$d')
+          echo "::set-output name=release_notes::${release_notes}"
+
+  release:
+    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    runs-on: ${{ matrix.job.os }}
+    needs: prepare
+    strategy:
+      matrix:
+        job:
+          # os: used for the runner
+          # platform: a generic platform name
+          # target: used by Cargo
+          # arch: either 386, arm64 or amd64
+          - os: ubuntu-20.04
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+            arch: amd64
+          - os: ubuntu-20.04
+            platform: linux
+            target: aarch64-unknown-linux-gnu
+            arch: arm64
+          - os: macos-latest
+            platform: darwin
+            target: x86_64-apple-darwin
+            arch: amd64
+          - os: macos-latest
+            platform: darwin
+            target: aarch64-apple-darwin
+            arch: arm64
+          - os: windows-latest
+            platform: win32
+            target: x86_64-pc-windows-msvc
+            arch: amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+
+      - uses: Swatinem/rust-cache@v1
+        with:
+          cache-on-failure: true
+
+      - name: Apple M1 setup
+        if: ${{ matrix.job.target == 'aarch64-apple-darwin' }}
+        run: |
+          echo "SDKROOT=$(xcrun -sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+          echo "MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version)" >> $GITHUB_ENV
+
+      - name: Linux ARM setup
+        if: ${{ matrix.job.target == 'aarch64-unknown-linux-gnu' }}
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Build binaries
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --bins --target ${{ matrix.job.target }}
+
+      - name: Archive binaries
+        id: artifacts
+        env:
+          PLATFORM_NAME: ${{ matrix.job.platform }}
+          TARGET: ${{ matrix.job.target }}
+          ARCH: ${{ matrix.job.arch }}
+          VERSION_NAME: ${{ needs.prepare.outputs.tag_name }}
+        run: |
+          if [ "$PLATFORM_NAME" == "linux" ]; then
+            tar -czvf "aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz" -C ./target/${TARGET}/release forge cast anvil chisel
+            echo "::set-output name=file_name::aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz"
+          elif [ "$PLATFORM_NAME" == "darwin" ]; then
+            # We need to use gtar here otherwise the archive is corrupt.
+            # See: https://github.com/actions/virtual-environments/issues/2619
+            gtar -czvf "aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz" -C ./target/${TARGET}/release aiken
+            echo "::set-output name=file_name::aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz"
+          else
+            cd ./target/${TARGET}/release
+            7z a -tzip "aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.zip" aiken.exe
+            mv "aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.zip" ../../../
+            echo "::set-output name=file_name::aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.zip"
+          fi
+        shell: bash
+
+      # Creates the release for this specific version
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ needs.prepare.outputs.release_name }}
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          body: ${{ needs.prepare.outputs.release_notes }}
+          files: |
+            ${{ steps.artifacts.outputs.file_name }}

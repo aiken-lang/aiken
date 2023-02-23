@@ -2,7 +2,7 @@ name: Nix
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   update-cargo-nix:
@@ -12,29 +12,29 @@ jobs:
       pull-requests: write
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      with:
-        ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v18
+      - name: Install Nix
+        uses: cachix/install-nix-action@v18
 
-    - name: Setup Cachix
-      uses: cachix/cachix-action@v12
-      with:
-        name: aiken-lang
-        authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v12
+        with:
+          name: aiken-lang
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-    - name: Run cargo2nix
-      shell: bash
-      run: |
-        nix run github:cargo2nix/cargo2nix -- -s > Cargo.nix
+      - name: Run cargo2nix
+        shell: bash
+        run: |
+          nix run github:cargo2nix/cargo2nix -- -s > Cargo.nix
 
-    - name: Create PR
-      uses: peter-evans/create-pull-request@v4
-      with:
-        branch: patch/cargo.nix
-        delete-branch: true
-        title: Update Cargo.nix
-        add-paths: Cargo.nix
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v4
+        with:
+          branch: patch/cargo.nix
+          delete-branch: true
+          title: Update Cargo.nix
+          add-paths: Cargo.nix

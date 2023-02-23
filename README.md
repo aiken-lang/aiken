@@ -6,7 +6,7 @@
 
 [![Licence](https://img.shields.io/github/license/aiken-lang/aiken)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
-[![Rust Build](https://github.com/aiken-lang/aiken/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/aiken-lang/aiken/actions/workflows/rust.yml)
+[![Tests](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml)
 
   <hr/>
 </div>
