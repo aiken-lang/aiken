@@ -35,10 +35,13 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just('.').to(Token::Dot),
         just("!=").to(Token::NotEqual),
         just('!').to(Token::Bang),
-        just("<=").to(Token::LessEqual),
-        just('<').to(Token::Less),
-        just(">=").to(Token::GreaterEqual),
-        just('>').to(Token::Greater),
+        just('?').to(Token::Question),
+        choice((
+            just("<=").to(Token::LessEqual),
+            just('<').to(Token::Less),
+            just(">=").to(Token::GreaterEqual),
+            just('>').to(Token::Greater),
+        )),
         just('+').to(Token::Plus),
         just("->").to(Token::RArrow),
         just('-').to(Token::Minus),
@@ -52,8 +55,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just('|').to(Token::Vbar),
         just("&&").to(Token::AmperAmper),
         just('#').to(Token::Hash),
-        choice((just("\n\n"), just("\r\n\r\n"))).to(Token::EmptyLine),
-        choice((just("\n"), just("\r\n"))).to(Token::NewLine),
     ));
 
     let grouping = choice((
@@ -76,18 +77,27 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             .or(just('t').to('\t')),
     );
 
-    let string = just('"')
+    let string = just('@')
+        .ignore_then(just('"'))
         .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
         .then_ignore(just('"'))
         .collect::<String>()
         .map(|value| Token::String { value })
         .labelled("string");
 
+    let bytestring = just('"')
+        .ignore_then(filter(|c| *c != '\\' && *c != '"').or(escape).repeated())
+        .then_ignore(just('"'))
+        .collect::<String>()
+        .map(|value| Token::ByteString { value })
+        .labelled("bytestring");
+
     let keyword = text::ident().map(|s: String| match s.as_str() {
         "trace" => Token::Trace,
         "error" => Token::ErrorTerm,
         "as" => Token::As,
-        "assert" => Token::Assert,
+        "assert" => Token::Expect,
+        "expect" => Token::Expect,
         "const" => Token::Const,
         "fn" => Token::Fn,
         "test" => Token::Test,
@@ -101,6 +111,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "todo" => Token::Todo,
         "type" => Token::Type,
         "when" => Token::When,
+        "validator" => Token::Validator,
         _ => {
             if s.chars().next().map_or(false, |c| c.is_uppercase()) {
                 Token::UpName {
@@ -121,38 +132,52 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         }
     });
 
-    let module_comments = just("////").ignore_then(
-        take_until(text::newline().rewind())
-            .to(Token::ModuleComment)
-            .map_with_span(|token, span| (token, span)),
-    );
+    fn comment_parser(token: Token) -> impl Parser<char, (Token, Span), Error = ParseError> {
+        let n = match token {
+            Token::ModuleComment => 4,
+            Token::DocComment => 3,
+            Token::Comment => 2,
+            _ => unreachable!(),
+        };
 
-    let doc_comments = just("///").ignore_then(
-        take_until(text::newline().rewind())
-            .to(Token::DocComment)
-            .map_with_span(|token, span| (token, span)),
-    );
+        choice((
+            // NOTE: The first case here work around a bug introduced with chumsky=0.9.0 which
+            // miscalculate the offset for empty comments.
+            just("/".repeat(n))
+                .ignore_then(text::newline().rewind())
+                .to(token.clone())
+                .map_with_span(move |token, span: Span| {
+                    (token, Span::new((), span.start + n..span.end))
+                }),
+            just("/".repeat(n)).ignore_then(
+                take_until(text::newline().rewind())
+                    .to(token)
+                    .map_with_span(|token, span| (token, span)),
+            ),
+        ))
+    }
 
-    let comments = just("//").ignore_then(
-        take_until(text::newline().rewind())
-            .to(Token::Comment)
-            .map_with_span(|token, span| (token, span)),
-    );
+    let newlines = choice((
+        choice((just("\n\n"), just("\r\n\r\n"))).to(Token::EmptyLine),
+        choice((just("\n"), just("\r\n"))).to(Token::NewLine),
+    ));
 
     choice((
-        module_comments,
-        doc_comments,
-        comments,
-        choice((ordinal, keyword, int, op, grouping, string))
-            .or(any().map(Token::Error).validate(|t, span, emit| {
-                emit(ParseError::expected_input_found(
-                    span,
-                    None,
-                    Some(t.clone()),
-                ));
-                t
-            }))
-            .map_with_span(|token, span| (token, span)),
+        comment_parser(Token::ModuleComment),
+        comment_parser(Token::DocComment),
+        comment_parser(Token::Comment),
+        choice((
+            ordinal, keyword, int, op, newlines, grouping, bytestring, string,
+        ))
+        .or(any().map(Token::Error).validate(|t, span, emit| {
+            emit(ParseError::expected_input_found(
+                span,
+                None,
+                Some(t.clone()),
+            ));
+            t
+        }))
+        .map_with_span(|token, span| (token, span)),
     ))
     .padded_by(one_of(" \t").ignored().repeated())
     .recover_with(skip_then_retry_until([]))

@@ -14,7 +14,7 @@ fn assert_fmt(src: &str, expected: &str) {
     let (module2, extra2) = parser::module(&out, ModuleKind::Lib).unwrap();
     let mut out2 = String::new();
     format::pretty(&mut out2, module2, extra2, &out);
-    assert!(out == out2, "formatting isn't idempotent");
+    assert_eq!(out, out2, "formatting isn't idempotent");
 }
 
 #[test]
@@ -50,6 +50,27 @@ fn test_format_if() {
             },
           )
         }
+    "#};
+
+    assert_fmt(src, expected)
+}
+
+#[test]
+fn test_format_validator() {
+    let src = indoc! {r#"
+      validator foo ( ) {
+      fn(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+      True
+      }
+      }
+    "#};
+
+    let expected = indoc! {r#"
+      validator foo {
+        fn(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+          True
+        }
+      }
     "#};
 
     assert_fmt(src, expected)
@@ -233,7 +254,7 @@ fn test_negate() {
 }
 
 #[test]
-fn test_block_expr() {
+fn test_block_arithmetic_expr() {
     let src = indoc! {r#"
         fn foo() {
           ( 14 + 42 ) * 1337
@@ -258,17 +279,284 @@ fn test_block_expr() {
 }
 
 #[test]
-fn test_format_bytearray_literals() {
+fn test_block_logical_expr() {
     let src = indoc! {r#"
-        const foo = #"ff00"
-        const bar = #[0, 255]
+        fn foo() {
+          !(a && b)
+        }
+
+        fn bar() {
+          (a || b) && (c || d)
+        }
+
+        fn baz() {
+          a || (b && c) || d
+        }
     "#};
 
-    let expected = indoc! { r#"
-        const foo = #"ff00"
+    let expected = indoc! {r#"
+        fn foo() {
+          !(a && b)
+        }
 
-        const bar = #"00ff"
+        fn bar() {
+          ( a || b ) && ( c || d )
+        }
+
+        fn baz() {
+          a || b && c || d
+        }
     "#};
 
     assert_fmt(src, expected);
+}
+
+#[test]
+fn test_nested_function_calls() {
+    let src = indoc! {r#"
+        fn foo(output) {
+          [
+            output.address.stake_credential == Some(
+            Inline(
+            VerificationKeyCredential(
+              #"66666666666666666666666666666666666666666666666666666666",
+            ))
+            )
+            ,
+            when output.datum is {
+              InlineDatum(_) -> True
+              _ -> error "expected inline datum"
+            },
+          ]
+          |> list.and
+        }
+    "#};
+
+    let expected = indoc! {r#"
+        fn foo(output) {
+          [
+            output.address.stake_credential == Some(
+              Inline(
+                VerificationKeyCredential(
+                  #"66666666666666666666666666666666666666666666666666666666",
+                ),
+              ),
+            ),
+            when output.datum is {
+              InlineDatum(_) -> True
+              _ -> error @"expected inline datum"
+            },
+          ]
+          |> list.and
+        }
+    "#};
+
+    assert_fmt(src, expected);
+}
+
+#[test]
+fn format_trace_todo_error() {
+    let src = indoc! {r#"
+        fn foo_1() {
+          todo
+        }
+
+        fn foo_2() {
+          todo "my custom message"
+        }
+
+        fn foo_3() {
+          when x is {
+            Foo -> True
+            _ -> error
+          }
+        }
+
+        fn foo_4() {
+          if 14 == 42 {
+            error "I don't think so"
+          } else {
+            trace "been there"
+            True
+          }
+        }
+    "#};
+
+    let out = indoc! {r#"
+        fn foo_1() {
+          todo
+        }
+
+        fn foo_2() {
+          todo @"my custom message"
+        }
+
+        fn foo_3() {
+          when x is {
+            Foo -> True
+            _ -> error
+          }
+        }
+
+        fn foo_4() {
+          if 14 == 42 {
+            error @"I don't think so"
+          } else {
+            trace @"been there"
+            True
+          }
+        }
+    "#};
+
+    assert_fmt(src, out);
+}
+
+#[test]
+fn test_trace_if_false() {
+    let src = indoc! {r#"
+        fn foo() {
+          my_expression?
+        }
+
+        fn bar() {
+          (True && False)? || foo()?
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
+
+#[test]
+fn test_newline_comments() {
+    let src = indoc! {r#"
+        // My comment
+        //
+        // has a newline.
+        fn foo() {
+          True
+        }
+
+        // My comments
+
+        // can live apart
+        fn bar() {
+          True
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
+
+#[test]
+fn test_newline_doc_comments() {
+    let src = indoc! {r#"
+        /// My doc comment
+        ///
+        /// has a newline.
+        fn foo() {
+          True
+        }
+
+        /// My doc comments
+
+        /// cannot be separated
+        fn bar() {
+          True
+        }
+    "#};
+
+    let out = indoc! {r#"
+        /// My doc comment
+        ///
+        /// has a newline.
+        fn foo() {
+          True
+        }
+
+        /// My doc comments
+        /// cannot be separated
+        fn bar() {
+          True
+        }
+    "#};
+
+    assert_fmt(src, out);
+}
+
+#[test]
+fn test_newline_module_comments() {
+    let src = indoc! {r#"
+        //// My module comment
+        ////
+        //// has a newline.
+
+        fn foo() {
+          True
+        }
+
+        //// My module comments
+
+        //// cannot be separated
+    "#};
+
+    let out = indoc! {r#"
+        //// My module comment
+        ////
+        //// has a newline.
+        //// My module comments
+        //// cannot be separated
+
+        fn foo() {
+          True
+        }
+    "#};
+
+    assert_fmt(src, out);
+}
+
+#[test]
+fn test_bytearray_literals() {
+    let src = indoc! {r#"
+        const foo_const_array = #[102, 111, 111]
+
+        const foo_const_hex = #"666f6f"
+
+        const foo_const_utf8 = "foo"
+
+        fn foo() {
+          let foo_const_array = #[102, 111, 111]
+
+          let foo_const_hex = #"666f6f"
+
+          let foo_const_utf8 = "foo"
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
+
+#[test]
+fn test_string_literal() {
+    let src = indoc! {r#"
+        const foo_const: String = @"foo"
+
+        fn foo() {
+          let foo_var: String = @"foo"
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
+
+#[test]
+fn test_unicode() {
+    let src = indoc! {r#"
+        /// ∞ ★ ♩ ♫ ✓
+        fn foo() {
+          trace @"∀💩"
+          Void
+        }
+    "#};
+
+    assert_fmt(src, src);
 }

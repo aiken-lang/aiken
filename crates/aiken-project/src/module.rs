@@ -1,13 +1,13 @@
 use crate::error::Error;
 use aiken_lang::{
     ast::{
-        DataType, Definition, ModuleKind, TypedDataType, TypedFunction, TypedModule, UntypedModule,
+        DataType, Definition, Located, ModuleKind, TypedDataType, TypedFunction, TypedModule,
+        TypedValidator, UntypedModule,
     },
     builder::{DataTypeKey, FunctionAccessKey},
     parser::extra::{comments_before, Comment, ModuleExtra},
     tipo::TypeInfo,
     uplc::CodeGenerator,
-    VALIDATOR_NAMES,
 };
 use indexmap::IndexMap;
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
@@ -40,55 +40,6 @@ impl ParsedModule {
             .collect();
 
         (name, deps)
-    }
-
-    pub fn attach_doc_and_module_comments(&mut self) {
-        // Module Comments
-        self.ast.docs = self
-            .extra
-            .module_comments
-            .iter()
-            .map(|span| {
-                Comment::from((span, self.code.as_str()))
-                    .content
-                    .to_string()
-            })
-            .collect();
-
-        // Order definitions to avoid dissociating doc comments from them
-        let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
-        definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
-
-        // Doc Comments
-        let mut doc_comments = self.extra.doc_comments.iter().peekable();
-        for def in &mut definitions {
-            let docs: Vec<&str> =
-                comments_before(&mut doc_comments, def.location().start, &self.code);
-            if !docs.is_empty() {
-                let doc = docs.join("\n");
-                def.put_doc(doc);
-            }
-
-            if let Definition::DataType(DataType { constructors, .. }) = def {
-                for constructor in constructors {
-                    let docs: Vec<&str> =
-                        comments_before(&mut doc_comments, constructor.location.start, &self.code);
-                    if !docs.is_empty() {
-                        let doc = docs.join("\n");
-                        constructor.put_doc(doc);
-                    }
-
-                    for argument in constructor.arguments.iter_mut() {
-                        let docs: Vec<&str> =
-                            comments_before(&mut doc_comments, argument.location.start, &self.code);
-                        if !docs.is_empty() {
-                            let doc = docs.join("\n");
-                            argument.put_doc(doc);
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -223,6 +174,61 @@ pub struct CheckedModule {
     pub extra: ModuleExtra,
 }
 
+impl CheckedModule {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
+        self.ast.find_node(byte_index)
+    }
+
+    pub fn attach_doc_and_module_comments(&mut self) {
+        // Module Comments
+        self.ast.docs = self
+            .extra
+            .module_comments
+            .iter()
+            .map(|span| {
+                Comment::from((span, self.code.as_str()))
+                    .content
+                    .to_string()
+            })
+            .collect();
+
+        // Order definitions to avoid dissociating doc comments from them
+        let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
+        definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
+
+        // Doc Comments
+        let mut doc_comments = self.extra.doc_comments.iter().peekable();
+        for def in &mut definitions {
+            let docs: Vec<&str> =
+                comments_before(&mut doc_comments, def.location().start, &self.code);
+            if !docs.is_empty() {
+                let doc = docs.join("\n");
+                def.put_doc(doc);
+            }
+
+            if let Definition::DataType(DataType { constructors, .. }) = def {
+                for constructor in constructors {
+                    let docs: Vec<&str> =
+                        comments_before(&mut doc_comments, constructor.location.start, &self.code);
+                    if !docs.is_empty() {
+                        let doc = docs.join("\n");
+                        constructor.put_doc(doc);
+                    }
+
+                    for argument in constructor.arguments.iter_mut() {
+                        let docs: Vec<&str> =
+                            comments_before(&mut doc_comments, argument.location.start, &self.code);
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            argument.put_doc(doc);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct CheckedModules(HashMap<String, CheckedModule>);
 
@@ -251,17 +257,17 @@ impl CheckedModules {
         modules
     }
 
-    pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedFunction)> {
+    pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedValidator)> {
         let mut items = vec![];
-        for validator in self.0.values().filter(|module| module.kind.is_validator()) {
-            for some_definition in validator.ast.definitions() {
-                if let Definition::Fn(def) = some_definition {
-                    if VALIDATOR_NAMES.contains(&def.name.as_str()) {
-                        items.push((validator, def));
-                    }
+
+        for validator_module in self.0.values().filter(|module| module.kind.is_validator()) {
+            for some_definition in validator_module.ast.definitions() {
+                if let Definition::Validator(def) = some_definition {
+                    items.push((validator_module, def));
                 }
             }
         }
+
         items.into_iter()
     }
 
@@ -313,6 +319,7 @@ impl CheckedModules {
                     Definition::TypeAlias(_)
                     | Definition::ModuleConstant(_)
                     | Definition::Test(_)
+                    | Definition::Validator { .. }
                     | Definition::Use(_) => {}
                 }
             }

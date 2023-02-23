@@ -10,11 +10,11 @@ use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind, Pattern,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
-        UnqualifiedImport, UntypedDefinition, Use, PIPE_VARIABLE,
+        UnqualifiedImport, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
     builtins::{self, function, generic_var, tuple, unbound_var},
     tipo::fields::FieldMap,
-    IdGenerator, VALIDATOR_NAMES,
+    IdGenerator,
 };
 
 use super::{
@@ -247,6 +247,7 @@ impl<'a> Environment<'a> {
             | Definition::DataType { .. }
             | Definition::Use { .. }
             | Definition::Test { .. }
+            | Definition::Validator { .. }
             | Definition::ModuleConstant { .. }) => definition,
         }
     }
@@ -710,6 +711,7 @@ impl<'a> Environment<'a> {
                             location: *location,
                             previous_location: *previous,
                             name: name.to_string(),
+                            module: module.clone(),
                         });
                     }
 
@@ -800,6 +802,7 @@ impl<'a> Environment<'a> {
                         location: *location,
                         previous_location: *previous_location,
                         name: module_name,
+                        module: module.clone(),
                     });
                 }
 
@@ -882,6 +885,7 @@ impl<'a> Environment<'a> {
                                 })
                             }
                             Definition::Fn { .. }
+                            | Definition::Validator { .. }
                             | Definition::Use { .. }
                             | Definition::ModuleConstant { .. }
                             | Definition::Test { .. } => None,
@@ -993,6 +997,7 @@ impl<'a> Environment<'a> {
             }
 
             Definition::Fn { .. }
+            | Definition::Validator { .. }
             | Definition::Test { .. }
             | Definition::Use { .. }
             | Definition::ModuleConstant { .. } => {}
@@ -1066,9 +1071,71 @@ impl<'a> Environment<'a> {
                     tipo,
                 );
 
-                if !public && (kind.is_lib() || !VALIDATOR_NAMES.contains(&name.as_str())) {
+                if !public && kind.is_lib() {
                     self.init_usage(name.clone(), EntityKind::PrivateFunction, *location);
                 }
+            }
+
+            Definition::Validator(Validator {
+                fun,
+                location,
+                params,
+                ..
+            }) if kind.is_validator() => {
+                assert_unique_value_name(names, &fun.name, location)?;
+
+                // Create the field map so we can reorder labels for usage of this function
+                let mut field_map = FieldMap::new(fun.arguments.len() + params.len(), true);
+
+                // Chain together extra params and function.arguments
+                for (i, arg) in params.iter().chain(fun.arguments.iter()).enumerate() {
+                    field_map.insert(arg.arg_name.get_label().clone(), i, &arg.location)?;
+                }
+
+                let field_map = field_map.into_option();
+
+                // Construct type from annotations
+                let mut hydrator = Hydrator::new();
+
+                hydrator.permit_holes(false);
+
+                let mut arg_types = Vec::new();
+
+                for arg in params.iter().chain(fun.arguments.iter()) {
+                    let tipo = hydrator.type_from_option_annotation(&arg.annotation, self)?;
+
+                    arg_types.push(tipo);
+                }
+
+                let return_type =
+                    hydrator.type_from_option_annotation(&fun.return_annotation, self)?;
+
+                let tipo = function(arg_types, return_type);
+
+                // Keep track of which types we create from annotations so we can know
+                // which generic types not to instantiate later when performing
+                // inference of the function body.
+                hydrators.insert(fun.name.clone(), hydrator);
+
+                // Insert the function into the environment
+                self.insert_variable(
+                    fun.name.clone(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: fun.name.clone(),
+                        field_map,
+                        module: module_name.to_owned(),
+                        arity: params.len() + fun.arguments.len(),
+                        location: fun.location,
+                        builtin: None,
+                    },
+                    tipo,
+                );
+            }
+
+            Definition::Validator(Validator { location, .. }) => {
+                self.warnings.push(Warning::ValidatorInLibraryModule {
+                    location: *location,
+                })
             }
 
             Definition::Test(Function { name, location, .. }) => {
@@ -1384,6 +1451,10 @@ impl<'a> Environment<'a> {
                     Some(module.clone())
                 };
 
+                if type_name == "List" && module.is_empty() {
+                    return self.check_list_pattern_exhaustiveness(patterns);
+                }
+
                 if let Ok(constructors) = self.get_constructors_for_type(&m, type_name, location) {
                     let mut unmatched_constructors: HashSet<String> =
                         constructors.iter().cloned().collect();
@@ -1421,6 +1492,75 @@ impl<'a> Environment<'a> {
                 Ok(())
             }
             _ => Ok(()),
+        }
+    }
+
+    pub fn check_list_pattern_exhaustiveness(
+        &mut self,
+        patterns: Vec<Pattern<PatternConstructor, Arc<Type>>>,
+    ) -> Result<(), Vec<String>> {
+        let mut cover_empty = false;
+        let mut cover_tail = false;
+
+        let patterns = patterns.iter().map(|p| match p {
+            Pattern::Assign { pattern, .. } => pattern,
+            _ => p,
+        });
+
+        // TODO: We could also warn on redundant patterns. As soon as we've matched the entire
+        // list, any new pattern is redundant. For example:
+        //
+        // when xs is {
+        //   [] => ...
+        //   [x, ..] => ...
+        //   [y] => ...
+        // }
+        //
+        // That last pattern is actually redundant / unreachable.
+        for p in patterns {
+            match p {
+                Pattern::Var { .. } => {
+                    cover_empty = true;
+                    cover_tail = true;
+                }
+                Pattern::Discard { .. } => {
+                    cover_empty = true;
+                    cover_tail = true;
+                }
+                Pattern::List { elements, tail, .. } => {
+                    if elements.is_empty() {
+                        cover_empty = true;
+                    }
+                    match tail {
+                        None => {}
+                        Some(p) => match **p {
+                            Pattern::Discard { .. } => {
+                                cover_tail = true;
+                            }
+                            Pattern::Var { .. } => {
+                                cover_tail = true;
+                            }
+                            _ => {
+                                unreachable!()
+                            }
+                        },
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if cover_empty && cover_tail {
+            Ok(())
+        } else {
+            let mut missing = vec![];
+            if !cover_empty {
+                missing.push("[]".to_owned());
+            }
+            if !cover_tail {
+                missing.push("[_, ..]".to_owned());
+            }
+            Err(missing)
         }
     }
 

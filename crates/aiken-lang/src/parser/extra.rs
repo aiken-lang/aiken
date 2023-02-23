@@ -23,10 +23,15 @@ pub struct Comment<'a> {
 
 impl<'a> From<(&Span, &'a str)> for Comment<'a> {
     fn from(src: (&Span, &'a str)) -> Comment<'a> {
-        let start = src.0.start;
-        let end = src.0.end;
+        fn char_indice(s: &str, i: usize) -> usize {
+            s.char_indices().nth(i).expect("char at given indice").0
+        }
+
+        let start = char_indice(src.1, src.0.start);
+        let end = char_indice(src.1, src.0.end);
+
         Comment {
-            start,
+            start: src.0.start,
             content: src.1.get(start..end).expect("From span to comment"),
         }
     }

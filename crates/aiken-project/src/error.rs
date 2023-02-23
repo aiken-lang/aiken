@@ -1,12 +1,9 @@
 use crate::{
-    blueprint::{error as blueprint, validator},
-    deps::manifest::Package,
-    package_name::PackageName,
-    pretty,
+    blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName, pretty,
     script::EvalHint,
 };
 use aiken_lang::{
-    ast::{BinOp, Span},
+    ast::{self, BinOp, Span},
     parser::error::ParseError,
     tipo,
 };
@@ -57,6 +54,9 @@ pub enum Error {
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 
+    #[error(transparent)]
+    Module(#[from] ast::Error),
+
     #[error("{help}")]
     TomlLoading {
         path: PathBuf,
@@ -71,10 +71,6 @@ pub enum Error {
 
     #[error("I just found a cycle in module hierarchy!")]
     ImportCycle { modules: Vec<String> },
-
-    /// Useful for returning many [`Error::Parse`] at once
-    #[error("A list of errors")]
-    List(Vec<Self>),
 
     #[error("While parsing files...")]
     Parse {
@@ -92,24 +88,6 @@ pub enum Error {
         named: NamedSource,
         #[source]
         error: tipo::error::Error,
-    },
-
-    #[error("Validator functions must return Bool")]
-    ValidatorMustReturnBool {
-        path: PathBuf,
-        src: String,
-        named: NamedSource,
-        location: Span,
-    },
-
-    #[error("Validator\n\n{name}\n\nrequires at least {at_least} arguments")]
-    WrongValidatorArity {
-        name: String,
-        at_least: u8,
-        location: Span,
-        path: PathBuf,
-        src: String,
-        named: Box<NamedSource>,
     },
 
     #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
@@ -135,36 +113,18 @@ pub enum Error {
     },
 
     #[error("I didn't find any validator matching your criteria.")]
-    NoValidatorNotFound {
-        known_validators: Vec<(String, validator::Purpose)>,
-    },
+    NoValidatorNotFound { known_validators: Vec<String> },
 
     #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
-    MoreThanOneValidatorFound {
-        known_validators: Vec<(String, validator::Purpose)>,
-    },
+    MoreThanOneValidatorFound { known_validators: Vec<String> },
 }
 
 impl Error {
-    pub fn len(&self) -> usize {
-        match self {
-            Error::List(errors) => errors.len(),
-            _ => 1,
-        }
-    }
-
     pub fn report(&self) {
-        match self {
-            Error::List(errors) => {
-                for error in errors {
-                    eprintln!("Error: {error:?}")
-                }
-            }
-            rest => eprintln!("Error: {rest:?}"),
-        }
+        eprintln!("Error: {self:?}")
     }
 
-    pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Self {
+    pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Vec<Self> {
         let mut errors = Vec::with_capacity(errs.len());
 
         for error in errs {
@@ -176,88 +136,7 @@ impl Error {
             });
         }
 
-        Error::List(errors)
-    }
-
-    pub fn append(self, next: Self) -> Self {
-        match (self, next) {
-            (Error::List(mut errors), Error::List(mut next_errors)) => {
-                errors.append(&mut next_errors);
-
-                Error::List(errors)
-            }
-            (Error::List(mut errors), rest) => {
-                errors.push(rest);
-
-                Error::List(errors)
-            }
-            (rest, Error::List(mut next_errors)) => {
-                let mut errors = vec![rest];
-
-                errors.append(&mut next_errors);
-
-                Error::List(errors)
-            }
-            (error, next_error) => Error::List(vec![error, next_error]),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        matches!(self, Error::List(errors) if errors.is_empty())
-    }
-
-    pub fn path(&self) -> Option<PathBuf> {
-        match self {
-            Error::DuplicateModule { second, .. } => Some(second.to_path_buf()),
-            Error::FileIo { .. } => None,
-            Error::Format { .. } => None,
-            Error::StandardIo(_) => None,
-            Error::Blueprint(_) => None,
-            Error::MissingManifest { path } => Some(path.to_path_buf()),
-            Error::TomlLoading { path, .. } => Some(path.to_path_buf()),
-            Error::ImportCycle { .. } => None,
-            Error::List(_) => None,
-            Error::Parse { path, .. } => Some(path.to_path_buf()),
-            Error::Type { path, .. } => Some(path.to_path_buf()),
-            Error::ValidatorMustReturnBool { path, .. } => Some(path.to_path_buf()),
-            Error::WrongValidatorArity { path, .. } => Some(path.to_path_buf()),
-            Error::TestFailure { path, .. } => Some(path.to_path_buf()),
-            Error::Http(_) => None,
-            Error::ZipExtract(_) => None,
-            Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => None,
-            Error::Json { .. } => None,
-            Error::MalformedStakeAddress { .. } => None,
-            Error::NoValidatorNotFound { .. } => None,
-            Error::MoreThanOneValidatorFound { .. } => None,
-        }
-    }
-
-    pub fn src(&self) -> Option<String> {
-        match self {
-            Error::DuplicateModule { .. } => None,
-            Error::FileIo { .. } => None,
-            Error::Format { .. } => None,
-            Error::StandardIo(_) => None,
-            Error::Blueprint(_) => None,
-            Error::MissingManifest { .. } => None,
-            Error::TomlLoading { src, .. } => Some(src.to_string()),
-            Error::ImportCycle { .. } => None,
-            Error::List(_) => None,
-            Error::Parse { src, .. } => Some(src.to_string()),
-            Error::Type { src, .. } => Some(src.to_string()),
-            Error::ValidatorMustReturnBool { src, .. } => Some(src.to_string()),
-            Error::WrongValidatorArity { src, .. } => Some(src.to_string()),
-            Error::TestFailure { .. } => None,
-            Error::Http(_) => None,
-            Error::ZipExtract(_) => None,
-            Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => None,
-            Error::Json { .. } => None,
-            Error::MalformedStakeAddress { .. } => None,
-            Error::NoValidatorNotFound { .. } => None,
-            Error::MoreThanOneValidatorFound { .. } => None,
-        }
+        errors
     }
 }
 
@@ -280,6 +159,69 @@ impl Debug for Error {
     }
 }
 
+impl From<Error> for Vec<Error> {
+    fn from(value: Error) -> Self {
+        vec![value]
+    }
+}
+
+pub trait GetSource {
+    fn path(&self) -> Option<PathBuf>;
+    fn src(&self) -> Option<String>;
+}
+
+impl GetSource for Error {
+    fn path(&self) -> Option<PathBuf> {
+        match self {
+            Error::DuplicateModule { second, .. } => Some(second.to_path_buf()),
+            Error::FileIo { .. } => None,
+            Error::Format { .. } => None,
+            Error::StandardIo(_) => None,
+            Error::Blueprint(_) => None,
+            Error::MissingManifest { path } => Some(path.to_path_buf()),
+            Error::TomlLoading { path, .. } => Some(path.to_path_buf()),
+            Error::ImportCycle { .. } => None,
+            Error::Parse { path, .. } => Some(path.to_path_buf()),
+            Error::Type { path, .. } => Some(path.to_path_buf()),
+            Error::TestFailure { path, .. } => Some(path.to_path_buf()),
+            Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module { .. } => None,
+        }
+    }
+
+    fn src(&self) -> Option<String> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::Format { .. } => None,
+            Error::StandardIo(_) => None,
+            Error::Blueprint(_) => None,
+            Error::MissingManifest { .. } => None,
+            Error::TomlLoading { src, .. } => Some(src.to_string()),
+            Error::ImportCycle { .. } => None,
+            Error::Parse { src, .. } => Some(src.to_string()),
+            Error::Type { src, .. } => Some(src.to_string()),
+            Error::TestFailure { .. } => None,
+            Error::Http(_) => None,
+            Error::ZipExtract(_) => None,
+            Error::JoinError(_) => None,
+            Error::UnknownPackageVersion { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module { .. } => None,
+        }
+    }
+}
+
 impl Diagnostic for Error {
     fn severity(&self) -> Option<miette::Severity> {
         Some(miette::Severity::Error)
@@ -291,7 +233,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::Blueprint(e) => e.code(),
             Error::ImportCycle { .. } => Some(Box::new("aiken::module::cyclical")),
-            Error::List(_) => None,
             Error::Parse { .. } => Some(Box::new("aiken::parser")),
             Error::Type { error, .. } => Some(Box::new(format!(
                 "aiken::check{}",
@@ -301,8 +242,6 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => Some(Box::new("aiken::loading::toml")),
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => Some(Box::new("aiken::scripts")),
-            Error::WrongValidatorArity { .. } => Some(Box::new("aiken::validators")),
             Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
             Error::Http(_) => Some(Box::new("aiken::packages::download")),
             Error::ZipExtract(_) => None,
@@ -312,6 +251,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.code(),
         }
     }
 
@@ -328,15 +268,12 @@ impl Diagnostic for Error {
                 "Try moving the shared code to a separate module that the others can depend on\n- {}",
                 modules.join("\n- ")
             ))),
-            Error::List(_) => None,
             Error::Parse { error, .. } => error.kind.help(),
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => Some(Box::new("Try annotating the validator's return type with Bool")),
-            Error::WrongValidatorArity { .. } => Some(Box::new("Validators require a minimum number of arguments please add the missing arguments.\nIf you don't need one of the required arguments use an underscore `_datum`.")),
             Error::TestFailure { evaluation_hint, .. }  =>{
                 match evaluation_hint {
                     None => None,
@@ -376,16 +313,17 @@ impl Diagnostic for Error {
             }))),
             Error::NoValidatorNotFound { known_validators } => {
                 Some(Box::new(format!(
-                    "Here's a list of all validators (and their purpose) I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
-                    known_validators.iter().map(|(name, purpose)| format!("→ {name} (purpose = {purpose})", name = name.purple().bold(), purpose = purpose.bright_blue())).collect::<Vec<String>>().join("\n")
+                    "Here's a list of all validators I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
+                    known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
             Error::MoreThanOneValidatorFound { known_validators } => {
                 Some(Box::new(format!(
-                    "Here's a list of all validators (and their purpose) I've found in your project. Select one of them using the appropriate options:\n\n{}",
-                    known_validators.iter().map(|(name, purpose)| format!("→ {name} (purpose = {purpose})", name = name.purple().bold(), purpose = purpose.bright_blue())).collect::<Vec<String>>().join("\n")
+                    "Here's a list of all validators I've found in your project. Select one of them using the appropriate options:\n\n{}",
+                    known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
                 )))
             },
+            Error::Module(e) => e.help(),
         }
     }
 
@@ -395,7 +333,6 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::Blueprint(e) => e.labels(),
-            Error::List(_) => None,
             Error::Parse { error, .. } => error.labels(),
             Error::MissingManifest { .. } => None,
             Error::Type { error, .. } => error.labels(),
@@ -410,12 +347,6 @@ impl Diagnostic for Error {
                 }
             }
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { location, .. } => Some(Box::new(
-                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
-            )),
-            Error::WrongValidatorArity { location, .. } => Some(Box::new(
-                vec![LabeledSpan::new_with_span(None, *location)].into_iter(),
-            )),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
@@ -425,6 +356,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.labels(),
         }
     }
 
@@ -434,15 +366,12 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::Blueprint(e) => e.source_code(),
-            Error::List(_) => None,
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { named, .. } => Some(named.deref()),
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { named, .. } => Some(named),
-            Error::WrongValidatorArity { named, .. } => Some(named.deref()),
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
@@ -452,6 +381,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.source_code(),
         }
     }
 
@@ -461,15 +391,12 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
             Error::Blueprint(e) => e.url(),
-            Error::List { .. } => None,
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.url(),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => None,
-            Error::WrongValidatorArity { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http { .. } => None,
             Error::ZipExtract { .. } => None,
@@ -479,6 +406,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.url(),
         }
     }
 
@@ -488,15 +416,12 @@ impl Diagnostic for Error {
             Error::FileIo { .. } => None,
             Error::Blueprint(e) => e.related(),
             Error::ImportCycle { .. } => None,
-            Error::List { .. } => None,
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.related(),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::ValidatorMustReturnBool { .. } => None,
-            Error::WrongValidatorArity { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http { .. } => None,
             Error::ZipExtract { .. } => None,
@@ -506,6 +431,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module(e) => e.related(),
         }
     }
 }
@@ -524,6 +450,24 @@ pub enum Warning {
     },
     #[error("{name} is already a dependency.")]
     DependencyAlreadyExists { name: PackageName },
+}
+
+impl GetSource for Warning {
+    fn path(&self) -> Option<PathBuf> {
+        match self {
+            Warning::NoValidators => None,
+            Warning::Type { path, .. } => Some(path.clone()),
+            Warning::DependencyAlreadyExists { .. } => None,
+        }
+    }
+
+    fn src(&self) -> Option<String> {
+        match self {
+            Warning::NoValidators => None,
+            Warning::Type { src, .. } => Some(src.clone()),
+            Warning::DependencyAlreadyExists { .. } => None,
+        }
+    }
 }
 
 impl Diagnostic for Warning {

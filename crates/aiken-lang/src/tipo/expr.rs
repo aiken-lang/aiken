@@ -4,14 +4,15 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, Clause, ClauseGuard, Constant,
-        RecordUpdateSpread, Span, TodoKind, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
-        TypedConstant, TypedIfBranch, TypedMultiPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
-        UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedIfBranch, UntypedMultiPattern,
-        UntypedPattern, UntypedRecordUpdateArg,
+        Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        Clause, ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing,
+        TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedMultiPattern,
+        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
+        UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{TypedExpr, UntypedExpr},
+    format,
     tipo::fields::FieldMap,
 };
 
@@ -21,13 +22,16 @@ use super::{
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
-    ModuleValueConstructor, PatternConstructor, RecordAccessor, Type, ValueConstructor,
-    ValueConstructorVariant,
+    PatternConstructor, RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
 };
 
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
     pub(crate) environment: &'a mut Environment<'b>,
+
+    // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
+    // typed AST depending on this setting.
+    pub(crate) tracing: Tracing,
 
     // Type hydrator for creating types from annotations
     pub(crate) hydrator: Hydrator,
@@ -43,7 +47,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         subjects_count: usize,
         subjects: &[Arc<Type>],
-        typed_clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>, String>],
+        typed_clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>>],
         location: Span,
     ) -> Result<(), Vec<String>> {
         // Because exhaustiveness checking in presence of multiple subjects is similar
@@ -221,11 +225,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             | UntypedExpr::RecordUpdate { .. }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::String { .. }
-            | UntypedExpr::Todo { .. }
             | UntypedExpr::Tuple { .. }
             | UntypedExpr::TupleIndex { .. }
             | UntypedExpr::UnOp { .. }
             | UntypedExpr::Var { .. }
+            | UntypedExpr::TraceIfFalse { .. }
             | UntypedExpr::When { .. } => Ok(()),
         }
     }
@@ -249,16 +253,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     /// returning an error.
     pub fn infer(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
         match expr {
-            UntypedExpr::Todo {
-                location,
-                label,
-                kind,
-                ..
-            } => Ok(self.infer_todo(location, kind, label)),
-
-            UntypedExpr::ErrorTerm { location, label } => {
-                Ok(self.infer_error_term(location, label))
-            }
+            UntypedExpr::ErrorTerm { location } => Ok(self.infer_error_term(location)),
 
             UntypedExpr::Var { location, name, .. } => self.infer_var(name, location),
 
@@ -309,7 +304,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 then,
                 text,
-            } => self.infer_trace(*then, location, text),
+                kind,
+            } => self.infer_trace(kind, *then, location, *text),
 
             UntypedExpr::When {
                 location,
@@ -354,9 +350,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } => self.infer_tuple_index(*tuple, index, location),
 
-            UntypedExpr::ByteArray { location, bytes } => {
-                Ok(self.infer_byte_array(bytes, location))
-            }
+            UntypedExpr::ByteArray {
+                bytes,
+                preferred_format,
+                location,
+            } => self.infer_bytearray(bytes, preferred_format, location),
 
             UntypedExpr::RecordUpdate {
                 location,
@@ -370,14 +368,105 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 value,
                 op,
             } => self.infer_un_op(location, value, op),
+
+            UntypedExpr::TraceIfFalse { value, location } => {
+                self.infer_trace_if_false(*value, location)
+            }
         }
     }
 
-    fn infer_byte_array(&mut self, bytes: Vec<u8>, location: Span) -> TypedExpr {
-        TypedExpr::ByteArray {
+    fn infer_bytearray(
+        &mut self,
+        bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        if let ByteArrayFormatPreference::Utf8String = preferred_format {
+            let value = String::from_utf8(bytes.clone()).unwrap();
+            let is_hex_string = hex::decode(&value).is_ok();
+            if bytes.len() >= 56 && is_hex_string {
+                self.environment
+                    .warnings
+                    .push(Warning::Utf8ByteArrayIsValidHexString { location, value });
+            }
+        }
+
+        Ok(TypedExpr::ByteArray {
             location,
             bytes,
             tipo: byte_array(),
+        })
+    }
+
+    fn infer_trace_if_false(
+        &mut self,
+        value: UntypedExpr,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let var_true = TypedExpr::Var {
+            location,
+            name: "True".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: "True".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 2,
+                },
+                tipo: bool(),
+            },
+        };
+
+        let var_false = TypedExpr::Var {
+            location,
+            name: "False".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: "False".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 2,
+                },
+                tipo: bool(),
+            },
+        };
+
+        let text = TypedExpr::String {
+            location,
+            tipo: string(),
+            value: format!(
+                "{} ? False",
+                format::Formatter::new().expr(&value).to_pretty_string(999)
+            ),
+        };
+
+        let typed_value = self.infer(value)?;
+
+        self.unify(bool(), typed_value.tipo(), typed_value.location(), false)?;
+
+        match self.tracing {
+            Tracing::NoTraces => Ok(typed_value),
+            Tracing::KeepTraces => Ok(TypedExpr::If {
+                location,
+                branches: vec1::vec1![IfBranch {
+                    condition: typed_value,
+                    body: var_true,
+                    location,
+                }],
+                final_else: Box::new(TypedExpr::Trace {
+                    location,
+                    tipo: bool(),
+                    text: Box::new(text),
+                    then: Box::new(var_false),
+                }),
+                tipo: bool(),
+            }),
         }
     }
 
@@ -817,14 +906,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_assignment(
         &mut self,
-        pattern: UntypedPattern,
-        value: UntypedExpr,
+        untyped_pattern: UntypedPattern,
+        untyped_value: UntypedExpr,
         kind: AssignmentKind,
         annotation: &Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let typed_value = self.in_new_scope(|value_typer| value_typer.infer(value.clone()))?;
+        let typed_value =
+            self.in_new_scope(|value_typer| value_typer.infer(untyped_value.clone()))?;
         let mut value_typ = typed_value.tipo();
+
+        let value_is_data = value_typ.is_data();
 
         // Check that any type annotation is accurate.
         let pattern = if let Some(ann) = annotation {
@@ -836,25 +928,25 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data()) || (kind.is_assert() && value_typ.is_data()),
+                (kind.is_let() && ann_typ.is_data()) || (kind.is_expect() && value_is_data),
             )?;
 
             value_typ = ann_typ.clone();
 
             // Ensure the pattern matches the type of the value
             PatternTyper::new(self.environment, &self.hydrator).unify(
-                pattern,
+                untyped_pattern.clone(),
                 value_typ.clone(),
                 Some(ann_typ),
             )?
         } else {
-            if value_typ.is_data() && !pattern.is_var() && !pattern.is_discard() {
+            if value_is_data && !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
                 return Err(Error::CastDataNoAnn {
                     location,
                     value: UntypedExpr::Assignment {
                         location,
-                        value: value.into(),
-                        pattern,
+                        value: untyped_value.into(),
+                        pattern: untyped_pattern,
                         kind,
                         annotation: Some(Annotation::Constructor {
                             location: Span::empty(),
@@ -868,7 +960,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             // Ensure the pattern matches the type of the value
             PatternTyper::new(self.environment, &self.hydrator).unify(
-                pattern,
+                untyped_pattern.clone(),
                 value_typ.clone(),
                 None,
             )?
@@ -877,7 +969,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // We currently only do limited exhaustiveness checking of custom types
         // at the top level of patterns.
         // Do not perform exhaustiveness checking if user explicitly used `assert`.
-        if kind != AssignmentKind::Assert {
+        if kind != AssignmentKind::Expect {
             if let Err(unmatched) = self.environment.check_exhaustiveness(
                 vec![pattern.clone()],
                 collapse_links(value_typ.clone()),
@@ -886,8 +978,37 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 return Err(Error::NotExhaustivePatternMatch {
                     location,
                     unmatched,
+                    is_let: true,
                 });
             }
+        } else if !value_is_data
+            && !value_typ.is_list()
+            && self
+                .environment
+                .check_exhaustiveness(
+                    vec![pattern.clone()],
+                    collapse_links(value_typ.clone()),
+                    location,
+                )
+                .is_ok()
+        {
+            self.environment
+                .warnings
+                .push(Warning::SingleConstructorExpect {
+                    location: Span {
+                        start: location.start,
+                        end: location.start + kind.location_offset(),
+                    },
+                    pattern_location: dbg!(untyped_pattern.location()),
+                    value_location: dbg!(untyped_value.location()),
+                    sample: UntypedExpr::Assignment {
+                        location: Span::empty(),
+                        value: Box::new(untyped_value),
+                        pattern: untyped_pattern,
+                        kind: AssignmentKind::Let,
+                        annotation: None,
+                    },
+                })
         }
 
         Ok(TypedExpr::Assignment {
@@ -1233,29 +1354,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((typed_pattern, typed_alternatives))
     }
 
-    fn infer_const_tuple(
-        &mut self,
-        untyped_elements: Vec<UntypedConstant>,
-        location: Span,
-    ) -> Result<TypedConstant, Error> {
-        let mut elements = Vec::with_capacity(untyped_elements.len());
-
-        for element in untyped_elements {
-            let element = self.infer_const(&None, element)?;
-
-            elements.push(element);
-        }
-
-        Ok(Constant::Tuple { elements, location })
-    }
-
     // TODO: extract the type annotation checking into a infer_module_const
     // function that uses this function internally
     pub fn infer_const(
         &mut self,
         annotation: &Option<Annotation>,
-        value: UntypedConstant,
-    ) -> Result<TypedConstant, Error> {
+        value: Constant,
+    ) -> Result<Constant, Error> {
         let inferred = match value {
             Constant::Int {
                 location, value, ..
@@ -1265,215 +1370,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location, value, ..
             } => Ok(Constant::String { location, value }),
 
-            Constant::Tuple {
-                elements, location, ..
-            } => self.infer_const_tuple(elements, location),
-
-            Constant::List {
-                elements, location, ..
-            } => self.infer_const_list(elements, location),
-
-            Constant::ByteArray { location, bytes } => Ok(Constant::ByteArray { location, bytes }),
-
-            Constant::Record {
-                module,
+            Constant::ByteArray {
                 location,
-                name,
-                args,
-                // field_map, is always None here because untyped not yet unified
-                ..
-            } if args.is_empty() => {
-                // Register the module as having been used if it was imported
-                if let Some(ref module) = &module {
-                    self.environment.unused_modules.remove(module);
-                }
-
-                // Type check the record constructor
-                let constructor = self.infer_value_constructor(&module, &name, &location)?;
-
-                let (tag, field_map) = match &constructor.variant {
-                    ValueConstructorVariant::Record {
-                        name, field_map, ..
-                    } => (name.clone(), field_map.clone()),
-
-                    ValueConstructorVariant::ModuleFn { .. }
-                    | ValueConstructorVariant::LocalVariable { .. } => {
-                        return Err(Error::NonLocalClauseGuardVariable { location, name })
-                    }
-
-                    // TODO: remove this clone. Could use an rc instead
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        return Ok(literal.clone())
-                    }
-                };
-
-                Ok(Constant::Record {
-                    module,
-                    location,
-                    name,
-                    args: vec![],
-                    tipo: constructor.tipo,
-                    tag,
-                    field_map,
-                })
-            }
-
-            Constant::Record {
-                module,
-                location,
-                name,
-                mut args,
-                // field_map, is always None here because untyped not yet unified
-                ..
+                bytes,
+                preferred_format,
             } => {
-                // Register the module as having been used if it was imported
-                if let Some(ref module) = &module {
-                    self.environment.unused_modules.remove(module);
-                }
-
-                let constructor = self.infer_value_constructor(&module, &name, &location)?;
-
-                let (tag, field_map) = match &constructor.variant {
-                    ValueConstructorVariant::Record {
-                        name, field_map, ..
-                    } => (name.clone(), field_map.clone()),
-
-                    ValueConstructorVariant::ModuleFn { .. }
-                    | ValueConstructorVariant::LocalVariable { .. } => {
-                        return Err(Error::NonLocalClauseGuardVariable { location, name })
-                    }
-
-                    // TODO: remove this clone. Could be an rc instead
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        return Ok(literal.clone())
-                    }
-                };
-
-                // Pretty much all the other infer functions operate on UntypedExpr
-                // or TypedExpr rather than ClauseGuard. To make things easier we
-                // build the TypedExpr equivalent of the constructor and use that
-                // TODO: resvisit this. It is rather awkward at present how we
-                // have to convert to this other data structure.
-                let fun = match &module {
-                    Some(module_name) => {
-                        let tipo = Arc::clone(&constructor.tipo);
-
-                        let module_name = self
-                            .environment
-                            .imported_modules
-                            .get(module_name)
-                            .expect("Failed to find previously located module import")
-                            .1
-                            .name
-                            .clone();
-
-                        let module_value_constructor = ModuleValueConstructor::Record {
-                            name: name.clone(),
-                            field_map: field_map.clone(),
-                            arity: args.len(),
-                            tipo: Arc::clone(&tipo),
-                            location: constructor.variant.location(),
-                        };
-
-                        TypedExpr::ModuleSelect {
-                            label: name.clone(),
-                            module_alias: module_name.clone(),
-                            module_name,
-                            tipo,
-                            constructor: module_value_constructor,
-                            location,
-                        }
-                    }
-
-                    None => TypedExpr::Var {
-                        constructor,
-                        location,
-                        name: name.clone(),
-                    },
-                };
-
-                // This is basically the same code as do_infer_call_with_known_fun()
-                // except the args are typed with infer_clause_guard() here.
-                // This duplication is a bit awkward but it works!
-                // Potentially this could be improved later
-                match self.get_field_map(&fun, location)? {
-                    // The fun has a field map so labelled arguments may be present and need to be reordered.
-                    Some(field_map) => field_map.reorder(&mut args, location)?,
-
-                    // The fun has no field map and so we error if arguments have been labelled
-                    None => assert_no_labeled_arguments(&args)
-                        .map(|(location, label)| {
-                            Err(Error::UnexpectedLabeledArg { location, label })
-                        })
-                        .unwrap_or(Ok(()))?,
-                }
-
-                let (mut args_types, return_type) = self.environment.match_fun_type(
-                    fun.tipo(),
-                    args.len(),
-                    fun.location(),
+                let _ = self.infer_bytearray(bytes.clone(), preferred_format, location)?;
+                Ok(Constant::ByteArray {
                     location,
-                )?;
-
-                let mut typed_args = Vec::new();
-
-                for (tipo, arg) in args_types.iter_mut().zip(args) {
-                    let CallArg {
-                        label,
-                        value,
-                        location,
-                    } = arg;
-
-                    let value = self.infer_const(&None, value)?;
-
-                    self.unify(tipo.clone(), value.tipo(), value.location(), tipo.is_data())?;
-
-                    typed_args.push(CallArg {
-                        label,
-                        value,
-                        location,
-                    });
-                }
-
-                Ok(Constant::Record {
-                    module,
-                    location,
-                    name,
-                    args: typed_args,
-                    tipo: return_type,
-                    tag,
-                    field_map,
+                    bytes,
+                    preferred_format,
                 })
-            }
-            Constant::Var {
-                location,
-                module,
-                name,
-                ..
-            } => {
-                // Register the module as having been used if it was imported
-                if let Some(ref module) = &module {
-                    self.environment.unused_modules.remove(module);
-                }
-
-                // Infer the type of this constant
-                let constructor = self.infer_value_constructor(&module, &name, &location)?;
-
-                match constructor.variant {
-                    ValueConstructorVariant::ModuleConstant { .. }
-                    | ValueConstructorVariant::ModuleFn { .. } => Ok(Constant::Var {
-                        location,
-                        module,
-                        name,
-                        tipo: Arc::clone(&constructor.tipo),
-                        constructor: Some(Box::from(constructor)),
-                    }),
-                    // constructor.variant cannot be a LocalVariable because module constants can
-                    // only be defined at module scope. It also cannot be a Record because then
-                    // this constant would have been parsed as a Constant::Record. Therefore this
-                    // code is unreachable.
-                    _ => unreachable!(),
-                }
             }
         }?;
 
@@ -1490,30 +1397,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         Ok(inferred)
-    }
-
-    fn infer_const_list(
-        &mut self,
-        untyped_elements: Vec<UntypedConstant>,
-        location: Span,
-    ) -> Result<TypedConstant, Error> {
-        let tipo = self.new_unbound_var();
-
-        let mut elements = Vec::with_capacity(untyped_elements.len());
-
-        for element in untyped_elements {
-            let element = self.infer_const(&None, element)?;
-
-            self.unify(tipo.clone(), element.tipo(), element.location(), false)?;
-
-            elements.push(element);
-        }
-
-        Ok(Constant::List {
-            elements,
-            location,
-            tipo: list(tipo),
-        })
     }
 
     fn infer_if(
@@ -1533,7 +1416,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             false,
         )?;
 
-        let body = self.infer(first.body.clone())?;
+        let body = self.in_new_scope(|body_typer| body_typer.infer(first.body.clone()))?;
 
         let tipo = body.tipo();
 
@@ -1553,7 +1436,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 false,
             )?;
 
-            let body = self.infer(branch.body.clone())?;
+            let body = self.in_new_scope(|body_typer| body_typer.infer(branch.body.clone()))?;
 
             self.unify(
                 tipo.clone(),
@@ -1569,7 +1452,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             });
         }
 
-        let typed_final_else = self.infer(final_else)?;
+        let typed_final_else = self.in_new_scope(|body_typer| body_typer.infer(final_else))?;
 
         self.unify(
             tipo.clone(),
@@ -1825,48 +1708,41 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn infer_todo(&mut self, location: Span, kind: TodoKind, label: Option<String>) -> TypedExpr {
+    fn infer_error_term(&mut self, location: Span) -> TypedExpr {
         let tipo = self.new_unbound_var();
 
-        self.environment.warnings.push(Warning::Todo {
-            kind,
-            location,
-            tipo: tipo.clone(),
-        });
-
-        TypedExpr::Todo {
-            location,
-            label,
-            tipo,
-        }
-    }
-
-    fn infer_error_term(&mut self, location: Span, label: Option<String>) -> TypedExpr {
-        let tipo = self.new_unbound_var();
-
-        TypedExpr::ErrorTerm {
-            location,
-            tipo,
-            label,
-        }
+        TypedExpr::ErrorTerm { location, tipo }
     }
 
     fn infer_trace(
         &mut self,
+        kind: TraceKind,
         then: UntypedExpr,
         location: Span,
-        text: Option<String>,
+        text: UntypedExpr,
     ) -> Result<TypedExpr, Error> {
-        let then = self.infer(then)?;
+        let text = self.infer(text)?;
+        self.unify(string(), text.tipo(), text.location(), false)?;
 
+        let then = self.infer(then)?;
         let tipo = then.tipo();
 
-        Ok(TypedExpr::Trace {
-            location,
-            tipo,
-            then: Box::new(then),
-            text,
-        })
+        if let TraceKind::Todo = kind {
+            self.environment.warnings.push(Warning::Todo {
+                location,
+                tipo: tipo.clone(),
+            })
+        }
+
+        match self.tracing {
+            Tracing::NoTraces => Ok(then),
+            Tracing::KeepTraces => Ok(TypedExpr::Trace {
+                location,
+                tipo,
+                then: Box::new(then),
+                text: Box::new(text),
+            }),
+        }
     }
 
     fn infer_value_constructor(
@@ -2024,6 +1900,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             return Err(Error::NotExhaustivePatternMatch {
                 location,
                 unmatched,
+                is_let: false,
             });
         }
 
@@ -2039,7 +1916,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.environment.instantiate(t, ids, &self.hydrator)
     }
 
-    pub fn new(environment: &'a mut Environment<'b>) -> Self {
+    pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
         let mut hydrator = Hydrator::new();
 
         hydrator.permit_holes(true);
@@ -2047,6 +1924,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Self {
             hydrator,
             environment,
+            tracing,
             ungeneralised_function_used: false,
         }
     }

@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
 use crate::{
-    ast::{Constant, DefinitionLocation, ModuleKind, Span, TypedConstant},
+    ast::{Constant, DefinitionLocation, ModuleKind, Span},
     tipo::fields::FieldMap,
 };
 
@@ -584,7 +584,7 @@ pub enum ValueConstructorVariant {
     ModuleConstant {
         location: Span,
         module: String,
-        literal: Constant<Arc<Type>, String>,
+        literal: Constant,
     },
 
     /// A function belonging to the module
@@ -715,7 +715,7 @@ pub enum PatternConstructor {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ModuleValueConstructor {
     Record {
         name: String,
@@ -744,7 +744,7 @@ pub enum ModuleValueConstructor {
     },
 
     Constant {
-        literal: TypedConstant,
+        literal: Constant,
         location: Span,
     },
 }

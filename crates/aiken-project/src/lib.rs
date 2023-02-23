@@ -12,9 +12,9 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::{schema::Schema, validator, Blueprint};
+use crate::blueprint::{schema::Schema, Blueprint};
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, TypedDataType, TypedFunction},
+    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
     builtins,
     tipo::TypeInfo,
@@ -56,6 +56,11 @@ pub struct Source {
     pub kind: ModuleKind,
 }
 
+pub struct Checkpoint {
+    module_types: HashMap<String, TypeInfo>,
+    defined_modules: HashMap<String, PathBuf>,
+}
+
 pub struct Project<T>
 where
     T: EventListener,
@@ -67,7 +72,7 @@ where
     module_types: HashMap<String, TypeInfo>,
     root: PathBuf,
     sources: Vec<Source>,
-    pub warnings: Vec<Warning>,
+    warnings: Vec<Warning>,
     event_listener: T,
     functions: IndexMap<FunctionAccessKey, TypedFunction>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
@@ -78,6 +83,14 @@ where
     T: EventListener,
 {
     pub fn new(root: PathBuf, event_listener: T) -> Result<Project<T>, Error> {
+        let config = Config::load(&root)?;
+
+        let project = Project::new_with_config(config, root, event_listener);
+
+        Ok(project)
+    }
+
+    pub fn new_with_config(config: Config, root: PathBuf, event_listener: T) -> Project<T> {
         let id_gen = IdGenerator::new();
 
         let mut module_types = HashMap::new();
@@ -89,9 +102,7 @@ where
 
         let data_types = builtins::prelude_data_types(&id_gen);
 
-        let config = Config::load(&root)?;
-
-        Ok(Project {
+        Project {
             config,
             checked_modules: CheckedModules::default(),
             defined_modules: HashMap::new(),
@@ -103,18 +114,43 @@ where
             event_listener,
             functions,
             data_types,
-        })
+        }
     }
 
-    pub fn build(&mut self, uplc: bool) -> Result<(), Error> {
+    pub fn warnings(&mut self) -> Vec<Warning> {
+        std::mem::take(&mut self.warnings)
+    }
+
+    pub fn modules(&self) -> Vec<CheckedModule> {
+        self.checked_modules.values().cloned().collect()
+    }
+
+    pub fn importable_modules(&self) -> Vec<String> {
+        self.module_types.keys().cloned().collect()
+    }
+
+    pub fn checkpoint(&self) -> Checkpoint {
+        Checkpoint {
+            module_types: self.module_types.clone(),
+            defined_modules: self.defined_modules.clone(),
+        }
+    }
+
+    pub fn restore(&mut self, checkpoint: Checkpoint) {
+        self.module_types = checkpoint.module_types;
+        self.defined_modules = checkpoint.defined_modules;
+    }
+
+    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
+            tracing,
         };
 
         self.compile(options)
     }
 
-    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Error> {
+    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Vec<Error>> {
         self.compile_deps()?;
 
         self.event_listener
@@ -130,7 +166,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules)?;
+        self.type_check(parsed_modules, Tracing::NoTraces, false)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -144,8 +180,8 @@ where
 
         for file in doc_files {
             let path = destination.join(file.path);
-            fs::create_dir_all(path.parent().unwrap())?;
-            fs::write(&path, file.content)?;
+            fs::create_dir_all(path.parent().unwrap()).map_err(Error::from)?;
+            fs::write(&path, file.content).map_err(Error::from)?;
         }
 
         Ok(())
@@ -157,8 +193,10 @@ where
         match_tests: Option<Vec<String>>,
         verbose: bool,
         exact_match: bool,
-    ) -> Result<(), Error> {
+        tracing: Tracing,
+    ) -> Result<(), Vec<Error>> {
         let options = Options {
+            tracing,
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
@@ -175,16 +213,19 @@ where
 
     pub fn dump_uplc(&self, blueprint: &Blueprint<Schema>) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
+
         self.event_listener
             .handle_event(Event::DumpingUPLC { path: dir.clone() });
+
         fs::create_dir_all(&dir)?;
+
         for validator in &blueprint.validators {
-            let path = dir
-                .clone()
-                .join(format!("{}::{}>.uplc", validator.title, validator.purpose));
+            let path = dir.clone().join(format!("{}.uplc", validator.title));
+
             fs::write(&path, validator.program.to_pretty())
                 .map_err(|error| Error::FileIo { error, path })?;
         }
+
         Ok(())
     }
 
@@ -192,7 +233,7 @@ where
         self.root.join("plutus.json")
     }
 
-    pub fn compile(&mut self, options: Options) -> Result<(), Error> {
+    pub fn compile(&mut self, options: Options) -> Result<(), Vec<Error>> {
         self.compile_deps()?;
 
         self.event_listener
@@ -206,7 +247,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules)?;
+        self.type_check(parsed_modules, options.tracing, true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -233,9 +274,13 @@ where
                 }
 
                 let json = serde_json::to_string_pretty(&blueprint).unwrap();
-                fs::write(self.blueprint_path(), json).map_err(|error| Error::FileIo {
-                    error,
-                    path: self.blueprint_path(),
+
+                fs::write(self.blueprint_path(), json).map_err(|error| {
+                    Error::FileIo {
+                        error,
+                        path: self.blueprint_path(),
+                    }
+                    .into()
                 })
             }
             CodeGenMode::Test {
@@ -272,7 +317,7 @@ where
                     .handle_event(Event::FinishedTests { tests: results });
 
                 if !errors.is_empty() {
-                    Err(Error::List(errors))
+                    Err(errors)
                 } else {
                     Ok(())
                 }
@@ -284,7 +329,6 @@ where
     pub fn address(
         &self,
         title: Option<&String>,
-        purpose: Option<&validator::Purpose>,
         stake_address: Option<&String>,
     ) -> Result<ShelleyAddress, Error> {
         // Parse stake address
@@ -315,7 +359,8 @@ where
         let when_too_many =
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
-        blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+
+        blueprint.with_validator(title, when_too_many, when_missing, |validator| {
             let n = validator.parameters.len();
             if n > 0 {
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
@@ -330,7 +375,6 @@ where
     pub fn apply_parameter(
         &self,
         title: Option<&String>,
-        purpose: Option<&validator::Purpose>,
         param: &Term<DeBruijn>,
     ) -> Result<Blueprint<serde_json::Value>, Error> {
         // Read blueprint
@@ -343,8 +387,9 @@ where
         let when_too_many =
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+
         let applied_validator =
-            blueprint.with_validator(title, purpose, when_too_many, when_missing, |validator| {
+            blueprint.with_validator(title, when_too_many, when_missing, |validator| {
                 validator.apply(param).map_err(|e| e.into())
             })?;
 
@@ -354,8 +399,7 @@ where
             .into_iter()
             .map(|validator| {
                 let same_title = validator.title == applied_validator.title;
-                let same_purpose = validator.purpose == applied_validator.purpose;
-                if same_title && same_purpose {
+                if same_title {
                     applied_validator.to_owned()
                 } else {
                     validator
@@ -366,7 +410,7 @@ where
         Ok(blueprint)
     }
 
-    fn compile_deps(&mut self) -> Result<(), Error> {
+    fn compile_deps(&mut self) -> Result<(), Vec<Error>> {
         let manifest = deps::download(
             &self.event_listener,
             UseManifest::Yes,
@@ -388,7 +432,7 @@ where
 
             let parsed_modules = self.parse_sources(package.name)?;
 
-            self.type_check(parsed_modules)?;
+            self.type_check(parsed_modules, Tracing::NoTraces, true)?;
         }
 
         Ok(())
@@ -410,7 +454,7 @@ where
         Ok(())
     }
 
-    fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Error> {
+    fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Vec<Error>> {
         let mut errors = Vec::new();
         let mut parsed_modules = HashMap::with_capacity(self.sources.len());
 
@@ -426,7 +470,7 @@ where
                     // Store the name
                     ast.name = name.clone();
 
-                    let mut module = ParsedModule {
+                    let module = ParsedModule {
                         kind,
                         ast,
                         code,
@@ -444,10 +488,9 @@ where
                             module: module.name.clone(),
                             first,
                             second: module.path,
-                        });
+                        }
+                        .into());
                     }
-
-                    module.attach_doc_and_module_comments();
 
                     parsed_modules.insert(module.name.clone(), module);
                 }
@@ -467,11 +510,16 @@ where
         if errors.is_empty() {
             Ok(parsed_modules.into())
         } else {
-            Err(Error::List(errors))
+            Err(errors)
         }
     }
 
-    fn type_check(&mut self, mut parsed_modules: ParsedModules) -> Result<(), Error> {
+    fn type_check(
+        &mut self,
+        mut parsed_modules: ParsedModules,
+        tracing: Tracing,
+        validate_module_name: bool,
+    ) -> Result<(), Error> {
         let processing_sequence = parsed_modules.sequence()?;
 
         for name in processing_sequence {
@@ -493,6 +541,7 @@ where
                         kind,
                         &self.config.name.to_string(),
                         &self.module_types,
+                        tracing,
                         &mut type_warnings,
                     )
                     .map_err(|error| Error::Type {
@@ -501,6 +550,10 @@ where
                         named: NamedSource::new(path.display().to_string(), code.clone()),
                         error,
                     })?;
+
+                if validate_module_name {
+                    ast.validate_module_name()?;
+                }
 
                 // Register any warnings emitted as type warnings
                 let type_warnings = type_warnings
@@ -514,18 +567,19 @@ where
                 self.module_types
                     .insert(name.clone(), ast.type_info.clone());
 
-                self.checked_modules.insert(
-                    name.clone(),
-                    CheckedModule {
-                        kind,
-                        extra,
-                        name,
-                        code,
-                        ast,
-                        package,
-                        input_path: path,
-                    },
-                );
+                let mut checked_module = CheckedModule {
+                    kind,
+                    extra,
+                    name: name.clone(),
+                    code,
+                    ast,
+                    package,
+                    input_path: path,
+                };
+
+                checked_module.attach_doc_and_module_comments();
+
+                self.checked_modules.insert(name, checked_module);
             }
         }
 

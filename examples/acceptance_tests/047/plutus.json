@@ -5,8 +5,7 @@
   },
   "validators": [
     {
-      "title": "foo",
-      "purpose": "spend",
+      "title": "foo.spend",
       "datum": {
         "title": "Unit",
         "description": "The nullary constructor.",

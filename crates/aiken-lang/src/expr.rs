@@ -4,15 +4,15 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, AssignmentKind, BinOp, CallArg, Clause, DefinitionLocation, IfBranch,
-        Pattern, RecordUpdateSpread, Span, TodoKind, TypedRecordUpdateArg, UnOp,
-        UntypedRecordUpdateArg,
+        Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg, Clause,
+        DefinitionLocation, IfBranch, Pattern, RecordUpdateSpread, Span, TraceKind,
+        TypedRecordUpdateArg, UnOp, UntypedRecordUpdateArg,
     },
     builtins::void,
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypedExpr {
     Int {
         location: Span,
@@ -96,14 +96,14 @@ pub enum TypedExpr {
         location: Span,
         tipo: Arc<Type>,
         then: Box<Self>,
-        text: Option<String>,
+        text: Box<Self>,
     },
 
     When {
         location: Span,
         tipo: Arc<Type>,
         subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>, String>>,
+        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>>>,
     },
 
     If {
@@ -143,16 +143,9 @@ pub enum TypedExpr {
         tuple: Box<Self>,
     },
 
-    Todo {
-        location: Span,
-        label: Option<String>,
-        tipo: Arc<Type>,
-    },
-
     ErrorTerm {
         location: Span,
         tipo: Arc<Type>,
-        label: Option<String>,
     },
 
     RecordUpdate {
@@ -177,7 +170,6 @@ impl TypedExpr {
             Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
             | Self::Int { tipo, .. }
-            | Self::Todo { tipo, .. }
             | Self::ErrorTerm { tipo, .. }
             | Self::When { tipo, .. }
             | Self::List { tipo, .. }
@@ -223,7 +215,6 @@ impl TypedExpr {
             | TypedExpr::List { .. }
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
-            | TypedExpr::Todo { .. }
             | TypedExpr::ErrorTerm { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Tuple { .. }
@@ -262,7 +253,6 @@ impl TypedExpr {
             | Self::Int { location, .. }
             | Self::Var { location, .. }
             | Self::Trace { location, .. }
-            | Self::Todo { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
@@ -298,7 +288,6 @@ impl TypedExpr {
             | Self::Int { location, .. }
             | Self::Trace { location, .. }
             | Self::Var { location, .. }
-            | Self::Todo { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
@@ -316,6 +305,96 @@ impl TypedExpr {
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
             | Self::RecordUpdate { location, .. } => *location,
+        }
+    }
+
+    // This could be optimised in places to exit early if the first of a series
+    // of expressions is after the byte index.
+    pub fn find_node(&self, byte_index: usize) -> Option<&Self> {
+        if !self.location().contains(byte_index) {
+            return None;
+        }
+
+        match self {
+            TypedExpr::ErrorTerm { .. }
+            | TypedExpr::Var { .. }
+            | TypedExpr::Int { .. }
+            | TypedExpr::String { .. }
+            | TypedExpr::ByteArray { .. }
+            | TypedExpr::ModuleSelect { .. } => Some(self),
+
+            TypedExpr::Trace { text, then, .. } => text
+                .find_node(byte_index)
+                .or_else(|| then.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
+                expressions.iter().find_map(|e| e.find_node(byte_index))
+            }
+
+            TypedExpr::Fn { body, .. } => body.find_node(byte_index).or(Some(self)),
+
+            TypedExpr::Tuple {
+                elems: elements, ..
+            }
+            | TypedExpr::List { elements, .. } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::Call { fun, args, .. } => args
+                .iter()
+                .find_map(|arg| arg.find_node(byte_index))
+                .or_else(|| fun.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::BinOp { left, right, .. } => left
+                .find_node(byte_index)
+                .or_else(|| right.find_node(byte_index)),
+
+            TypedExpr::Assignment { value, .. } => value.find_node(byte_index),
+
+            TypedExpr::When {
+                subjects, clauses, ..
+            } => subjects
+                .iter()
+                .find_map(|subject| subject.find_node(byte_index))
+                .or_else(|| {
+                    clauses
+                        .iter()
+                        .find_map(|clause| clause.find_node(byte_index))
+                })
+                .or(Some(self)),
+
+            TypedExpr::RecordAccess {
+                record: expression, ..
+            }
+            | TypedExpr::TupleIndex {
+                tuple: expression, ..
+            } => expression.find_node(byte_index).or(Some(self)),
+
+            TypedExpr::RecordUpdate { spread, args, .. } => args
+                .iter()
+                .find_map(|arg| arg.find_node(byte_index))
+                .or_else(|| spread.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => branches
+                .iter()
+                .find_map(|branch| {
+                    branch
+                        .condition
+                        .find_node(byte_index)
+                        .or_else(|| branch.body.find_node(byte_index))
+                })
+                .or_else(|| final_else.find_node(byte_index))
+                .or(Some(self)),
+
+            TypedExpr::UnOp { value, .. } => value.find_node(byte_index).or(Some(self)),
         }
     }
 }
@@ -372,6 +451,7 @@ pub enum UntypedExpr {
     ByteArray {
         location: Span,
         bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
     },
 
     PipeLine {
@@ -387,15 +467,21 @@ pub enum UntypedExpr {
     },
 
     Trace {
+        kind: TraceKind,
         location: Span,
         then: Box<Self>,
-        text: Option<String>,
+        text: Box<Self>,
+    },
+
+    TraceIfFalse {
+        location: Span,
+        value: Box<Self>,
     },
 
     When {
         location: Span,
         subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, (), (), ()>>,
+        clauses: Vec<Clause<Self, (), ()>>,
     },
 
     If {
@@ -421,15 +507,8 @@ pub enum UntypedExpr {
         tuple: Box<Self>,
     },
 
-    Todo {
-        kind: TodoKind,
-        location: Span,
-        label: Option<String>,
-    },
-
     ErrorTerm {
         location: Span,
-        label: Option<String>,
     },
 
     RecordUpdate {
@@ -446,7 +525,35 @@ pub enum UntypedExpr {
     },
 }
 
+pub const DEFAULT_TODO_STR: &str = "aiken::todo";
+
+pub const DEFAULT_ERROR_STR: &str = "aiken::error";
+
 impl UntypedExpr {
+    pub fn todo(location: Span, reason: Option<Self>) -> Self {
+        UntypedExpr::Trace {
+            location,
+            kind: TraceKind::Todo,
+            then: Box::new(UntypedExpr::ErrorTerm { location }),
+            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+                location,
+                value: DEFAULT_TODO_STR.to_string(),
+            })),
+        }
+    }
+
+    pub fn error(location: Span, reason: Option<Self>) -> Self {
+        UntypedExpr::Trace {
+            location,
+            kind: TraceKind::Error,
+            then: Box::new(UntypedExpr::ErrorTerm { location }),
+            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+                location,
+                value: DEFAULT_ERROR_STR.to_string(),
+            })),
+        }
+    }
+
     pub fn append_in_sequence(self, next: Self) -> Self {
         let location = Span {
             start: self.location().start,
@@ -499,10 +606,10 @@ impl UntypedExpr {
         match self {
             Self::PipeLine { expressions, .. } => expressions.last().location(),
             Self::Trace { then, .. } => then.location(),
-            Self::Fn { location, .. }
+            Self::TraceIfFalse { location, .. }
+            | Self::Fn { location, .. }
             | Self::Var { location, .. }
             | Self::Int { location, .. }
-            | Self::Todo { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }

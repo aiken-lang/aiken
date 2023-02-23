@@ -13,19 +13,19 @@ test let_1() {
 test let_2() {
   let x: Data = 1
 
-  assert y: Int = x
+  expect y: Int = x
 
   y == 1
 }
 
 test assert_1() {
-  assert thing: Thing = builtin.constr_data(0, [builtin.i_data(1)])
+  expect thing: Thing = builtin.constr_data(0, [builtin.i_data(1)])
 
   thing.wow == 1
 }
 
 fn cast_to_thing(x: Data) -> Thing {
-  assert x: Thing = x
+  expect x: Thing = x
 
   x
 }

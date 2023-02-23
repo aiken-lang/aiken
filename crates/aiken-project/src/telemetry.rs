@@ -1,8 +1,8 @@
 use crate::script::EvalInfo;
 use std::path::PathBuf;
 
-pub trait EventListener: std::fmt::Debug {
-    fn handle_event(&self, event: Event);
+pub trait EventListener {
+    fn handle_event(&self, _event: Event) {}
 }
 
 pub enum Event {

@@ -11,7 +11,7 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chumsky = "0.8.0"
+chumsky = "0.9.0"
 hex = "0.4.3"
 indexmap = "1.9.1"
 indoc = "1.0.7"

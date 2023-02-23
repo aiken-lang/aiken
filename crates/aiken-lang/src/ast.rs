@@ -3,8 +3,11 @@ use std::{fmt, ops::Range, sync::Arc};
 use crate::{
     builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
-    tipo::{fields::FieldMap, PatternConstructor, Type, TypeInfo, ValueConstructor},
+    parser::token::Token,
+    tipo::{PatternConstructor, Type, TypeInfo},
 };
+use miette::Diagnostic;
+use owo_colors::OwoColorize;
 
 pub const ASSERT_VARIABLE: &str = "_try";
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -63,6 +66,59 @@ impl UntypedModule {
                 }
             })
             .collect()
+    }
+}
+
+impl TypedModule {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
+        self.definitions
+            .iter()
+            .find_map(|definition| definition.find_node(byte_index))
+    }
+
+    pub fn validate_module_name(&self) -> Result<(), Error> {
+        if self.name == "aiken" || self.name == "aiken/builtin" {
+            return Err(Error::ReservedModuleName {
+                name: self.name.to_string(),
+            });
+        };
+
+        for segment in self.name.split('/') {
+            if str_to_keyword(segment).is_some() {
+                return Err(Error::KeywordInModuleName {
+                    name: self.name.to_string(),
+                    keyword: segment.to_string(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn str_to_keyword(word: &str) -> Option<Token> {
+    // Alphabetical keywords:
+    match word {
+        "assert" => Some(Token::Expect),
+        "expect" => Some(Token::Expect),
+        "else" => Some(Token::Else),
+        "is" => Some(Token::Is),
+        "as" => Some(Token::As),
+        "when" => Some(Token::When),
+        "const" => Some(Token::Const),
+        "fn" => Some(Token::Fn),
+        "if" => Some(Token::If),
+        "use" => Some(Token::Use),
+        "let" => Some(Token::Let),
+        "opaque" => Some(Token::Opaque),
+        "pub" => Some(Token::Pub),
+        "todo" => Some(Token::Todo),
+        "type" => Some(Token::Type),
+        "trace" => Some(Token::Trace),
+        "test" => Some(Token::Test),
+        "error" => Some(Token::ErrorTerm),
+        "validator" => Some(Token::Validator),
+        _ => None,
     }
 }
 
@@ -145,6 +201,41 @@ pub struct TypeAlias<T> {
 pub type TypedDataType = DataType<Arc<Type>>;
 
 impl TypedDataType {
+    pub fn ordering() -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Less".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Equal".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Greater".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "Ordering".to_string(),
+            opaque: false,
+            parameters: vec![],
+            public: true,
+            typed_parameters: vec![],
+        }
+    }
+
     pub fn option(tipo: Arc<Type>) -> Self {
         DataType {
             constructors: vec![
@@ -209,25 +300,37 @@ pub struct Use<PackageName> {
     pub unqualified: Vec<UnqualifiedImport>,
 }
 
-pub type TypedModuleConstant = ModuleConstant<Arc<Type>, String>;
-pub type UntypedModuleConstant = ModuleConstant<(), ()>;
+pub type TypedModuleConstant = ModuleConstant<Arc<Type>>;
+pub type UntypedModuleConstant = ModuleConstant<()>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ModuleConstant<T, ConstantRecordTag> {
+pub struct ModuleConstant<T> {
     pub doc: Option<String>,
     pub location: Span,
     pub public: bool,
     pub name: String,
     pub annotation: Option<Annotation>,
-    pub value: Box<Constant<T, ConstantRecordTag>>,
+    pub value: Box<Constant>,
     pub tipo: T,
 }
 
-pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String, String>;
-pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
+pub type TypedValidator = Validator<Arc<Type>, TypedExpr>;
+pub type UntypedValidator = Validator<(), UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
+pub struct Validator<T, Expr> {
+    pub doc: Option<String>,
+    pub end_position: usize,
+    pub fun: Function<T, Expr>,
+    pub location: Span,
+    pub params: Vec<Arg<T>>,
+}
+
+pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Definition<T, Expr, PackageName> {
     Fn(Function<T, Expr>),
 
     TypeAlias(TypeAlias<T>),
@@ -236,12 +339,14 @@ pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
 
     Use(Use<PackageName>),
 
-    ModuleConstant(ModuleConstant<T, ConstantRecordTag>),
+    ModuleConstant(ModuleConstant<T>),
 
     Test(Function<T, Expr>),
+
+    Validator(Validator<T, Expr>),
 }
 
-impl<A, B, C, E> Definition<A, B, C, E> {
+impl<A, B, C> Definition<A, B, C> {
     pub fn location(&self) -> Span {
         match self {
             Definition::Fn(Function { location, .. })
@@ -249,6 +354,7 @@ impl<A, B, C, E> Definition<A, B, C, E> {
             | Definition::TypeAlias(TypeAlias { location, .. })
             | Definition::DataType(DataType { location, .. })
             | Definition::ModuleConstant(ModuleConstant { location, .. })
+            | Definition::Validator(Validator { location, .. })
             | Definition::Test(Function { location, .. }) => *location,
         }
     }
@@ -260,9 +366,64 @@ impl<A, B, C, E> Definition<A, B, C, E> {
             | Definition::TypeAlias(TypeAlias { doc, .. })
             | Definition::DataType(DataType { doc, .. })
             | Definition::ModuleConstant(ModuleConstant { doc, .. })
+            | Definition::Validator(Validator { doc, .. })
             | Definition::Test(Function { doc, .. }) => {
                 let _ = std::mem::replace(doc, Some(new_doc));
             }
+        }
+    }
+
+    pub fn doc(&self) -> Option<String> {
+        match self {
+            Definition::Use { .. } => None,
+            Definition::Fn(Function { doc, .. })
+            | Definition::TypeAlias(TypeAlias { doc, .. })
+            | Definition::DataType(DataType { doc, .. })
+            | Definition::ModuleConstant(ModuleConstant { doc, .. })
+            | Definition::Validator(Validator { doc, .. })
+            | Definition::Test(Function { doc, .. }) => doc.clone(),
+        }
+    }
+}
+
+impl TypedDefinition {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
+        // Note that the fn span covers the function head, not
+        // the entire statement.
+        if let Definition::Fn(Function { body, .. })
+        | Definition::Validator(Validator {
+            fun: Function { body, .. },
+            ..
+        })
+        | Definition::Test(Function { body, .. }) = self
+        {
+            if let Some(expression) = body.find_node(byte_index) {
+                return Some(Located::Expression(expression));
+            }
+        }
+
+        if self.location().contains(byte_index) {
+            Some(Located::Definition(self))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Located<'a> {
+    Expression(&'a TypedExpr),
+    Definition(&'a TypedDefinition),
+}
+
+impl<'a> Located<'a> {
+    pub fn definition_location(&self) -> Option<DefinitionLocation<'_>> {
+        match self {
+            Self::Expression(expression) => expression.definition_location(),
+            Self::Definition(definition) => Some(DefinitionLocation {
+                module: None,
+                span: definition.location(),
+            }),
         }
     }
 }
@@ -273,11 +434,8 @@ pub struct DefinitionLocation<'module> {
     pub span: Span,
 }
 
-pub type TypedConstant = Constant<Arc<Type>, String>;
-pub type UntypedConstant = Constant<(), ()>;
-
 #[derive(Debug, Clone, PartialEq)]
-pub enum Constant<T, RecordTag> {
+pub enum Constant {
     Int {
         location: Span,
         value: String,
@@ -288,75 +446,28 @@ pub enum Constant<T, RecordTag> {
         value: String,
     },
 
-    Tuple {
-        location: Span,
-        elements: Vec<Self>,
-    },
-
-    List {
-        location: Span,
-        elements: Vec<Self>,
-        tipo: T,
-    },
-
-    Record {
-        location: Span,
-        module: Option<String>,
-        name: String,
-        args: Vec<CallArg<Self>>,
-        tag: RecordTag,
-        tipo: T,
-        field_map: Option<FieldMap>,
-    },
-
     ByteArray {
         location: Span,
         bytes: Vec<u8>,
-    },
-
-    Var {
-        location: Span,
-        module: Option<String>,
-        name: String,
-        constructor: Option<Box<ValueConstructor>>,
-        tipo: T,
+        preferred_format: ByteArrayFormatPreference,
     },
 }
 
-impl TypedConstant {
+impl Constant {
     pub fn tipo(&self) -> Arc<Type> {
         match self {
             Constant::Int { .. } => builtins::int(),
             Constant::String { .. } => builtins::string(),
             Constant::ByteArray { .. } => builtins::byte_array(),
-            Constant::Tuple { elements, .. } => {
-                builtins::tuple(elements.iter().map(|e| e.tipo()).collect())
-            }
-            Constant::List { tipo, .. }
-            | Constant::Record { tipo, .. }
-            | Constant::Var { tipo, .. } => tipo.clone(),
         }
     }
-}
 
-impl<A, B> Constant<A, B> {
     pub fn location(&self) -> Span {
         match self {
             Constant::Int { location, .. }
-            | Constant::Tuple { location, .. }
-            | Constant::List { location, .. }
             | Constant::String { location, .. }
-            | Constant::Record { location, .. }
-            | Constant::ByteArray { location, .. }
-            | Constant::Var { location, .. } => *location,
+            | Constant::ByteArray { location, .. } => *location,
         }
-    }
-
-    pub fn is_simple(&self) -> bool {
-        matches!(
-            self,
-            Self::Int { .. } | Self::ByteArray { .. } | Self::String { .. }
-        )
     }
 }
 
@@ -375,6 +486,12 @@ impl CallArg<UntypedExpr> {
             UntypedExpr::Var { ref name, .. } => name.contains(CAPTURE_VARIABLE),
             _ => false,
         }
+    }
+}
+
+impl TypedCallArg {
+    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+        self.value.find_node(byte_index)
     }
 }
 
@@ -682,11 +799,6 @@ pub enum Pattern<Constructor, Type> {
         value: String,
     },
 
-    String {
-        location: Span,
-        value: String,
-    },
-
     /// The creation of a variable.
     /// e.g. `assert [this_is_a_var, .._] = x`
     Var {
@@ -741,7 +853,6 @@ impl<A, B> Pattern<A, B> {
             | Pattern::Var { location, .. }
             | Pattern::List { location, .. }
             | Pattern::Discard { location, .. }
-            | Pattern::String { location, .. }
             | Pattern::Tuple { location, .. }
             // | Pattern::Concatenate { location, .. }
             | Pattern::Constructor { location, .. } => *location,
@@ -764,9 +875,16 @@ impl<A, B> Pattern<A, B> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ByteArrayFormatPreference {
+    HexadecimalString,
+    ArrayOfBytes,
+    Utf8String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum AssignmentKind {
     Let,
-    Assert,
+    Expect,
 }
 
 impl AssignmentKind {
@@ -774,8 +892,15 @@ impl AssignmentKind {
         matches!(self, AssignmentKind::Let)
     }
 
-    pub fn is_assert(&self) -> bool {
-        matches!(self, AssignmentKind::Assert)
+    pub fn is_expect(&self) -> bool {
+        matches!(self, AssignmentKind::Expect)
+    }
+
+    pub fn location_offset(&self) -> usize {
+        match self {
+            AssignmentKind::Let => 3,
+            AssignmentKind::Expect => 6,
+        }
     }
 }
 
@@ -784,15 +909,15 @@ pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor
 pub type UntypedMultiPattern = MultiPattern<(), ()>;
 pub type TypedMultiPattern = MultiPattern<PatternConstructor, Arc<Type>>;
 
-pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>, String>;
-pub type UntypedClause = Clause<UntypedExpr, (), (), ()>;
+pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>>;
+pub type UntypedClause = Clause<UntypedExpr, (), ()>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Clause<Expr, PatternConstructor, Type, RecordTag> {
+pub struct Clause<Expr, PatternConstructor, Type> {
     pub location: Span,
     pub pattern: MultiPattern<PatternConstructor, Type>,
     pub alternative_patterns: Vec<MultiPattern<PatternConstructor, Type>>,
-    pub guard: Option<ClauseGuard<Type, RecordTag>>,
+    pub guard: Option<ClauseGuard<Type>>,
     pub then: Expr,
 }
 
@@ -807,13 +932,17 @@ impl TypedClause {
             end: self.then.location().end,
         }
     }
+
+    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+        self.then.find_node(byte_index)
+    }
 }
 
-pub type UntypedClauseGuard = ClauseGuard<(), ()>;
-pub type TypedClauseGuard = ClauseGuard<Arc<Type>, String>;
+pub type UntypedClauseGuard = ClauseGuard<()>;
+pub type TypedClauseGuard = ClauseGuard<Arc<Type>>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClauseGuard<Type, RecordTag> {
+pub enum ClauseGuard<Type> {
     Not {
         location: Span,
         value: Box<Self>,
@@ -873,10 +1002,10 @@ pub enum ClauseGuard<Type, RecordTag> {
         name: String,
     },
 
-    Constant(Constant<Type, RecordTag>),
+    Constant(Constant),
 }
 
-impl<A, B> ClauseGuard<A, B> {
+impl<A> ClauseGuard<A> {
     pub fn location(&self) -> Span {
         match self {
             ClauseGuard::Constant(constant) => constant.location(),
@@ -937,12 +1066,18 @@ pub struct IfBranch<Expr> {
     pub location: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedRecordUpdateArg {
     pub label: String,
     pub location: Span,
     pub value: TypedExpr,
     pub index: usize,
+}
+
+impl TypedRecordUpdateArg {
+    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+        self.value.find_node(byte_index)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -959,9 +1094,26 @@ pub struct RecordUpdateSpread {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TodoKind {
-    Keyword,
-    EmptyFunction,
+pub enum TraceKind {
+    Trace,
+    Todo,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tracing {
+    NoTraces,
+    KeepTraces,
+}
+
+impl From<bool> for Tracing {
+    fn from(keep: bool) -> Self {
+        if keep {
+            Tracing::KeepTraces
+        } else {
+            Tracing::NoTraces
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -997,6 +1149,10 @@ impl Span {
             end: self.end().max(other.end()),
         }
     }
+
+    pub fn contains(&self, byte_index: usize) -> bool {
+        byte_index >= self.start && byte_index < self.end
+    }
 }
 
 impl fmt::Debug for Span {
@@ -1028,4 +1184,30 @@ impl chumsky::Span for Span {
     fn end(&self) -> Self::Offset {
         self.end
     }
+}
+
+#[derive(Debug, thiserror::Error, Diagnostic)]
+pub enum Error {
+    #[error(
+      "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
+      name.purple(),
+      keyword.purple()
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
+    #[diagnostic(code("illegal::module_name"))]
+    #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
+
+    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
+    KeywordInModuleName { name: String, keyword: String },
+
+    #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n", name.purple())]
+    #[diagnostic(code("illegal::module_name"))]
+    #[diagnostic(help(r#"Some module names are reserved for internal use. This the case of:
+
+- aiken: where the prelude is located;
+- aiken/builtin: where I store low-level Plutus builtins.
+
+Note that 'aiken' is also imported by default; but you can refer to it explicitly to disambiguate with a local value that would clash with one from that module."#
+    ))]
+    ReservedModuleName { name: String },
 }

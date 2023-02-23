@@ -5,14 +5,15 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, CallArg, ClauseGuard, Constant, DataType,
-        Definition, Function, IfBranch, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TypeAlias, TypedArg, TypedConstant, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition,
-        UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, CAPTURE_VARIABLE,
+        Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        ClauseGuard, Constant, DataType, Definition, Function, IfBranch, ModuleConstant, Pattern,
+        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
+        TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
+        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
+        Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
-    expr::UntypedExpr,
+    expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
     parser::extra::{Comment, ModuleExtra},
     pretty::{break_, concat, flex_break, join, line, lines, nil, Document, Documentable},
     tipo::{self, Type},
@@ -235,6 +236,13 @@ impl<'comments> Formatter<'comments> {
                 *end_position,
             ),
 
+            Definition::Validator(Validator {
+                end_position,
+                fun: function,
+                params,
+                ..
+            }) => self.definition_validator(params, function, *end_position),
+
             Definition::Test(Function {
                 name,
                 arguments: args,
@@ -316,82 +324,19 @@ impl<'comments> Formatter<'comments> {
             })
     }
 
-    fn const_expr<'a, A, B>(&mut self, value: &'a Constant<A, B>) -> Document<'a> {
+    fn const_expr<'a>(&mut self, value: &'a Constant) -> Document<'a> {
         match value {
-            Constant::ByteArray { bytes, .. } => self.bytearray(bytes),
+            Constant::ByteArray {
+                bytes,
+                preferred_format,
+                ..
+            } => self.bytearray(bytes, preferred_format),
             Constant::Int { value, .. } => value.to_doc(),
-
             Constant::String { value, .. } => self.string(value),
-
-            Constant::List { elements, .. } => {
-                let comma: fn() -> Document<'a> = if elements.iter().all(Constant::is_simple) {
-                    || flex_break(",", ", ")
-                } else {
-                    || break_(",", ", ")
-                };
-                let elements_document = join(elements.iter().map(|e| self.const_expr(e)), comma());
-                list(elements_document, elements.len(), None)
-            }
-
-            Constant::Record {
-                name,
-                args,
-                module: None,
-                ..
-            } if args.is_empty() => name.to_doc(),
-
-            Constant::Record {
-                name,
-                args,
-                module: Some(m),
-                ..
-            } if args.is_empty() => m.to_doc().append(".").append(name.as_str()),
-
-            Constant::Record {
-                name,
-                args,
-                module: None,
-                ..
-            } => name
-                .to_doc()
-                .append(wrap_args(
-                    args.iter()
-                        .map(|a| (self.constant_call_arg(a), a.label.is_some())),
-                ))
-                .group(),
-
-            Constant::Record {
-                name,
-                args,
-                module: Some(m),
-                ..
-            } => m
-                .to_doc()
-                .append(".")
-                .append(name.as_str())
-                .append(wrap_args(
-                    args.iter()
-                        .map(|a| (self.constant_call_arg(a), a.label.is_some())),
-                ))
-                .group(),
-
-            Constant::Var {
-                name, module: None, ..
-            } => name.to_doc(),
-
-            Constant::Var {
-                name,
-                module: Some(module),
-                ..
-            } => docvec![module, ".", name],
-
-            Constant::Tuple { elements, .. } => {
-                wrap_args(elements.iter().map(|e| (self.const_expr(e), false))).group()
-            }
         }
     }
 
-    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedConstant) -> Document<'a> {
+    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a Constant) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
         name.to_doc()
             .append(": ")
@@ -549,6 +494,63 @@ impl<'comments> Formatter<'comments> {
             .append("}")
     }
 
+    fn definition_validator<'a>(
+        &mut self,
+        params: &'a [UntypedArg],
+        fun: &'a UntypedFunction,
+        end_position: usize,
+    ) -> Document<'a> {
+        // Fn and args
+        let head = "fn".to_doc().append(wrap_args(
+            fun.arguments.iter().map(|e| (self.fn_arg(e), false)),
+        ));
+
+        // Add return annotation
+        let head = match &fun.return_annotation {
+            Some(anno) => head.append(" -> ").append(self.annotation(anno)),
+            None => head,
+        }
+        .group();
+
+        // Format body
+        let body = self.expr(&fun.body);
+
+        // Add any trailing comments
+        let body = match printed_comments(self.pop_comments(fun.end_position), false) {
+            Some(comments) => body.append(line()).append(comments),
+            None => body,
+        };
+
+        // validator name(params)
+        let v_head = "validator"
+            .to_doc()
+            .append(" ")
+            .append(fun.name.as_str())
+            .append(if !params.is_empty() {
+                wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
+            } else {
+                "".to_doc()
+            });
+
+        // Stick it all together
+        let inner_fn = head
+            .append(" {")
+            .append(line().append(body).nest(INDENT).group())
+            .append(line())
+            .append("}");
+
+        let inner_fn = match printed_comments(self.pop_comments(end_position), false) {
+            Some(comments) => inner_fn.append(line()).append(comments),
+            None => inner_fn,
+        };
+
+        v_head
+            .append(" {")
+            .append(line().append(inner_fn).nest(INDENT).group())
+            .append(line())
+            .append("}")
+    }
+
     fn expr_fn<'a>(
         &mut self,
         args: &'a [UntypedArg],
@@ -606,7 +608,7 @@ impl<'comments> Formatter<'comments> {
 
         let keyword = match kind {
             Some(AssignmentKind::Let) => "let ",
-            Some(AssignmentKind::Assert) => "assert ",
+            Some(AssignmentKind::Expect) => "expect ",
             None => "try ",
         };
 
@@ -637,26 +639,49 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    pub fn bytearray<'a>(&mut self, bytes: &'a [u8]) -> Document<'a> {
-        "#".to_doc()
-            .append("\"")
-            .append(Document::String(hex::encode(bytes)))
-            .append("\"")
+    pub fn bytearray<'a>(
+        &mut self,
+        bytes: &'a [u8],
+        preferred_format: &ByteArrayFormatPreference,
+    ) -> Document<'a> {
+        match preferred_format {
+            ByteArrayFormatPreference::HexadecimalString => "#"
+                .to_doc()
+                .append("\"")
+                .append(Document::String(hex::encode(bytes)))
+                .append("\""),
+            ByteArrayFormatPreference::ArrayOfBytes => "#"
+                .to_doc()
+                .append(
+                    flex_break("[", "[")
+                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .append("]"),
+                )
+                .group(),
+            ByteArrayFormatPreference::Utf8String => nil()
+                .append("\"")
+                .append(Document::String(String::from_utf8(bytes.to_vec()).unwrap()))
+                .append("\""),
+        }
     }
 
     pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
-            UntypedExpr::ByteArray { bytes, .. } => self.bytearray(bytes),
+            UntypedExpr::ByteArray {
+                bytes,
+                preferred_format,
+                ..
+            } => self.bytearray(bytes, preferred_format),
+
             UntypedExpr::If {
                 branches,
                 final_else,
                 ..
             } => self.if_expr(branches, final_else),
-            UntypedExpr::Todo { label: None, .. } => "todo".to_doc(),
-
-            UntypedExpr::Todo { label: Some(l), .. } => docvec!["todo(\"", l, "\")"],
 
             UntypedExpr::PipeLine { expressions, .. } => self.pipeline(expressions),
 
@@ -706,27 +731,8 @@ impl<'comments> Formatter<'comments> {
             } => self.assignment(pattern, value, None, Some(*kind), annotation),
 
             UntypedExpr::Trace {
-                text: None, then, ..
-            } => "trace"
-                .to_doc()
-                .append(if self.pop_empty_lines(then.start_byte_index()) {
-                    lines(2)
-                } else {
-                    line()
-                })
-                .append(self.expr(then)),
-
-            UntypedExpr::Trace {
-                text: Some(l),
-                then,
-                ..
-            } => docvec!["trace(\"", l, "\")"]
-                .append(if self.pop_empty_lines(then.start_byte_index()) {
-                    lines(2)
-                } else {
-                    line()
-                })
-                .append(self.expr(then)),
+                kind, text, then, ..
+            } => self.trace(kind, text, then),
 
             UntypedExpr::When {
                 subjects, clauses, ..
@@ -755,20 +761,59 @@ impl<'comments> Formatter<'comments> {
                     .append(suffix)
             }
 
-            UntypedExpr::ErrorTerm { label: None, .. } => "error".to_doc(),
+            UntypedExpr::ErrorTerm { .. } => "error".to_doc(),
 
-            UntypedExpr::ErrorTerm { label: Some(l), .. } => docvec!["error(\"", l, "\")"],
+            UntypedExpr::TraceIfFalse { value, .. } => self.trace_if_false(value),
         };
 
         commented(document, comments)
     }
 
     fn string<'a>(&self, string: &'a String) -> Document<'a> {
-        let doc = string.to_doc().surround("\"", "\"");
+        let doc = "@".to_doc().append(string.to_doc().surround("\"", "\""));
         if string.contains('\n') {
             doc.force_break()
         } else {
             doc
+        }
+    }
+
+    pub fn trace_if_false<'a>(&mut self, value: &'a UntypedExpr) -> Document<'a> {
+        docvec![self.wrap_unary_op(value), "?"]
+    }
+
+    pub fn trace<'a>(
+        &mut self,
+        kind: &'a TraceKind,
+        text: &'a UntypedExpr,
+        then: &'a UntypedExpr,
+    ) -> Document<'a> {
+        let (keyword, default_text) = match kind {
+            TraceKind::Trace => ("trace", None),
+            TraceKind::Error => ("error", Some(DEFAULT_ERROR_STR.to_string())),
+            TraceKind::Todo => ("todo", Some(DEFAULT_TODO_STR.to_string())),
+        };
+
+        let body = match text {
+            UntypedExpr::String { value, .. } if Some(value) == default_text.as_ref() => {
+                keyword.to_doc()
+            }
+            _ => keyword
+                .to_doc()
+                .append(" ")
+                .append(self.wrap_expr(text))
+                .group(),
+        };
+
+        match kind {
+            TraceKind::Error | TraceKind::Todo => body,
+            TraceKind::Trace => body
+                .append(if self.pop_empty_lines(then.start_byte_index()) {
+                    lines(2)
+                } else {
+                    line()
+                })
+                .append(self.expr(then)),
         }
     }
 
@@ -843,30 +888,12 @@ impl<'comments> Formatter<'comments> {
             false
         };
 
-        match args {
-            [arg] if is_breakable_expr(&arg.value) => self
-                .expr(fun)
-                .append(if needs_curly {
-                    break_(" {", " { ")
-                } else {
-                    break_("(", "(")
-                })
-                .append(self.call_arg(arg, needs_curly))
-                .append(if needs_curly {
-                    break_("}", " }")
-                } else {
-                    break_(")", ")")
-                })
-                .group(),
-
-            _ => self
-                .expr(fun)
-                .append(wrap_args(
-                    args.iter()
-                        .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
-                ))
-                .group(),
-        }
+        self.expr(fun)
+            .append(wrap_args(
+                args.iter()
+                    .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
+            ))
+            .group()
     }
 
     pub fn if_expr<'a>(
@@ -1340,7 +1367,10 @@ impl<'comments> Formatter<'comments> {
 
     fn wrap_expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Trace { .. }
+            UntypedExpr::Trace {
+                kind: TraceKind::Trace,
+                ..
+            }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => "{"
                 .to_doc()
@@ -1379,7 +1409,10 @@ impl<'comments> Formatter<'comments> {
 
     fn case_clause_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::Trace { .. }
+            UntypedExpr::Trace {
+                kind: TraceKind::Trace,
+                ..
+            }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => " {"
                 .to_doc()
@@ -1453,8 +1486,6 @@ impl<'comments> Formatter<'comments> {
         let comments = self.pop_comments(pattern.location().start);
         let doc = match pattern {
             Pattern::Int { value, .. } => value.to_doc(),
-
-            Pattern::String { value, .. } => self.string(value),
 
             Pattern::Var { name, .. } => name.to_doc(),
 
@@ -1562,17 +1593,17 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn constant_call_arg<'a, A, B>(&mut self, arg: &'a CallArg<Constant<A, B>>) -> Document<'a> {
-        match &arg.label {
-            None => self.const_expr(&arg.value),
-            Some(s) => s.to_doc().append(": ").append(self.const_expr(&arg.value)),
+    fn un_op<'a>(&mut self, value: &'a UntypedExpr, op: &'a UnOp) -> Document<'a> {
+        match op {
+            UnOp::Not => docvec!["!", self.wrap_unary_op(value)],
+            UnOp::Negate => docvec!["-", self.wrap_unary_op(value)],
         }
     }
 
-    fn un_op<'a>(&mut self, value: &'a UntypedExpr, op: &'a UnOp) -> Document<'a> {
-        match op {
-            UnOp::Not => docvec!["!", self.wrap_expr(value)],
-            UnOp::Negate => docvec!["-", self.wrap_expr(value)],
+    fn wrap_unary_op<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
+        match expr {
+            UntypedExpr::BinOp { .. } => "(".to_doc().append(self.expr(expr)).append(")"),
+            _ => self.wrap_expr(expr),
         }
     }
 }

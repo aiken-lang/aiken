@@ -22,6 +22,7 @@ pub const VOID: &str = "Void";
 pub const RESULT: &str = "Result";
 pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
+pub const ORDERING: &str = "Ordering";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -114,6 +115,72 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             location: Span::empty(),
             parameters: vec![],
             tipo: bool(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // Ordering
+    prelude.types_constructors.insert(
+        ORDERING.to_string(),
+        vec![
+            "Less".to_string(),
+            "Equal".to_string(),
+            "Greater".to_string(),
+        ],
+    );
+
+    prelude.values.insert(
+        "Less".to_string(),
+        ValueConstructor::public(
+            ordering(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Less".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 3,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        "Equal".to_string(),
+        ValueConstructor::public(
+            ordering(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Equal".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 3,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        "Greater".to_string(),
+        ValueConstructor::public(
+            ordering(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Greater".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 3,
+            },
+        ),
+    );
+
+    prelude.types.insert(
+        ORDERING.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![],
+            tipo: ordering(),
             module: "".to_string(),
             public: true,
         },
@@ -511,18 +578,66 @@ pub fn from_default_function(
 
             Some((tipo, 1))
         }
-        // Anything below has a direct syntax equivalent in Aiken, so
-        // there's no need to support builtin for those.
-        DefaultFunction::ChooseData => None,
-        DefaultFunction::MkPairData => None,
-        DefaultFunction::MkNilData => None,
-        DefaultFunction::MkNilPairData => None,
-        DefaultFunction::ChooseUnit => None,
-        DefaultFunction::Trace => None,
-        DefaultFunction::FstPair => None,
-        DefaultFunction::SndPair => None,
-        DefaultFunction::ChooseList => None,
-        DefaultFunction::MkCons => None,
+        DefaultFunction::ChooseData => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(
+                vec![
+                    data(),
+                    a.clone(),
+                    a.clone(),
+                    a.clone(),
+                    a.clone(),
+                    a.clone(),
+                ],
+                a,
+            );
+            Some((tipo, 6))
+        }
+        DefaultFunction::MkPairData => {
+            let tipo = function(vec![data(), data()], tuple(vec![data(), data()]));
+            Some((tipo, 2))
+        }
+        DefaultFunction::MkNilData => {
+            let tipo = function(vec![], list(data()));
+            Some((tipo, 0))
+        }
+        DefaultFunction::MkNilPairData => {
+            let tipo = function(vec![], list(tuple(vec![data(), data()])));
+            Some((tipo, 0))
+        }
+        DefaultFunction::ChooseUnit => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(vec![data(), a.clone()], a);
+            Some((tipo, 2))
+        }
+        DefaultFunction::Trace => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(vec![string(), a.clone()], a);
+            Some((tipo, 2))
+        }
+        DefaultFunction::FstPair => {
+            let a = generic_var(id_gen.next());
+            let b = generic_var(id_gen.next());
+            let tipo = function(vec![tuple(vec![a.clone(), b])], a);
+            Some((tipo, 1))
+        }
+        DefaultFunction::SndPair => {
+            let a = generic_var(id_gen.next());
+            let b = generic_var(id_gen.next());
+            let tipo = function(vec![tuple(vec![a, b.clone()])], b);
+            Some((tipo, 1))
+        }
+        DefaultFunction::ChooseList => {
+            let a = generic_var(id_gen.next());
+            let b = generic_var(id_gen.next());
+            let tipo = function(vec![list(a), b.clone(), b.clone()], b);
+            Some((tipo, 3))
+        }
+        DefaultFunction::MkCons => {
+            let a = generic_var(id_gen.next());
+            let tipo = function(vec![a.clone(), list(a.clone())], list(a));
+            Some((tipo, 2))
+        }
     };
 
     info.map(|(tipo, arity)| {
@@ -810,6 +925,16 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
 pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDataType> {
     let mut data_types = IndexMap::new();
 
+    // Ordering
+    let ordering_data_type = TypedDataType::ordering();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "Ordering".to_string(),
+        },
+        ordering_data_type,
+    );
+
     // Option
     let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
     data_types.insert(
@@ -905,6 +1030,15 @@ pub fn option(a: Arc<Type>) -> Arc<Type> {
         name: OPTION.to_string(),
         module: "".to_string(),
         args: vec![a],
+    })
+}
+
+pub fn ordering() -> Arc<Type> {
+    Arc::new(Type::App {
+        public: true,
+        name: ORDERING.to_string(),
+        module: "".to_string(),
+        args: vec![],
     })
 }
 

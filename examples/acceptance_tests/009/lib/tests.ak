@@ -5,5 +5,5 @@ pub fn is_empty(bytes: ByteArray) -> Bool {
 }
 
 test is_empty_1() {
-  is_empty(#[]) == True
+  is_empty(#"") == True
 }

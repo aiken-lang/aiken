@@ -1,5 +1,4 @@
 use crate::with_project;
-use aiken_lang::VALIDATOR_NAMES;
 use aiken_project::error::Error;
 use miette::IntoDiagnostic;
 use std::{fs, path::PathBuf};
@@ -17,11 +16,11 @@ pub struct Args {
 
     /// Name of the validator's module within the project. Optional if there's only one validator.
     #[clap(short, long)]
-    validator: Option<String>,
+    module: Option<String>,
 
-    /// Purpose of the validator within the module. Optional if there's only one validator.
-    #[clap(short, long, possible_values=&VALIDATOR_NAMES)]
-    purpose: Option<String>,
+    /// Name of the validator within the module. Optional if there's only one validator.
+    #[clap(short, long)]
+    validator: Option<String>,
 
     /// The parameter, using high-level UPLC-syntax
     parameter: String,
@@ -30,8 +29,8 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
+        module,
         validator,
-        purpose,
         parameter,
     }: Args,
 ) -> miette::Result<()> {
@@ -41,19 +40,28 @@ pub fn exec(
         .into_diagnostic()?;
 
     with_project(directory, |p| {
-        let blueprint = p.apply_parameter(
-            validator.as_ref(),
-            purpose
-                .as_ref()
-                .map(|p| p.clone().try_into().unwrap())
-                .as_ref(),
-            &term,
-        )?;
+        let title = module.as_ref().map(|m| {
+            format!(
+                "{m}{}",
+                validator
+                    .as_ref()
+                    .map(|v| format!(".{v}"))
+                    .unwrap_or_default()
+            )
+        });
+
+        let title = title.as_ref().or(validator.as_ref());
+
+        let blueprint = p.apply_parameter(title, &term)?;
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
-        fs::write(p.blueprint_path(), json).map_err(|error| Error::FileIo {
-            error,
-            path: p.blueprint_path(),
+
+        fs::write(p.blueprint_path(), json).map_err(|error| {
+            Error::FileIo {
+                error,
+                path: p.blueprint_path(),
+            }
+            .into()
         })
     })
 }

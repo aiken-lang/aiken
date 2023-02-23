@@ -8,6 +8,7 @@ pub enum Token {
     UpName { name: String },
     DiscardName { name: String },
     Int { value: String },
+    ByteString { value: String },
     String { value: String },
     // Groupings
     NewLineLeftParen, // ↳(
@@ -39,8 +40,9 @@ pub enum Token {
     // Other Punctuation
     Colon,
     Comma,
-    Hash, // '#'
-    Bang, // '!'
+    Hash,     // '#'
+    Bang,     // '!'
+    Question, // '?'
     Equal,
     EqualEqual, // '=='
     NotEqual,   // '!='
@@ -60,11 +62,12 @@ pub enum Token {
     NewLine,
     // Keywords (alphabetically):
     As,
-    Assert,
     Const,
     Fn,
     If,
     Else,
+    ErrorTerm,
+    Expect,
     Is,
     Let,
     Opaque,
@@ -75,7 +78,7 @@ pub enum Token {
     Type,
     When,
     Trace,
-    ErrorTerm,
+    Validator,
 }
 
 impl fmt::Display for Token {
@@ -95,6 +98,7 @@ impl fmt::Display for Token {
             Token::DiscardName { name } => name,
             Token::Int { value } => value,
             Token::String { value } => value,
+            Token::ByteString { value } => value,
             Token::NewLineLeftParen => "↳(",
             Token::LeftParen => "(",
             Token::RightParen => ")",
@@ -124,6 +128,7 @@ impl fmt::Display for Token {
             Token::Hash => "#",
             Token::Bang => "!",
             Token::Equal => "=",
+            Token::Question => "?",
             Token::EqualEqual => "==",
             Token::NotEqual => "!=",
             Token::Vbar => "|",
@@ -140,7 +145,7 @@ impl fmt::Display for Token {
             Token::EmptyLine => "EMPTYLINE",
             Token::NewLine => "NEWLINE",
             Token::As => "as",
-            Token::Assert => "assert",
+            Token::Expect => "expect",
             Token::When => "when",
             Token::Is => "is",
             Token::Const => "const",
@@ -156,6 +161,7 @@ impl fmt::Display for Token {
             Token::Type => "type",
             Token::Test => "test",
             Token::ErrorTerm => "error",
+            Token::Validator => "validator",
         };
         write!(f, "\"{s}\"")
     }

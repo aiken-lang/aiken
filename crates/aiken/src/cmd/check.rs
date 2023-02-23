@@ -24,6 +24,10 @@ pub struct Args {
     /// It forces test names to match exactly
     #[clap(short, long)]
     exact_match: bool,
+
+    /// Remove traces when generating code (including tests)
+    #[clap(long)]
+    no_traces: bool,
 }
 
 pub fn exec(
@@ -33,9 +37,16 @@ pub fn exec(
         debug,
         match_tests,
         exact_match,
+        no_traces,
     }: Args,
 ) -> miette::Result<()> {
     crate::with_project(directory, |p| {
-        p.check(skip_tests, match_tests.clone(), debug, exact_match)
+        p.check(
+            skip_tests,
+            match_tests.clone(),
+            debug,
+            exact_match,
+            (!no_traces).into(),
+        )
     })
 }

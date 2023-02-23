@@ -4,12 +4,15 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{apply_wrap, delayed_choose_list, if_else},
+        builder::{apply_wrap, delayed_choose_list, delayed_if_else, if_else},
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
-    machine::runtime::convert_constr_to_tag,
-    BigInt, Constr, KeyValuePairs, PlutusData,
+    machine::{
+        runtime::{convert_constr_to_tag, ANY_TAG},
+        to_pallas_bigint,
+    },
+    Constr, KeyValuePairs, PlutusData,
 };
 
 use crate::{
@@ -28,6 +31,7 @@ pub struct FuncComponents {
     pub dependencies: Vec<FunctionAccessKey>,
     pub args: Vec<String>,
     pub recursive: bool,
+    pub defined_by_zero_arg: bool,
 }
 
 #[derive(Clone, Eq, Debug, PartialEq, Hash)]
@@ -64,6 +68,7 @@ pub enum ClauseProperties {
         needs_constr_var: bool,
         is_complex_clause: bool,
         original_subject_name: String,
+        final_clause: bool,
     },
     ListClause {
         clause_var_name: String,
@@ -71,6 +76,7 @@ pub enum ClauseProperties {
         is_complex_clause: bool,
         original_subject_name: String,
         current_index: i64,
+        final_clause: bool,
     },
     TupleClause {
         clause_var_name: String,
@@ -78,6 +84,7 @@ pub enum ClauseProperties {
         is_complex_clause: bool,
         original_subject_name: String,
         defined_tuple_indices: IndexSet<(usize, String)>,
+        final_clause: bool,
     },
 }
 
@@ -90,6 +97,7 @@ impl ClauseProperties {
                 is_complex_clause: false,
                 original_subject_name: subject_name,
                 current_index: -1,
+                final_clause: false,
             }
         } else if t.is_tuple() {
             ClauseProperties::TupleClause {
@@ -98,6 +106,7 @@ impl ClauseProperties {
                 is_complex_clause: false,
                 original_subject_name: subject_name,
                 defined_tuple_indices: IndexSet::new(),
+                final_clause: false,
             }
         } else {
             ClauseProperties::ConstrClause {
@@ -105,6 +114,7 @@ impl ClauseProperties {
                 needs_constr_var: false,
                 is_complex_clause: false,
                 original_subject_name: subject_name,
+                final_clause: false,
             }
         }
     }
@@ -133,6 +143,14 @@ impl ClauseProperties {
             | ClauseProperties::TupleClause {
                 needs_constr_var, ..
             } => needs_constr_var,
+        }
+    }
+
+    pub fn is_final_clause(&mut self) -> &mut bool {
+        match self {
+            ClauseProperties::ConstrClause { final_clause, .. }
+            | ClauseProperties::ListClause { final_clause, .. }
+            | ClauseProperties::TupleClause { final_clause, .. } => final_clause,
         }
     }
 
@@ -173,6 +191,21 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(DefaultFunction::BData.into(), term)
     } else if field_type.is_int() {
         apply_wrap(DefaultFunction::IData.into(), term)
+    } else if field_type.is_void() {
+        apply_wrap(
+            apply_wrap(
+                Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(),
+                term,
+            ),
+            Term::Constant(
+                UplcConstant::Data(PlutusData::Constr(Constr {
+                    tag: convert_constr_to_tag(0).unwrap(),
+                    any_constructor: None,
+                    fields: vec![],
+                }))
+                .into(),
+            ),
+        )
     } else if field_type.is_map() {
         apply_wrap(DefaultFunction::MapData.into(), term)
     } else if field_type.is_string() {
@@ -237,7 +270,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
             term,
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(1),
+                    tag: convert_constr_to_tag(1).unwrap(),
                     any_constructor: None,
                     fields: vec![],
                 }))
@@ -245,7 +278,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
             ),
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(0),
+                    tag: convert_constr_to_tag(0).unwrap(),
                     any_constructor: None,
                     fields: vec![],
                 }))
@@ -262,6 +295,23 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(DefaultFunction::UnIData.into(), term)
     } else if field_type.is_bytearray() {
         apply_wrap(DefaultFunction::UnBData.into(), term)
+    } else if field_type.is_void() {
+        delayed_if_else(
+            apply_wrap(
+                apply_wrap(
+                    DefaultFunction::EqualsInteger.into(),
+                    Term::Constant(UplcConstant::Integer(0.into()).into()),
+                ),
+                apply_wrap(
+                    Term::Builtin(DefaultFunction::FstPair)
+                        .force_wrap()
+                        .force_wrap(),
+                    apply_wrap(DefaultFunction::UnConstrData.into(), term),
+                ),
+            ),
+            Term::Constant(UplcConstant::Unit.into()),
+            Term::Error,
+        )
     } else if field_type.is_map() {
         apply_wrap(DefaultFunction::UnMapData.into(), term)
     } else if field_type.is_string() {
@@ -332,7 +382,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(
             apply_wrap(
                 DefaultFunction::EqualsInteger.into(),
-                Term::Constant(UplcConstant::Integer(1).into()),
+                Term::Constant(UplcConstant::Integer(1.into()).into()),
             ),
             apply_wrap(
                 Term::Builtin(DefaultFunction::FstPair)
@@ -347,8 +397,8 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
 }
 
 pub fn rearrange_clauses(
-    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>>,
-) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>, String>> {
+    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>>>,
+) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>>> {
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
@@ -383,11 +433,22 @@ pub fn rearrange_clauses(
             sorted_clauses[sorted_clauses.len() - 1].clone().then
         }
         Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
-        _ => TypedExpr::ErrorTerm {
-            location: Span::empty(),
-            tipo: sorted_clauses[sorted_clauses.len() - 1].then.tipo(),
-            label: Some("Clause not filled".to_string()),
-        },
+        _ => {
+            let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
+            TypedExpr::Trace {
+                location: Span::empty(),
+                tipo: tipo.clone(),
+                text: Box::new(TypedExpr::String {
+                    location: Span::empty(),
+                    tipo: crate::builtins::string(),
+                    value: "Clause not filled".to_string(),
+                }),
+                then: Box::new(TypedExpr::ErrorTerm {
+                    location: Span::empty(),
+                    tipo,
+                }),
+            }
+        }
     };
 
     for (index, clause) in sorted_clauses.iter().enumerate() {
@@ -502,6 +563,7 @@ pub fn rearrange_clauses(
     final_clauses
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn list_access_to_uplc(
     names: &[String],
     id_list: &[u64],
@@ -510,11 +572,14 @@ pub fn list_access_to_uplc(
     term: Term<Name>,
     tipos: Vec<Arc<Type>>,
     check_last_item: bool,
+    is_list_accessor: bool,
 ) -> Term<Name> {
     if let Some((first, names)) = names.split_first() {
         let (current_tipo, tipos) = tipos.split_first().unwrap();
 
-        let head_list = if current_tipo.is_map() {
+        let head_list = if matches!(current_tipo.get_uplc_type(), UplcType::Pair(_, _))
+            && is_list_accessor
+        {
             apply_wrap(
                 Term::Builtin(DefaultFunction::HeadList).force_wrap(),
                 Term::Var(
@@ -545,28 +610,125 @@ pub fn list_access_to_uplc(
         };
 
         if names.len() == 1 && tail {
-            Term::Lambda {
-                parameter_name: Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
+            if first == "_" && names[0] == "_" {
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: "_".to_string(),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: term.into(),
                 }
-                .into(),
-                body: apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: first.clone(),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                        body: apply_wrap(
-                            Term::Lambda {
-                                parameter_name: Name {
-                                    text: names[0].clone(),
+            } else if first == "_" {
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: apply_wrap(
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: names[0].clone(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: term.into(),
+                        },
+                        apply_wrap(
+                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Var(
+                                Name {
+                                    text: format!(
+                                        "tail_index_{}_{}",
+                                        current_index, id_list[current_index]
+                                    ),
                                     unique: 0.into(),
                                 }
                                 .into(),
-                                body: term.into(),
-                            },
+                            ),
+                        ),
+                    )
+                    .into(),
+                }
+            } else if names[0] == "_" {
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: apply_wrap(
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: first.clone(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: term.into(),
+                        },
+                        head_list,
+                    )
+                    .into(),
+                }
+            } else {
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: apply_wrap(
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: first.clone(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: apply_wrap(
+                                Term::Lambda {
+                                    parameter_name: Name {
+                                        text: names[0].clone(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                    body: term.into(),
+                                },
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Var(
+                                        Name {
+                                            text: format!(
+                                                "tail_index_{}_{}",
+                                                current_index, id_list[current_index]
+                                            ),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
+                                ),
+                            )
+                            .into(),
+                        },
+                        head_list,
+                    )
+                    .into(),
+                }
+            }
+        } else if names.is_empty() {
+            if first == "_" {
+                Term::Lambda {
+                    parameter_name: Name {
+                        text: if check_last_item {
+                            format!("tail_index_{}_{}", current_index, id_list[current_index])
+                        } else {
+                            "_".to_string()
+                        },
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: if check_last_item {
+                        delayed_choose_list(
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::TailList).force_wrap(),
                                 Term::Var(
@@ -580,15 +742,29 @@ pub fn list_access_to_uplc(
                                     .into(),
                                 ),
                             ),
+                            term,
+                            apply_wrap(
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                                    Term::Constant(
+                                        UplcConstant::String(
+                                            "List/Tuple/Constr contains more items than expected"
+                                                .to_string(),
+                                        )
+                                        .into(),
+                                    ),
+                                ),
+                                Term::Delay(Term::Error.into()),
+                            )
+                            .force_wrap(),
                         )
-                        .into(),
+                        .into()
+                    } else {
+                        term.into()
                     },
-                    head_list,
-                )
-                .into(),
-            }
-        } else if names.is_empty() {
-            Term::Lambda {
+                }
+            } else {
+                Term::Lambda {
                 parameter_name: Name {
                     text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
                     unique: 0.into(),
@@ -622,7 +798,7 @@ pub fn list_access_to_uplc(
                                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
                                         Term::Constant(
                                             UplcConstant::String(
-                                                "List/Tuple contains more items than it should"
+                                                "List/Tuple/Constr contains more items than it expected"
                                                     .to_string(),
                                             )
                                             .into(),
@@ -641,50 +817,172 @@ pub fn list_access_to_uplc(
                 )
                 .into(),
             }
-        } else {
-            Term::Lambda {
-                parameter_name: Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
-                }
-                .into(),
-                body: apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: first.clone(),
-                            unique: 0.into(),
+            }
+        } else if first == "_" {
+            let mut list_access_inner = list_access_to_uplc(
+                names,
+                id_list,
+                tail,
+                current_index + 1,
+                term,
+                tipos.to_owned(),
+                check_last_item,
+                is_list_accessor,
+            );
+
+            list_access_inner = match &list_access_inner {
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    if &parameter_name.text == "_" {
+                        body.as_ref().clone()
+                    } else {
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
+                                ),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: apply_wrap(
+                                list_access_inner,
+                                apply_wrap(
+                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Var(
+                                        Name {
+                                            text: format!(
+                                                "tail_index_{}_{}",
+                                                current_index, id_list[current_index]
+                                            ),
+                                            unique: 0.into(),
+                                        }
+                                        .into(),
+                                    ),
+                                ),
+                            )
+                            .into(),
                         }
-                        .into(),
-                        body: apply_wrap(
-                            list_access_to_uplc(
-                                names,
-                                id_list,
-                                tail,
-                                current_index + 1,
-                                term,
-                                tipos.to_owned(),
-                                check_last_item,
-                            ),
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                                Term::Var(
-                                    Name {
-                                        text: format!(
-                                            "tail_index_{}_{}",
-                                            current_index, id_list[current_index]
-                                        ),
+                    }
+                }
+                _ => list_access_inner,
+            };
+
+            match &list_access_inner {
+                Term::Lambda { .. } => list_access_inner,
+                _ => Term::Lambda {
+                    parameter_name: Name {
+                        text: "_".to_string(),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: list_access_inner.into(),
+                },
+            }
+        } else {
+            let mut list_access_inner = list_access_to_uplc(
+                names,
+                id_list,
+                tail,
+                current_index + 1,
+                term,
+                tipos.to_owned(),
+                check_last_item,
+                is_list_accessor,
+            );
+
+            list_access_inner = match &list_access_inner {
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    if &parameter_name.text == "_" {
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
+                                ),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: apply_wrap(
+                                Term::Lambda {
+                                    parameter_name: Name {
+                                        text: first.clone(),
                                         unique: 0.into(),
                                     }
                                     .into(),
+                                    body: body.as_ref().clone().into(),
+                                },
+                                head_list,
+                            )
+                            .into(),
+                        }
+                    } else {
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: format!(
+                                    "tail_index_{}_{}",
+                                    current_index, id_list[current_index]
                                 ),
-                            ),
-                        )
-                        .into(),
-                    },
-                    head_list,
-                )
-                .into(),
-            }
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: apply_wrap(
+                                Term::Lambda {
+                                    parameter_name: Name {
+                                        text: first.clone(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                    body: apply_wrap(
+                                        list_access_inner,
+                                        apply_wrap(
+                                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                            Term::Var(
+                                                Name {
+                                                    text: format!(
+                                                        "tail_index_{}_{}",
+                                                        current_index, id_list[current_index]
+                                                    ),
+                                                    unique: 0.into(),
+                                                }
+                                                .into(),
+                                            ),
+                                        ),
+                                    )
+                                    .into(),
+                                },
+                                head_list,
+                            )
+                            .into(),
+                        }
+                    }
+                }
+                _ => Term::Lambda {
+                    parameter_name: Name {
+                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                    body: apply_wrap(
+                        Term::Lambda {
+                            parameter_name: Name {
+                                text: first.clone(),
+                                unique: 0.into(),
+                            }
+                            .into(),
+                            body: list_access_inner.into(),
+                        },
+                        head_list,
+                    )
+                    .into(),
+                },
+            };
+            list_access_inner
         }
     } else {
         term
@@ -757,16 +1055,18 @@ pub fn check_when_pattern_needs(
                 check_when_pattern_needs(&argument.value, clause_properties);
             }
         }
-        Pattern::Discard { .. } => {}
-        _ => todo!("{pattern:#?}"),
+        Pattern::Discard { .. } => {
+            *clause_properties.needs_constr_var() = true;
+        }
+        Pattern::Assign { pattern, .. } => {
+            *clause_properties.needs_constr_var() = true;
+
+            check_when_pattern_needs(pattern, clause_properties)
+        }
     }
 }
 
-pub fn constants_ir(
-    literal: &Constant<Arc<Type>, String>,
-    ir_stack: &mut Vec<Air>,
-    scope: Vec<u64>,
-) {
+pub fn constants_ir(literal: &Constant, ir_stack: &mut Vec<Air>, scope: Vec<u64>) {
     match literal {
         Constant::Int { value, .. } => {
             ir_stack.push(Air::Int {
@@ -780,32 +1080,12 @@ pub fn constants_ir(
                 value: value.clone(),
             });
         }
-        Constant::Tuple { .. } => {
-            todo!()
-        }
-        Constant::List { elements, tipo, .. } => {
-            ir_stack.push(Air::List {
-                scope: scope.clone(),
-                count: elements.len(),
-                tipo: tipo.clone(),
-                tail: false,
-            });
-
-            for element in elements {
-                constants_ir(element, ir_stack, scope.clone());
-            }
-        }
-        Constant::Record { .. } => {
-            // ir_stack.push(Air::Record { scope,  });
-            todo!()
-        }
         Constant::ByteArray { bytes, .. } => {
             ir_stack.push(Air::ByteArray {
                 scope,
                 bytes: bytes.clone(),
             });
         }
-        Constant::Var { .. } => todo!(),
     };
 }
 
@@ -991,9 +1271,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
     let mut new_constants = vec![];
     for constant in constants {
         let constant = match constant.as_ref() {
-            UplcConstant::Integer(i) => {
-                UplcConstant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
-            }
+            UplcConstant::Integer(i) => UplcConstant::Data(PlutusData::BigInt(to_pallas_bigint(i))),
             UplcConstant::ByteString(b) => {
                 UplcConstant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
             }
@@ -1002,8 +1280,9 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
             )),
 
             UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag((*b).into()),
-                any_constructor: None,
+                tag: convert_constr_to_tag((*b).into()).unwrap_or(ANY_TAG),
+                any_constructor: convert_constr_to_tag((*b).into())
+                    .map_or(Some((*b).into()), |_| None),
                 fields: vec![],
             })),
             UplcConstant::ProtoList(_, constants) => {
@@ -1034,7 +1313,11 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                 )])))
             }
             d @ UplcConstant::Data(_) => d.clone(),
-            _ => unreachable!(),
+            UplcConstant::Unit => UplcConstant::Data(PlutusData::Constr(Constr {
+                tag: convert_constr_to_tag(0).unwrap(),
+                any_constructor: None,
+                fields: vec![],
+            })),
         };
         new_constants.push(constant);
     }
@@ -1375,30 +1658,21 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::Todo { scope, label, tipo } => {
+            Air::ErrorTerm { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::Todo { scope, tipo, label };
+                    new_air[index] = Air::ErrorTerm { scope, tipo };
                     needs_variant = true;
                 }
             }
-            Air::ErrorTerm { scope, label, tipo } => {
+            Air::Trace { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::ErrorTerm { scope, tipo, label };
-                    needs_variant = true;
-                }
-            }
-            Air::Trace { scope, text, tipo } => {
-                if tipo.is_generic() {
-                    let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
-
-                    new_air[index] = Air::Trace { scope, tipo, text };
+                    new_air[index] = Air::Trace { scope, tipo };
                     needs_variant = true;
                 }
             }
@@ -1571,8 +1845,7 @@ pub fn handle_func_dependencies_ir(
     dependency_vec.reverse();
 
     while let Some(dependency) = dependency_vec.pop() {
-        if (defined_functions.contains_key(&dependency) && !funt_comp.args.is_empty())
-            || func_components.get(&dependency).is_none()
+        if defined_functions.contains_key(&dependency) || func_components.get(&dependency).is_none()
         {
             continue;
         }
@@ -1583,31 +1856,27 @@ pub fn handle_func_dependencies_ir(
         if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec()
             || funt_comp.args.is_empty()
         {
-            // we handle zero arg functions and their dependencies in a unique way
-            if !depend_comp.args.is_empty() {
-                let mut recursion_ir = vec![];
-                handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
+            let mut recursion_ir = vec![];
+            handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
 
-                let mut temp_ir = vec![Air::DefineFunc {
-                    scope: func_scope.to_vec(),
-                    func_name: dependency.function_name.clone(),
-                    module_name: dependency.module_name.clone(),
-                    params: depend_comp.args.clone(),
-                    recursive: depend_comp.recursive,
-                    variant_name: dependency.variant_name.clone(),
-                }];
+            let mut temp_ir = vec![Air::DefineFunc {
+                scope: func_scope.to_vec(),
+                func_name: dependency.function_name.clone(),
+                module_name: dependency.module_name.clone(),
+                params: depend_comp.args.clone(),
+                recursive: depend_comp.recursive,
+                variant_name: dependency.variant_name.clone(),
+            }];
 
-                temp_ir.append(&mut recursion_ir);
+            temp_ir.append(&mut recursion_ir);
 
-                temp_ir.append(dependencies_ir);
+            temp_ir.append(dependencies_ir);
 
-                *dependencies_ir = temp_ir;
-                if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
-                    defined_functions.insert(dependency, ());
-                }
+            *dependencies_ir = temp_ir;
+            if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
+                defined_functions.insert(dependency, ());
             }
-        } else {
-            // Dependency will need to be defined somewhere in the main body
+        } else if depend_comp.args.is_empty() {
             to_be_defined.insert(dependency, ());
         }
     }
@@ -1779,7 +2048,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
 }
 
 pub fn handle_clause_guard(
-    clause_guard: &ClauseGuard<Arc<Type>, String>,
+    clause_guard: &ClauseGuard<Arc<Type>>,
     clause_guard_vec: &mut Vec<Air>,
     scope: Vec<u64>,
 ) {

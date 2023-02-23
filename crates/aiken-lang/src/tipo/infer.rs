@@ -3,12 +3,11 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         DataType, Definition, Function, Layer, ModuleConstant, ModuleKind, RecordConstructor,
-        RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedModule, UntypedDefinition,
-        UntypedModule, Use,
+        RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition, TypedModule,
+        UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
     builtins::function,
-    parser::token::Token,
     IdGenerator,
 };
 
@@ -20,6 +19,8 @@ use super::{
     TypeInfo, ValueConstructor, ValueConstructorVariant,
 };
 
+const PUB_OFFSET: usize = 3;
+
 impl UntypedModule {
     pub fn infer(
         mut self,
@@ -27,13 +28,12 @@ impl UntypedModule {
         kind: ModuleKind,
         package: &str,
         modules: &HashMap<String, TypeInfo>,
+        tracing: Tracing,
         warnings: &mut Vec<Warning>,
     ) -> Result<TypedModule, Error> {
         let name = self.name.clone();
         let docs = std::mem::take(&mut self.docs);
         let mut environment = Environment::new(id_gen.clone(), &name, modules, warnings);
-
-        validate_module_name(&name)?;
 
         let mut type_names = HashMap::with_capacity(self.definitions.len());
         let mut value_names = HashMap::with_capacity(self.definitions.len());
@@ -70,6 +70,8 @@ impl UntypedModule {
         for def in self.definitions().cloned() {
             match def {
                 Definition::ModuleConstant { .. } => consts.push(def),
+                Definition::Validator { .. } if kind.is_validator() => not_consts.push(def),
+                Definition::Validator { .. } => (),
                 Definition::Fn { .. }
                 | Definition::Test { .. }
                 | Definition::TypeAlias { .. }
@@ -79,7 +81,8 @@ impl UntypedModule {
         }
 
         for def in consts.into_iter().chain(not_consts) {
-            let definition = infer_definition(def, &name, &mut hydrators, &mut environment, kind)?;
+            let definition =
+                infer_definition(def, &name, &mut hydrators, &mut environment, tracing, kind)?;
             definitions.push(definition);
         }
 
@@ -144,6 +147,7 @@ fn infer_definition(
     module_name: &String,
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
+    tracing: Tracing,
     kind: ModuleKind,
 ) -> Result<TypedDefinition, Error> {
     match def {
@@ -162,7 +166,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -188,7 +192,7 @@ fn infer_definition(
                         .map(|(arg_name, tipo)| arg_name.set_type(tipo.clone()))
                         .collect();
 
-                    let mut expr_typer = ExprTyper::new(environment);
+                    let mut expr_typer = ExprTyper::new(environment, tracing);
 
                     expr_typer.hydrator = hydrators
                         .remove(&name)
@@ -246,14 +250,67 @@ fn infer_definition(
             }))
         }
 
+        Definition::Validator(Validator {
+            doc,
+            location,
+            end_position,
+            mut fun,
+            mut params,
+        }) => {
+            let params_length = params.len();
+            params.append(&mut fun.arguments);
+            fun.arguments = params;
+
+            if let Definition::Fn(mut typed_fun) = infer_definition(
+                Definition::Fn(fun),
+                module_name,
+                hydrators,
+                environment,
+                tracing,
+                kind,
+            )? {
+                if !typed_fun.return_type.is_bool() {
+                    return Err(Error::ValidatorMustReturnBool {
+                        return_type: typed_fun.return_type.clone(),
+                        location: typed_fun.location,
+                    });
+                }
+
+                let typed_params = typed_fun.arguments.drain(0..params_length).collect();
+
+                if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
+                    return Err(Error::IncorrectValidatorArity {
+                        count: typed_fun.arguments.len() as u32,
+                        location: typed_fun.location,
+                    });
+                }
+
+                Ok(Definition::Validator(Validator {
+                    doc,
+                    end_position,
+                    fun: typed_fun,
+                    location,
+                    params: typed_params,
+                }))
+            } else {
+                unreachable!("validator definition inferred as something other than a function?")
+            }
+        }
+
         Definition::Test(f) => {
-            if let Definition::Fn(f) =
-                infer_definition(Definition::Fn(f), module_name, hydrators, environment, kind)?
-            {
+            if let Definition::Fn(f) = infer_definition(
+                Definition::Fn(f),
+                module_name,
+                hydrators,
+                environment,
+                tracing,
+                kind,
+            )? {
                 environment.unify(f.return_type.clone(), builtins::bool(), f.location, false)?;
+
                 Ok(Definition::Test(f))
             } else {
-                unreachable!("test defintion inferred as something else than a function?")
+                unreachable!("test definition inferred as something other than a function?")
             }
         }
 
@@ -270,7 +327,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -306,7 +363,7 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
@@ -449,12 +506,13 @@ fn infer_definition(
                 environment.warnings.push(Warning::PubInValidatorModule {
                     location: Span {
                         start: location.start,
-                        end: location.start + 3,
+                        end: location.start + PUB_OFFSET,
                     },
                 })
             }
 
-            let typed_expr = ExprTyper::new(environment).infer_const(&annotation, *value)?;
+            let typed_expr =
+                ExprTyper::new(environment, tracing).infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
 
@@ -486,46 +544,5 @@ fn infer_definition(
                 tipo,
             }))
         }
-    }
-}
-
-fn validate_module_name(name: &str) -> Result<(), Error> {
-    if name == "aiken" || name == "aiken/builtin" {
-        return Err(Error::ReservedModuleName {
-            name: name.to_string(),
-        });
-    };
-
-    for segment in name.split('/') {
-        if str_to_keyword(segment).is_some() {
-            return Err(Error::KeywordInModuleName {
-                name: name.to_string(),
-                keyword: segment.to_string(),
-            });
-        }
-    }
-
-    Ok(())
-}
-
-fn str_to_keyword(word: &str) -> Option<Token> {
-    // Alphabetical keywords:
-    match word {
-        "as" => Some(Token::As),
-        "assert" => Some(Token::Assert),
-        "when" => Some(Token::When),
-        "const" => Some(Token::Const),
-        "fn" => Some(Token::Fn),
-        "if" => Some(Token::If),
-        "use" => Some(Token::Use),
-        "let" => Some(Token::Let),
-        "opaque" => Some(Token::Opaque),
-        "pub" => Some(Token::Pub),
-        "todo" => Some(Token::Todo),
-        "type" => Some(Token::Type),
-        "trace" => Some(Token::Trace),
-        "test" => Some(Token::Test),
-        "error" => Some(Token::ErrorTerm),
-        _ => None,
     }
 }

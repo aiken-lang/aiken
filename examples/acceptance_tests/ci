@@ -1,5 +1,22 @@
-for scenario in $(find . -maxdepth 1 -mindepth 1 -type d)
-do
-	./run $scenario
+#!/usr/bin/env bash
+
+exit_codes=()
+
+for scenario in $(find . -maxdepth 1 -mindepth 1 -regex ".*[0-9]\{3\}" -type d); do
+    ./run $scenario
+    exit_codes+=("$?")
 done
 
+for interaction in $(find script_context/validators -type f); do
+  title=$(basename $interaction)
+  title="${title%.*}"
+  cd script_context && ./test.sh $title
+  exit_codes+=("$?")
+  cd -
+done
+
+for code in ${exit_codes[@]}; do
+  if [ $code -ne 0 ]; then
+    exit $code
+  fi
+done

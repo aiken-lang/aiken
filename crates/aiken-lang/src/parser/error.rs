@@ -102,15 +102,18 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
 pub enum ErrorKind {
     #[error("I arrived at the end of the file unexpectedly.")]
     UnexpectedEnd,
+
     #[error("{0}")]
     #[diagnostic(help("{}", .0.help().unwrap_or_else(|| Box::new(""))))]
     Unexpected(Pattern),
+
     #[error("I discovered an invalid tuple index.")]
     #[diagnostic()]
     InvalidTupleIndex {
         #[help]
         hint: Option<String>,
     },
+
     #[error("I tripped over a malformed base16-encoded string literal.")]
     #[diagnostic(help("{}", formatdoc! {
         r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal) string literals.
@@ -123,6 +126,7 @@ pub enum ErrorKind {
         "#
     , "pub const".bright_blue(), "=".yellow(), "\"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50\"".bright_purple()}))]
     MalformedBase16StringLiteral,
+
     #[error("I failed to understand a when clause guard.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
     #[diagnostic(help("{}", formatdoc! {

@@ -4,6 +4,7 @@ use std::{
     rc::Rc,
 };
 
+use num_bigint::BigInt;
 use serde::{
     self,
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
@@ -228,7 +229,7 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     // tag: 0
-    Integer(i128),
+    Integer(BigInt),
     // tag: 1
     ByteString(Vec<u8>),
     // tag: 2

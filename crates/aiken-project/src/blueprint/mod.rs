@@ -7,7 +7,7 @@ use aiken_lang::uplc::CodeGenerator;
 use error::Error;
 use schema::Schema;
 use std::fmt::{self, Debug, Display};
-use validator::{Purpose, Validator};
+use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Blueprint<T: Default> {
@@ -16,13 +16,26 @@ pub struct Blueprint<T: Default> {
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preamble {
     pub title: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
     pub version: String,
+
+    pub plutus_version: PlutusVersion,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlutusVersion {
+    V1,
+    V2,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -57,16 +70,12 @@ impl<T> Blueprint<T>
 where
     T: Clone + Default,
 {
-    pub fn lookup(
-        &self,
-        title: Option<&String>,
-        purpose: Option<&Purpose>,
-    ) -> Option<LookupResult<Validator<T>>> {
+    pub fn lookup(&self, title: Option<&String>) -> Option<LookupResult<Validator<T>>> {
         let mut validator = None;
+
         for v in self.validators.iter() {
             let match_title = Some(&v.title) == title.or(Some(&v.title));
-            let match_purpose = Some(&v.purpose) == purpose.or(Some(&v.purpose));
-            if match_title && match_purpose {
+            if match_title {
                 validator = Some(if validator.is_none() {
                     LookupResult::One(v)
                 } else {
@@ -74,33 +83,27 @@ where
                 })
             }
         }
+
         validator
     }
 
     pub fn with_validator<F, A, E>(
         &self,
         title: Option<&String>,
-        purpose: Option<&Purpose>,
-        when_missing: fn(Vec<(String, Purpose)>) -> E,
-        when_too_many: fn(Vec<(String, Purpose)>) -> E,
+        when_too_many: fn(Vec<String>) -> E,
+        when_missing: fn(Vec<String>) -> E,
         action: F,
     ) -> Result<A, E>
     where
         F: Fn(Validator<T>) -> Result<A, E>,
     {
-        match self.lookup(title, purpose) {
+        match self.lookup(title) {
             Some(LookupResult::One(validator)) => action(validator.to_owned()),
             Some(LookupResult::Many) => Err(when_too_many(
-                self.validators
-                    .iter()
-                    .map(|v| (v.title.clone(), v.purpose.clone()))
-                    .collect(),
+                self.validators.iter().map(|v| v.title.clone()).collect(),
             )),
             None => Err(when_missing(
-                self.validators
-                    .iter()
-                    .map(|v| (v.title.clone(), v.purpose.clone()))
-                    .collect(),
+                self.validators.iter().map(|v| v.title.clone()).collect(),
             )),
         }
     }
@@ -122,6 +125,7 @@ impl From<&Config> for Preamble {
             } else {
                 Some(config.description.clone())
             },
+            plutus_version: PlutusVersion::V2,
             version: config.version.clone(),
             license: config.license.clone(),
         }
@@ -140,6 +144,7 @@ mod test {
                 title: "Foo".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                plutus_version: PlutusVersion::V2,
                 license: Some("Apache-2.0".to_string()),
             },
             validators: vec![],
@@ -150,6 +155,7 @@ mod test {
                 "preamble": {
                     "title": "Foo",
                     "version": "1.0.0",
+                    "plutusVersion": "v2",
                     "license": "Apache-2.0"
                 },
                 "validators": []
@@ -164,6 +170,7 @@ mod test {
                 title: "Foo".to_string(),
                 description: Some("Lorem ipsum".to_string()),
                 version: "1.0.0".to_string(),
+                plutus_version: PlutusVersion::V2,
                 license: None,
             },
             validators: vec![],
@@ -175,6 +182,7 @@ mod test {
                     "title": "Foo",
                     "description": "Lorem ipsum",
                     "version": "1.0.0",
+                    "plutusVersion": "v2"
                 },
                 "validators": []
             }),

@@ -1,6 +1,6 @@
 use super::Type;
 use crate::{
-    ast::{Annotation, BinOp, CallArg, Span, TodoKind, UntypedPattern},
+    ast::{Annotation, BinOp, CallArg, Span, UntypedPattern},
     expr::{self, UntypedExpr},
     format::Formatter,
     levenshtein,
@@ -140,13 +140,24 @@ For example:
 
     #[error("I noticed you were importing '{}' twice.\n", name.purple())]
     #[diagnostic(code("duplicate::import"))]
-    #[diagnostic(help("The best thing to do from here is to remove one of them."))]
+    #[diagnostic(help(r#"If you're trying to import two modules with identical names but from different packages, you'll need to use a named import.
+For example:
+
+╰─▶ {keyword_use} {import} {keyword_as} {named}
+
+Otherwise, just remove the redundant import."#
+        , keyword_use = "use".bright_blue()
+        , keyword_as = "as".bright_blue()
+        , import = module.iter().map(|x| x.purple().bold().to_string()).collect::<Vec<_>>().join("/".bold().to_string().as_ref())
+        , named = module.join("_")
+    ))]
     DuplicateImport {
-        #[label]
+        #[label("also imported here as '{name}'")]
         location: Span,
-        #[label]
-        previous_location: Span,
         name: String,
+        module: Vec<String>,
+        #[label("imported here as '{name}'")]
+        previous_location: Span,
     },
 
     #[error("I discovered two top-level objects referred to as '{}'.\n", name.purple())]
@@ -333,7 +344,7 @@ Perhaps, try the following:
     #[diagnostic(code("illegal::module_name"))]
     #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
 
-    as, assert, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
+    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
     KeywordInModuleName { name: String, keyword: String },
 
     #[error("I discovered a function which is ending with an assignment.\n")]
@@ -389,25 +400,37 @@ If you really meant to return that last expression, try to replace it with the f
         tipo: Arc<Type>,
     },
 
-    #[error("I realized that a given 'when/is' expression is non-exhaustive.\n")]
+    #[error("{}\n", if *is_let {
+          "I noticed a let assignment matching a value with more than one constructor.".to_string()
+      } else {
+          format!(
+              "I realized that a given '{keyword_when}/{keyword_is}' expression is non-exhaustive.",
+              keyword_is = "is".purple(),
+              keyword_when = "when".purple()
+          )
+      }
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
     #[diagnostic(code("non_exhaustive_pattern_match"))]
-    #[diagnostic(help(r#"When clauses must be exhaustive -- that is, they must cover all possible cases of the type they match. While it is recommended to have an explicit branch for each constructor, you can also use the wildcard '{discard}' as a last branch to match any remaining result.
+    #[diagnostic(help(r#"Let bindings and when clauses must be exhaustive -- that is, they must cover all possible cases of the type they match. In {keyword_when}/{keyword_is} pattern-match, it is recommended to have an explicit branch for each constructor as it prevents future silly mistakes when adding new constructors to a type. However, you can also use the wildcard '{discard}' as a last branch to match any remaining result.
 
-In this particular instance, the following cases are missing:
+In this particular instance, the following cases are unmatched:
 
 {missing}"#
         , discard = "_".yellow()
+        , keyword_is = "is".purple()
+        , keyword_when = "when".purple()
         , missing = unmatched
             .iter()
             .map(|s| format!("─▶ {s}"))
             .collect::<Vec<_>>()
-            .join("")
+            .join("\n")
     ))]
     NotExhaustivePatternMatch {
-        #[label]
+        #[label("{}", if *is_let { "use when/is" } else { "non-exhaustive" })]
         location: Span,
         unmatched: Vec<String>,
+        is_let: bool,
     },
 
     #[error("I tripped over a call attempt on something that isn't a function.\n")]
@@ -497,17 +520,6 @@ You can help me by providing a type-annotation for 'x', as such:
         #[label]
         location: Span,
     },
-
-    #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n", name.purple())]
-    #[diagnostic(code("illegal::module_name"))]
-    #[diagnostic(help(r#"Some module names are reserved for internal use. This the case of:
-
-- aiken: where the prelude is located;
-- aiken/builtin: where I store low-level Plutus builtins.
-
-Note that 'aiken' is also imported by default; but you can refer to it explicitly to disambiguate with a local value that would clash with one from that module."#
-    ))]
-    ReservedModuleName { name: String },
 
     #[error(
         "I discovered an attempt to access the {} element of a {}-tuple.\n",
@@ -733,6 +745,54 @@ The best thing to do from here is to remove it."#))]
         location: Span,
         name: String,
     },
+
+    #[error("A validator must return {}", "Bool".bright_blue().bold())]
+    #[diagnostic(code("illegal::validator_return_type"))]
+    #[diagnostic(help(r#"While analyzing the return type of your validator, I found it to be:
+
+╰─▶ {signature}
+
+...but I expected this to be a {type_Bool}. If I am inferring the wrong type, try annotating the validator's return type with Bool"#
+        , type_Bool = "Bool".bright_blue().bold()
+        , signature = return_type.to_pretty(0).red()
+    ))]
+    ValidatorMustReturnBool {
+        #[label("invalid return type")]
+        location: Span,
+        return_type: Arc<Type>,
+    },
+
+    #[error("Validators require at least 2 arguments and at most 3 arguments.")]
+    #[diagnostic(code("illegal::validator_arity"))]
+    #[diagnostic(help(
+        "Validators require either 2 or 3 arguments {}.\nIf you don't need one of the required arguments use an underscore `_datum`.",
+        if *count < 2 {
+            let missing = 2 - count;
+
+            let mut arguments = "argument".to_string();
+
+            if missing > 1 {
+                arguments.push('s');
+            }
+
+            format!("please add the {} missing {arguments}", missing.to_string().yellow())
+        } else {
+            let extra = count - 3;
+
+            let mut arguments = "argument".to_string();
+
+            if extra > 1 {
+                arguments.push('s');
+            }
+
+            format!("please remove the {} extra {arguments}", extra.to_string().yellow())
+        }
+    ))]
+    IncorrectValidatorArity {
+        count: u32,
+        #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
+        location: Span,
+    },
 }
 
 impl Error {
@@ -815,11 +875,12 @@ fn suggest_neighbor<'a>(
     items: impl Iterator<Item = &'a String>,
     default: &'a str,
 ) -> String {
+    let threshold = (name.len() as f64).sqrt().round() as usize;
     items
         .map(|s| (s, levenshtein::distance(name, s)))
         .min_by(|(_, a), (_, b)| a.cmp(b))
         .and_then(|(suggestion, distance)| {
-            if distance <= 4 {
+            if distance <= threshold {
                 Some(format!("Did you mean '{}'?", suggestion.yellow()))
             } else {
                 None
@@ -1076,11 +1137,25 @@ pub enum Warning {
         sample: UntypedExpr,
     },
 
+    #[error("I found an {} trying to match a type with one constructor", "expect".purple())]
+    #[diagnostic(
+        code("single_constructor_expect"),
+        help("If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}", "FROM".bold(), "Data".purple(), "let".purple(), format_suggestion(sample))
+    )]
+    SingleConstructorExpect {
+        #[label("use let")]
+        location: Span,
+        #[label("only one constructor")]
+        pattern_location: Span,
+        #[label("is not Data")]
+        value_location: Span,
+        sample: UntypedExpr,
+    },
+
     #[error("I found a todo left in the code.\n")]
     #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
     #[diagnostic(code("todo"))]
     Todo {
-        kind: TodoKind,
         #[label]
         location: Span,
         tipo: Arc<Type>,
@@ -1172,6 +1247,42 @@ pub enum Warning {
         location: Span,
         name: String,
     },
+
+    #[error("I came across a validator in a {} module which means\nI'm going to ignore it.\n", "lib/".purple())]
+    #[diagnostic(help(
+        "No big deal, but you might want to move it to a {} module\nor remove it to get rid of that warning.",
+        "validators/".purple()
+    ))]
+    #[diagnostic(code("unused::validator"))]
+    ValidatorInLibraryModule {
+        #[label("unused")]
+        location: Span,
+    },
+
+    #[error(
+        "I noticed a suspicious {type_ByteArray} UTF-8 literal which resembles a hash digest.",
+        type_ByteArray = "ByteArray".bold().bright_blue()
+    )]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"When you specify a {type_ByteArray} literal using plain double-quotes, it's interpreted as an array of UTF-8 bytes. For example, the literal {literal_foo} is interpreted as the byte sequence {foo_bytes}.
+
+           However here, you have specified a literal that resembles a hash digest encoded as an hexadecimal string. This is a common case, but you probably want to capture the raw bytes represented by this sequence, and not the hexadecimal sequence. Fear not! Aiken provides a convenient syntax for that: just prefix the literal with {symbol_hash}. This will decode the hexadecimal string for you and capture the non-encoded bytes as a {type_ByteArray}.
+
+           ╰─▶ {symbol_hash}{value}
+        "#,
+        type_ByteArray = "ByteArray".bold().bright_blue(),
+        literal_foo = "\"foo\"".purple(),
+        foo_bytes = "#[102, 111, 111]".purple(),
+        value = "\"{value}\"".purple(),
+        symbol_hash = "#".purple(),
+    }))]
+    #[diagnostic(code("syntax::bytearray_literal_is_hex_string"))]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]
+    Utf8ByteArrayIsValidHexString {
+        #[label("missing '#' to decode hex string")]
+        location: Span,
+        value: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1209,5 +1320,5 @@ fn format_suggestion(sample: &UntypedExpr) -> String {
             }
         })
         .collect::<Vec<_>>()
-        .join("")
+        .join("\n")
 }

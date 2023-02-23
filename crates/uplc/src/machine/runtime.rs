@@ -1,6 +1,7 @@
 use std::{ops::Deref, rc::Rc};
 
-use pallas_primitives::babbage::{BigInt, Constr, PlutusData};
+use num_integer::Integer;
+use pallas_primitives::babbage::{Constr, PlutusData};
 
 use crate::{
     ast::{Constant, Type},
@@ -10,7 +11,7 @@ use crate::{
 
 use super::{
     cost_model::{BuiltinCosts, ExBudget},
-    Error, Value,
+    from_pallas_bigint, to_pallas_bigint, Error, Value,
 };
 
 //#[derive(std::cmp::PartialEq)]
@@ -330,10 +331,9 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            match arg1.checked_add(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
-                                None => Err(Error::OverflowError),
-                            }
+                            let result = arg1 + arg2;
+
+                            Ok(Value::Con(Constant::Integer(result).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -344,10 +344,9 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            match arg1.checked_sub(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
-                                None => Err(Error::OverflowError),
-                            }
+                            let result = arg1 - arg2;
+
+                            Ok(Value::Con(Constant::Integer(result).into()).into())
                         }
                         _ => unreachable!(),
                     }
@@ -358,9 +357,25 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            match arg1.checked_mul(*arg2) {
-                                Some(res) => Ok(Value::Con(Constant::Integer(res).into()).into()),
-                                None => Err(Error::OverflowError),
+                            let result = arg1 * arg2;
+
+                            Ok(Value::Con(Constant::Integer(result).into()).into())
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            },
+            DefaultFunction::DivideInteger => match (args[0].as_ref(), args[1].as_ref()) {
+                (Value::Con(integer1), Value::Con(integer2)) => {
+                    match (integer1.as_ref(), integer2.as_ref()) {
+                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
+                            if *arg2 != 0.into() {
+                                let (result, _) = arg1.div_mod_floor(arg2);
+
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
+                            } else {
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -368,38 +383,16 @@ impl DefaultFunction {
                 }
                 _ => unreachable!(),
             },
-            DefaultFunction::DivideInteger => {
-                match (args[0].as_ref(), args[1].as_ref()) {
-                    (Value::Con(integer1), Value::Con(integer2)) => {
-                        match (integer1.as_ref(), integer2.as_ref()) {
-                            (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                                if *arg2 != 0 {
-                                    let ret = (*arg1 as f64) / (*arg2 as f64);
-
-                                    Ok(Value::Con(Constant::Integer(ret.floor() as i128).into())
-                                        .into())
-                                } else {
-                                    Err(Error::DivideByZero(*arg1, *arg2))
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
             DefaultFunction::QuotientInteger => match (args[0].as_ref(), args[1].as_ref()) {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = (*arg1 as f64) / (*arg2 as f64);
+                            if *arg2 != 0.into() {
+                                let (result, _) = arg1.div_rem(arg2);
 
-                                let ret = if ret < 0. { ret.ceil() } else { ret.floor() };
-
-                                Ok(Value::Con(Constant::Integer(ret as i128).into()).into())
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
                             } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -411,12 +404,12 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = arg1 % arg2;
+                            if *arg2 != 0.into() {
+                                let (_, result) = arg1.div_rem(arg2);
 
-                                Ok(Value::Con(Constant::Integer(ret).into()).into())
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
                             } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -428,12 +421,12 @@ impl DefaultFunction {
                 (Value::Con(integer1), Value::Con(integer2)) => {
                     match (integer1.as_ref(), integer2.as_ref()) {
                         (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            if *arg2 != 0 {
-                                let ret = arg1 % arg2;
+                            if *arg2 != 0.into() {
+                                let (_, result) = arg1.div_mod_floor(arg2);
 
-                                Ok(Value::Con(Constant::Integer(ret.abs()).into()).into())
+                                Ok(Value::Con(Constant::Integer(result).into()).into())
                             } else {
-                                Err(Error::DivideByZero(*arg1, *arg2))
+                                Err(Error::DivideByZero(arg1.clone(), arg2.clone()))
                             }
                         }
                         _ => unreachable!(),
@@ -493,7 +486,12 @@ impl DefaultFunction {
                 (Value::Con(integer), Value::Con(byte_string)) => {
                     match (integer.as_ref(), byte_string.as_ref()) {
                         (Constant::Integer(arg1), Constant::ByteString(arg2)) => {
-                            let mut ret = vec![(arg1 % 256) as u8];
+                            let wrap = arg1.mod_floor(&256.into());
+
+                            let byte: u8 = wrap.try_into().unwrap();
+
+                            let mut ret = vec![byte];
+
                             ret.extend(arg2.clone());
 
                             Ok(Value::Con(Constant::ByteString(ret).into()).into())
@@ -512,8 +510,16 @@ impl DefaultFunction {
                                 Constant::Integer(arg2),
                                 Constant::ByteString(arg3),
                             ) => {
-                                let skip = if 0 > *arg1 { 0 } else { *arg1 as usize };
-                                let take = if 0 > *arg2 { 0 } else { *arg2 as usize };
+                                let skip: usize = if arg1.lt(&0.into()) {
+                                    0
+                                } else {
+                                    arg1.try_into().unwrap()
+                                };
+                                let take: usize = if arg2.lt(&0.into()) {
+                                    0
+                                } else {
+                                    arg2.try_into().unwrap()
+                                };
 
                                 let ret: Vec<u8> =
                                     arg3.iter().skip(skip).take(take).cloned().collect();
@@ -529,7 +535,7 @@ impl DefaultFunction {
             DefaultFunction::LengthOfByteString => match args[0].as_ref() {
                 Value::Con(byte_string) => match byte_string.as_ref() {
                     Constant::ByteString(arg1) => {
-                        Ok(Value::Con(Constant::Integer(arg1.len() as i128).into()).into())
+                        Ok(Value::Con(Constant::Integer(arg1.len().into()).into()).into())
                     }
                     _ => unreachable!(),
                 },
@@ -539,14 +545,14 @@ impl DefaultFunction {
                 (Value::Con(byte_string), Value::Con(integer)) => {
                     match (byte_string.as_ref(), integer.as_ref()) {
                         (Constant::ByteString(arg1), Constant::Integer(arg2)) => {
-                            let index = *arg2 as usize;
+                            let index: i128 = arg2.try_into().unwrap();
 
-                            if 0 <= *arg2 && index < arg1.len() {
-                                let ret = arg1[index] as i128;
+                            if 0 <= index && index < arg1.len() as i128 {
+                                let ret = arg1[index as usize];
 
-                                Ok(Value::Con(Constant::Integer(ret).into()).into())
+                                Ok(Value::Con(Constant::Integer(ret.into()).into()).into())
                             } else {
-                                Err(Error::ByteStringOutOfBounds(*arg2, arg1.to_vec()))
+                                Err(Error::ByteStringOutOfBounds(arg2.clone(), arg1.to_vec()))
                             }
                         }
                         _ => unreachable!(),
@@ -879,10 +885,11 @@ impl DefaultFunction {
                                 })
                                 .collect();
 
+                            let i: u64 = i.try_into().unwrap();
+
                             let constr_data = PlutusData::Constr(Constr {
-                                // TODO: handle other types of constructor tags
-                                tag: convert_constr_to_tag(*i as u64),
-                                any_constructor: None,
+                                tag: convert_constr_to_tag(i).unwrap_or(ANY_TAG),
+                                any_constructor: convert_constr_to_tag(i).map_or(Some(i), |_| None),
                                 fields: data_list,
                             });
 
@@ -938,8 +945,7 @@ impl DefaultFunction {
             DefaultFunction::IData => match args[0].as_ref() {
                 Value::Con(integer) => match integer.as_ref() {
                     Constant::Integer(i) => Ok(Value::Con(
-                        Constant::Data(PlutusData::BigInt(BigInt::Int((*i).try_into().unwrap())))
-                            .into(),
+                        Constant::Data(PlutusData::BigInt(to_pallas_bigint(i))).into(),
                     )
                     .into()),
                     _ => unreachable!(),
@@ -959,27 +965,29 @@ impl DefaultFunction {
             },
             DefaultFunction::UnConstrData => match args[0].as_ref() {
                 Value::Con(con) => match con.as_ref() {
-                    Constant::Data(PlutusData::Constr(c)) => {
-                        Ok(Value::Con(
-                            Constant::ProtoPair(
-                                Type::Integer,
-                                Type::List(Type::Data.into()),
-                                // TODO: handle other types of constructor tags
-                                Constant::Integer(convert_tag_to_constr(c.tag as i128)).into(),
-                                Constant::ProtoList(
-                                    Type::Data,
-                                    c.fields
-                                        .deref()
-                                        .iter()
-                                        .map(|d| Constant::Data(d.clone()))
-                                        .collect(),
-                                )
-                                .into(),
+                    Constant::Data(PlutusData::Constr(c)) => Ok(Value::Con(
+                        Constant::ProtoPair(
+                            Type::Integer,
+                            Type::List(Type::Data.into()),
+                            Constant::Integer(
+                                convert_tag_to_constr(c.tag)
+                                    .unwrap_or_else(|| c.any_constructor.unwrap())
+                                    .into(),
+                            )
+                            .into(),
+                            Constant::ProtoList(
+                                Type::Data,
+                                c.fields
+                                    .deref()
+                                    .iter()
+                                    .map(|d| Constant::Data(d.clone()))
+                                    .collect(),
                             )
                             .into(),
                         )
-                        .into())
-                    }
+                        .into(),
+                    )
+                    .into()),
                     v => Err(Error::DeserialisationError(
                         "UnConstrData".to_string(),
                         Value::Con(v.clone().into()),
@@ -1034,7 +1042,7 @@ impl DefaultFunction {
                     )
                     .into()),
                     v => Err(Error::DeserialisationError(
-                        "UnMapData".to_string(),
+                        "UnListData".to_string(),
                         Value::Con(v.clone().into()),
                     )),
                 },
@@ -1046,16 +1054,10 @@ impl DefaultFunction {
             DefaultFunction::UnIData => match args[0].as_ref() {
                 Value::Con(data) => match data.as_ref() {
                     Constant::Data(PlutusData::BigInt(b)) => {
-                        if let BigInt::Int(i) = b {
-                            let x: i128 = (*i).try_into().unwrap();
-
-                            Ok(Value::Con(Constant::Integer(x).into()).into())
-                        } else {
-                            unreachable!()
-                        }
+                        Ok(Value::Con(Constant::Integer(from_pallas_bigint(b)).into()).into())
                     }
                     v => Err(Error::DeserialisationError(
-                        "UnMapData".to_string(),
+                        "UnIData".to_string(),
                         Value::Con(v.clone().into()),
                     )),
                 },
@@ -1070,7 +1072,7 @@ impl DefaultFunction {
                         Ok(Value::Con(Constant::ByteString(b.to_vec()).into()).into())
                     }
                     v => Err(Error::DeserialisationError(
-                        "UnMapData".to_string(),
+                        "UnBData".to_string(),
                         Value::Con(v.clone().into()),
                     )),
                 },
@@ -1126,25 +1128,27 @@ impl DefaultFunction {
     }
 }
 
-pub fn convert_tag_to_constr(tag: i128) -> i128 {
-    if tag < 128 {
-        tag - 121
-    } else if (1280..1401).contains(&tag) {
-        tag - 1280
+pub fn convert_tag_to_constr(tag: u64) -> Option<u64> {
+    if (121..=127).contains(&tag) {
+        Some(tag - 121)
+    } else if (1280..=1400).contains(&tag) {
+        Some(tag - 1280 + 7)
     } else {
-        todo!()
+        None
     }
 }
 
-pub fn convert_constr_to_tag(constr: u64) -> u64 {
-    if constr < 7 {
-        constr + 121
-    } else if constr < 128 {
-        constr + 1280
+pub fn convert_constr_to_tag(constr: u64) -> Option<u64> {
+    if (0..=6).contains(&constr) {
+        Some(121 + constr)
+    } else if (7..=127).contains(&constr) {
+        Some(1280 - 7 + constr)
     } else {
-        todo!()
+        None // 102 otherwise
     }
 }
+
+pub static ANY_TAG: u64 = 102;
 
 #[cfg(not(feature = "native-secp256k1"))]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
@@ -1163,6 +1167,8 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<R
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
 }
 
+/// Unlike the Haskell implementation the schnorr verification function in Aiken doesn't allow for arbitrary message sizes (at the moment).
+/// The message needs to be 32 bytes (ideally prehashed, but not a requirement).
 #[cfg(not(feature = "native-secp256k1"))]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
     use secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
@@ -1195,13 +1201,65 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<R
 
 #[cfg(feature = "native-secp256k1")]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Rc<Value>, Error> {
-    use k256::schnorr::{self, signature::Verifier};
+    use k256::schnorr::{self, signature::hazmat::PrehashVerifier};
 
     let verifying_key = schnorr::VerifyingKey::from_bytes(public_key)?;
 
     let signature = schnorr::Signature::try_from(signature)?;
 
-    let valid = verifying_key.verify(message, &signature);
+    let valid = verifying_key.verify_prehash(message, &signature);
 
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{convert_constr_to_tag, convert_tag_to_constr};
+
+    #[test]
+    fn compact_tag_range() {
+        assert_eq!(convert_constr_to_tag(0), Some(121));
+        assert_eq!(convert_constr_to_tag(1), Some(122));
+        assert_eq!(convert_constr_to_tag(6), Some(127));
+        assert_ne!(convert_constr_to_tag(7), Some(128)); // This is not allowed
+    }
+    #[test]
+    fn compact_tag_mid_range() {
+        assert_eq!(convert_constr_to_tag(7), Some(1280));
+        assert_eq!(convert_constr_to_tag(8), Some(1281));
+        assert_eq!(convert_constr_to_tag(100), Some(1373));
+        assert_eq!(convert_constr_to_tag(127), Some(1400));
+        assert_ne!(convert_constr_to_tag(128), Some(1401)); // This is not allowed
+    }
+
+    #[test]
+    fn any_range() {
+        assert_eq!(convert_constr_to_tag(128), None);
+        assert_eq!(
+            convert_constr_to_tag(128).map_or(Some(128), |_| None),
+            Some(128)
+        );
+        assert_eq!(convert_constr_to_tag(123124125125), None);
+        assert_eq!(convert_constr_to_tag(1).map_or(Some(1), |_| None), None); // This is a compact tag
+    }
+
+    #[test]
+    fn to_compact_tag() {
+        assert_eq!(convert_tag_to_constr(121), Some(0));
+        assert_eq!(convert_tag_to_constr(122), Some(1));
+        assert_eq!(convert_tag_to_constr(127), Some(6));
+        assert_eq!(convert_tag_to_constr(128), None); // This can never happen actually. Pallas sorts that out already during deserialization.
+    }
+    #[test]
+    fn to_compact_tag_mid() {
+        assert_eq!(convert_tag_to_constr(1280), Some(7));
+        assert_eq!(convert_tag_to_constr(1281), Some(8));
+        assert_eq!(convert_tag_to_constr(1400), Some(127));
+        assert_eq!(convert_tag_to_constr(1401), None); // This can never happen actually. Pallas sorts that out already during deserialization.
+    }
+
+    #[test]
+    fn to_any_tag() {
+        assert_eq!(convert_tag_to_constr(102), None);
+    }
 }

@@ -1,9 +1,9 @@
 use super::{
-    error::{assert_min_arity, assert_return_bool, Error},
+    error::Error,
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
-use aiken_lang::{ast::TypedFunction, uplc::CodeGenerator};
+use aiken_lang::{ast::TypedValidator, uplc::CodeGenerator};
 use miette::NamedSource;
 use serde;
 use std::{
@@ -15,7 +15,6 @@ use uplc::ast::{DeBruijn, Program, Term};
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T> {
     pub title: String,
-    pub purpose: Purpose,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -26,15 +25,6 @@ pub struct Validator<T> {
     pub parameters: Vec<Annotated<T>>,
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Purpose {
-    Spend,
-    Mint,
-    Withdraw,
-    Publish,
 }
 
 impl Display for Validator<Schema> {
@@ -48,32 +38,23 @@ impl Validator<Schema> {
     pub fn from_checked_module(
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
-        validator: &CheckedModule,
-        def: &TypedFunction,
+        module: &CheckedModule,
+        def: &TypedValidator,
     ) -> Result<Validator<Schema>, Error> {
-        let purpose: Purpose = def
-            .name
-            .clone()
-            .try_into()
-            .expect("unexpected validator name");
+        let mut args = def.fun.arguments.iter().rev();
+        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
-        assert_return_bool(validator, def)?;
-        assert_min_arity(validator, def, purpose.min_arity())?;
+        let mut arguments = Vec::with_capacity(def.params.len() + def.fun.arguments.len());
 
-        let mut args = def.arguments.iter().rev();
-        let (_, redeemer) = (args.next(), args.next().unwrap());
-        let datum = if purpose.min_arity() > 2 {
-            args.next()
-        } else {
-            None
-        };
+        arguments.extend(def.params.clone());
+        arguments.extend(def.fun.arguments.clone());
 
         Ok(Validator {
-            title: validator.name.clone(),
+            title: format!("{}.{}", &module.name, &def.fun.name),
             description: None,
-            purpose,
-            parameters: args
-                .rev()
+            parameters: def
+                .params
+                .iter()
                 .map(|param| {
                     let annotation =
                         Annotated::from_type(modules.into(), &param.tipo, &HashMap::new()).map_err(
@@ -81,8 +62,8 @@ impl Validator<Schema> {
                                 error,
                                 location: param.location,
                                 source_code: NamedSource::new(
-                                    validator.input_path.display().to_string(),
-                                    validator.code.clone(),
+                                    module.input_path.display().to_string(),
+                                    module.code.clone(),
                                 ),
                             },
                         );
@@ -101,8 +82,8 @@ impl Validator<Schema> {
                             error,
                             location: datum.location,
                             source_code: NamedSource::new(
-                                validator.input_path.display().to_string(),
-                                validator.code.clone(),
+                                module.input_path.display().to_string(),
+                                module.code.clone(),
                             ),
                         },
                     )
@@ -113,12 +94,12 @@ impl Validator<Schema> {
                     error,
                     location: redeemer.location,
                     source_code: NamedSource::new(
-                        validator.input_path.display().to_string(),
-                        validator.code.clone(),
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
                     ),
                 })?,
             program: generator
-                .generate(&def.body, &def.arguments, true)
+                .generate(&def.fun.body, &arguments, true)
                 .try_into()
                 .unwrap(),
         })
@@ -144,47 +125,13 @@ where
     }
 }
 
-impl Purpose {
-    pub fn min_arity(&self) -> u8 {
-        match self {
-            Purpose::Spend => 3,
-            Purpose::Mint | Purpose::Withdraw | Purpose::Publish => 2,
-        }
-    }
-}
-
-impl Display for Purpose {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
-            Purpose::Spend => "spend",
-            Purpose::Mint => "mint",
-            Purpose::Withdraw => "withdraw",
-            Purpose::Publish => "publish",
-        })
-    }
-}
-
-impl TryFrom<String> for Purpose {
-    type Error = String;
-
-    fn try_from(purpose: String) -> Result<Purpose, Self::Error> {
-        match &purpose[..] {
-            "spend" => Ok(Purpose::Spend),
-            "mint" => Ok(Purpose::Mint),
-            "withdraw" => Ok(Purpose::Withdraw),
-            "publish" => Ok(Purpose::Publish),
-            unexpected => Err(format!("Can't turn '{unexpected}' into any Purpose")),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::{module::ParsedModule, PackageName};
     use aiken_lang::{
         self,
-        ast::{ModuleKind, TypedDataType, TypedFunction},
+        ast::{ModuleKind, Tracing, TypedDataType, TypedFunction},
         builder::{DataTypeKey, FunctionAccessKey},
         builtins, parser,
         tipo::TypeInfo,
@@ -237,7 +184,8 @@ mod test {
             let (mut ast, extra) =
                 parser::module(source_code, kind).expect("Failed to parse module");
             ast.name = name.clone();
-            let mut module = ParsedModule {
+
+            ParsedModule {
                 kind,
                 ast,
                 code: source_code.to_string(),
@@ -245,9 +193,7 @@ mod test {
                 path: PathBuf::new(),
                 extra,
                 package: self.package.to_string(),
-            };
-            module.attach_doc_and_module_comments();
-            module
+            }
         }
 
         fn check(&mut self, module: ParsedModule) -> CheckedModule {
@@ -260,6 +206,7 @@ mod test {
                     module.kind,
                     &self.package.to_string(),
                     &self.module_types,
+                    Tracing::NoTraces,
                     &mut warnings,
                 )
                 .expect("Failed to type-check module");
@@ -267,7 +214,7 @@ mod test {
             self.module_types
                 .insert(module.name.clone(), ast.type_info.clone());
 
-            CheckedModule {
+            let mut checked_module = CheckedModule {
                 kind: module.kind,
                 extra: module.extra,
                 name: module.name,
@@ -275,7 +222,11 @@ mod test {
                 package: module.package,
                 input_path: module.path,
                 ast,
-            }
+            };
+
+            checked_module.attach_doc_and_module_comments();
+
+            checked_module
         }
     }
 
@@ -304,13 +255,14 @@ mod test {
     fn validator_mint_basic() {
         assert_validator(
             r#"
-            fn mint(redeemer: Data, ctx: Data) {
+            validator mint {
+              fn(redeemer: Data, ctx: Data) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "mint",
+              "title": "test_module.mint",
               "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
               "redeemer": {
                 "title": "Data",
@@ -325,13 +277,14 @@ mod test {
     fn validator_mint_parameterized() {
         assert_validator(
             r#"
-            fn mint(utxo_ref: Int, redeemer: Data, ctx: Data) {
+            validator mint(utxo_ref: Int) {
+              fn(redeemer: Data, ctx: Data) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "mint",
+              "title": "test_module.mint",
               "hash": "a82df717fd39f5b273c4eb89ae5252e11cc272ac59d815419bf2e4c3",
               "parameters": [{
                 "title": "utxo_ref",
@@ -381,13 +334,14 @@ mod test {
                 Abort
             }
 
-            fn spend(datum: State, redeemer: Input, ctx: Data) {
+            validator spend {
+              fn(datum: State, redeemer: Input, ctx: Data) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "spend",
+              "title": "test_module.spend",
               "hash": "e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
               "datum": {
                 "title": "State",
@@ -464,22 +418,21 @@ mod test {
     fn validator_spend_2tuple() {
         assert_validator(
             r#"
-            fn spend(datum: (Int, ByteArray), redeemer: String, ctx: Void) {
+            validator spend {
+              fn(datum: (Int, ByteArray), redeemer: String, ctx: Void) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "spend",
+              "title": "test_module.spend",
               "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
               "datum": {
-                "dataType": "#pair",
-                "left": {
-                  "dataType": "integer"
-                },
-                "right": {
-                  "dataType": "bytes"
-                }
+                "dataType": "list",
+                "items": [
+                  { "dataType": "integer" },
+                  { "dataType": "bytes" }
+                ]
               },
               "redeemer": {
                 "dataType": "#string"
@@ -493,18 +446,19 @@ mod test {
     fn validator_spend_tuples() {
         assert_validator(
             r#"
-            fn spend(datum: (Int, Int, Int), redeemer: Data, ctx: Void) {
+            validator spend {
+              fn(datum: (Int, Int, Int), redeemer: Data, ctx: Void) {
                 True
+              }
             }
             "#,
             json!({
-              "title": "test_module",
-              "purpose": "spend",
+              "title": "test_module.spend",
               "hash": "f335ce0436fd7df56e727a66ada7298534a27b98f887bc3b7947ee48",
               "datum": {
                 "title": "Tuple",
-                "dataType": "#list",
-                "elements": [
+                "dataType": "list",
+                "items": [
                   {
                     "dataType": "integer"
                   },
@@ -539,14 +493,15 @@ mod test {
                 Infinite
             }
 
-            fn withdraw(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+            validator withdraw {
+              fn(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
                 True
+              }
             }
             "#,
             json!(
                 {
-                  "title": "test_module",
-                  "purpose": "withdraw",
+                  "title": "test_module.withdraw",
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Either",
@@ -607,14 +562,15 @@ mod test {
 
             type UUID { UUID }
 
-            fn mint(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator mint {
+              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
+              }
             }
             "#,
             json!(
                 {
-                  "title": "test_module",
-                  "purpose": "mint",
+                  "title": "test_module.mint",
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
@@ -654,14 +610,15 @@ mod test {
 
             type UUID { UUID }
 
-            fn mint(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator mint {
+              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
+              }
             }
             "#,
             json!(
                 {
-                  "title": "test_module",
-                  "purpose": "mint",
+                  "title": "test_module.mint",
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",

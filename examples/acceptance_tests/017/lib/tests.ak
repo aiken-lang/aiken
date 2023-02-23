@@ -9,5 +9,5 @@ pub fn take(bytes: ByteArray, n: Int) -> ByteArray {
 }
 
 test take_1() {
-  take(#[1, 2, 3], 2) == #[1, 2]
+  take(#"010203", 2) == #"0102"
 }

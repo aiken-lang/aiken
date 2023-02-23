@@ -142,15 +142,15 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
                 body,
             } = func
             {
-                if let replace_term @ (Term::Var(_)
-                | Term::Constant(_)
-                | Term::Error
-                | Term::Delay(_)
-                | Term::Lambda { .. }) = argument.as_ref()
-                {
-                    let mut occurrences = 0;
-                    var_occurrences(body, parameter_name.clone(), &mut occurrences);
-                    if occurrences <= 1 {
+                let mut occurrences = 0;
+                var_occurrences(body, parameter_name.clone(), &mut occurrences);
+                if occurrences == 1 {
+                    if let replace_term @ (Term::Var(_)
+                    | Term::Constant(_)
+                    | Term::Error
+                    | Term::Delay(_)
+                    | Term::Lambda { .. }) = argument.as_ref()
+                    {
                         *term =
                             substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
                     }
@@ -193,6 +193,28 @@ fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>, occurrences: &mut us
         _ => {}
     }
 }
+
+// fn error_occurrences(term: &Term<Name>, occurrences: &mut usize) {
+//     match term {
+//         Term::Delay(body) => {
+//             error_occurrences(body.as_ref(), occurrences);
+//         }
+//         Term::Lambda { body, .. } => {
+//             error_occurrences(body.as_ref(), occurrences);
+//         }
+//         Term::Apply { function, argument } => {
+//             error_occurrences(function.as_ref(), occurrences);
+//             error_occurrences(argument.as_ref(), occurrences);
+//         }
+//         Term::Force(x) => {
+//             error_occurrences(x.as_ref(), occurrences);
+//         }
+//         Term::Error => {
+//             *occurrences += 1;
+//         }
+//         _ => {}
+//     }
+// }
 
 fn lambda_reduce(term: &mut Term<Name>) {
     match term {

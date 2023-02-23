@@ -8,7 +8,7 @@ pub mod cmd;
 
 pub fn with_project<A>(directory: Option<PathBuf>, mut action: A) -> miette::Result<()>
 where
-    A: FnMut(&mut Project<Terminal>) -> Result<(), aiken_project::error::Error>,
+    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<aiken_project::error::Error>>,
 {
     let project_path = if let Some(d) = directory {
         d
@@ -26,23 +26,28 @@ where
 
     let build_result = action(&mut project);
 
-    let warning_count = project.warnings.len();
+    let warnings = project.warnings();
 
-    for warning in project.warnings {
+    let warning_count = warnings.len();
+
+    for warning in warnings {
         warning.report()
     }
 
     let plural = if warning_count == 1 { "" } else { "s" };
 
-    if let Err(err) = build_result {
-        err.report();
+    if let Err(errs) = build_result {
+        for err in &errs {
+            err.report()
+        }
+
         println!("\n{}", "Summary".purple().bold());
 
         let warning_text = format!("{warning_count} warning{plural}");
 
-        let plural = if err.len() == 1 { "" } else { "s" };
+        let plural = if errs.len() == 1 { "" } else { "s" };
 
-        let error_text = format!("{} error{}", err.len(), plural);
+        let error_text = format!("{} error{}", errs.len(), plural);
 
         let full_summary = format!("    {}, {}", error_text.red(), warning_text.yellow());
 
