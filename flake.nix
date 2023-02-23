@@ -47,20 +47,13 @@
         ];
       in rec {
         inherit packages;
-        devShell = pkgs.devshell.mkShell {
-          name = "aiken";
-          motd = ''            Aiken
-                                    $(type -p menu &>/dev/null && menu)'';
-          commands = aikenCmds;
-        };
+        devShell = rustPkgs.workspaceShell { };
         devShells = {
-          aiken = devShell;
-          ws = rustPkgs.workspaceShell {
-            packages = with pkgs; [
-              # nix
-              rnix-lsp
-              alejandra
-            ];
+          aiken = pkgs.devshell.mkShell {
+            name = "aiken";
+            motd = ''            Aiken
+                                      $(type -p menu &>/dev/null && menu)'';
+            commands = aikenCmds;
           };
         };
       }
