@@ -114,7 +114,7 @@ jobs:
           VERSION_NAME: ${{ needs.prepare.outputs.tag_name }}
         run: |
           if [ "$PLATFORM_NAME" == "linux" ]; then
-            tar -czvf "aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz" -C ./target/${TARGET}/release forge cast anvil chisel
+            tar -czvf "aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz" -C ./target/${TARGET}/release aiken
             echo "::set-output name=file_name::aiken_${VERSION_NAME}_${PLATFORM_NAME}_${ARCH}.tar.gz"
           elif [ "$PLATFORM_NAME" == "darwin" ]; then
             # We need to use gtar here otherwise the archive is corrupt.
