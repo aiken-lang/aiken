@@ -43,12 +43,12 @@ in
 {
   cargo2nixVersion = "0.11.0";
   workspace = {
-    aiken = rustPackages.unknown.aiken."0.0.28";
-    aiken-lang = rustPackages.unknown.aiken-lang."0.0.28";
-    uplc = rustPackages.unknown.uplc."0.0.28";
+    aiken = rustPackages.unknown.aiken."0.0.29";
+    aiken-lang = rustPackages.unknown.aiken-lang."0.0.29";
+    uplc = rustPackages.unknown.uplc."0.0.29";
     flat-rs = rustPackages.unknown.flat-rs."0.0.27";
-    aiken-lsp = rustPackages.unknown.aiken-lsp."0.0.28";
-    aiken-project = rustPackages.unknown.aiken-project."0.0.28";
+    aiken-lsp = rustPackages.unknown.aiken-lsp."0.0.29";
+    aiken-project = rustPackages.unknown.aiken-project."0.0.29";
   };
   "registry+https://github.com/rust-lang/crates.io-index".addr2line."0.19.0" = overridableMkRustCrate (profileName: rec {
     name = "addr2line";
@@ -108,15 +108,15 @@ in
     };
   });
   
-  "unknown".aiken."0.0.28" = overridableMkRustCrate (profileName: rec {
+  "unknown".aiken."0.0.29" = overridableMkRustCrate (profileName: rec {
     name = "aiken";
-    version = "0.0.28";
+    version = "0.0.29";
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/crates/aiken");
     dependencies = {
-      aiken_lang = rustPackages."unknown".aiken-lang."0.0.28" { inherit profileName; };
-      aiken_lsp = rustPackages."unknown".aiken-lsp."0.0.28" { inherit profileName; };
-      aiken_project = rustPackages."unknown".aiken-project."0.0.28" { inherit profileName; };
+      aiken_lang = rustPackages."unknown".aiken-lang."0.0.29" { inherit profileName; };
+      aiken_lsp = rustPackages."unknown".aiken-lsp."0.0.29" { inherit profileName; };
+      aiken_project = rustPackages."unknown".aiken-project."0.0.29" { inherit profileName; };
       anyhow = rustPackages."registry+https://github.com/rust-lang/crates.io-index".anyhow."1.0.68" { inherit profileName; };
       clap = rustPackages."registry+https://github.com/rust-lang/crates.io-index".clap."3.2.23" { inherit profileName; };
       hex = rustPackages."registry+https://github.com/rust-lang/crates.io-index".hex."0.4.3" { inherit profileName; };
@@ -132,13 +132,13 @@ in
       regex = rustPackages."registry+https://github.com/rust-lang/crates.io-index".regex."1.7.0" { inherit profileName; };
       serde_json = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde_json."1.0.91" { inherit profileName; };
       thiserror = rustPackages."registry+https://github.com/rust-lang/crates.io-index".thiserror."1.0.38" { inherit profileName; };
-      uplc = rustPackages."unknown".uplc."0.0.28" { inherit profileName; };
+      uplc = rustPackages."unknown".uplc."0.0.29" { inherit profileName; };
     };
   });
   
-  "unknown".aiken-lang."0.0.28" = overridableMkRustCrate (profileName: rec {
+  "unknown".aiken-lang."0.0.29" = overridableMkRustCrate (profileName: rec {
     name = "aiken-lang";
-    version = "0.0.28";
+    version = "0.0.29";
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/crates/aiken-lang");
     dependencies = {
@@ -152,7 +152,7 @@ in
       owo_colors = rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; };
       strum = rustPackages."registry+https://github.com/rust-lang/crates.io-index".strum."0.24.1" { inherit profileName; };
       thiserror = rustPackages."registry+https://github.com/rust-lang/crates.io-index".thiserror."1.0.38" { inherit profileName; };
-      uplc = rustPackages."unknown".uplc."0.0.28" { inherit profileName; };
+      uplc = rustPackages."unknown".uplc."0.0.29" { inherit profileName; };
       vec1 = rustPackages."registry+https://github.com/rust-lang/crates.io-index".vec1."1.10.1" { inherit profileName; };
     };
     devDependencies = {
@@ -161,14 +161,14 @@ in
     };
   });
   
-  "unknown".aiken-lsp."0.0.28" = overridableMkRustCrate (profileName: rec {
+  "unknown".aiken-lsp."0.0.29" = overridableMkRustCrate (profileName: rec {
     name = "aiken-lsp";
-    version = "0.0.28";
+    version = "0.0.29";
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/crates/aiken-lsp");
     dependencies = {
-      aiken_lang = rustPackages."unknown".aiken-lang."0.0.28" { inherit profileName; };
-      aiken_project = rustPackages."unknown".aiken-project."0.0.28" { inherit profileName; };
+      aiken_lang = rustPackages."unknown".aiken-lang."0.0.29" { inherit profileName; };
+      aiken_project = rustPackages."unknown".aiken-project."0.0.29" { inherit profileName; };
       crossbeam_channel = rustPackages."registry+https://github.com/rust-lang/crates.io-index".crossbeam-channel."0.5.6" { inherit profileName; };
       indoc = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".indoc."2.0.0" { profileName = "__noProfile"; };
       itertools = rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; };
@@ -184,13 +184,13 @@ in
     };
   });
   
-  "unknown".aiken-project."0.0.28" = overridableMkRustCrate (profileName: rec {
+  "unknown".aiken-project."0.0.29" = overridableMkRustCrate (profileName: rec {
     name = "aiken-project";
-    version = "0.0.28";
+    version = "0.0.29";
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/crates/aiken-project");
     dependencies = {
-      aiken_lang = rustPackages."unknown".aiken-lang."0.0.28" { inherit profileName; };
+      aiken_lang = rustPackages."unknown".aiken-lang."0.0.29" { inherit profileName; };
       askama = rustPackages."registry+https://github.com/rust-lang/crates.io-index".askama."0.10.5" { inherit profileName; };
       assert_json_diff = rustPackages."registry+https://github.com/rust-lang/crates.io-index".assert-json-diff."2.0.2" { inherit profileName; };
       dirs = rustPackages."registry+https://github.com/rust-lang/crates.io-index".dirs."4.0.0" { inherit profileName; };
@@ -215,7 +215,7 @@ in
       thiserror = rustPackages."registry+https://github.com/rust-lang/crates.io-index".thiserror."1.0.38" { inherit profileName; };
       tokio = rustPackages."registry+https://github.com/rust-lang/crates.io-index".tokio."1.24.2" { inherit profileName; };
       toml = rustPackages."registry+https://github.com/rust-lang/crates.io-index".toml."0.5.10" { inherit profileName; };
-      uplc = rustPackages."unknown".uplc."0.0.28" { inherit profileName; };
+      uplc = rustPackages."unknown".uplc."0.0.29" { inherit profileName; };
       walkdir = rustPackages."registry+https://github.com/rust-lang/crates.io-index".walkdir."2.3.2" { inherit profileName; };
       zip = rustPackages."registry+https://github.com/rust-lang/crates.io-index".zip."0.6.4" { inherit profileName; };
     };
@@ -3722,9 +3722,9 @@ in
     ];
   });
   
-  "unknown".uplc."0.0.28" = overridableMkRustCrate (profileName: rec {
+  "unknown".uplc."0.0.29" = overridableMkRustCrate (profileName: rec {
     name = "uplc";
-    version = "0.0.28";
+    version = "0.0.29";
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/crates/uplc");
     features = builtins.concatLists [
