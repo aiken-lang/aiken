@@ -1,7 +1,7 @@
 [package]
 name = "aiken"
 description = "Cardano smart contract language and toolchain"
-version = "0.0.28"
+version = "0.0.29"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -24,8 +24,8 @@ pallas-traverse = "0.16.0"
 regex = "1.5.4"
 thiserror = "1.0.31"
 
-aiken-lang = { path = "../aiken-lang", version = "0.0.28" }
-aiken-lsp = { path = "../aiken-lsp", version = "0.0.28" }
-aiken-project = { path = '../aiken-project', version = "0.0.28" }
-uplc = { path = '../uplc', version = "0.0.28" }
+aiken-lang = { path = "../aiken-lang", version = "0.0.29" }
+aiken-lsp = { path = "../aiken-lsp", version = "0.0.29" }
+aiken-project = { path = '../aiken-project', version = "0.0.29" }
+uplc = { path = '../uplc', version = "0.0.29" }
 serde_json = "1.0.91"
