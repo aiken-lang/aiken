@@ -86,14 +86,6 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install OpenSSL
-        run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            sudo apt-get install pkg-config libssl-dev
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            brew install openssl@1.1
-          fi
-
       - name: Apple M1 setup
         if: ${{ matrix.job.target == 'aarch64-apple-darwin' }}
         run: |
@@ -104,7 +96,7 @@ jobs:
         if: ${{ matrix.job.target == 'aarch64-unknown-linux-gnu' }}
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu libssl-dev:arm64
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
       - name: Build binaries
