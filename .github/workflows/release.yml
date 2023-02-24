@@ -25,14 +25,12 @@ jobs:
       - name: Compute release name and tag
         id: release_info
         run: |
-          echo "::set-output name=tag_name::${GITHUB_REF_NAME}"
-          echo "::set-output name=release_name::${GITHUB_REF_NAME}"
+          echo "tag_name=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          echo "release_name=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
 
       - name: Extract release notes
         id: extract_release_notes
-        run: |
-          release_notes=$(sed -n '/^## .*$/,$p' CHANGELOG.md | sed '1d;/^## /,$d')
-          echo "::set-output name=release_notes::${release_notes}"
+        run: echo "release_notes=$(sed -n '/^## .*$/,$p' CHANGELOG.md | sed '1d;/^## /,$d')" >> $GITHUB_OUTPUT
 
   release:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
