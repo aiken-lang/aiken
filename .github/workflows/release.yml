@@ -87,12 +87,12 @@ jobs:
           cache-on-failure: true
 
       - name: Get Dependencies [Ubuntu]
-        if: matrix.os == 'ubuntu-latest'
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get install pkg-config libssl-dev
 
       - name: Get Dependencies [MacOS]
-        if: matrix.os == 'macOS-latest'
+        if: ${{ matrix.os == 'macOS-latest' }}
         run: |
           brew install openssl@1.1
 
