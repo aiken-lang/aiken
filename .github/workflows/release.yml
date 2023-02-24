@@ -10,7 +10,7 @@ env:
 jobs:
   prepare:
     name: Prepare release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.release_info.outputs.tag_name }}
       release_name: ${{ steps.release_info.outputs.release_name }}
@@ -45,11 +45,11 @@ jobs:
           # platform: a generic platform name
           # target: used by Cargo
           # arch: either 386, arm64 or amd64
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             platform: linux
             target: x86_64-unknown-linux-gnu
             arch: amd64
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             platform: linux
             target: aarch64-unknown-linux-gnu
             arch: arm64
@@ -65,6 +65,10 @@ jobs:
             platform: win32
             target: x86_64-pc-windows-msvc
             arch: amd64
+          - os: windows-latest
+            platform: win32
+            target: aarch64-pc-windows-msvc
+            arch: arm64
 
     steps:
       - name: Checkout
@@ -81,6 +85,16 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           cache-on-failure: true
+
+      - name: Get Dependencies [Ubuntu]
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install pkg-config libssl-dev
+
+      - name: Get Dependencies [MacOS]
+        if: matrix.os == 'macOS-latest'
+        run: |
+          brew install openssl@1.1
 
       - name: Apple M1 setup
         if: ${{ matrix.job.target == 'aarch64-apple-darwin' }}
