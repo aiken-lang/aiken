@@ -86,15 +86,13 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Get Dependencies [Ubuntu]
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Install OpenSSL
         run: |
-          sudo apt-get install pkg-config libssl-dev
-
-      - name: Get Dependencies [MacOS]
-        if: ${{ matrix.os == 'macOS-latest' }}
-        run: |
-          brew install openssl@1.1
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get install pkg-config libssl-dev
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install openssl@1.1
+          fi
 
       - name: Apple M1 setup
         if: ${{ matrix.job.target == 'aarch64-apple-darwin' }}
