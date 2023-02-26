@@ -276,34 +276,36 @@ impl<'a> CodeGenerator<'a> {
                                 return;
                             }
                         }
-                        ValueConstructorVariant::ModuleFn { builtin, .. } => {
-                            if let Some(func) = builtin {
-                                ir_stack.push(Air::Builtin {
-                                    scope: scope.clone(),
-                                    count: func.arity(),
-                                    func: func.clone(),
-                                    tipo: tipo.clone(),
-                                });
+                        ValueConstructorVariant::ModuleFn {
+                            builtin: Some(func),
+                            ..
+                        } => {
+                            ir_stack.push(Air::Builtin {
+                                scope: scope.clone(),
+                                count: func.arity(),
+                                func: *func,
+                                tipo: tipo.clone(),
+                            });
 
-                                if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                        let mut scope = scope.clone();
-                                        scope.push(self.id_gen.next());
+                            if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                    let mut scope = scope.clone();
+                                    scope.push(self.id_gen.next());
 
-                                        if func_type.is_data() && !arg.value.tipo().is_data() {
-                                            ir_stack.push(Air::WrapData {
-                                                scope: scope.clone(),
-                                                tipo: arg.value.tipo(),
-                                            })
-                                        }
-
-                                        self.build_ir(&arg.value, ir_stack, scope);
+                                    if func_type.is_data() && !arg.value.tipo().is_data() {
+                                        ir_stack.push(Air::WrapData {
+                                            scope: scope.clone(),
+                                            tipo: arg.value.tipo(),
+                                        })
                                     }
-                                } else {
-                                    unreachable!()
+
+                                    self.build_ir(&arg.value, ir_stack, scope);
                                 }
-                                return;
+                            } else {
+                                unreachable!()
                             }
+
+                            return;
                         }
                         _ => {}
                     },
@@ -364,7 +366,7 @@ impl<'a> CodeGenerator<'a> {
                                         ir_stack.push(Air::Builtin {
                                             scope: scope.clone(),
                                             count: func.arity(),
-                                            func: func.clone(),
+                                            func: *func,
                                             tipo: tipo.clone(),
                                         });
 
