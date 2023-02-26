@@ -9,7 +9,10 @@ use crate::{
 use indoc::formatdoc;
 use miette::{Diagnostic, LabeledSpan};
 use ordinal::Ordinal;
-use owo_colors::OwoColorize;
+use owo_colors::{
+    OwoColorize,
+    Stream::{Stderr, Stdout},
+};
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
@@ -37,7 +40,7 @@ impl Diagnostic for UnknownLabels {
                {known_labels}"#
             , known_labels = self.valid
                 .iter()
-                .map(|s| format!("─▶ {}", s.yellow()))
+                .map(|s| format!("─▶ {}", s.if_supports_color(Stdout, |s| s.yellow())))
                 .collect::<Vec<_>>()
                 .join("\n")
         }))
@@ -85,10 +88,14 @@ pub enum Error {
         errors: Vec<Snippet>,
     },
 
-    #[error("I found two function arguments both called '{}'.\n", label.purple())]
+    #[error(
+        "I found two function arguments both called '{}'.\n",
+        label.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("duplicate::argument"))]
-    #[diagnostic(help("Function arguments cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names."
-        , discard = "_".yellow()
+    #[diagnostic(help(
+        "Function arguments cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names.",
+        discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     DuplicateArgument {
         #[label]
@@ -100,8 +107,9 @@ pub enum Error {
 
     #[error("I found two declarations for the constant '{}'.\n", name.purple())]
     #[diagnostic(code("duplicate::constant"))]
-    #[diagnostic(help("Top-level constants of a same module cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names."
-        , discard = "_".yellow()
+    #[diagnostic(help(
+        "Top-level constants of a same module cannot have the same name. You can use '{discard}' and numbers to distinguish between similar names.",
+        discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     DuplicateConstName {
         #[label("declared again here")]
@@ -111,7 +119,10 @@ pub enum Error {
         name: String,
     },
 
-    #[error("I stumbled upon the field '{}' twice in a data-type definition.\n", label.purple())]
+    #[error(
+        "I stumbled upon the field '{}' twice in a data-type definition.\n",
+        label.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("duplicate::field"))]
     #[diagnostic(help(r#"Data-types must have fields with strictly different names. You can use '{discard}' and numbers to distinguish between similar names.
 Note that it is also possible to declare data-types with positional (nameless) fields only.
@@ -123,12 +134,12 @@ For example:
   │   {variant_Point}({type_Int}, {type_Int}, {type_Int})
   │ }}
 "#
-        , discard = "_".yellow()
-        , keyword_pub = "pub".bright_blue()
-        , keyword_type = "type".yellow()
-        , type_Int = "Int".green()
-        , type_Point = "Point".green()
-        , variant_Point = "Point".green()
+        , discard = "_".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_type = "type".if_supports_color(Stdout, |s| s.yellow())
+        , type_Int = "Int".if_supports_color(Stdout, |s| s.green())
+        , type_Point = "Point".if_supports_color(Stdout, |s| s.green())
+        , variant_Point = "Point".if_supports_color(Stdout, |s| s.green())
     ))]
     DuplicateField {
         #[label]
@@ -138,7 +149,10 @@ For example:
         label: String,
     },
 
-    #[error("I noticed you were importing '{}' twice.\n", name.purple())]
+    #[error(
+        "I noticed you were importing '{}' twice.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("duplicate::import"))]
     #[diagnostic(help(r#"If you're trying to import two modules with identical names but from different packages, you'll need to use a named import.
 For example:
@@ -146,9 +160,13 @@ For example:
 ╰─▶ {keyword_use} {import} {keyword_as} {named}
 
 Otherwise, just remove the redundant import."#
-        , keyword_use = "use".bright_blue()
-        , keyword_as = "as".bright_blue()
-        , import = module.iter().map(|x| x.purple().bold().to_string()).collect::<Vec<_>>().join("/".bold().to_string().as_ref())
+        , keyword_use = "use".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_as = "as".if_supports_color(Stdout, |s| s.bright_blue())
+        , import = module
+            .iter()
+            .map(|x| x.if_supports_color(Stdout, |s| s.purple()).to_string())
+            .collect::<Vec<_>>()
+            .join("/".if_supports_color(Stdout, |s| s.bold()).to_string().as_ref())
         , named = module.join("_")
     ))]
     DuplicateImport {
@@ -160,13 +178,17 @@ Otherwise, just remove the redundant import."#
         previous_location: Span,
     },
 
-    #[error("I discovered two top-level objects referred to as '{}'.\n", name.purple())]
+    #[error(
+        "I discovered two top-level objects referred to as '{}'.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("duplicate::name"))]
-    #[diagnostic(help(r#"Top-level definitions cannot have the same name, even if they refer to objects with different natures (e.g. function and test).
+    #[diagnostic(help(
+        r#"Top-level definitions cannot have the same name, even if they refer to objects with different natures (e.g. function and test).
 
 You can use '{discard}' and numbers to distinguish between similar names.
-"#
-        , discard = "_".yellow()
+"#,
+        discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     DuplicateName {
         #[label]
@@ -176,10 +198,14 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
-    #[error("I found two types declared with the same name: '{}'.\n", name.purple())]
+    #[error(
+        "I found two types declared with the same name: '{}'.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("duplicate::type"))]
-    #[diagnostic(help("Types cannot have the same top-level name. You {cannot} use '_' in types name, but you can use numbers to distinguish between similar names."
-        , cannot = "cannot".red()
+    #[diagnostic(help(
+        "Types cannot have the same top-level name. You {cannot} use '_' in types name, but you can use numbers to distinguish between similar names.",
+        cannot = "cannot".if_supports_color(Stdout, |s| s.red())
     ))]
     DuplicateTypeName {
         #[label]
@@ -189,7 +215,10 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
-    #[error("I realized the variable '{}' was mentioned more than once in an alternative pattern.\n", name.purple())]
+    #[error(
+        "I realized the variable '{}' was mentioned more than once in an alternative pattern.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url(
         "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
     ))]
@@ -200,7 +229,10 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
-    #[error("I tripped over an extra variable in an alternative pattern: {}.\n", name.purple())]
+    #[error(
+        "I tripped over an extra variable in an alternative pattern: {}.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url(
         "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
     ))]
@@ -221,16 +253,21 @@ You can use '{discard}' and numbers to distinguish between similar names.
 
     #[error("I found a discarded expression not bound to a variable.\n")]
     #[diagnostic(code("implicit_discard"))]
-    #[diagnostic(help("A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'."
-        , keyword_let = "let".yellow()
-        , discard = "_".yellow()
+    #[diagnostic(help(
+        "A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'.",
+        keyword_let = "let".if_supports_color(Stdout, |s| s.yellow()),
+        discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     ImplicitlyDiscardedExpression {
         #[label]
         location: Span,
     },
 
-    #[error("I saw a {} fields in a context where there should be {}.\n", given.purple(), expected.purple())]
+    #[error(
+        "I saw a {} fields in a context where there should be {}.\n",
+        given.if_supports_color(Stdout, |s| s.purple()),
+        expected.if_supports_color(Stdout, |s| s.purple()),
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types"))]
     #[diagnostic(code("arity::constructor"))]
     IncorrectFieldsArity {
@@ -241,7 +278,11 @@ You can use '{discard}' and numbers to distinguish between similar names.
         labels: Vec<String>,
     },
 
-    #[error("I saw a function or constructor that expects {} arguments be called with {} arguments.\n", expected.purple(), given.purple())]
+    #[error(
+        "I saw a function or constructor that expects {} arguments be called with {} arguments.\n",
+        expected.if_supports_color(Stdout, |s| s.purple()),
+        given.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
     #[diagnostic(code("arity::invoke"))]
     #[diagnostic(help(r#"Functions (and constructors) must always be called with all their arguments (comma-separated, between brackets).
@@ -260,11 +301,11 @@ From there, you can define 'increment', a function that takes a single argument 
   ┍━━━━━━━━━━━━━━━━━━━━━━━━━━
   │ {keyword_let} increment = add(1, _)
 "#
-        , discard = "_".yellow()
-        , expected = expected.purple()
-        , keyword_fn = "fn".yellow()
-        , keyword_let = "let".yellow()
-        , type_Int = "Int".green()
+        , discard = "_".if_supports_color(Stdout, |s| s.yellow())
+        , expected = expected.if_supports_color(Stdout, |s| s.purple())
+        , keyword_fn = "fn".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_let = "let".if_supports_color(Stdout, |s| s.yellow())
+        , type_Int = "Int".if_supports_color(Stdout, |s| s.green())
     ))]
     IncorrectFunctionCallArity {
         #[label]
@@ -276,7 +317,11 @@ From there, you can define 'increment', a function that takes a single argument 
     // TODO: Since we do not actually support patterns on multiple items, we won't likely ever
     // encounter that error. We could simplify a bit the type-checker and get rid of that error
     // eventually.
-    #[error("I counted {} different clauses in a multi-pattern instead of {}.\n", given.purple(), expected.purple())]
+    #[error(
+        "I counted {} different clauses in a multi-pattern instead of {}.\n",
+        given.if_supports_color(Stdout, |s| s.purple()),
+        expected.if_supports_color(Stdout, |s| s.purple()),
+    )]
     #[diagnostic(code("arity::clause"))]
     IncorrectNumClausePatterns {
         #[label]
@@ -285,12 +330,17 @@ From there, you can define 'increment', a function that takes a single argument 
         given: usize,
     },
 
-    #[error("I saw a pattern on a constructor that has {} field(s) be matched with {} argument(s).\n", expected.purple(), given.len().purple())]
+    #[error(
+        "I saw a pattern on a constructor that has {} field(s) be matched with {} argument(s).\n",
+        expected.if_supports_color(Stdout, |s| s.purple()),
+        given.len().if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
     #[diagnostic(code("arity::pattern"))]
-    #[diagnostic(help("When pattern-matching on constructors, you must either match the exact number of fields, or use the spread operator '{spread}'. Note that unused fields must be discarded by prefixing their name with '{discard}'."
-        , discard = "_".yellow()
-        , spread = "..".yellow()
+    #[diagnostic(help(
+        "When pattern-matching on constructors, you must either match the exact number of fields, or use the spread operator '{spread}'. Note that unused fields must be discarded by prefixing their name with '{discard}'.",
+        discard = "_".if_supports_color(Stdout, |s| s.yellow()),
+        spread = "..".if_supports_color(Stdout, |s| s.yellow()),
     ))]
     IncorrectPatternArity {
         #[label("{}", suggest_pattern(*expected, name, given, module, *is_record).unwrap_or_default())]
@@ -302,11 +352,16 @@ From there, you can define 'increment', a function that takes a single argument 
         is_record: bool,
     },
 
-    #[error("I saw a pattern on a {}-tuple be matched into a {}-tuple.\n", expected.purple(), given.purple())]
+    #[error(
+        "I saw a pattern on a {}-tuple be matched into a {}-tuple.\n",
+        expected.if_supports_color(Stdout, |s| s.purple()),
+        given.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#destructuring"))]
     #[diagnostic(code("arity::tuple"))]
-    #[diagnostic(help("When pattern matching on a tuple, you must match all of its elements. Note that unused fields must be discarded by prefixing their name with '{discard}'."
-        , discard = "_".yellow()
+    #[diagnostic(help(
+        "When pattern matching on a tuple, you must match all of its elements. Note that unused fields must be discarded by prefixing their name with '{discard}'.",
+        discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     IncorrectTupleArity {
         #[label]
@@ -315,7 +370,11 @@ From there, you can define 'increment', a function that takes a single argument 
         given: usize,
     },
 
-    #[error("I noticed a generic data-type with {} type parameters instead of {}.\n", given.purple(), expected.purple())]
+    #[error(
+        "I noticed a generic data-type with {} type parameters instead of {}.\n",
+        given.if_supports_color(Stdout, |s| s.purple()),
+        expected.if_supports_color(Stdout, |s| s.purple()),
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#generics"))]
     #[diagnostic(code("arity::generic"))]
     #[diagnostic(help(r#"Data-types that are generic in one or more types must be written with all their generic types in type annotations. Generic types must be indicated between chevrons '{chevron_left}' and '{chevron_right}'.
@@ -323,8 +382,8 @@ From there, you can define 'increment', a function that takes a single argument 
 Perhaps, try the following:
 
 ╰─▶  {suggestion}"#
-        , chevron_left = "<".yellow()
-        , chevron_right = ">".yellow()
+        , chevron_left = "<".if_supports_color(Stdout, |s| s.yellow())
+        , chevron_right = ">".if_supports_color(Stdout, |s| s.yellow())
         , suggestion = suggest_generic(name, *expected)
     ))]
     IncorrectTypeArity {
@@ -337,8 +396,8 @@ Perhaps, try the following:
 
     #[error(
       "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
-      name.purple(),
-      keyword.purple()
+      name.if_supports_color(Stdout, |s| s.purple()),
+      keyword.if_supports_color(Stdout, |s| s.purple()),
     )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
     #[diagnostic(code("illegal::module_name"))]
@@ -363,7 +422,10 @@ If you really meant to return that last expression, try to replace it with the f
         expr: expr::UntypedExpr,
     },
 
-    #[error("I found a missing variable in an alternative pattern: {}.\n", name.purple())]
+    #[error(
+        "I found a missing variable in an alternative pattern: {}.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url(
         "https://aiken-lang.org/language-tour/control-flow#alternative-clause-patterns"
     ))]
@@ -374,7 +436,10 @@ If you really meant to return that last expression, try to replace it with the f
         name: String,
     },
 
-    #[error("I stumbled upon an invalid (non-local) clause guard '{}'.\n", name.purple())]
+    #[error(
+        "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
     #[diagnostic(code("illegal::clause_guard"))]
     #[diagnostic(help("There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."))]
@@ -389,10 +454,11 @@ If you really meant to return that last expression, try to replace it with the f
     )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("illegal::tuple_index"))]
-    #[diagnostic(help(r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
+    #[diagnostic(help(
+        r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
 
-╰─▶ {type_info}"#
-        , type_info = tipo.to_pretty(4).red()
+╰─▶ {type_info}"#,
+        type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
     ))]
     NotATuple {
         #[label]
@@ -405,8 +471,8 @@ If you really meant to return that last expression, try to replace it with the f
       } else {
           format!(
               "I realized that a given '{keyword_when}/{keyword_is}' expression is non-exhaustive.",
-              keyword_is = "is".purple(),
-              keyword_when = "when".purple()
+              keyword_is = "is".if_supports_color(Stdout, |s| s.purple()),
+              keyword_when = "when".if_supports_color(Stdout, |s| s.purple())
           )
       }
     )]
@@ -417,9 +483,9 @@ If you really meant to return that last expression, try to replace it with the f
 In this particular instance, the following cases are unmatched:
 
 {missing}"#
-        , discard = "_".yellow()
-        , keyword_is = "is".purple()
-        , keyword_when = "when".purple()
+        , discard = "_".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_is = "is".if_supports_color(Stdout, |s| s.purple())
+        , keyword_when = "when".if_supports_color(Stdout, |s| s.purple())
         , missing = unmatched
             .iter()
             .map(|s| format!("─▶ {s}"))
@@ -435,10 +501,11 @@ In this particular instance, the following cases are unmatched:
 
     #[error("I tripped over a call attempt on something that isn't a function.\n")]
     #[diagnostic(code("illegal::invoke"))]
-    #[diagnostic(help(r#"It seems like you're trying to call something that isn't a function. I am inferring the following type:
+    #[diagnostic(help(
+        r#"It seems like you're trying to call something that isn't a function. I am inferring the following type:
 
-╰─▶  {inference}"#
-        , inference = tipo.to_pretty(4)
+╰─▶ {inference}"#,
+        inference = tipo.to_pretty(0)
     ))]
     NotFn {
         #[label]
@@ -468,8 +535,8 @@ The culprit is:
 {type_info}
 
 Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
-        , type_info = leaked.to_pretty(4).red()
-        , keyword_pub = "pub".bright_blue()
+        , type_info = leaked.to_pretty(4).if_supports_color(Stdout, |s| s.red())
+        , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
     ))]
     PrivateTypeLeak {
         #[label]
@@ -495,9 +562,9 @@ You can help me by providing a type-annotation for 'x', as such:
    ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    │ {keyword_let} foo = {keyword_fn}(x: {type_ScriptContext}) {{ x.transaction }}
 "#
-        , keyword_fn = "fn".yellow()
-        , keyword_let = "let".yellow()
-        , type_ScriptContext = "ScriptContext".green()
+        , keyword_fn = "fn".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_let = "let".if_supports_color(Stdout, |s| s.yellow())
+        , type_ScriptContext = "ScriptContext".if_supports_color(Stdout, |s| s.green())
     ))]
     RecordAccessUnknownType {
         #[label]
@@ -523,8 +590,8 @@ You can help me by providing a type-annotation for 'x', as such:
 
     #[error(
         "I discovered an attempt to access the {} element of a {}-tuple.\n",
-        Ordinal(*index + 1).to_string().purple(),
-        size.purple()
+        Ordinal(*index + 1).to_string().if_supports_color(Stdout, |s| s.purple()),
+        size.if_supports_color(Stdout, |s| s.purple())
     )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("invalid::tuple_index"))]
@@ -535,7 +602,10 @@ You can help me by providing a type-annotation for 'x', as such:
         size: usize,
     },
 
-    #[error("I tripped over the following labeled argument: {}.\n", label.purple())]
+    #[error(
+        "I tripped over the following labeled argument: {}.\n",
+        label.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#labeled-arguments"))]
     #[diagnostic(code("unexpected::module_name"))]
     UnexpectedLabeledArg {
@@ -544,7 +614,10 @@ You can help me by providing a type-annotation for 'x', as such:
         label: String,
     },
 
-    #[error("I tripped over the following labeled argument: {}.\n", label.purple())]
+    #[error(
+        "I tripped over the following labeled argument: {}.\n",
+        label.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#named-accessors"))]
     #[diagnostic(code("unexpected::labeled_argument"))]
     #[diagnostic(help(r#"The constructor '{constructor}' does not have any labeled field. Its fields must therefore be matched only by position.
@@ -553,7 +626,9 @@ Perhaps, try the following:
 
 ╰─▶  {suggestion}
 "#
-        , constructor = name.green()
+        , constructor = name
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
         , suggestion = suggest_constructor_pattern(name, args, module, *with_spread)
     ))]
     UnexpectedLabeledArgInPattern {
@@ -579,7 +654,10 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::labels"))]
     UnknownLabels(#[related] Vec<UnknownLabels>),
 
-    #[error("I stumbled upon a reference to an unknown module: '{}'\n", name.purple())]
+    #[error(
+        "I stumbled upon a reference to an unknown module: '{}'\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("unknown::module"))]
     #[diagnostic(help(
         "{}",
@@ -594,8 +672,8 @@ Perhaps, try the following:
 
     #[error(
         "I found an unknown import '{}' from module '{}'.\n",
-        name.purple(),
-        module_name.purple()
+        name.if_supports_color(Stdout, |s| s.purple()),
+        module_name.if_supports_color(Stdout, |s| s.purple())
     )]
     #[diagnostic(code("unknown::module_field"))]
     #[diagnostic(help(
@@ -615,7 +693,11 @@ Perhaps, try the following:
         type_constructors: Vec<String>,
     },
 
-    #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
+    #[error(
+        "I looked for '{}' in '{}' but couldn't find it.\n",
+        name.if_supports_color(Stdout, |s| s.purple()),
+        module_name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("unknown::module_type"))]
     #[diagnostic(help(
         "{}",
@@ -633,7 +715,10 @@ Perhaps, try the following:
         type_constructors: Vec<String>,
     },
 
-    #[error("I looked for '{}' in '{}' but couldn't find it.\n", name.purple(), module_name.purple())]
+    #[error("I looked for '{}' in '{}' but couldn't find it.\n",
+        name.if_supports_color(Stdout, |s| s.purple()),
+        module_name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("unknown::module_value"))]
     #[diagnostic(help(
         "{}",
@@ -652,14 +737,14 @@ Perhaps, try the following:
     },
 
     #[error(
-      "I looked for the field '{}' in a record of type '{}' couldn't find it.\n",
-      label.purple(),
-      typ.to_pretty(4).purple()
+      "I looked for the field '{}' in a record of type '{}' but couldn't find it.\n",
+      label.if_supports_color(Stdout, |s| s.purple()),
+      typ.to_pretty(0).if_supports_color(Stdout, |s| s.purple()),
     )]
     #[diagnostic(code("unknown::record_field"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(label, fields.iter(), "Did you forget to make the it public?")
+        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?")
     ))]
     UnknownRecordField {
         #[label]
@@ -683,7 +768,10 @@ Perhaps, try the following:
         types: Vec<String>,
     },
 
-    #[error("I found a reference to an unknown data-type constructor: '{}'.\n", name.purple())]
+    #[error(
+        "I found a reference to an unknown data-type constructor: '{}'.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("unknown::type_constructor"))]
     #[diagnostic(help(
         "{}",
@@ -737,24 +825,37 @@ The best thing to do from here is to remove it."#))]
         location: Span,
     },
 
-    #[error("I discovered an attempt to import a validator module: '{}'\n", name.purple())]
+    #[error(
+        "I discovered an attempt to import a validator module: '{}'\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("illegal::import"))]
-    #[diagnostic(help("If you are trying to share code defined in a validator then move it to a library module under {}", "lib/".purple()))]
+    #[diagnostic(help(
+        "If you are trying to share code defined in a validator then move it to a library module under {}",
+        "lib/".if_supports_color(Stdout, |s| s.purple()))
+    )]
     ValidatorImported {
         #[label]
         location: Span,
         name: String,
     },
 
-    #[error("A validator must return {}", "Bool".bright_blue().bold())]
+    #[error(
+        "A validator must return {}",
+        "Bool"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+    )]
     #[diagnostic(code("illegal::validator_return_type"))]
     #[diagnostic(help(r#"While analyzing the return type of your validator, I found it to be:
 
 ╰─▶ {signature}
 
 ...but I expected this to be a {type_Bool}. If I am inferring the wrong type, try annotating the validator's return type with Bool"#
-        , type_Bool = "Bool".bright_blue().bold()
-        , signature = return_type.to_pretty(0).red()
+        , type_Bool = "Bool"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+        , signature = return_type.to_pretty(0).if_supports_color(Stdout, |s| s.red())
     ))]
     ValidatorMustReturnBool {
         #[label("invalid return type")]
@@ -775,7 +876,10 @@ The best thing to do from here is to remove it."#))]
                 arguments.push('s');
             }
 
-            format!("please add the {} missing {arguments}", missing.to_string().yellow())
+            format!(
+                "please add the {} missing {arguments}",
+                missing.to_string().if_supports_color(Stdout, |s| s.yellow()),
+            )
         } else {
             let extra = count - 3;
 
@@ -785,7 +889,10 @@ The best thing to do from here is to remove it."#))]
                 arguments.push('s');
             }
 
-            format!("please remove the {} extra {arguments}", extra.to_string().yellow())
+            format!(
+                "please remove the {} extra {arguments}",
+                extra.to_string().if_supports_color(Stdout, |s| s.yellow()),
+            )
         }
     ))]
     IncorrectValidatorArity {
@@ -881,7 +988,10 @@ fn suggest_neighbor<'a>(
         .min_by(|(_, a), (_, b)| a.cmp(b))
         .and_then(|(suggestion, distance)| {
             if distance <= threshold {
-                Some(format!("Did you mean '{}'?", suggestion.yellow()))
+                Some(format!(
+                    "Did you mean '{}'?",
+                    suggestion.if_supports_color(Stdout, |s| s.yellow())
+                ))
             } else {
                 None
             }
@@ -962,10 +1072,10 @@ fn suggest_unify(
                {given}
 
                Note that I infer the type of the entire '{keyword_when}/{keyword_is}' expression based on the type of the first branch I encounter."#,
-            keyword_when = "when".yellow(),
-            keyword_is = "is".yellow(),
-            expected = expected.green(),
-            given = given.red()
+            keyword_when = "when".if_supports_color(Stdout, |s| s.yellow()),
+            keyword_is = "is".if_supports_color(Stdout, |s| s.yellow()),
+            expected = expected.if_supports_color(Stdout, |s| s.green()),
+            given = given.if_supports_color(Stdout, |s| s.red())
         },
         Some(UnifyErrorSituation::ReturnAnnotationMismatch) => formatdoc! {
             r#"While comparing the return annotation of a function with its actual return type, I realized that both don't match.
@@ -979,8 +1089,8 @@ fn suggest_unify(
                {}
 
                Either, fix the annotation or adjust the function body to return the expected type."#,
-            expected.green(),
-            given.red()
+            expected.if_supports_color(Stdout, |s| s.green()),
+            given.if_supports_color(Stdout, |s| s.red())
         },
         Some(UnifyErrorSituation::PipeTypeMismatch) => formatdoc! {
             r#"As I was looking at a pipeline you have defined, I realized that one of the pipe isn't valid.
@@ -994,8 +1104,8 @@ fn suggest_unify(
                {}
 
                Either, fix the input or change the target so that both match."#,
-            expected.green(),
-            given.red()
+            expected.if_supports_color(Stdout, |s| s.green()),
+            given.if_supports_color(Stdout, |s| s.red())
         },
         Some(UnifyErrorSituation::Operator(op)) => formatdoc! {
             r#"While checking operands of a binary operator, I realized that at least one of them doesn't have the expected type.
@@ -1008,9 +1118,9 @@ fn suggest_unify(
 
                {}
             "#,
-            op.to_doc().to_pretty_string(70).yellow(),
-            expected.green(),
-            given.red()
+            op.to_doc().to_pretty_string(70).if_supports_color(Stdout, |s| s.yellow()),
+            expected.if_supports_color(Stdout, |s| s.green()),
+            given.if_supports_color(Stdout, |s| s.red())
         },
         None => formatdoc! {
             r#"I am inferring the following type:
@@ -1022,8 +1132,8 @@ fn suggest_unify(
                {}
 
                Either, add type-annotation to improve my inference, or adjust the expression to have the expected type."#,
-            expected.green(),
-            given.red()
+            expected.if_supports_color(Stdout, |s| s.green()),
+            given.if_supports_color(Stdout, |s| s.red())
         },
     }
 }
@@ -1044,12 +1154,16 @@ fn suggest_make_public() -> String {
 
            The function 'foo' is private and can't be accessed from outside of the 'aiken/foo' module. But the data-type '{type_Bar}' is public and available.
         "#
-        , keyword_fn = "fn".yellow()
-        , keyword_pub = "pub".bright_blue()
-        , keyword_type = "type".yellow()
-        , literal_foo = "\"foo\"".bright_purple()
-        , type_Bar = "Bar".green()
-        , variant_Bar = "Bar".green()
+        , keyword_fn = "fn".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_type = "type".if_supports_color(Stdout, |s| s.bright_blue())
+        , literal_foo = "\"foo\"".if_supports_color(Stdout, |s| s.bright_purple())
+        , type_Bar = "Bar"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+        , variant_Bar = "Bar"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
     }
 }
 
@@ -1077,15 +1191,21 @@ fn suggest_import_constructor() -> String {
              │   }}
              │ }}
         "#
-        , keyword_fn =  "fn".yellow()
-        , keyword_is = "is".yellow()
-        , keyword_pub = "pub".bright_blue()
-        , keyword_type = "type".yellow()
-        , keyword_use = "use".bright_blue()
-        , keyword_when = "when".yellow()
-        , type_Pet = "Pet".green()
-        , variant_Cat = "Cat".green()
-        , variant_Dog = "Dog".green()
+        , keyword_fn =  "fn".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_is = "is".if_supports_color(Stdout, |s| s.yellow())
+        , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_type = "type".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_use = "use".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_when = "when".if_supports_color(Stdout, |s| s.yellow())
+        , type_Pet = "Pet"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+        , variant_Cat = "Cat"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+        , variant_Dog = "Dog"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
     }
 }
 
@@ -1129,7 +1249,11 @@ pub enum Warning {
     #[error("I found a when expression with a single clause.")]
     #[diagnostic(
         code("single_when_clause"),
-        help("Prefer using a {} binding like so...\n\n{}", "let".purple(), format_suggestion(sample))
+        help(
+            "Prefer using a {} binding like so...\n\n{}",
+            "let".if_supports_color(Stderr, |s| s.purple()),
+            format_suggestion(sample)
+        )
     )]
     SingleWhenClause {
         #[label("use let")]
@@ -1137,10 +1261,19 @@ pub enum Warning {
         sample: UntypedExpr,
     },
 
-    #[error("I found an {} trying to match a type with one constructor", "expect".purple())]
+    #[error(
+        "I found an {} trying to match a type with one constructor",
+        "expect".if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(
         code("single_constructor_expect"),
-        help("If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}", "FROM".bold(), "Data".purple(), "let".purple(), format_suggestion(sample))
+        help(
+            "If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}",
+            "from".if_supports_color(Stderr, |s| s.bold()),
+            "Data".if_supports_color(Stderr, |s| s.purple()),
+            "let".if_supports_color(Stderr, |s| s.purple()),
+            format_suggestion(sample)
+        )
     )]
     SingleConstructorExpect {
         #[label("use let")]
@@ -1161,7 +1294,10 @@ pub enum Warning {
         tipo: Arc<Type>,
     },
 
-    #[error("I discovered an unused constructor: '{}'.\n", name.purple())]
+    #[error(
+        "I discovered an unused constructor: '{}'.\n",
+        name.if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
@@ -1173,7 +1309,10 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I discovered an unused imported module: '{}'.\n", name.purple())]
+    #[error(
+        "I discovered an unused imported module: '{}'.\n",
+        name.if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
@@ -1184,7 +1323,10 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I discovered an unused imported value: '{}'.\n", name.purple())]
+    #[error(
+        "I discovered an unused imported value: '{}'.\n",
+        name.if_supports_color(Stderr, |s| s.purple()),
+    )]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
@@ -1202,11 +1344,14 @@ pub enum Warning {
         location: Span,
     },
 
-    #[error("I found an unused private function: '{}'.\n", name.purple())]
+    #[error(
+        "I found an unused private function: '{}'.\n",
+        name.if_supports_color(Stderr, |s| s.purple()),
+    )]
     #[diagnostic(help(
         "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
-         Otherwise, you might want to get rid of it altogether."
-         , keyword_pub = "pub".bright_blue()
+         Otherwise, you might want to get rid of it altogether.",
+         keyword_pub = "pub".if_supports_color(Stderr, |s| s.bright_blue())
     ))]
     #[diagnostic(code("unused::function"))]
     UnusedPrivateFunction {
@@ -1215,11 +1360,14 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I found an unused (private) module constant: '{}'.\n", name.purple())]
+    #[error(
+        "I found an unused (private) module constant: '{}'.\n",
+        name.if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(help(
         "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
-         Otherwise, you might want to get rid of it altogether."
-        , keyword_pub = "pub".bright_blue()
+         Otherwise, you might want to get rid of it altogether.",
+         keyword_pub = "pub".if_supports_color(Stderr, |s| s.bright_blue())
     ))]
     #[diagnostic(code("unused::constant"))]
     UnusedPrivateModuleConstant {
@@ -1228,7 +1376,10 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I discovered an unused type: '{}'.\n", name.purple())]
+    #[error(
+        "I discovered an unused type: '{}'.\n",
+        name.if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(code("unused::type"))]
     UnusedType {
         #[label]
@@ -1248,10 +1399,13 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I came across a validator in a {} module which means\nI'm going to ignore it.\n", "lib/".purple())]
+    #[error(
+        "I came across a validator in a {} module which means\nI'm going to ignore it.\n",
+        "lib/".if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(help(
         "No big deal, but you might want to move it to a {} module\nor remove it to get rid of that warning.",
-        "validators/".purple()
+        "validators/".if_supports_color(Stderr, |s| s.purple())
     ))]
     #[diagnostic(code("unused::validator"))]
     ValidatorInLibraryModule {
@@ -1261,7 +1415,9 @@ pub enum Warning {
 
     #[error(
         "I noticed a suspicious {type_ByteArray} UTF-8 literal which resembles a hash digest.",
-        type_ByteArray = "ByteArray".bold().bright_blue()
+        type_ByteArray = "ByteArray"
+            .if_supports_color(Stderr, |s| s.bright_blue())
+            .if_supports_color(Stderr, |s| s.bold())
     )]
     #[diagnostic(help("{}", formatdoc! {
         r#"When you specify a {type_ByteArray} literal using plain double-quotes, it's interpreted as an array of UTF-8 bytes. For example, the literal {literal_foo} is interpreted as the byte sequence {foo_bytes}.
@@ -1270,11 +1426,13 @@ pub enum Warning {
 
            ╰─▶ {symbol_hash}{value}
         "#,
-        type_ByteArray = "ByteArray".bold().bright_blue(),
-        literal_foo = "\"foo\"".purple(),
-        foo_bytes = "#[102, 111, 111]".purple(),
-        value = "\"{value}\"".purple(),
-        symbol_hash = "#".purple(),
+        type_ByteArray = "ByteArray"
+            .if_supports_color(Stderr, |s| s.bright_blue())
+            .if_supports_color(Stderr, |s| s.bold()),
+        literal_foo = "\"foo\"".if_supports_color(Stderr, |s| s.purple()),
+        foo_bytes = "#[102, 111, 111]".if_supports_color(Stderr, |s| s.purple()),
+        value = "\"{value}\"".if_supports_color(Stderr, |s| s.purple()),
+        symbol_hash = "#".if_supports_color(Stderr, |s| s.purple()),
     }))]
     #[diagnostic(code("syntax::bytearray_literal_is_hex_string"))]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]
@@ -1314,9 +1472,11 @@ fn format_suggestion(sample: &UntypedExpr) -> String {
         .enumerate()
         .map(|(ix, line)| {
             if ix == 0 {
-                format!("╰─▶ {}", line.yellow())
+                format!("╰─▶ {}", line.if_supports_color(Stdout, |s| s.yellow()))
             } else {
-                format!("    {line}").yellow().to_string()
+                format!("    {line}")
+                    .if_supports_color(Stdout, |s| s.yellow())
+                    .to_string()
             }
         })
         .collect::<Vec<_>>()

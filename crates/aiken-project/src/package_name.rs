@@ -1,4 +1,4 @@
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stdout};
 use serde::{de::Visitor, Deserialize, Serialize};
 use std::{
     fmt::{self, Display},
@@ -109,12 +109,19 @@ impl<'de> Deserialize<'de> for PackageName {
 
 #[derive(Debug, Error, miette::Diagnostic)]
 pub enum Error {
-    #[error("{} is not a valid project name: {}", name.red(), reason.to_string())]
+    #[error(
+        "{} is not a valid project name: {}",
+        name.if_supports_color(Stdout, |s| s.red()),
+        reason.to_string()
+    )]
     InvalidProjectName {
         name: String,
         reason: InvalidProjectNameReason,
     },
-    #[error("A project named {} already exists.", name.red())]
+    #[error(
+        "A project named {} already exists.",
+        name.if_supports_color(Stdout, |s| s.red())
+    )]
     ProjectExists { name: String },
 }
 
@@ -134,9 +141,9 @@ impl fmt::Display for InvalidProjectNameReason {
                 {}/{}\n\nEach part must start with a lowercase letter \
                 and may only contain lowercase letters, numbers, hyphens or underscores.\
                 \nFor example,\n\n\t{}",
-                "{owner}".bright_blue(),
-                "{project}".bright_blue(),
-                "aiken-lang/stdlib".bright_blue(),
+                "{owner}".if_supports_color(Stdout, |s| s.bright_blue()),
+                "{project}".if_supports_color(Stdout, |s| s.bright_blue()),
+                "aiken-lang/stdlib".if_supports_color(Stdout, |s| s.bright_blue()),
             ),
         }
     }

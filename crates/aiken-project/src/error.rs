@@ -10,7 +10,7 @@ use aiken_lang::{
 use miette::{
     Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
 };
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stdout};
 use std::{
     fmt::{Debug, Display},
     io,
@@ -121,7 +121,7 @@ pub enum Error {
 
 impl Error {
     pub fn report(&self) {
-        eprintln!("Error: {self:?}")
+        println!("{self:?}")
     }
 
     pub fn from_parse_errors(errs: Vec<ParseError>, path: &Path, src: &str) -> Vec<Self> {
@@ -314,13 +314,27 @@ impl Diagnostic for Error {
             Error::NoValidatorNotFound { known_validators } => {
                 Some(Box::new(format!(
                     "Here's a list of all validators I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
-                    known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
+                    known_validators
+                        .iter()
+                        .map(|title| format!(
+                            "→ {title}",
+                            title = title.if_supports_color(Stdout, |s| s.purple())
+                        ))
+                        .collect::<Vec<String>>()
+                        .join("\n")
                 )))
             },
             Error::MoreThanOneValidatorFound { known_validators } => {
                 Some(Box::new(format!(
                     "Here's a list of all validators I've found in your project. Select one of them using the appropriate options:\n\n{}",
-                    known_validators.iter().map(|title| format!("→ {title}", title = title.purple().bold())).collect::<Vec<String>>().join("\n")
+                    known_validators
+                        .iter()
+                        .map(|title| format!(
+                            "→ {title}",
+                            title = title.if_supports_color(Stdout, |s| s.purple())
+                        ))
+                        .collect::<Vec<String>>()
+                        .join("\n")
                 )))
             },
             Error::Module(e) => e.help(),
@@ -526,7 +540,7 @@ impl Warning {
     }
 
     pub fn report(&self) {
-        eprintln!("Warning: {self:?}")
+        eprintln!("{self:?}")
     }
 }
 

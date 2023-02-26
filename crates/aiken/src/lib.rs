@@ -1,6 +1,9 @@
 use aiken_project::{pretty, script::EvalInfo, telemetry, Project};
 use miette::IntoDiagnostic;
-use owo_colors::OwoColorize;
+use owo_colors::{
+    OwoColorize,
+    Stream::{self, Stderr},
+};
 use std::{collections::BTreeMap, env, path::PathBuf, process};
 use uplc::machine::cost_model::ExBudget;
 
@@ -41,7 +44,12 @@ where
             err.report()
         }
 
-        println!("\n{}", "Summary".purple().bold());
+        eprintln!(
+            "\n{}",
+            "Summary"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold())
+        );
 
         let warning_text = format!("{warning_count} warning{plural}");
 
@@ -49,17 +57,29 @@ where
 
         let error_text = format!("{} error{}", errs.len(), plural);
 
-        let full_summary = format!("    {}, {}", error_text.red(), warning_text.yellow());
+        let full_summary = format!(
+            "    {}, {}",
+            error_text.if_supports_color(Stderr, |s| s.red()),
+            warning_text.if_supports_color(Stderr, |s| s.yellow())
+        );
 
-        println!("{full_summary}");
+        eprintln!("{full_summary}");
 
         process::exit(1);
     } else {
-        println!("\n{}", "Summary".purple().bold());
+        eprintln!(
+            "\n{}",
+            "Summary"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold())
+        );
 
         let warning_text = format!("{warning_count} warning{plural}");
 
-        println!("    0 errors, {}", warning_text.yellow(),);
+        eprintln!(
+            "    0 errors, {}",
+            warning_text.if_supports_color(Stderr, |s| s.yellow()),
+        );
     }
     Ok(())
 }
@@ -75,12 +95,15 @@ impl telemetry::EventListener for Terminal {
                 version,
                 root,
             } => {
-                println!(
+                eprintln!(
                     "{} {} {} ({})",
-                    "    Compiling".bold().purple(),
-                    name.bold(),
+                    "    Compiling"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    name.if_supports_color(Stderr, |s| s.bold()),
                     version,
-                    root.display().bright_blue()
+                    root.display()
+                        .if_supports_color(Stderr, |s| s.bright_blue())
                 );
             }
             telemetry::Event::BuildingDocumentation {
@@ -88,65 +111,103 @@ impl telemetry::EventListener for Terminal {
                 version,
                 root,
             } => {
-                println!(
+                eprintln!(
                     "{} {} {} ({})",
-                    "   Generating documentation".bold().purple(),
-                    name.bold(),
+                    "   Generating documentation"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    name.if_supports_color(Stderr, |s| s.bold()),
                     version,
-                    root.to_str().unwrap_or("").bright_blue()
+                    root.to_str()
+                        .unwrap_or("")
+                        .if_supports_color(Stderr, |s| s.bright_blue())
                 );
             }
             telemetry::Event::WaitingForBuildDirLock => {
-                println!("{}", "Waiting for build directory lock ...".bold().purple());
+                eprintln!(
+                    "{}",
+                    "Waiting for build directory lock ..."
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple())
+                );
             }
             telemetry::Event::DumpingUPLC { path } => {
-                println!(
+                eprintln!(
                     "{} {} ({})",
-                    "    Exporting".bold().purple(),
-                    "UPLC".bold(),
-                    path.display().bright_blue()
+                    "    Exporting"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    "UPLC".if_supports_color(Stderr, |s| s.bold()),
+                    path.display()
+                        .if_supports_color(Stderr, |s| s.bright_blue())
                 );
             }
             telemetry::Event::GeneratingBlueprint { path } => {
-                println!(
+                eprintln!(
                     "{} {} ({})",
-                    "   Generating".bold().purple(),
-                    "project's blueprint".bold(),
-                    path.display().bright_blue()
+                    "   Generating"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    "project's blueprint".if_supports_color(Stderr, |s| s.bold()),
+                    path.display()
+                        .if_supports_color(Stderr, |s| s.bright_blue())
                 );
             }
             telemetry::Event::GeneratingDocFiles { output_path } => {
-                println!(
+                eprintln!(
                     "{} in {}",
-                    "   Generating documentation files".bold().purple(),
-                    output_path.to_str().unwrap_or("").bright_blue()
+                    "   Generating documentation files"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    output_path
+                        .to_str()
+                        .unwrap_or("")
+                        .if_supports_color(Stderr, |s| s.bright_blue())
                 );
             }
             telemetry::Event::GeneratingUPLCFor { name, path } => {
-                println!(
+                eprintln!(
                     "{} {}.{{{}}}",
-                    "   Generating UPLC for".bold().purple(),
-                    path.to_str().unwrap_or("").blue(),
-                    name.bright_blue(),
+                    "   Generating UPLC for"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    path.to_str()
+                        .unwrap_or("")
+                        .if_supports_color(Stderr, |s| s.blue()),
+                    name.if_supports_color(Stderr, |s| s.bright_blue()),
                 );
             }
             telemetry::Event::EvaluatingFunction { results } => {
-                println!("{}\n", "  Evaluating function ...".bold().purple());
+                eprintln!(
+                    "{}\n",
+                    "  Evaluating function ..."
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple())
+                );
 
                 let (max_mem, max_cpu) = find_max_execution_units(&results);
 
                 for eval_info in &results {
-                    println!("    {}", fmt_eval(eval_info, max_mem, max_cpu))
+                    println!("    {}", fmt_eval(eval_info, max_mem, max_cpu, Stderr))
                 }
             }
             telemetry::Event::RunningTests => {
-                println!("{} {}\n", "      Testing".bold().purple(), "...".bold());
+                eprintln!(
+                    "{} {}\n",
+                    "      Testing"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    "...".if_supports_color(Stderr, |s| s.bold())
+                );
             }
             telemetry::Event::FinishedTests { tests } => {
                 let (max_mem, max_cpu) = find_max_execution_units(&tests);
 
                 for (module, infos) in &group_by_module(&tests) {
-                    let title = module.bold().blue().to_string();
+                    let title = module
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.blue())
+                        .to_string();
 
                     let tests = infos
                         .iter()
@@ -156,11 +217,11 @@ impl telemetry::EventListener for Terminal {
 
                     let summary = fmt_test_summary(infos, true);
 
-                    println!(
+                    eprintln!(
                         "{}\n",
                         pretty::indent(
                             &pretty::open_box(&title, &tests, &summary, |border| border
-                                .bright_black()
+                                .if_supports_color(Stderr, |s| s.bright_black())
                                 .to_string()),
                             4
                         )
@@ -168,7 +229,13 @@ impl telemetry::EventListener for Terminal {
                 }
             }
             telemetry::Event::DownloadingPackage { name } => {
-                println!("{} {}", "  Downloading".bold().purple(), name.bold())
+                eprintln!(
+                    "{} {}",
+                    "  Downloading"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    name.if_supports_color(Stderr, |s| s.bold())
+                )
             }
             telemetry::Event::PackagesDownloaded { start, count } => {
                 let elapsed = format!("{:.2}s", start.elapsed().as_millis() as f32 / 1000.);
@@ -178,10 +245,21 @@ impl telemetry::EventListener for Terminal {
                     _ => format!("{count} packages in {elapsed}"),
                 };
 
-                println!("{} {}", "   Downloaded".bold().purple(), msg.bold())
+                eprintln!(
+                    "{} {}",
+                    "   Downloaded"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    msg.if_supports_color(Stderr, |s| s.bold())
+                )
             }
             telemetry::Event::ResolvingVersions => {
-                println!("{}", "    Resolving versions".bold().purple(),)
+                eprintln!(
+                    "{}",
+                    "    Resolving versions"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                )
             }
         }
     }
@@ -203,13 +281,27 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
     let test = format!(
         "{status} [mem: {mem_unit}, cpu: {cpu_unit}] {module}",
         status = if *success {
-            pretty::style_if(styled, "PASS".to_string(), |s| s.bold().green().to_string())
+            pretty::style_if(styled, "PASS".to_string(), |s| {
+                s.if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.green())
+                    .to_string()
+            })
         } else {
-            pretty::style_if(styled, "FAIL".to_string(), |s| s.bold().red().to_string())
+            pretty::style_if(styled, "FAIL".to_string(), |s| {
+                s.if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.red())
+                    .to_string()
+            })
         },
-        mem_unit = pretty::style_if(styled, mem_pad, |s| s.bright_white().to_string()),
-        cpu_unit = pretty::style_if(styled, cpu_pad, |s| s.bright_white().to_string()),
-        module = pretty::style_if(styled, script.name.clone(), |s| s.bright_blue().to_string()),
+        mem_unit = pretty::style_if(styled, mem_pad, |s| s
+            .if_supports_color(Stderr, |s| s.bright_white())
+            .to_string()),
+        cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
+            .if_supports_color(Stderr, |s| s.bright_white())
+            .to_string()),
+        module = pretty::style_if(styled, script.name.clone(), |s| s
+            .if_supports_color(Stderr, |s| s.bright_blue())
+            .to_string()),
     );
 
     let logs = if logs.is_empty() {
@@ -219,8 +311,8 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
             .map(|line| {
                 format!(
                     "{arrow} {styled_line}",
-                    arrow = "↳".bright_yellow(),
-                    styled_line = line.bright_black()
+                    arrow = "↳".if_supports_color(Stderr, |s| s.bright_yellow()),
+                    styled_line = line.if_supports_color(Stderr, |s| s.bright_black())
                 )
             })
             .collect::<Vec<_>>()
@@ -247,20 +339,20 @@ fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {
     format!(
         "{} | {} | {}",
         pretty::style_if(styled, format!("{} tests", tests.len()), |s| s
-            .bold()
+            .if_supports_color(Stderr, |s| s.bold())
             .to_string()),
         pretty::style_if(styled, format!("{n_passed} passed"), |s| s
-            .bright_green()
-            .bold()
+            .if_supports_color(Stderr, |s| s.bright_green())
+            .if_supports_color(Stderr, |s| s.bold())
             .to_string()),
         pretty::style_if(styled, format!("{n_failed} failed"), |s| s
-            .bright_red()
-            .bold()
+            .if_supports_color(Stderr, |s| s.bright_red())
+            .if_supports_color(Stderr, |s| s.bold())
             .to_string()),
     )
 }
 
-fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
+fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, stream: Stream) -> String {
     let EvalInfo {
         output,
         script,
@@ -272,8 +364,8 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize) -> String {
 
     format!(
         "    {}::{} [mem: {}, cpu: {}]\n    │\n    ╰─▶ {}",
-        script.module.blue(),
-        script.name.bright_blue(),
+        script.module.if_supports_color(stream, |s| s.blue()),
+        script.name.if_supports_color(stream, |s| s.bright_blue()),
         pretty::pad_left(mem.to_string(), max_mem, " "),
         pretty::pad_left(cpu.to_string(), max_cpu, " "),
         output

@@ -7,7 +7,7 @@ use crate::{
     tipo::{PatternConstructor, Type, TypeInfo},
 };
 use miette::Diagnostic;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stdout};
 
 pub const ASSERT_VARIABLE: &str = "_try";
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -1190,8 +1190,8 @@ impl chumsky::Span for Span {
 pub enum Error {
     #[error(
       "I realized the module '{}' contains the keyword '{}', which is forbidden.\n",
-      name.purple(),
-      keyword.purple()
+      name.if_supports_color(Stdout, |s| s.purple()),
+      keyword.if_supports_color(Stdout, |s| s.purple())
     )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/modules"))]
     #[diagnostic(code("illegal::module_name"))]
@@ -1200,7 +1200,9 @@ pub enum Error {
     as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
     KeywordInModuleName { name: String, keyword: String },
 
-    #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n", name.purple())]
+    #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
     #[diagnostic(code("illegal::module_name"))]
     #[diagnostic(help(r#"Some module names are reserved for internal use. This the case of:
 

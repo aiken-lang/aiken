@@ -5,7 +5,7 @@ use aiken_project::{
     pretty,
 };
 use miette::IntoDiagnostic;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{path::PathBuf, process, str::FromStr};
 
 #[derive(clap::Args)]
@@ -43,27 +43,29 @@ pub fn exec(args: Args) -> miette::Result<()> {
         }
     };
 
-    println!(
+    eprintln!(
         "{} {}",
         pretty::pad_left("Package".to_string(), 13, " ")
             .bold()
             .purple(),
-        dependency.name.bright_blue(),
+        dependency
+            .name
+            .if_supports_color(Stderr, |s| s.bright_blue()),
     );
 
     match config.insert(&dependency, args.overwrite) {
         Some(config) => {
             config.save(&root).into_diagnostic()?;
-            println!(
+            eprintln!(
                 "{} version → {}",
                 pretty::pad_left(
                     if args.overwrite { "Changed" } else { "Added" }.to_string(),
                     13,
                     " "
                 )
-                .bold()
-                .purple(),
-                dependency.version.yellow()
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold()),
+                dependency.version.if_supports_color(Stderr, |s| s.yellow())
             );
             Ok(())
         }

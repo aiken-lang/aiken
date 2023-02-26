@@ -4,7 +4,7 @@ use aiken_project::{
 };
 use indoc::{formatdoc, indoc};
 use miette::IntoDiagnostic;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -55,7 +55,7 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
 }
 
 fn print_success_message(package_name: &PackageName) {
-    println!(
+    eprintln!(
         "\n{}",
         formatdoc! {
             r#"Your Aiken project {name} has been {s} created.
@@ -64,10 +64,17 @@ fn print_success_message(package_name: &PackageName) {
                    {cd} {name}
                    {aiken} check
             "#,
-            s = "successfully".bold().bright_green(),
-            cd = "cd".bold().purple(),
-            name = package_name.repo.bright_blue(),
-            aiken = "aiken".bold().purple(),
+            s = "successfully"
+                .if_supports_color(Stderr, |s| s.bright_green())
+                .if_supports_color(Stderr, |s| s.bold()),
+            cd = "cd"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold()),
+            name = package_name
+                .if_supports_color(Stderr, |s| s.repo.bright_blue()),
+            aiken = "aiken"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold())
         }
     )
 }

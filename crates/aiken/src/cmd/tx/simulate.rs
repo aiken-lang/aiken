@@ -1,5 +1,5 @@
 use miette::IntoDiagnostic;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_primitives::{
     babbage::{Redeemer, TransactionInput, TransactionOutput},
     Fragment,
@@ -54,7 +54,12 @@ pub fn exec(
         zero_slot,
     }: Args,
 ) -> miette::Result<()> {
-    eprintln!("{} script context", "      Parsing".bold().purple(),);
+    eprintln!(
+        "{} script context",
+        "      Parsing"
+            .if_supports_color(Stderr, |s| s.purple())
+            .if_supports_color(Stderr, |s| s.bold())
+    );
 
     let (tx_bytes, inputs_bytes, outputs_bytes) = if cbor {
         (
@@ -78,7 +83,13 @@ pub fn exec(
         .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
         .into_diagnostic()?;
 
-    eprintln!("{} {}", "   Simulating".bold().purple(), tx.hash());
+    eprintln!(
+        "{} {}",
+        "   Simulating"
+            .if_supports_color(Stderr, |s| s.purple())
+            .if_supports_color(Stderr, |s| s.bold()),
+        tx.hash()
+    );
 
     let inputs = Vec::<TransactionInput>::decode_fragment(&inputs_bytes).unwrap();
     let outputs = Vec::<TransactionOutput>::decode_fragment(&outputs_bytes).unwrap();
@@ -100,9 +111,11 @@ pub fn exec(
         };
 
         let with_redeemer = |redeemer: &Redeemer| {
-            println!(
+            eprintln!(
                 "{} {:?} → {}",
-                "     Redeemer".bold().purple(),
+                "     Redeemer"
+                    .if_supports_color(Stderr, |s| s.purple())
+                    .if_supports_color(Stderr, |s| s.bold()),
                 redeemer.tag,
                 redeemer.index
             )
@@ -147,7 +160,13 @@ pub fn exec(
 }
 
 fn display_tx_error(err: &tx::error::Error) -> String {
-    let mut msg = format!("{} {}", "        Error".bold().red(), err.red());
+    let mut msg = format!(
+        "{} {}",
+        "        Error"
+            .if_supports_color(Stderr, |s| s.red())
+            .if_supports_color(Stderr, |s| s.bold()),
+        err.red()
+    );
     match err {
         tx::error::Error::RedeemerError { err, .. } => {
             msg.push_str(&format!(
@@ -164,7 +183,15 @@ fn display_tx_error(err: &tx::error::Error) -> String {
             msg.push_str(
                 traces
                     .iter()
-                    .map(|s| format!("\n{} {}", "        Trace".bold().yellow(), s.yellow()))
+                    .map(|s| {
+                        format!(
+                            "\n{} {}",
+                            "        Trace"
+                                .if_supports_color(Stderr, |s| s.yellow())
+                                .if_supports_color(Stderr, |s| s.bold()),
+                            s.if_supports_color(Stderr, |s| s.yellow())
+                        )
+                    })
                     .collect::<Vec<_>>()
                     .join("")
                     .as_str(),

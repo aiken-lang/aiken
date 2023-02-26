@@ -1,7 +1,7 @@
 use crate::{ast::Span, parser::token::Token};
 use indoc::formatdoc;
 use miette::Diagnostic;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stdout};
 use std::collections::HashSet;
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
@@ -123,8 +123,12 @@ pub enum ErrorKind {
              ┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
              │ {} my_policy_id {}
              │   #{}
-        "#
-    , "pub const".bright_blue(), "=".yellow(), "\"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50\"".bright_purple()}))]
+        "#,
+        "pub const".if_supports_color(Stdout, |s| s.bright_blue()),
+        "=".if_supports_color(Stdout, |s| s.yellow()),
+        "\"f4c9f9c4252d86702c2f4c2e49e6648c7cffe3c8f2b6b7d779788f50\""
+            .if_supports_color(Stdout, |s| s.bright_purple())
+    }))]
     MalformedBase16StringLiteral,
 
     #[error("I failed to understand a when clause guard.")]
@@ -143,10 +147,10 @@ pub enum ErrorKind {
            {bad}   (x, _) if x % 3 == 0 -> ...
            {bad}   (x, y) if x + y > 42 -> ...
         "#
-        , operator_or = "||".yellow()
-        , operator_and = "&&".yellow()
-        , good = "✔️".green()
-        , bad = "✖️".red()
+        , operator_or = "||".if_supports_color(Stdout, |s| s.yellow())
+        , operator_and = "&&".if_supports_color(Stdout, |s| s.yellow())
+        , good = "✔️".if_supports_color(Stdout, |s| s.green())
+        , bad = "✖️".if_supports_color(Stdout, |s| s.red())
     }))]
     InvalidWhenClause,
 }

@@ -3,7 +3,7 @@ use aiken_lang::{
     ast::{DataType, Definition, TypedDefinition},
     tipo::{pretty, Type, TypeVar},
 };
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Stream::Stdout};
 use serde::{
     self,
     ser::{Serialize, SerializeStruct, Serializer},
@@ -533,7 +533,9 @@ I got there when trying to generate a blueprint specification of the following t
                 r#"There cannot be any unbound type variable at the contract's boundary (i.e. in types used as datum and/or redeemer). Indeed, in order to generate an outward-facing specification of the contract's interface, I need to know what concrete representations will the datum and/or the redeemer have.
 
 If your contract doesn't need datum or redeemer, you can always give them the type {type_Void} to indicate this. It is very concrete and will help me progress forward."#,
-                type_Void = "Void".bright_blue().bold()
+                type_Void = "Void"
+                    .if_supports_color(Stdout, |s| s.bright_blue())
+                    .if_supports_color(Stdout, |s| s.bold())
             ),
 
             ErrorContext::ExpectedData => format!(
@@ -542,7 +544,9 @@ If your contract doesn't need datum or redeemer, you can always give them the ty
 There are few restrictions like this one. In this instance, here's the types I followed and that led me to this problem:
 
 ╰─▶ {breadcrumbs}"#,
-                type_String = "String".bright_blue().bold(),
+                type_String = "String"
+                    .if_supports_color(Stdout, |s| s.bright_blue())
+                    .if_supports_color(Stdout, |s| s.bold()),
                 breadcrumbs = Error::fmt_breadcrumbs(&self.breadcrumbs)
             ),
 
@@ -564,8 +568,8 @@ Here's the types I followed and that led me to this problem:
                 pretty::Printer::new()
                     .print(type_info)
                     .to_pretty_string(70)
-                    .bright_blue()
-                    .bold()
+                    .if_supports_color(Stdout, |s| s.bright_blue())
+                    .if_supports_color(Stdout, |s| s.bold())
                     .to_string()
             })
             .collect::<Vec<_>>()
