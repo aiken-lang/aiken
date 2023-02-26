@@ -174,6 +174,7 @@ impl<'a> CodeGenerator<'a> {
                         scope,
                         func: *builtin,
                         tipo: constructor.tipo.clone(),
+                        count: 0,
                     });
                 }
                 _ => {
@@ -233,44 +234,168 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Call {
                 fun, args, tipo, ..
             } => {
-                if let Some(data_type) = lookup_data_type_by_tipo(self.data_types.clone(), tipo) {
-                    if let TypedExpr::Var { constructor, .. } = &**fun {
-                        if let ValueConstructorVariant::Record {
+                match &**fun {
+                    TypedExpr::Var { constructor, .. } => match &constructor.variant {
+                        ValueConstructorVariant::Record {
                             name: constr_name, ..
-                        } = &constructor.variant
-                        {
-                            let (constr_index, _) = data_type
-                                .constructors
-                                .iter()
-                                .enumerate()
-                                .find(|(_, dt)| &dt.name == constr_name)
-                                .unwrap();
+                        } => {
+                            if let Some(data_type) =
+                                lookup_data_type_by_tipo(self.data_types.clone(), tipo)
+                            {
+                                let (constr_index, _) = data_type
+                                    .constructors
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, dt)| &dt.name == constr_name)
+                                    .unwrap();
 
-                            ir_stack.push(Air::Record {
-                                scope: scope.clone(),
-                                constr_index,
-                                tipo: constructor.tipo.clone(),
-                                count: args.len(),
-                            });
+                                ir_stack.push(Air::Record {
+                                    scope: scope.clone(),
+                                    constr_index,
+                                    tipo: constructor.tipo.clone(),
+                                    count: args.len(),
+                                });
 
-                            if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                    let mut scope = scope.clone();
-                                    scope.push(self.id_gen.next());
+                                if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                        let mut scope = scope.clone();
+                                        scope.push(self.id_gen.next());
 
-                                    if func_type.is_data() && !arg.value.tipo().is_data() {
-                                        ir_stack.push(Air::WrapData {
-                                            scope: scope.clone(),
-                                            tipo: arg.value.tipo(),
-                                        })
+                                        if func_type.is_data() && !arg.value.tipo().is_data() {
+                                            ir_stack.push(Air::WrapData {
+                                                scope: scope.clone(),
+                                                tipo: arg.value.tipo(),
+                                            })
+                                        }
+
+                                        self.build_ir(&arg.value, ir_stack, scope);
                                     }
-
-                                    self.build_ir(&arg.value, ir_stack, scope);
+                                } else {
+                                    unreachable!()
                                 }
                                 return;
                             }
                         }
-                    }
+                        ValueConstructorVariant::ModuleFn { builtin, .. } => {
+                            if let Some(func) = builtin {
+                                ir_stack.push(Air::Builtin {
+                                    scope: scope.clone(),
+                                    count: func.arity(),
+                                    func: func.clone(),
+                                    tipo: tipo.clone(),
+                                });
+
+                                if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                        let mut scope = scope.clone();
+                                        scope.push(self.id_gen.next());
+
+                                        if func_type.is_data() && !arg.value.tipo().is_data() {
+                                            ir_stack.push(Air::WrapData {
+                                                scope: scope.clone(),
+                                                tipo: arg.value.tipo(),
+                                            })
+                                        }
+
+                                        self.build_ir(&arg.value, ir_stack, scope);
+                                    }
+                                } else {
+                                    unreachable!()
+                                }
+                                return;
+                            }
+                        }
+                        _ => {}
+                    },
+                    TypedExpr::ModuleSelect {
+                        constructor,
+                        module_name,
+                        ..
+                    } => match constructor {
+                        ModuleValueConstructor::Record {
+                            name: constr_name,
+                            tipo,
+                            ..
+                        } => {
+                            if let Some(data_type) =
+                                lookup_data_type_by_tipo(self.data_types.clone(), tipo)
+                            {
+                                let (constr_index, _) = data_type
+                                    .constructors
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, dt)| &dt.name == constr_name)
+                                    .unwrap();
+
+                                ir_stack.push(Air::Record {
+                                    scope: scope.clone(),
+                                    constr_index,
+                                    tipo: tipo.clone(),
+                                    count: args.len(),
+                                });
+
+                                if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                        let mut scope = scope.clone();
+                                        scope.push(self.id_gen.next());
+
+                                        if func_type.is_data() && !arg.value.tipo().is_data() {
+                                            ir_stack.push(Air::WrapData {
+                                                scope: scope.clone(),
+                                                tipo: arg.value.tipo(),
+                                            })
+                                        }
+
+                                        self.build_ir(&arg.value, ir_stack, scope);
+                                    }
+                                } else {
+                                    unreachable!()
+                                }
+                                return;
+                            }
+                        }
+                        ModuleValueConstructor::Fn { name, .. } => {
+                            let type_info = self.module_types.get(module_name).unwrap();
+                            let value = type_info.values.get(name).unwrap();
+
+                            match &value.variant {
+                                ValueConstructorVariant::ModuleFn { builtin, .. } => {
+                                    if let Some(func) = builtin {
+                                        ir_stack.push(Air::Builtin {
+                                            scope: scope.clone(),
+                                            count: func.arity(),
+                                            func: func.clone(),
+                                            tipo: tipo.clone(),
+                                        });
+
+                                        if let Some(fun_arg_types) = fun.tipo().arg_types() {
+                                            for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                                let mut scope = scope.clone();
+                                                scope.push(self.id_gen.next());
+
+                                                if func_type.is_data()
+                                                    && !arg.value.tipo().is_data()
+                                                {
+                                                    ir_stack.push(Air::WrapData {
+                                                        scope: scope.clone(),
+                                                        tipo: arg.value.tipo(),
+                                                    })
+                                                }
+
+                                                self.build_ir(&arg.value, ir_stack, scope);
+                                            }
+                                        } else {
+                                            unreachable!()
+                                        }
+                                        return;
+                                    }
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        _ => {}
+                    },
+                    _ => {}
                 }
 
                 ir_stack.push(Air::Call {
@@ -575,13 +700,14 @@ impl<'a> CodeGenerator<'a> {
                         let value = type_info.values.get(name).unwrap();
                         match &value.variant {
                             ValueConstructorVariant::ModuleFn { builtin, .. } => {
-                                let builtin = builtin.unwrap();
-
-                                ir_stack.push(Air::Builtin {
-                                    func: builtin,
-                                    scope,
-                                    tipo: tipo.clone(),
-                                });
+                                if let Some(builtin) = builtin {
+                                    ir_stack.push(Air::Builtin {
+                                        func: *builtin,
+                                        scope,
+                                        tipo: tipo.clone(),
+                                        count: 0,
+                                    });
+                                }
                             }
                             _ => unreachable!(),
                         }
@@ -2339,16 +2465,11 @@ impl<'a> CodeGenerator<'a> {
             let inner_list_type = &tipo.get_inner_types()[0];
             let inner_pair_types = inner_list_type.get_inner_types();
 
-            assert_vec.push(Air::Call {
-                scope: scope.clone(),
-                count: 2,
-                tipo: tipo.clone(),
-            });
-
             assert_vec.push(Air::Builtin {
                 scope: scope.clone(),
                 func: DefaultFunction::ChooseUnit,
                 tipo: tipo.clone(),
+                count: DefaultFunction::ChooseUnit.arity(),
             });
 
             assert_vec.push(Air::Call {
@@ -2428,16 +2549,11 @@ impl<'a> CodeGenerator<'a> {
             let new_id = self.id_gen.next();
             let inner_list_type = &tipo.get_inner_types()[0];
 
-            assert_vec.push(Air::Call {
-                scope: scope.clone(),
-                count: 2,
-                tipo: tipo.clone(),
-            });
-
             assert_vec.push(Air::Builtin {
                 scope: scope.clone(),
                 func: DefaultFunction::ChooseUnit,
                 tipo: tipo.clone(),
+                count: DefaultFunction::ChooseUnit.arity(),
             });
 
             assert_vec.push(Air::Call {
@@ -2549,16 +2665,11 @@ impl<'a> CodeGenerator<'a> {
             let data_type = lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
             let new_id = self.id_gen.next();
 
-            assert_vec.push(Air::Call {
-                scope: scope.clone(),
-                count: 2,
-                tipo: tipo.clone(),
-            });
-
             assert_vec.push(Air::Builtin {
                 scope: scope.clone(),
                 func: DefaultFunction::ChooseUnit,
                 tipo: tipo.clone(),
+                count: DefaultFunction::ChooseUnit.arity(),
             });
 
             assert_vec.push(Air::When {
@@ -3409,13 +3520,19 @@ impl<'a> CodeGenerator<'a> {
                         tail,
                     };
                 }
-                Air::Builtin { tipo, scope, func } => {
+                Air::Builtin {
+                    tipo,
+                    scope,
+                    func,
+                    count,
+                } => {
                     let mut replaced_type = tipo.clone();
                     replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
                     ir_stack[index] = Air::Builtin {
                         scope,
                         func,
+                        count,
                         tipo: replaced_type,
                     };
                 }
@@ -4157,53 +4274,138 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             }
-            Air::Builtin { func, tipo, .. } => match func {
-                DefaultFunction::FstPair | DefaultFunction::SndPair | DefaultFunction::HeadList => {
-                    let id = self.id_gen.next();
-                    let mut term: Term<Name> = func.into();
-                    for _ in 0..func.force_count() {
-                        term = term.force_wrap();
-                    }
+            Air::Builtin {
+                func, tipo, count, ..
+            } => {
+                let mut term: Term<Name> = Term::Builtin(func);
+                for _ in 0..func.force_count() {
+                    term = term.force_wrap();
+                }
 
-                    term = apply_wrap(
-                        term,
-                        Term::Var(
-                            Name {
-                                text: format!("__arg_{id}"),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                        ),
-                    );
+                let mut arg_vec = vec![];
+                for _ in 0..count {
+                    arg_vec.push(arg_stack.pop().unwrap());
+                }
 
-                    let inner_type = if matches!(func, DefaultFunction::SndPair) {
-                        tipo.get_inner_types()[0].get_inner_types()[1].clone()
-                    } else {
-                        tipo.get_inner_types()[0].get_inner_types()[0].clone()
-                    };
+                for arg in arg_vec.iter() {
+                    term = apply_wrap(term, arg.clone());
+                }
 
-                    term = convert_data_to_type(term, &inner_type);
-                    term = Term::Lambda {
-                        parameter_name: Name {
-                            text: format!("__arg_{id}"),
-                            unique: 0.into(),
+                match func {
+                    DefaultFunction::FstPair
+                    | DefaultFunction::SndPair
+                    | DefaultFunction::HeadList => {
+                        let temp_var = format!("__item_{}", self.id_gen.next());
+
+                        if count == 0 {
+                            term = apply_wrap(
+                                term,
+                                Term::Var(
+                                    Name {
+                                        text: temp_var.clone(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
+                            );
                         }
-                        .into(),
-                        body: term.into(),
-                    };
 
-                    arg_stack.push(term);
-                }
-                DefaultFunction::MkCons => todo!(),
-                DefaultFunction::MkPairData => todo!(),
-                _ => {
-                    let mut term = Term::Builtin(func);
-                    for _ in 0..func.force_count() {
-                        term = term.force_wrap();
+                        term = convert_data_to_type(term, &tipo);
+
+                        if count == 0 {
+                            term = Term::Lambda {
+                                parameter_name: Name {
+                                    text: temp_var,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                                body: term.into(),
+                            };
+                        }
                     }
-                    arg_stack.push(term);
+                    DefaultFunction::UnConstrData => {
+                        let temp_tuple = format!("__unconstr_tuple_{}", self.id_gen.next());
+
+                        let temp_var = format!("__item_{}", self.id_gen.next());
+
+                        if count == 0 {
+                            term = apply_wrap(
+                                term,
+                                Term::Var(
+                                    Name {
+                                        text: temp_var.clone(),
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                ),
+                            );
+                        }
+
+                        term = apply_wrap(
+                            Term::Lambda {
+                                parameter_name: Name {
+                                    text: temp_tuple.clone(),
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                                body: apply_wrap(
+                                    apply_wrap(
+                                        Term::Builtin(DefaultFunction::MkPairData),
+                                        apply_wrap(
+                                            Term::Builtin(DefaultFunction::IData),
+                                            apply_wrap(
+                                                Term::Builtin(DefaultFunction::FstPair)
+                                                    .force_wrap()
+                                                    .force_wrap(),
+                                                Term::Var(
+                                                    Name {
+                                                        text: temp_tuple.clone(),
+                                                        unique: 0.into(),
+                                                    }
+                                                    .into(),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                    apply_wrap(
+                                        Term::Builtin(DefaultFunction::ListData),
+                                        apply_wrap(
+                                            Term::Builtin(DefaultFunction::SndPair)
+                                                .force_wrap()
+                                                .force_wrap(),
+                                            Term::Var(
+                                                Name {
+                                                    text: temp_tuple,
+                                                    unique: 0.into(),
+                                                }
+                                                .into(),
+                                            ),
+                                        ),
+                                    ),
+                                )
+                                .into(),
+                            },
+                            term,
+                        );
+
+                        if count == 0 {
+                            term = Term::Lambda {
+                                parameter_name: Name {
+                                    text: temp_var,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                                body: term.into(),
+                            };
+                        }
+                    }
+                    DefaultFunction::MkCons => {
+                        unimplemented!("Use brackets instead.");
+                    }
+                    _ => {}
                 }
-            },
+                arg_stack.push(term);
+            }
             Air::BinOp { name, tipo, .. } => {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
@@ -4927,7 +5129,6 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-
             Air::WrapClause { .. } => {
                 let _ = arg_stack.pop().unwrap();
 

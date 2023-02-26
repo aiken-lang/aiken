@@ -1485,12 +1485,22 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::Builtin { scope, func, tipo } => {
+            Air::Builtin {
+                scope,
+                func,
+                tipo,
+                count,
+            } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_generics_to_replace(&mut tipo, &generic_types);
 
-                    new_air[index] = Air::Builtin { scope, func, tipo };
+                    new_air[index] = Air::Builtin {
+                        scope,
+                        func,
+                        tipo,
+                        count,
+                    };
                     needs_variant = true;
                 }
             }
