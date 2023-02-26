@@ -999,8 +999,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         start: location.start,
                         end: location.start + kind.location_offset(),
                     },
-                    pattern_location: dbg!(untyped_pattern.location()),
-                    value_location: dbg!(untyped_value.location()),
+                    pattern_location: untyped_pattern.location(),
+                    value_location: untyped_value.location(),
                     sample: UntypedExpr::Assignment {
                         location: Span::empty(),
                         value: Box::new(untyped_value),

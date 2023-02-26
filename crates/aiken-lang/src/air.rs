@@ -78,6 +78,7 @@ pub enum Air {
 
     Builtin {
         scope: Vec<u64>,
+        count: usize,
         func: DefaultFunction,
         tipo: Arc<Type>,
     },
