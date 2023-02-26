@@ -1,0 +1,110 @@
+use aiken/bytearray
+use aiken/dict.{Dict}
+use aiken/hash.{Blake2b_224, Hash}
+use aiken/transaction/credential.{Script}
+
+pub type PolicyId =
+  Hash<Blake2b_224, Script>
+
+pub type AssetName =
+  ByteArray
+
+pub opaque type Value {
+  inner: Dict<PolicyId, Dict<AssetName, Int>>,
+}
+
+pub fn zero() -> Value {
+  Value { inner: dict.new() }
+}
+
+pub fn from_asset(
+  policy_id: PolicyId,
+  asset_name: AssetName,
+  quantity: Int,
+) -> Value {
+  let asset =
+    dict.new()
+    |> dict.insert(asset_name, quantity, bytearray.compare)
+  dict.new()
+  |> dict.insert(policy_id, asset, bytearray.compare)
+  |> Value
+}
+
+pub fn add(left v0: Value, right v1: Value) -> Value {
+  dict.union_with(
+    v0.inner,
+    v1.inner,
+    fn(_, a0, a1) {
+      let result =
+        dict.union_with(
+          a0,
+          a1,
+          fn(_, q0, q1) {
+            let q = q0 + q1
+            if q == 0 {
+              None
+            } else {
+              Some(q)
+            }
+          },
+          bytearray.compare,
+        )
+
+      if dict.is_empty(result) {
+        None
+      } else {
+        Some(result)
+      }
+    },
+    bytearray.compare,
+  )
+  |> Value
+}
+
+/// Flatten a value as a list of results, possibly discarding some along the way.
+///
+/// When the `transform` function returns `None`, the result is discarded altogether.
+pub fn flatten_with(
+  self: Value,
+  transform: fn(PolicyId, AssetName, Int) -> Option<result>,
+) -> List<result> {
+  dict.fold(
+    self.inner,
+    fn(policy_id, asset, assets) {
+      dict.fold(
+        asset,
+        fn(asset_name, quantity, xs) {
+          when transform(policy_id, asset_name, quantity) is {
+            None -> xs
+            Some(x) -> [x, ..xs]
+          }
+        },
+        assets,
+      )
+    },
+    [],
+  )
+}
+
+test flatten_with_1() {
+  flatten_with(zero(), fn(p, a, q) { Some((p, a, q)) }) == []
+}
+
+test flatten_with_2() {
+  let v =
+    zero()
+    |> add(from_asset("a", "1", 14))
+    |> add(from_asset("b", "", 42))
+    |> add(from_asset("a", "2", 42))
+
+  flatten_with(
+    v,
+    fn(p, a, q) {
+      if q == 42 {
+        Some((p, a))
+      } else {
+        None
+      }
+    },
+  ) == [("b", ""), ("a", "2")]
+}
