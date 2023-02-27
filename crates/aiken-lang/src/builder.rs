@@ -1129,10 +1129,11 @@ pub fn match_ir_for_recursion(
     }
 }
 
-pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &IndexMap<u64, Arc<Type>>) {
+pub fn find_and_replace_generics(tipo: &mut Arc<Type>, mono_types: &IndexMap<u64, Arc<Type>>) {
     if let Some(id) = tipo.get_generic() {
-        //If generic does not have a type we know of like a None in option then just use same type
-        *tipo = generic_types.get(&id).unwrap_or(tipo).clone();
+        // If a generic does not have a type we know of
+        // like a None in option then just use same type
+        *tipo = mono_types.get(&id).unwrap_or(tipo).clone();
     } else if tipo.is_generic() {
         match &**tipo {
             Type::App {
@@ -1144,7 +1145,7 @@ pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &IndexMap<u
                 let mut new_args = vec![];
                 for arg in args {
                     let mut arg = arg.clone();
-                    find_generics_to_replace(&mut arg, generic_types);
+                    find_and_replace_generics(&mut arg, mono_types);
                     new_args.push(arg);
                 }
                 let t = Type::App {
@@ -1159,12 +1160,12 @@ pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &IndexMap<u
                 let mut new_args = vec![];
                 for arg in args {
                     let mut arg = arg.clone();
-                    find_generics_to_replace(&mut arg, generic_types);
+                    find_and_replace_generics(&mut arg, mono_types);
                     new_args.push(arg);
                 }
 
                 let mut ret = ret.clone();
-                find_generics_to_replace(&mut ret, generic_types);
+                find_and_replace_generics(&mut ret, mono_types);
 
                 let t = Type::Fn {
                     args: new_args,
@@ -1176,7 +1177,7 @@ pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &IndexMap<u
                 let mut new_elems = vec![];
                 for elem in elems {
                     let mut elem = elem.clone();
-                    find_generics_to_replace(&mut elem, generic_types);
+                    find_and_replace_generics(&mut elem, mono_types);
                     new_elems.push(elem);
                 }
                 let t = Type::Tuple { elems: new_elems };
@@ -1188,7 +1189,7 @@ pub fn find_generics_to_replace(tipo: &mut Arc<Type>, generic_types: &IndexMap<u
                     TypeVar::Unbound { .. } => todo!(),
                     TypeVar::Link { tipo } => {
                         let mut tipo = tipo;
-                        find_generics_to_replace(&mut tipo, generic_types);
+                        find_and_replace_generics(&mut tipo, mono_types);
                         tipo
                     }
                     TypeVar::Generic { .. } => unreachable!(),
@@ -1364,7 +1365,7 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
 
 pub fn monomorphize(
     ir: Vec<Air>,
-    generic_types: IndexMap<u64, Arc<Type>>,
+    mono_types: IndexMap<u64, Arc<Type>>,
     full_type: &Arc<Type>,
 ) -> (String, Vec<Air>) {
     let mut new_air = ir.clone();
@@ -1381,7 +1382,7 @@ pub fn monomorphize(
                 if constructor.tipo.is_generic() {
                     let mut tipo = constructor.tipo.clone();
 
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     let mut variant = String::new();
 
@@ -1415,7 +1416,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::List {
                         scope,
@@ -1435,7 +1436,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::ListAccessor {
                         scope,
@@ -1455,7 +1456,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::ListExpose {
                         scope,
@@ -1474,7 +1475,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::BinOp {
                         scope,
@@ -1493,7 +1494,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::Builtin {
                         scope,
@@ -1507,7 +1508,7 @@ pub fn monomorphize(
             Air::UnWrapData { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::UnWrapData { scope, tipo };
                     needs_variant = true;
@@ -1516,7 +1517,7 @@ pub fn monomorphize(
             Air::WrapData { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::WrapData { scope, tipo };
                     needs_variant = true;
@@ -1529,7 +1530,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::When {
                         scope,
@@ -1547,7 +1548,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::Clause {
                         scope,
@@ -1567,7 +1568,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::ListClause {
                         scope,
@@ -1590,7 +1591,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::TupleClause {
                         scope,
@@ -1611,7 +1612,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::ClauseGuard {
                         scope,
@@ -1630,7 +1631,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::ListClauseGuard {
                         scope,
@@ -1645,7 +1646,7 @@ pub fn monomorphize(
             Air::Tuple { scope, tipo, count } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::Tuple { scope, tipo, count };
                     needs_variant = true;
@@ -1658,7 +1659,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::TupleIndex {
                         scope,
@@ -1671,7 +1672,7 @@ pub fn monomorphize(
             Air::ErrorTerm { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::ErrorTerm { scope, tipo };
                     needs_variant = true;
@@ -1680,7 +1681,7 @@ pub fn monomorphize(
             Air::Trace { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::Trace { scope, tipo };
                     needs_variant = true;
@@ -1694,7 +1695,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::Record {
                         scope,
@@ -1712,7 +1713,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::RecordAccess {
                         scope,
@@ -1731,7 +1732,7 @@ pub fn monomorphize(
                 for (ind, name, tipo) in indices {
                     if tipo.is_generic() {
                         let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
+                        find_and_replace_generics(&mut tipo, &mono_types);
                         needs_variant = true;
                         new_indices.push((ind, name, tipo));
                     } else {
@@ -1755,7 +1756,7 @@ pub fn monomorphize(
                 for (ind, tipo) in indices {
                     if tipo.is_generic() {
                         let mut tipo = tipo.clone();
-                        find_generics_to_replace(&mut tipo, &generic_types);
+                        find_and_replace_generics(&mut tipo, &mono_types);
                         needs_variant = true;
                         new_indices.push((ind, tipo));
                     } else {
@@ -1763,7 +1764,7 @@ pub fn monomorphize(
                     }
                 }
                 if tipo.is_generic() {
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
                 }
                 new_air[index] = Air::RecordUpdate {
                     scope,
@@ -1780,7 +1781,7 @@ pub fn monomorphize(
             } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::TupleAccessor {
                         scope,
@@ -1795,7 +1796,7 @@ pub fn monomorphize(
             Air::Call { scope, count, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::Call { scope, count, tipo };
                     needs_variant = true;
@@ -1804,7 +1805,7 @@ pub fn monomorphize(
             Air::If { scope, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
-                    find_generics_to_replace(&mut tipo, &generic_types);
+                    find_and_replace_generics(&mut tipo, &mono_types);
 
                     new_air[index] = Air::If { scope, tipo };
                     needs_variant = true;
@@ -1984,17 +1985,17 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
         let data_type = lookup_data_type_by_tipo(data_types.clone(), t).unwrap();
         let new_type_fields = data_type.typed_parameters.clone();
 
-        let mut generics_type_map: IndexMap<u64, Arc<Type>> = IndexMap::new();
+        let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
 
         for (tipo, param) in new_type_fields.iter().zip(t.arg_types().unwrap()) {
-            let mut map = generics_type_map.into_iter().collect_vec();
+            let mut map = mono_types.into_iter().collect_vec();
             map.append(&mut get_generics_and_type(tipo, &param));
-            generics_type_map = map.into_iter().collect();
+            mono_types = map.into_iter().collect();
         }
 
         let mut generic_type = data_type.constructors[0].arguments[0].tipo.clone();
 
-        find_generics_to_replace(&mut generic_type, &generics_type_map);
+        find_and_replace_generics(&mut generic_type, &mono_types);
 
         replace_opaque_type(&mut generic_type, data_types.clone());
         *t = generic_type;

@@ -89,9 +89,15 @@ impl<'a> CodeGenerator<'a> {
 
         self.build_ir(body, &mut ir_stack, scope);
 
+        println!("{:#?}", ir_stack);
+
         self.define_ir(&mut ir_stack);
 
+        println!("{:#?}", ir_stack);
+
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
+
+        println!("{:#?}", ir_stack);
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -3144,6 +3150,8 @@ impl<'a> CodeGenerator<'a> {
 
         let mut recursion_func_map_to_add = recursion_func_map.clone();
 
+        println!("ARE WE GETTING HERE");
+
         for func_index in func_index_map.clone().iter() {
             let func = func_index.0;
 
@@ -3252,181 +3260,203 @@ impl<'a> CodeGenerator<'a> {
                     if let ValueConstructorVariant::ModuleFn {
                         name,
                         module,
-                        builtin,
+                        builtin: None,
                         ..
                     } = &constructor.variant
                     {
-                        if builtin.is_none() {
-                            let non_variant_function_key = FunctionAccessKey {
-                                module_name: module.clone(),
-                                function_name: name.clone(),
-                                variant_name: String::new(),
-                            };
+                        let non_variant_function_key = FunctionAccessKey {
+                            module_name: module.clone(),
+                            function_name: name.clone(),
+                            variant_name: String::new(),
+                        };
 
-                            let function = *self.functions.get(&non_variant_function_key).unwrap();
+                        let function = *self.functions.get(&non_variant_function_key).unwrap();
 
-                            let mut func_ir = vec![];
+                        let mut func_ir = vec![];
 
-                            self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+                        self.build_ir(&function.body, &mut func_ir, scope.to_vec());
 
-                            let param_types = constructor.tipo.arg_types().unwrap();
+                        println!(
+                            "OUR FUNC IR FOR {:#?} IS: {:#?}",
+                            non_variant_function_key, func_ir
+                        );
 
-                            let mut generics_type_map: IndexMap<u64, Arc<Type>> = IndexMap::new();
+                        let param_types = constructor.tipo.arg_types().unwrap();
 
-                            for (index, arg) in function.arguments.iter().enumerate() {
-                                if arg.tipo.is_generic() {
-                                    let mut map = generics_type_map.into_iter().collect_vec();
-                                    map.append(&mut get_generics_and_type(
-                                        &arg.tipo,
-                                        &param_types[index],
-                                    ));
+                        let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
 
-                                    generics_type_map = map.into_iter().collect();
+                        for (index, arg) in function.arguments.iter().enumerate() {
+                            if arg.tipo.is_generic() {
+                                let mut map = mono_types.into_iter().collect_vec();
+                                map.append(&mut get_generics_and_type(
+                                    &arg.tipo,
+                                    &param_types[index],
+                                ));
+
+                                mono_types = map.into_iter().collect();
+                            }
+                        }
+
+                        println!("DID WE GET HERE");
+
+                        let (variant_name, func_ir) =
+                            monomorphize(func_ir, mono_types, &constructor.tipo);
+
+                        println!("AND HERE?");
+
+                        let function_key = FunctionAccessKey {
+                            module_name: module.clone(),
+                            function_name: non_variant_function_key.function_name,
+                            variant_name: variant_name.clone(),
+                        };
+
+                        ir_stack[index] = Air::Var {
+                            scope: scope.clone(),
+                            constructor: constructor.clone(),
+                            name: name.clone(),
+                            variant_name: variant_name.clone(),
+                        };
+
+                        if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
+                            let new_scope = get_common_ancestor(scope, scope_prev);
+
+                            to_be_defined_map.insert(function_key, new_scope);
+                        } else if func_components.get(&function_key).is_some() {
+                            to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                        } else {
+                            to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                            let mut func_calls = IndexMap::new();
+
+                            for ir in func_ir.clone().into_iter() {
+                                if let Air::Var {
+                                    constructor:
+                                        ValueConstructor {
+                                            variant:
+                                                ValueConstructorVariant::ModuleFn {
+                                                    name: func_name,
+                                                    module,
+                                                    ..
+                                                },
+                                            tipo,
+                                            ..
+                                        },
+                                    ..
+                                } = ir
+                                {
+                                    let current_func = FunctionAccessKey {
+                                        module_name: module.clone(),
+                                        function_name: func_name.clone(),
+                                        variant_name: String::new(),
+                                    };
+
+                                    let current_func_as_variant = FunctionAccessKey {
+                                        module_name: module.clone(),
+                                        function_name: func_name.clone(),
+                                        variant_name: variant_name.clone(),
+                                    };
+
+                                    let function = self.functions.get(&current_func);
+                                    if function_key.clone() == current_func_as_variant {
+                                        func_calls.insert(current_func_as_variant, ());
+                                    } else if let (Some(function), Type::Fn { .. }) =
+                                        (function, &*tipo)
+                                    {
+                                        let mut mono_types: IndexMap<u64, Arc<Type>> =
+                                            IndexMap::new();
+
+                                        let param_types = tipo.arg_types().unwrap();
+
+                                        for (index, arg) in function.arguments.iter().enumerate() {
+                                            if arg.tipo.is_generic() {
+                                                let mut map = mono_types.into_iter().collect_vec();
+                                                map.append(&mut get_generics_and_type(
+                                                    &arg.tipo,
+                                                    &param_types[index],
+                                                ));
+
+                                                mono_types = map.into_iter().collect();
+                                            }
+                                        }
+
+                                        let mut func_ir = vec![];
+
+                                        self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+
+                                        let (variant_name, _) =
+                                            monomorphize(func_ir, mono_types, &tipo);
+
+                                        func_calls.insert(
+                                            FunctionAccessKey {
+                                                module_name: current_func.module_name,
+                                                function_name: current_func.function_name,
+                                                variant_name,
+                                            },
+                                            (),
+                                        );
+                                    } else {
+                                        func_calls.insert(current_func, ());
+                                    }
                                 }
                             }
 
-                            let (variant_name, func_ir) =
-                                monomorphize(func_ir, generics_type_map, &constructor.tipo);
+                            let mut args = vec![];
 
-                            let function_key = FunctionAccessKey {
-                                module_name: module.clone(),
-                                function_name: non_variant_function_key.function_name,
-                                variant_name: variant_name.clone(),
-                            };
+                            for arg in function.arguments.iter() {
+                                match &arg.arg_name {
+                                    ArgName::Named { name, .. } => {
+                                        args.push(name.clone());
+                                    }
+                                    _ => {
+                                        args.push("_".to_string());
+                                    }
+                                }
+                            }
 
-                            ir_stack[index] = Air::Var {
-                                scope: scope.clone(),
-                                constructor: constructor.clone(),
-                                name: name.clone(),
-                                variant_name: variant_name.clone(),
-                            };
+                            println!("FUNC CALLS IS {:#?}", func_calls);
 
-                            if let Some(scope_prev) = to_be_defined_map.get(&function_key) {
-                                let new_scope = get_common_ancestor(scope, scope_prev);
-
-                                to_be_defined_map.insert(function_key, new_scope);
-                            } else if func_components.get(&function_key).is_some() {
-                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
+                            let recursive = if func_calls.get(&function_key).is_some() {
+                                func_calls.remove(&function_key);
+                                true
                             } else {
-                                to_be_defined_map.insert(function_key.clone(), scope.to_vec());
-                                let mut func_calls = IndexMap::new();
+                                false
+                            };
 
-                                for ir in func_ir.clone().into_iter() {
-                                    if let Air::Var {
-                                        constructor:
-                                            ValueConstructor {
-                                                variant:
-                                                    ValueConstructorVariant::ModuleFn {
-                                                        name: func_name,
-                                                        module,
-                                                        ..
-                                                    },
-                                                tipo,
-                                                ..
-                                            },
-                                        ..
-                                    } = ir
-                                    {
-                                        let current_func = FunctionAccessKey {
-                                            module_name: module.clone(),
-                                            function_name: func_name.clone(),
-                                            variant_name: String::new(),
-                                        };
-
-                                        let current_func_as_variant = FunctionAccessKey {
-                                            module_name: module.clone(),
-                                            function_name: func_name.clone(),
-                                            variant_name: variant_name.clone(),
-                                        };
-
-                                        let function = self.functions.get(&current_func);
-                                        if function_key.clone() == current_func_as_variant {
-                                            func_calls.insert(current_func_as_variant, ());
-                                        } else if let (Some(function), Type::Fn { .. }) =
-                                            (function, &*tipo)
-                                        {
-                                            let mut generics_type_map: IndexMap<u64, Arc<Type>> =
-                                                IndexMap::new();
-
-                                            let param_types = tipo.arg_types().unwrap();
-
-                                            for (index, arg) in
-                                                function.arguments.iter().enumerate()
-                                            {
-                                                if arg.tipo.is_generic() {
-                                                    let mut map =
-                                                        generics_type_map.into_iter().collect_vec();
-                                                    map.append(&mut get_generics_and_type(
-                                                        &arg.tipo,
-                                                        &param_types[index],
-                                                    ));
-
-                                                    generics_type_map = map.into_iter().collect();
-                                                }
-                                            }
-
-                                            let mut func_ir = vec![];
-
-                                            self.build_ir(
-                                                &function.body,
-                                                &mut func_ir,
-                                                scope.to_vec(),
-                                            );
-
-                                            let (variant_name, _) =
-                                                monomorphize(func_ir, generics_type_map, &tipo);
-
-                                            func_calls.insert(
-                                                FunctionAccessKey {
-                                                    module_name: current_func.module_name,
-                                                    function_name: current_func.function_name,
-                                                    variant_name,
-                                                },
-                                                (),
-                                            );
-                                        } else {
-                                            func_calls.insert(current_func, ());
-                                        }
+                            func_components.insert(
+                                function_key,
+                                FuncComponents {
+                                    ir: func_ir,
+                                    dependencies: func_calls.keys().cloned().collect_vec(),
+                                    recursive,
+                                    args,
+                                    defined_by_zero_arg: in_zero_arg_func,
+                                },
+                            );
+                        }
+                    } else {
+                        println!("ARE WE GETTING HERE323323");
+                        for func in to_be_defined_map.clone().iter() {
+                            if get_common_ancestor(scope, func.1) == scope.to_vec() {
+                                if let Some(index_scope) = func_index_map.get(func.0) {
+                                    if get_common_ancestor(index_scope, func.1) == scope.to_vec() {
+                                        func_index_map.insert(func.0.clone(), scope.clone());
+                                        to_be_defined_map.shift_remove(func.0);
+                                    } else {
+                                        to_be_defined_map.insert(
+                                            func.0.clone(),
+                                            get_common_ancestor(index_scope, func.1),
+                                        );
                                     }
-                                }
-
-                                let mut args = vec![];
-
-                                for arg in function.arguments.iter() {
-                                    match &arg.arg_name {
-                                        ArgName::Named { name, .. } => {
-                                            args.push(name.clone());
-                                        }
-                                        _ => {
-                                            args.push("_".to_string());
-                                        }
-                                    }
-                                }
-
-                                let recursive = if func_calls.get(&function_key).is_some() {
-                                    func_calls.remove(&function_key);
-                                    true
                                 } else {
-                                    false
-                                };
-
-                                func_components.insert(
-                                    function_key,
-                                    FuncComponents {
-                                        ir: func_ir,
-                                        dependencies: func_calls.keys().cloned().collect_vec(),
-                                        recursive,
-                                        args,
-                                        defined_by_zero_arg: in_zero_arg_func,
-                                    },
-                                );
+                                    func_index_map.insert(func.0.clone(), scope.clone());
+                                    to_be_defined_map.shift_remove(func.0);
+                                }
                             }
                         }
                     }
                 }
                 a => {
                     let scope = a.scope();
-
+                    println!("ARE WE GETTING HERE2222");
                     for func in to_be_defined_map.clone().iter() {
                         if get_common_ancestor(&scope, func.1) == scope.to_vec() {
                             if let Some(index_scope) = func_index_map.get(func.0) {
@@ -3448,6 +3478,8 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
         }
+
+        println!("REACHED HERE");
 
         // Still to be defined
         for func in to_be_defined_map.clone().iter() {
