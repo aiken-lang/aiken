@@ -5,7 +5,7 @@ Update or revert to a specific Aiken version with ease.
 ## Installing
 
 ```sh
-curl -L https://install.aiken-lang.org | bash
+curl -sSfL https://install.aiken-lang.org | bash
 ```
 
 ## Usage
