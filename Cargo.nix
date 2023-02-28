@@ -2159,6 +2159,13 @@ in
     version = "3.5.0";
     registry = "registry+https://github.com/rust-lang/crates.io-index";
     src = fetchCratesIo { inherit name version; sha256 = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"; };
+    features = builtins.concatLists [
+      [ "supports-color" ]
+      [ "supports-colors" ]
+    ];
+    dependencies = {
+      supports_color = rustPackages."registry+https://github.com/rust-lang/crates.io-index".supports-color."1.3.1" { inherit profileName; };
+    };
   });
   
   "registry+https://github.com/rust-lang/crates.io-index".pallas."0.16.0" = overridableMkRustCrate (profileName: rec {
