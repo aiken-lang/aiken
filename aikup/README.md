@@ -1,4 +1,4 @@
-# `foundryup`
+# `aikup`
 
 Update or revert to a specific Foundry branch with ease.
 
