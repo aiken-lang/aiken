@@ -1,6 +1,6 @@
 # `aikup`
 
-Update or revert to a specific Foundry branch with ease.
+Update or revert to a specific Aiken version with ease.
 
 ## Installing
 
