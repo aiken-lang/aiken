@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+set -e
+
+AIKEN_DIR=${AIKEN_DIR-"$HOME/.aiken"}
+AIKEN_BIN_DIR="$AIKEN_DIR/bin"
+
+BINS=(aiken)
+
+export RUSTFLAGS="-C target-cpu=native"
+
+main() {
+  need_cmd git
+  need_cmd curl
+
+  while [[ $1 ]]; do
+    case $1 in
+      --)               shift; break;;
+
+      install)     shift; AIKUP_VERSION=$1;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        warn "unknown option: $1"
+        usage
+        exit 1
+    esac; shift
+  done
+
+  if [ -z "$AIKUP_VERSION" ]; then
+    err "must specify a version"
+  fi  
+
+  # Print the banner after successfully parsing args
+  banner
+
+  AIKUP_REPO="aiken-lang/aiken"
+
+  AIKUP_TAG=$AIKUP_VERSION
+
+  # Normalize versions
+  if [[ "$AIKUP_VERSION" == [[:digit:]]* ]]; then
+    # Add v prefix
+    AIKUP_VERSION="v${AIKUP_VERSION}"
+    AIKUP_TAG="${AIKUP_VERSION}"
+  fi
+
+  say "installing aiken (version ${AIKUP_VERSION}, tag ${AIKUP_TAG})"
+
+  PLATFORM="$(uname -s)"
+  case $PLATFORM in
+    Linux)
+      PLATFORM="linux"
+      ;;
+    Darwin)
+      PLATFORM="darwin"
+      ;;
+    *)
+      err "unsupported platform: $PLATFORM"
+      ;;
+  esac
+
+  ARCHITECTURE="$(uname -m)"
+  if [ "${ARCHITECTURE}" = "x86_64" ]; then
+    # Redirect stderr to /dev/null to avoid printing errors if non Rosetta.
+    if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = "1" ]; then
+      ARCHITECTURE="arm64" # Rosetta.
+    else
+      ARCHITECTURE="amd64" # Intel.
+    fi
+  elif [ "${ARCHITECTURE}" = "arm64" ] ||[ "${ARCHITECTURE}" = "aarch64" ] ; then
+    ARCHITECTURE="arm64" # Arm.
+  else
+    ARCHITECTURE="amd64" # Amd.
+  fi
+
+  # Compute the URL of the release tarball in the Aiken repository.
+  RELEASE_URL="https://github.com/${AIKUP_REPO}/releases/download/${AIKUP_TAG}/"
+  BIN_TARBALL_URL="${RELEASE_URL}aiken_${AIKUP_VERSION}_${PLATFORM}_${ARCHITECTURE}.tar.gz"
+
+  # Download the binaries tarball and unpack it into the .aiken bin directory.
+  say "downloading aiken"
+  ensure curl -# -L "$BIN_TARBALL_URL" | tar -xzC "$AIKEN_BIN_DIR"
+
+  for bin in "${BINS[@]}"; do
+    bin_path="$AIKEN_BIN_DIR/$bin"
+
+    # Print installed msg
+    say "installed - $("$bin_path" --version)"
+
+    # Check if the default path of the binary is not in AIKEN_BIN_DIR
+    which_path="$(which "$bin")"
+    if [ "$which_path" != "$bin_path" ]; then
+      warn ""
+      cat 1>&2 <<EOF
+There are multiple binaries with the name '$bin' present in your 'PATH'.
+This may be the result of installing '$bin' using another method,
+like Cargo or other package managers.
+You may need to run 'rm $which_path' or move '$AIKEN_BIN_DIR'
+in your 'PATH' to allow the newly installed version to take precedence!
+EOF
+    fi
+  done
+
+  say "done"
+}
+
+usage() {
+  cat 1>&2 <<EOF
+The installer for Aiken.
+
+Update or revert to a specific Aiken version with ease.
+
+USAGE:
+    aikup <SUBCOMMAND>
+
+OPTIONS:
+    -h, --help      Print help information
+
+SUBCOMMANDS:
+    install         Install a specific version
+EOF
+}
+
+say() {
+  printf "aikup: %s\n" "$1"
+}
+
+warn() {
+  say "warning: ${1}" >&2
+}
+
+err() {
+  say "$1" >&2
+  exit 1
+}
+
+need_cmd() {
+  if ! check_cmd "$1"; then
+    err "need '$1' (command not found)"
+  fi
+}
+
+check_cmd() {
+  command -v "$1" > /dev/null 2>&1
+}
+
+# Run a command that should never fail. If the command fails execution
+# will immediately terminate with an error showing the failing
+# command.
+ensure() {
+  if ! "$@"; then err "command failed: $*"; fi
+}
+
+# Banner Function for Aiken 
+banner() {
+  printf '
+
+.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx
+ 
+ ╔═╗ ╦ ╔╦ ║ ╔══ ╔╗╔           Modern and modular toolkit
+ ╠═╣ ║  ╠═╣ ╠═  ║║║     for Cardano Smart Contract Development 
+ ╚ ╝ ╩  ╚ ╚ ╚══ ╝╚╝               written in Rust.
+
+.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx
+
+Repo       : https://github.com/aiken-lang/aiken
+Docs       : https://aiken-lang.org/                      
+Chat       : https://discord.gg/Vc3x8N9nz2                         
+Contribute : https://github.com/aiken-lang/aiken/blob/main/CONTRIBUTING.md
+
+.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx
+
+'
+}
+
+
+main "$@" || exit 1
