@@ -6,7 +6,7 @@ echo Installing aikup...
 AIKEN_DIR=${AIKEN_DIR-"$HOME/.aiken"}
 AIKEN_BIN_DIR="$AIKEN_DIR/bin"
 
-BIN_URL="https://raw.githubusercontent.com/aiken-lang/aiken/master/aikup/aikup"
+BIN_URL="https://raw.githubusercontent.com/aiken-lang/aiken/main/aikup/aikup"
 BIN_PATH="$AIKEN_BIN_DIR/aikup"
 
 # Create the .aiken bin directory and aikup binary if it doesn't exist.
