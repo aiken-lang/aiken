@@ -2941,14 +2941,14 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn define_ir(&mut self, ir_stack: &mut Vec<Air>) {
-        let mut func_components = IndexMap::new();
+        let mut function_definitions = IndexMap::new();
         let mut func_index_map = IndexMap::new();
 
         let recursion_func_map = IndexMap::new();
 
         self.define_ir_recurse(
             ir_stack,
-            &mut func_components,
+            &mut function_definitions,
             &mut func_index_map,
             recursion_func_map,
             false,
@@ -2960,7 +2960,7 @@ impl<'a> CodeGenerator<'a> {
         let mut dependency_map = IndexMap::new();
         let mut dependency_vec = vec![];
 
-        let mut func_keys = func_components
+        let mut func_keys = function_definitions
             .clone()
             .into_iter()
             .filter(|(_, val)| !val.defined_by_zero_arg)
@@ -2969,7 +2969,7 @@ impl<'a> CodeGenerator<'a> {
 
         // deal with function dependencies by sorting order in which we iter over them.
         while let Some(function) = func_keys.pop() {
-            let funct_comp = func_components.get(&function.0).unwrap();
+            let funct_comp = function_definitions.get(&function.0).unwrap();
             if dependency_map.contains_key(&function.0) {
                 dependency_map.shift_remove(&function.0);
             }
@@ -2981,7 +2981,7 @@ impl<'a> CodeGenerator<'a> {
                     .map(|key| {
                         (
                             key.clone(),
-                            func_components.get(key).unwrap().defined_by_zero_arg,
+                            function_definitions.get(key).unwrap().defined_by_zero_arg,
                         )
                     })
                     .collect_vec(),
@@ -3000,17 +3000,17 @@ impl<'a> CodeGenerator<'a> {
             if self.defined_functions.contains_key(&func) {
                 continue;
             }
-            let funt_comp = func_components.get(&func).unwrap();
+            let function_component = function_definitions.get(&func).unwrap();
             let func_scope = func_index_map.get(&func).unwrap();
 
             let mut dep_ir = vec![];
 
-            if !funt_comp.args.is_empty() {
+            if !function_component.args.is_empty() {
                 // deal with function dependencies
                 handle_func_dependencies_ir(
                     &mut dep_ir,
-                    funt_comp,
-                    &func_components,
+                    function_component,
+                    &function_definitions,
                     &mut self.defined_functions,
                     &func_index_map,
                     func_scope,
@@ -3025,8 +3025,8 @@ impl<'a> CodeGenerator<'a> {
                 // deal with function dependencies in zero arg functions
                 handle_func_dependencies_ir(
                     &mut dep_ir,
-                    funt_comp,
-                    &func_components,
+                    function_component,
+                    &function_definitions,
                     &mut defined_functions,
                     &func_index_map,
                     func_scope,
@@ -3034,7 +3034,7 @@ impl<'a> CodeGenerator<'a> {
                 );
 
                 let mut final_zero_arg_ir = dep_ir;
-                final_zero_arg_ir.extend(funt_comp.ir.clone());
+                final_zero_arg_ir.extend(function_component.ir.clone());
 
                 self.convert_opaque_type_to_inner_ir(&mut final_zero_arg_ir);
 
@@ -3047,15 +3047,15 @@ impl<'a> CodeGenerator<'a> {
         while let Some(func) = to_be_defined.pop() {
             let mut dep_ir = vec![];
             let mut defined_functions = IndexMap::new();
-            // deal with function dependencies in zero arg functions
 
-            let funt_comp = func_components.get(&func.0).unwrap();
+            // deal with function dependencies in zero arg functions
+            let funt_comp = function_definitions.get(&func.0).unwrap();
             let func_scope = func_index_map.get(&func.0).unwrap();
 
             handle_func_dependencies_ir(
                 &mut dep_ir,
                 funt_comp,
-                &func_components,
+                &function_definitions,
                 &mut defined_functions,
                 &func_index_map,
                 func_scope,
@@ -3073,8 +3073,13 @@ impl<'a> CodeGenerator<'a> {
         for (index, ir) in ir_stack.clone().into_iter().enumerate().rev() {
             {
                 let temp_func_index_map = func_index_map.clone();
-                let to_insert = temp_func_index_map
-                    .into_iter()
+                let to_insert = final_func_dep_ir
+                    .iter()
+                    .filter_map(|(func_key, _)| {
+                        temp_func_index_map
+                            .get(func_key)
+                            .map(|scope| (func_key.clone(), scope.clone()))
+                    })
                     .filter(|func| {
                         get_common_ancestor(&func.1, &ir.scope()) == ir.scope()
                             && !self.defined_functions.contains_key(&func.0)
@@ -3083,7 +3088,7 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .collect_vec();
 
-                for (function_access_key, scopes) in to_insert.into_iter() {
+                for (function_access_key, scopes) in to_insert.into_iter().rev() {
                     func_index_map.remove(&function_access_key);
 
                     self.defined_functions
@@ -3092,7 +3097,10 @@ impl<'a> CodeGenerator<'a> {
                     let mut full_func_ir =
                         final_func_dep_ir.get(&function_access_key).unwrap().clone();
 
-                    let func_comp = func_components.get(&function_access_key).unwrap().clone();
+                    let func_comp = function_definitions
+                        .get(&function_access_key)
+                        .unwrap()
+                        .clone();
 
                     // zero arg functions are not recursive
                     if !func_comp.args.is_empty() {
