@@ -1827,26 +1827,26 @@ pub fn monomorphize(
 
 pub fn handle_func_dependencies_ir(
     dependencies_ir: &mut Vec<Air>,
-    funt_comp: &FuncComponents,
+    function_component: &FuncComponents,
     func_components: &IndexMap<FunctionAccessKey, FuncComponents>,
     defined_functions: &mut IndexMap<FunctionAccessKey, ()>,
     func_index_map: &IndexMap<FunctionAccessKey, Vec<u64>>,
     func_scope: &[u64],
     to_be_defined: &mut IndexMap<FunctionAccessKey, ()>,
 ) {
-    let mut funt_comp = funt_comp.clone();
+    let mut function_component = function_component.clone();
 
     let mut dependency_map = IndexMap::new();
     let mut dependency_vec = vec![];
 
     // deal with function dependencies by sorting order in which we pop them.
-    while let Some(dependency) = funt_comp.dependencies.pop() {
+    while let Some(dependency) = function_component.dependencies.pop() {
         let depend_comp = func_components.get(&dependency).unwrap();
         if dependency_map.contains_key(&dependency) {
             dependency_map.shift_remove(&dependency);
         }
         dependency_map.insert(dependency, ());
-        funt_comp
+        function_component
             .dependencies
             .extend(depend_comp.dependencies.clone().into_iter());
     }
@@ -1864,7 +1864,7 @@ pub fn handle_func_dependencies_ir(
         let dep_scope = func_index_map.get(&dependency).unwrap();
 
         if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec()
-            || funt_comp.args.is_empty()
+            || function_component.args.is_empty()
         {
             let mut recursion_ir = vec![];
             handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
