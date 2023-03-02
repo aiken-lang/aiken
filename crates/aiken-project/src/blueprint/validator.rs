@@ -700,7 +700,7 @@ mod test {
             }
 
             validator spend {
-              fn(datum: Data, redeemer: Int, ctx: Void) {
+              fn(datum: Foo, redeemer: Int, ctx: Void) {
                 True
               }
             }
