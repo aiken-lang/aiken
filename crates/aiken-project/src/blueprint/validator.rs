@@ -710,9 +710,18 @@ mod test {
                   "title": "test_module.spend",
                   "hash": "a3dbab684d90d19e6bab3a0b00a7290ff59fe637d14428859bf74376",
                   "datum": {
-                    "title": "Data",
-                    "description": "Any Plutus data.",
-                    "schema": {},
+                    "title": "Foo",
+                    "schema": {
+                        "anyOf": [{
+                            "title": "Foo",
+                            "index": 0,
+                            "fields": [{
+                                "title": "foo",
+                                "description": "Any Plutus data.",
+                            }],
+                            "dataType": "constructor",
+                        }]
+                    },
                   },
                   "redeemer": {
                     "schema": {
