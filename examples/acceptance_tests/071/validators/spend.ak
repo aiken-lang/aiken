@@ -85,7 +85,6 @@ pub fn validate_pool_borrow(
 ) -> Bool {
   let validator_address = scripthash_address(#"ff")
 
-  // Uncommend bellow to make everything worse
   expect Some(pool_output) = get_output(ctx, validator_address)
   expect Some(pool_input) = get_input(ctx, validator_address)
   True
