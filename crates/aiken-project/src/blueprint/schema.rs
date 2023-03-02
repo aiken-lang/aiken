@@ -296,17 +296,6 @@ impl Annotated<Schema> {
                 description,
                 annotated: data,
             }),
-
-            Annotated {
-                title: Some(title),
-                description,
-                annotated: Schema::Data(None),
-            } if title == "Data" => Ok(Annotated {
-                title: Some(title),
-                description,
-                annotated: Data::AnyOf(vec![]),
-            }),
-
             _ => Err(Error::new(ErrorContext::ExpectedData, type_info)),
         }
     }
