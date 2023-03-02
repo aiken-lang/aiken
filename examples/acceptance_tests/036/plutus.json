@@ -9,11 +9,13 @@
       "title": "spend.spend",
       "datum": {
         "title": "Data",
-        "description": "Any Plutus data."
+        "description": "Any Plutus data.",
+        "schema": {}
       },
       "redeemer": {
         "title": "Data",
-        "description": "Any Plutus data."
+        "description": "Any Plutus data.",
+        "schema": {}
       },
       "compiledCode": "59015f010000323232323232323232322225333006323232323233001003232323322323232323330140014a0944004c94ccc05c0045288a5000133223233223253330173370e00290010801099190009bab301e00130110033018375400400297adef6c6033223300800200100200100100237566601260140049001001a441050000000000003001001222533301300213374a900125eb804c8c8c8c94ccc04ccdc7802800899ba548000cc060dd300125eb804ccc01c01c00c014dd7180a0019bab3014002301700330150023001001222533301000214a026464a66601c600600429444ccc01401400400cc05000cc048008dd6198009801198009801001a400090021119199800800a4000006444666601866e1c0100080488ccc010010cdc0001a40046028002002460146ea8004526163001001222533300800214984cc014c004c028008ccc00c00cc02c0080055cd2b9b5573aaae7955cfaba05742ae89",
       "hash": "3f46b921ead33594e1da4afa1f1ba31807c0d8deca029f96fe9fe394"
@@ -23,48 +25,52 @@
       "redeemer": {
         "title": "Unit",
         "description": "The nullary constructor.",
-        "anyOf": [
-          {
-            "dataType": "constructor",
-            "index": 0,
-            "fields": []
-          }
-        ]
+        "schema": {
+          "anyOf": [
+            {
+              "dataType": "constructor",
+              "index": 0,
+              "fields": []
+            }
+          ]
+        }
       },
       "parameters": [
         {
           "title": "OutputReference",
           "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
-          "anyOf": [
-            {
-              "title": "OutputReference",
-              "dataType": "constructor",
-              "index": 0,
-              "fields": [
-                {
-                  "title": "transaction_id",
-                  "description": "A unique transaction identifier, as the hash of a transaction body. Note that the transaction id\n isn't a direct hash of the `Transaction` as visible on-chain. Rather, they correspond to hash\n digests of transaction body as they are serialized on the network.",
-                  "anyOf": [
-                    {
-                      "title": "TransactionId",
-                      "dataType": "constructor",
-                      "index": 0,
-                      "fields": [
-                        {
-                          "title": "hash",
-                          "dataType": "bytes"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "title": "output_index",
-                  "dataType": "integer"
-                }
-              ]
-            }
-          ]
+          "schema": {
+            "anyOf": [
+              {
+                "title": "OutputReference",
+                "dataType": "constructor",
+                "index": 0,
+                "fields": [
+                  {
+                    "title": "transaction_id",
+                    "description": "A unique transaction identifier, as the hash of a transaction body. Note that the transaction id\n isn't a direct hash of the `Transaction` as visible on-chain. Rather, they correspond to hash\n digests of transaction body as they are serialized on the network.",
+                    "anyOf": [
+                      {
+                        "title": "TransactionId",
+                        "dataType": "constructor",
+                        "index": 0,
+                        "fields": [
+                          {
+                            "title": "hash",
+                            "dataType": "bytes"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "output_index",
+                    "dataType": "integer"
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "compiledCode": "58e301000032323232323232323232222533300632323232533300a3370e0029000099251300400214a060166ea8004c8c8cc004dd6198019802198019802002a40009000119baf33004300500148000020c0040048894ccc03c0084cdd2a400497ae013232533300d300300213374a90001980900125eb804ccc01401400400cc04c00cc04400888c8ccc0040052000003222333300c3370e008004024466600800866e0000d200230140010012300a37540022930b180080091129998040010a4c26600a600260140046660060066016004002ae695cdaab9d5573caae7d5d02ba157441",

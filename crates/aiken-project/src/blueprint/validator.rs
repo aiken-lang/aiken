@@ -15,22 +15,55 @@ use uplc::ast::{DeBruijn, Program, Term};
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T> {
     pub title: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub datum: Option<Annotated<T>>,
-    pub redeemer: Annotated<T>,
+    pub datum: Option<Argument<T>>,
+
+    pub redeemer: Argument<T>,
+
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub parameters: Vec<Annotated<T>>,
+    pub parameters: Vec<Argument<T>>,
+
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Argument<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub schema: T,
 }
 
 impl Display for Validator<Schema> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
         f.write_str(&s)
+    }
+}
+
+impl Display for Argument<Schema> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
+        f.write_str(&s)
+    }
+}
+
+impl<T> From<Annotated<T>> for Argument<T> {
+    fn from(annotated: Annotated<T>) -> Self {
+        Argument {
+            title: annotated.title,
+            description: annotated.description,
+            schema: annotated.annotated,
+        }
     }
 }
 
@@ -71,7 +104,7 @@ impl Validator<Schema> {
                         annotation.title = annotation
                             .title
                             .or_else(|| Some(param.arg_name.get_label()));
-                        annotation
+                        annotation.into()
                     })
                 })
                 .collect::<Result<_, _>>()?,
@@ -88,7 +121,8 @@ impl Validator<Schema> {
                         },
                     )
                 })
-                .transpose()?,
+                .transpose()?
+                .map(|annotated| annotated.into()),
             redeemer: Annotated::from_type(modules.into(), &redeemer.tipo, &HashMap::new())
                 .map_err(|error| Error::Schema {
                     error,
@@ -97,7 +131,8 @@ impl Validator<Schema> {
                         module.input_path.display().to_string(),
                         module.code.clone(),
                     ),
-                })?,
+                })?
+                .into(),
             program: generator
                 .generate(&def.fun.body, &arguments, true)
                 .try_into()
@@ -266,7 +301,8 @@ mod test {
               "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
               "redeemer": {
                 "title": "Data",
-                "description": "Any Plutus data."
+                "description": "Any Plutus data.",
+                "schema": {}
               },
               "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
             }),
@@ -288,12 +324,14 @@ mod test {
               "hash": "a82df717fd39f5b273c4eb89ae5252e11cc272ac59d815419bf2e4c3",
               "parameters": [{
                 "title": "utxo_ref",
-                "dataType": "integer"
-
+                "schema": {
+                  "dataType": "integer"
+                }
               }],
               "redeemer": {
                 "title": "Data",
-                "description": "Any Plutus data."
+                "description": "Any Plutus data.",
+                "schema": {}
               },
               "compiledCode": "5840010000323232323232322322253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
             }),
@@ -346,68 +384,72 @@ mod test {
               "datum": {
                 "title": "State",
                 "description": "On-chain state",
-                "anyOf": [
-                  {
-                    "title": "State",
-                    "dataType": "constructor",
-                    "index": 0,
-                    "fields": [
-                      {
-                        "title": "contestationPeriod",
-                        "description": "The contestation period as a number of seconds",
-                        "anyOf": [
-                          {
-                            "title": "ContestationPeriod",
-                            "description": "A positive, non-zero number of seconds.",
-                            "dataType": "constructor",
-                            "index": 0,
-                            "fields": [
-                              {
-                                "dataType": "integer"
-                              }
-                            ]
+                "schema": {
+                  "anyOf": [
+                    {
+                      "title": "State",
+                      "dataType": "constructor",
+                      "index": 0,
+                      "fields": [
+                        {
+                          "title": "contestationPeriod",
+                          "description": "The contestation period as a number of seconds",
+                          "anyOf": [
+                            {
+                              "title": "ContestationPeriod",
+                              "description": "A positive, non-zero number of seconds.",
+                              "dataType": "constructor",
+                              "index": 0,
+                              "fields": [
+                                {
+                                  "dataType": "integer"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "title": "parties",
+                          "description": "List of public key hashes of all participants",
+                          "dataType": "list",
+                          "items": {
+                            "dataType": "bytes"
                           }
-                        ]
-                      },
-                      {
-                        "title": "parties",
-                        "description": "List of public key hashes of all participants",
-                        "dataType": "list",
-                        "items": {
+                        },
+                        {
+                          "title": "utxoHash",
                           "dataType": "bytes"
                         }
-                      },
-                      {
-                        "title": "utxoHash",
-                        "dataType": "bytes"
-                      }
-                    ]
-                  }
-                ]
+                      ]
+                    }
+                  ]
+                }
               },
               "redeemer": {
                 "title": "Input",
-                "anyOf": [
-                  {
-                    "title": "CollectCom",
-                    "dataType": "constructor",
-                    "index": 0,
-                    "fields": []
-                  },
-                  {
-                    "title": "Close",
-                    "dataType": "constructor",
-                    "index": 1,
-                    "fields": []
-                  },
-                  {
-                    "title": "Abort",
-                    "description": "Abort a transaction",
-                    "dataType": "constructor",
-                    "index": 2,
-                    "fields": []
-                  }
-                ]
+                "schema": {
+                  "anyOf": [
+                    {
+                      "title": "CollectCom",
+                      "dataType": "constructor",
+                      "index": 0,
+                      "fields": []
+                    },
+                    {
+                      "title": "Close",
+                      "dataType": "constructor",
+                      "index": 1,
+                      "fields": []
+                    },
+                    {
+                      "title": "Abort",
+                      "description": "Abort a transaction",
+                      "dataType": "constructor",
+                      "index": 2,
+                      "fields": []
+                    }
+                  ]
+                }
               },
               "compiledCode": "583b0100003232323232323222253330064a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae89"
             }),
@@ -428,14 +470,18 @@ mod test {
               "title": "test_module.spend",
               "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
               "datum": {
-                "dataType": "list",
-                "items": [
-                  { "dataType": "integer" },
-                  { "dataType": "bytes" }
-                ]
+                "schema": {
+                  "dataType": "list",
+                  "items": [
+                    { "dataType": "integer" },
+                    { "dataType": "bytes" }
+                  ]
+                }
               },
               "redeemer": {
-                "dataType": "#string"
+                "schema": {
+                  "dataType": "#string"
+                }
               },
               "compiledCode": "585501000032323232323232232232253330084a22930b1b99375c002646466ec0c024008c024004c024004dd6000980080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
             }),
@@ -457,22 +503,25 @@ mod test {
               "hash": "f335ce0436fd7df56e727a66ada7298534a27b98f887bc3b7947ee48",
               "datum": {
                 "title": "Tuple",
-                "dataType": "list",
-                "items": [
-                  {
-                    "dataType": "integer"
-                  },
-                  {
-                    "dataType": "integer"
-                  },
-                  {
-                    "dataType": "integer"
-                  }
-                ]
+                "schema": {
+                  "dataType": "list",
+                  "items": [
+                    {
+                      "dataType": "integer"
+                    },
+                    {
+                      "dataType": "integer"
+                    },
+                    {
+                      "dataType": "integer"
+                    }
+                  ]
+                }
               },
               "redeemer": {
                 "title": "Data",
-                "description": "Any Plutus data."
+                "description": "Any Plutus data.",
+                "schema": {}
               },
               "compiledCode": "5840010000323232323232322322253330074a22930b1bac0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
             }),
@@ -505,46 +554,48 @@ mod test {
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Either",
-                    "anyOf": [
-                      {
-                        "title": "Left",
-                        "dataType": "constructor",
-                        "index": 0,
-                        "fields": [
-                          {
-                            "dataType": "bytes"
-                          }
-                        ]
-                      },
-                      {
-                        "title": "Right",
-                        "dataType": "constructor",
-                        "index": 1,
-                        "fields": [
-                          {
-                            "title": "Interval",
-                            "anyOf": [
-                              {
-                                "title": "Finite",
-                                "dataType": "constructor",
-                                "index": 0,
-                                "fields": [
-                                  {
-                                    "dataType": "integer"
-                                  }
-                                ]
-                              },
-                              {
-                                "title": "Infinite",
-                                "dataType": "constructor",
-                                "index": 1,
-                                "fields": []
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
+                    "schema": {
+                      "anyOf": [
+                        {
+                          "title": "Left",
+                          "dataType": "constructor",
+                          "index": 0,
+                          "fields": [
+                            {
+                              "dataType": "bytes"
+                            }
+                          ]
+                        },
+                        {
+                          "title": "Right",
+                          "dataType": "constructor",
+                          "index": 1,
+                          "fields": [
+                            {
+                              "title": "Interval",
+                              "anyOf": [
+                                {
+                                  "title": "Finite",
+                                  "dataType": "constructor",
+                                  "index": 0,
+                                  "fields": [
+                                    {
+                                      "dataType": "integer"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "title": "Infinite",
+                                  "dataType": "constructor",
+                                  "index": 1,
+                                  "fields": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   },
                   "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
                 }
@@ -574,25 +625,27 @@ mod test {
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
-                    "anyOf": [
-                      {
-                        "title": "Dict",
-                        "dataType": "constructor",
-                        "index": 0,
-                        "fields": [
-                          {
-                            "title": "inner",
-                            "dataType": "map",
-                            "keys": {
-                              "dataType": "bytes"
-                            },
-                            "values": {
-                              "dataType": "integer"
+                    "schema": {
+                      "anyOf": [
+                        {
+                          "title": "Dict",
+                          "dataType": "constructor",
+                          "index": 0,
+                          "fields": [
+                            {
+                              "title": "inner",
+                              "dataType": "map",
+                              "keys": {
+                                "dataType": "bytes"
+                              },
+                              "values": {
+                                "dataType": "integer"
+                              }
                             }
-                          }
-                        ]
-                      }
-                    ]
+                          ]
+                        }
+                      ]
+                    }
                   },
                   "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
                 }
@@ -622,12 +675,14 @@ mod test {
                   "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
                   "redeemer": {
                     "title": "Dict",
-                    "dataType": "map",
-                    "keys": {
-                      "dataType": "bytes"
-                    },
-                    "values": {
-                      "dataType": "integer"
+                    "schema": {
+                      "dataType": "map",
+                      "keys": {
+                        "dataType": "bytes"
+                      },
+                      "values": {
+                        "dataType": "integer"
+                      }
                     }
                   },
                   "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881"
@@ -657,9 +712,12 @@ mod test {
                   "datum": {
                     "title": "Data",
                     "description": "Any Plutus data.",
+                    "schema": {},
                   },
                   "redeemer": {
-                    "dataType": "integer",
+                    "schema": {
+                      "dataType": "integer",
+                    }
                   },
                   "compiledCode": "5840010000323232323232322232253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
                 }

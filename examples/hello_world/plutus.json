@@ -10,35 +10,39 @@
       "title": "hello_world.spend",
       "datum": {
         "title": "Datum",
-        "anyOf": [
-          {
-            "title": "Datum",
-            "dataType": "constructor",
-            "index": 0,
-            "fields": [
-              {
-                "title": "owner",
-                "dataType": "bytes"
-              }
-            ]
-          }
-        ]
+        "schema": {
+          "anyOf": [
+            {
+              "title": "Datum",
+              "dataType": "constructor",
+              "index": 0,
+              "fields": [
+                {
+                  "title": "owner",
+                  "dataType": "bytes"
+                }
+              ]
+            }
+          ]
+        }
       },
       "redeemer": {
         "title": "Redeemer",
-        "anyOf": [
-          {
-            "title": "Redeemer",
-            "dataType": "constructor",
-            "index": 0,
-            "fields": [
-              {
-                "title": "msg",
-                "dataType": "bytes"
-              }
-            ]
-          }
-        ]
+        "schema": {
+          "anyOf": [
+            {
+              "title": "Redeemer",
+              "dataType": "constructor",
+              "index": 0,
+              "fields": [
+                {
+                  "title": "msg",
+                  "dataType": "bytes"
+                }
+              ]
+            }
+          ]
+        }
       },
       "compiledCode": "58dd0100003232323232323232222533300632323232533300a002100114a06464660026eb0cc010c014cc010c014019200048040dd7198021802804240006002002444a66601e00429404c8c94ccc038cdc78010018a5113330050050010033012003375c602000466e3cdd71980098010022400091010d48656c6c6f2c20576f726c64210022323330010014800000c888cccc030cdc3802001008119980200219b8000348008c0480040048c024dd50008a4c2c6002002444a66600e004293099802980098040011998018019804801000ab9a5736aae7955cfaba15745",
       "hash": "46872294cadbacb2c3214086c0129ede75cf9f767e95a449f996685f"
