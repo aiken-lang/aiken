@@ -635,4 +635,35 @@ mod test {
             ),
         );
     }
+
+    #[test]
+    fn exported_data() {
+        assert_validator(
+            r#"
+            pub type Foo {
+                foo: Data
+            }
+
+            validator spend {
+              fn(datum: Data, redeemer: Int, ctx: Void) {
+                True
+              }
+            }
+            "#,
+            json!(
+                {
+                  "title": "test_module.spend",
+                  "hash": "a3dbab684d90d19e6bab3a0b00a7290ff59fe637d14428859bf74376",
+                  "datum": {
+                    "title": "Data",
+                    "description": "Any Plutus data.",
+                  },
+                  "redeemer": {
+                    "dataType": "integer",
+                  },
+                  "compiledCode": "5840010000323232323232322232253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101"
+                }
+            ),
+        );
+    }
 }
