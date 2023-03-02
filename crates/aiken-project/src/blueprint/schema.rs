@@ -36,7 +36,7 @@ pub enum Schema {
     String,
     Pair(Data, Data),
     List(Vec<Data>),
-    Data(Option<Data>),
+    Data(Data),
 }
 
 /// A schema for Plutus' Data.
@@ -47,6 +47,7 @@ pub enum Data {
     List(Items<Data>),
     Map(Box<Data>, Box<Data>),
     AnyOf(Vec<Annotated<Constructor>>),
+    Opaque,
 }
 
 /// A structure that represents either one or many elements.
@@ -89,32 +90,32 @@ impl Annotated<Schema> {
                 "Data" => Ok(Annotated {
                     title: Some("Data".to_string()),
                     description: Some("Any Plutus data.".to_string()),
-                    annotated: Schema::Data(None),
+                    annotated: Schema::Data(Data::Opaque),
                 }),
 
-                "ByteArray" => Ok(Schema::Data(Some(Data::Bytes)).into()),
+                "ByteArray" => Ok(Schema::Data(Data::Bytes).into()),
 
-                "Int" => Ok(Schema::Data(Some(Data::Integer)).into()),
+                "Int" => Ok(Schema::Data(Data::Integer).into()),
 
                 "String" => Ok(Schema::String.into()),
 
                 "Void" => Ok(Annotated {
                     title: Some("Unit".to_string()),
                     description: Some("The nullary constructor.".to_string()),
-                    annotated: Schema::Data(Some(Data::AnyOf(vec![Annotated {
+                    annotated: Schema::Data(Data::AnyOf(vec![Annotated {
                         title: None,
                         description: None,
                         annotated: Constructor {
                             index: 0,
                             fields: vec![],
                         },
-                    }]))),
+                    }])),
                 }),
 
                 "Bool" => Ok(Annotated {
                     title: Some("Bool".to_string()),
                     description: None,
-                    annotated: Schema::Data(Some(Data::AnyOf(vec![
+                    annotated: Schema::Data(Data::AnyOf(vec![
                         Annotated {
                             title: Some("False".to_string()),
                             description: None,
@@ -131,13 +132,13 @@ impl Annotated<Schema> {
                                 fields: vec![],
                             },
                         },
-                    ]))),
+                    ])),
                 }),
 
                 "Ordering" => Ok(Annotated {
                     title: Some("Ordering".to_string()),
                     description: None,
-                    annotated: Schema::Data(Some(Data::AnyOf(vec![
+                    annotated: Schema::Data(Data::AnyOf(vec![
                         Annotated {
                             title: Some("Less".to_string()),
                             description: None,
@@ -162,7 +163,7 @@ impl Annotated<Schema> {
                                 fields: vec![],
                             },
                         },
-                    ]))),
+                    ])),
                 }),
 
                 "Option" => {
@@ -172,7 +173,7 @@ impl Annotated<Schema> {
                     Ok(Annotated {
                         title: Some("Optional".to_string()),
                         description: None,
-                        annotated: Schema::Data(Some(Data::AnyOf(vec![
+                        annotated: Schema::Data(Data::AnyOf(vec![
                             Annotated {
                                 title: Some("Some".to_string()),
                                 description: Some("An optional value.".to_string()),
@@ -189,7 +190,7 @@ impl Annotated<Schema> {
                                     fields: vec![],
                                 },
                             },
-                        ]))),
+                        ])),
                     })
                 }
 
@@ -202,19 +203,17 @@ impl Annotated<Schema> {
                     // as such. We don't have a concept of language maps in Aiken, so we simply
                     // make all types abide by this convention.
                     let data = match generic.annotated {
-                        Schema::Data(Some(Data::List(Items::Many(xs)))) if xs.len() == 2 => {
-                            Data::Map(
-                                Box::new(xs.first().unwrap().to_owned()),
-                                Box::new(xs.last().unwrap().to_owned()),
-                            )
-                        }
+                        Schema::Data(Data::List(Items::Many(xs))) if xs.len() == 2 => Data::Map(
+                            Box::new(xs.first().unwrap().to_owned()),
+                            Box::new(xs.last().unwrap().to_owned()),
+                        ),
                         _ => {
                             let inner = generic.into_data(type_info)?.annotated;
                             Data::List(Items::One(Box::new(inner)))
                         }
                     };
 
-                    Ok(Schema::Data(Some(data)).into())
+                    Ok(Schema::Data(data).into())
                 }
 
                 _ => Err(Error::new(ErrorContext::UnsupportedType, type_info)),
@@ -228,10 +227,10 @@ impl Annotated<Schema> {
                 let module = modules.get(module_name).unwrap();
                 let constructor = find_definition(type_name, &module.ast.definitions).unwrap();
                 let type_parameters = collect_type_parameters(&constructor.typed_parameters, args);
-                let annotated = Schema::Data(Some(
+                let annotated = Schema::Data(
                     Data::from_data_type(modules, constructor, &type_parameters)
                         .map_err(|e| e.backtrack(type_info))?,
-                ));
+                );
 
                 Ok(Annotated {
                     title: Some(constructor.name.clone()),
@@ -259,10 +258,10 @@ impl Annotated<Schema> {
                     let right = Annotated::from_type(modules, right, type_parameters)?
                         .into_data(right)
                         .map_err(|e| e.backtrack(type_info))?;
-                    Ok(Schema::Data(Some(Data::List(Items::Many(vec![
+                    Ok(Schema::Data(Data::List(Items::Many(vec![
                         left.annotated,
                         right.annotated,
-                    ]))))
+                    ])))
                     .into())
                 }
                 _ => {
@@ -277,7 +276,7 @@ impl Annotated<Schema> {
                     Ok(Annotated {
                         title: Some("Tuple".to_owned()),
                         description: None,
-                        annotated: Schema::Data(Some(Data::List(Items::Many(elems)))),
+                        annotated: Schema::Data(Data::List(Items::Many(elems))),
                     })
                 }
             },
@@ -290,7 +289,7 @@ impl Annotated<Schema> {
             Annotated {
                 title,
                 description,
-                annotated: Schema::Data(Some(data)),
+                annotated: Schema::Data(data),
             } => Ok(Annotated {
                 title,
                 description,
@@ -403,11 +402,7 @@ impl Serialize for Schema {
                 s.serialize_field("items", &items)?;
                 s.end()
             }
-            Schema::Data(None) => {
-                let s = serializer.serialize_struct("Data", 0)?;
-                s.end()
-            }
-            Schema::Data(Some(data)) => data.serialize(serializer),
+            Schema::Data(data) => data.serialize(serializer),
         }
     }
 }
@@ -415,6 +410,10 @@ impl Serialize for Schema {
 impl Serialize for Data {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
+            Data::Opaque => {
+                let s = serializer.serialize_struct("Opaque", 0)?;
+                s.end()
+            }
             Data::Integer => {
                 let mut s = serializer.serialize_struct("Integer", 1)?;
                 s.serialize_field("dataType", "integer")?;
@@ -628,7 +627,7 @@ pub mod test {
 
     #[test]
     fn serialize_data_integer() {
-        let schema = Schema::Data(Some(Data::Integer));
+        let schema = Schema::Data(Data::Integer);
         assert_json(
             &schema,
             json!({
@@ -639,7 +638,7 @@ pub mod test {
 
     #[test]
     fn serialize_data_bytes() {
-        let schema = Schema::Data(Some(Data::Bytes));
+        let schema = Schema::Data(Data::Bytes);
         assert_json(
             &schema,
             json!({
@@ -650,7 +649,7 @@ pub mod test {
 
     #[test]
     fn serialize_data_list_1() {
-        let schema = Schema::Data(Some(Data::List(Items::One(Box::new(Data::Integer)))));
+        let schema = Schema::Data(Data::List(Items::One(Box::new(Data::Integer))));
         assert_json(
             &schema,
             json!({
@@ -664,8 +663,8 @@ pub mod test {
 
     #[test]
     fn serialize_data_list_2() {
-        let schema = Schema::Data(Some(Data::List(Items::One(Box::new(Data::List(
-            Items::One(Box::new(Data::Integer)),
+        let schema = Schema::Data(Data::List(Items::One(Box::new(Data::List(Items::One(
+            Box::new(Data::Integer),
         ))))));
         assert_json(
             &schema,
@@ -682,10 +681,7 @@ pub mod test {
 
     #[test]
     fn serialize_data_list_3() {
-        let schema = Schema::Data(Some(Data::List(Items::Many(vec![
-            Data::Integer,
-            Data::Bytes,
-        ]))));
+        let schema = Schema::Data(Data::List(Items::Many(vec![Data::Integer, Data::Bytes])));
         assert_json(
             &schema,
             json!({
@@ -700,10 +696,7 @@ pub mod test {
 
     #[test]
     fn serialize_data_map_1() {
-        let schema = Schema::Data(Some(Data::Map(
-            Box::new(Data::Integer),
-            Box::new(Data::Bytes),
-        )));
+        let schema = Schema::Data(Data::Map(Box::new(Data::Integer), Box::new(Data::Bytes)));
         assert_json(
             &schema,
             json!({
@@ -720,10 +713,10 @@ pub mod test {
 
     #[test]
     fn serialize_data_map_2() {
-        let schema = Schema::Data(Some(Data::Map(
+        let schema = Schema::Data(Data::Map(
             Box::new(Data::Bytes),
             Box::new(Data::List(Items::One(Box::new(Data::Integer)))),
-        )));
+        ));
         assert_json(
             &schema,
             json!({
@@ -741,11 +734,11 @@ pub mod test {
 
     #[test]
     fn serialize_data_constr_1() {
-        let schema = Schema::Data(Some(Data::AnyOf(vec![Constructor {
+        let schema = Schema::Data(Data::AnyOf(vec![Constructor {
             index: 0,
             fields: vec![],
         }
-        .into()])));
+        .into()]));
         assert_json(
             &schema,
             json!({
@@ -760,7 +753,7 @@ pub mod test {
 
     #[test]
     fn serialize_data_constr_2() {
-        let schema = Schema::Data(Some(Data::AnyOf(vec![
+        let schema = Schema::Data(Data::AnyOf(vec![
             Constructor {
                 index: 0,
                 fields: vec![Data::Integer.into()],
@@ -771,7 +764,7 @@ pub mod test {
                 fields: vec![Data::Bytes.into()],
             }
             .into(),
-        ])));
+        ]));
         assert_json(
             &schema,
             json!({
@@ -793,7 +786,7 @@ pub mod test {
 
     #[test]
     fn serialize_empty_data() {
-        let schema = Schema::Data(None);
+        let schema = Schema::Data(Data::Opaque);
         assert_json(&schema, json!({}))
     }
 
