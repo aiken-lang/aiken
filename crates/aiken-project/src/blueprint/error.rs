@@ -41,3 +41,7 @@ pub enum Error {
         keyword_spend = "spend".if_supports_color(Stdout, |s| s.purple())))]
     ParameterizedValidator { n: usize },
 }
+
+unsafe impl Send for Error {}
+
+unsafe impl Sync for Error {}
