@@ -69,7 +69,7 @@ pub fn exec(
     let blueprint: Blueprint<serde_json::Value> =
         serde_json::from_reader(BufReader::new(blueprint)).into_diagnostic()?;
 
-    // Calculate the address
+    // Perform the conversion
     let when_too_many =
         |known_validators| ProjectError::MoreThanOneValidatorFound { known_validators };
     let when_missing = |known_validators| ProjectError::NoValidatorNotFound { known_validators };
