@@ -1186,19 +1186,15 @@ pub fn find_and_replace_generics(tipo: &mut Arc<Type>, mono_types: &IndexMap<u64
             Type::Var { tipo: var_tipo } => {
                 let var_type = var_tipo.as_ref().borrow().clone();
                 let var_tipo = match var_type {
-                    TypeVar::Unbound { .. } => todo!(),
                     TypeVar::Link { tipo } => {
                         let mut tipo = tipo;
                         find_and_replace_generics(&mut tipo, mono_types);
                         tipo
                     }
-                    TypeVar::Generic { .. } => unreachable!(),
+                    TypeVar::Generic { .. } | TypeVar::Unbound { .. } => unreachable!(),
                 };
 
-                let t = Type::Var {
-                    tipo: RefCell::from(TypeVar::Link { tipo: var_tipo }).into(),
-                };
-                *tipo = t.into()
+                *tipo = var_tipo;
             }
         };
     }
@@ -1258,6 +1254,10 @@ pub fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
         "_unbound".to_string()
     } else {
         let mut full_type = "_data".to_string();
+
+        if t.is_generic() {
+            panic!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE");
+        }
 
         let inner_types = t.get_inner_types();
 
@@ -1371,6 +1371,7 @@ pub fn monomorphize(
     let mut new_air = ir.clone();
     let mut new_name = String::new();
     let mut needs_variant = false;
+
     for (index, ir) in ir.into_iter().enumerate() {
         match ir {
             Air::Var {

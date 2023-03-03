@@ -89,15 +89,9 @@ impl<'a> CodeGenerator<'a> {
 
         self.build_ir(body, &mut ir_stack, scope);
 
-        println!("{:#?}", ir_stack);
-
         self.define_ir(&mut ir_stack);
 
-        println!("{:#?}", ir_stack);
-
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
-
-        println!("{:#?}", ir_stack);
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
@@ -3150,8 +3144,6 @@ impl<'a> CodeGenerator<'a> {
 
         let mut recursion_func_map_to_add = recursion_func_map.clone();
 
-        println!("ARE WE GETTING HERE");
-
         for func_index in func_index_map.clone().iter() {
             let func = func_index.0;
 
@@ -3276,11 +3268,6 @@ impl<'a> CodeGenerator<'a> {
 
                         self.build_ir(&function.body, &mut func_ir, scope.to_vec());
 
-                        println!(
-                            "OUR FUNC IR FOR {:#?} IS: {:#?}",
-                            non_variant_function_key, func_ir
-                        );
-
                         let param_types = constructor.tipo.arg_types().unwrap();
 
                         let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
@@ -3288,21 +3275,16 @@ impl<'a> CodeGenerator<'a> {
                         for (index, arg) in function.arguments.iter().enumerate() {
                             if arg.tipo.is_generic() {
                                 let mut map = mono_types.into_iter().collect_vec();
-                                map.append(&mut get_generics_and_type(
-                                    &arg.tipo,
-                                    &param_types[index],
-                                ));
+                                let param_type = &param_types[index];
+
+                                map.append(&mut get_generics_and_type(&arg.tipo, &param_type));
 
                                 mono_types = map.into_iter().collect();
                             }
                         }
 
-                        println!("DID WE GET HERE");
-
                         let (variant_name, func_ir) =
                             monomorphize(func_ir, mono_types, &constructor.tipo);
-
-                        println!("AND HERE?");
 
                         let function_key = FunctionAccessKey {
                             module_name: module.clone(),
@@ -3412,8 +3394,6 @@ impl<'a> CodeGenerator<'a> {
                                 }
                             }
 
-                            println!("FUNC CALLS IS {:#?}", func_calls);
-
                             let recursive = if func_calls.get(&function_key).is_some() {
                                 func_calls.remove(&function_key);
                                 true
@@ -3433,7 +3413,6 @@ impl<'a> CodeGenerator<'a> {
                             );
                         }
                     } else {
-                        println!("ARE WE GETTING HERE323323");
                         for func in to_be_defined_map.clone().iter() {
                             if get_common_ancestor(scope, func.1) == scope.to_vec() {
                                 if let Some(index_scope) = func_index_map.get(func.0) {
@@ -3456,7 +3435,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 a => {
                     let scope = a.scope();
-                    println!("ARE WE GETTING HERE2222");
+
                     for func in to_be_defined_map.clone().iter() {
                         if get_common_ancestor(&scope, func.1) == scope.to_vec() {
                             if let Some(index_scope) = func_index_map.get(func.0) {
@@ -3478,8 +3457,6 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
         }
-
-        println!("REACHED HERE");
 
         // Still to be defined
         for func in to_be_defined_map.clone().iter() {
