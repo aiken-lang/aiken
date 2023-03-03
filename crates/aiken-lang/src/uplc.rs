@@ -1812,6 +1812,10 @@ impl<'a> CodeGenerator<'a> {
                     && !tipo.is_data()
                 {
                     let mut assert_vec = vec![];
+                    let mut scope = scope;
+
+                    scope.push(self.id_gen.next());
+
                     self.recursive_assert_pattern(
                         pattern,
                         &mut assert_vec,
