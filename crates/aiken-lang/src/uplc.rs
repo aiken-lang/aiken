@@ -3277,7 +3277,7 @@ impl<'a> CodeGenerator<'a> {
                                 let mut map = mono_types.into_iter().collect_vec();
                                 let param_type = &param_types[index];
 
-                                map.append(&mut get_generics_and_type(&arg.tipo, &param_type));
+                                map.append(&mut get_generics_and_type(&arg.tipo, param_type));
 
                                 mono_types = map.into_iter().collect();
                             }

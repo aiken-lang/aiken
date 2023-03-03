@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::Arc};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
