@@ -10,7 +10,7 @@ authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
 [dependencies]
 aiken-lang = { path = "../aiken-lang", version = "0.0.29" }
-askama = "0.10.5"
+askama = "0.12.0"
 assert-json-diff = "2.0.2"
 dirs = "4.0.0"
 fslock = "0.2.1"
@@ -21,10 +21,10 @@ indexmap = "1.9.2"
 itertools = "0.10.5"
 miette = { version = "5.5.0", features = ["fancy"] }
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
-pallas = "0.16.0"
-pallas-traverse = "0.16.0"
+pallas = "0.18.0"
+pallas-traverse = "0.18.0"
 petgraph = "0.6.3"
-pulldown-cmark = { version = "0.8.0", default-features = false }
+pulldown-cmark = { version = "0.9.2", default-features = false }
 rayon = "1.7.0"
 regex = "1.7.1"
 reqwest = "0.11.14"
@@ -33,7 +33,7 @@ serde_json = { version = "1.0.94", features = ["preserve_order"] }
 strip-ansi-escapes = "0.1.1"
 thiserror = "1.0.39"
 tokio = { version = "1.26.0", features = ["full"] }
-toml = "0.5.11"
+toml = "0.7.2"
 uplc = { path = '../uplc', version = "0.0.29" }
 walkdir = "2.3.2"
 zip = "0.6.4"
