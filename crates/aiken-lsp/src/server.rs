@@ -747,7 +747,7 @@ impl Server {
         let register_options =
             serde_json::value::to_value(lsp_types::DidChangeWatchedFilesRegistrationOptions {
                 watchers: vec![lsp_types::FileSystemWatcher {
-                    glob_pattern: "aiken.toml".into(),
+                    glob_pattern: String::from("aiken.toml").into(),
                     kind: Some(lsp_types::WatchKind::Change),
                 }],
             })?;
