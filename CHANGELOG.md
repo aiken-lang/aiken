@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - 2023-MM-DD
+
+### Added
+
+- **aiken**: new command `blueprint convert`
+
 ## [v0.0.29] - 2023-MM-DD
 
 ### Added
