@@ -9,23 +9,23 @@ license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
 
 [dependencies]
-anyhow = "1.0.57"
-clap = { version = "3.1.14", features = ["derive"] }
+anyhow = "1.0.69"
+clap = { version = "3.2.23", features = ["derive"] }
 hex = "0.4.3"
-ignore = "0.4.18"
+ignore = "0.4.20"
 indoc = "1.0"
-miette = { version = "5.3.0", features = ["fancy"] }
+miette = { version = "5.5.0", features = ["fancy"] }
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 pallas-addresses = "0.16.0"
 pallas-codec = "0.16.0"
 pallas-crypto = "0.16.0"
 pallas-primitives = "0.16.0"
 pallas-traverse = "0.16.0"
-regex = "1.5.4"
-thiserror = "1.0.31"
+regex = "1.7.1"
+thiserror = "1.0.39"
 
 aiken-lang = { path = "../aiken-lang", version = "0.0.29" }
 aiken-lsp = { path = "../aiken-lsp", version = "0.0.29" }
 aiken-project = { path = '../aiken-project', version = "0.0.29" }
 uplc = { path = '../uplc', version = "0.0.29" }
-serde_json = "1.0.91"
+serde_json = "1.0.94"

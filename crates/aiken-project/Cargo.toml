@@ -14,26 +14,26 @@ askama = "0.10.5"
 assert-json-diff = "2.0.2"
 dirs = "4.0.0"
 fslock = "0.2.1"
-futures = "0.3.25"
+futures = "0.3.26"
 hex = "0.4.3"
-ignore = "0.4.18"
-indexmap = "1.9.1"
-itertools = "0.10.1"
-miette = { version = "5.3.0", features = ["fancy"] }
+ignore = "0.4.20"
+indexmap = "1.9.2"
+itertools = "0.10.5"
+miette = { version = "5.5.0", features = ["fancy"] }
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 pallas = "0.16.0"
 pallas-traverse = "0.16.0"
-petgraph = "0.6.2"
+petgraph = "0.6.3"
 pulldown-cmark = { version = "0.8.0", default-features = false }
-rayon = "1.6.1"
-regex = "1.6.0"
-reqwest = "0.11.13"
-serde = { version = "1.0.144", features = ["derive"] }
-serde_json = { version = "1.0.85", features = ["preserve_order"] }
+rayon = "1.7.0"
+regex = "1.7.1"
+reqwest = "0.11.14"
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = { version = "1.0.94", features = ["preserve_order"] }
 strip-ansi-escapes = "0.1.1"
-thiserror = "1.0.37"
-tokio = { version = "1.24.2", features = ["full"] }
-toml = "0.5.9"
+thiserror = "1.0.39"
+tokio = { version = "1.26.0", features = ["full"] }
+toml = "0.5.11"
 uplc = { path = '../uplc', version = "0.0.29" }
 walkdir = "2.3.2"
 zip = "0.6.4"
