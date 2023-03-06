@@ -6,7 +6,6 @@ use clap::Subcommand;
 
 /// Managing project dependencies
 #[derive(Subcommand)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     /// Add a new package dependency
     Add(add::Args),

@@ -1,4 +1,4 @@
-use clap::clap_derive::ArgEnum;
+use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use serde_json::json;
 use std::{env, fs::File, io::BufReader, path::PathBuf, process};
@@ -10,7 +10,6 @@ use aiken_project::{
 
 /// Convert a blueprint into other formats.
 #[derive(clap::Args)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
@@ -24,11 +23,11 @@ pub struct Args {
     validator: Option<String>,
 
     // Format to convert to
-    #[clap(long, arg_enum, default_value = "cardano-cli")]
+    #[clap(long, default_value = "cardano-cli")]
     to: Format,
 }
 
-#[derive(Copy, Clone, ArgEnum)]
+#[derive(Copy, Clone, ValueEnum)]
 pub enum Format {
     CardanoCli,
 }

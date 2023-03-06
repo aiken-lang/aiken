@@ -7,9 +7,8 @@ use uplc::{
     parser,
 };
 
-#[derive(clap::Args)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 /// Apply a parameter to a parameterized validator.
+#[derive(clap::Args)]
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,

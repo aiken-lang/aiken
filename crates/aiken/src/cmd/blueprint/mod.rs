@@ -6,7 +6,6 @@ use clap::Subcommand;
 
 /// Commands for working with Plutus blueprints
 #[derive(Subcommand)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     Address(address::Args),
     Apply(apply::Args),

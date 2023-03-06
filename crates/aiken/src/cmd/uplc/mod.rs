@@ -7,7 +7,6 @@ use clap::Subcommand;
 
 /// Commands for working with untyped Plutus-core
 #[derive(Subcommand)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     Fmt(fmt::Args),
     Eval(eval::Args),

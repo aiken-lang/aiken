@@ -2,9 +2,8 @@ use crate::with_project;
 use aiken_lang::ast::Tracing;
 use std::path::PathBuf;
 
-#[derive(clap::Args)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 /// Compute a validator's address.
+#[derive(clap::Args)]
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,

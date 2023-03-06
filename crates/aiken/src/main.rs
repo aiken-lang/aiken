@@ -10,7 +10,6 @@ use clap::Parser;
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
 #[clap(propagate_version = true)]
-#[clap(setting(clap::AppSettings::DeriveDisplayOrder))]
 pub enum Cmd {
     New(new::Args),
     Fmt(fmt::Args),
