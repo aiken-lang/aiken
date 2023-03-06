@@ -54,9 +54,9 @@ impl Manifest {
             src: toml.clone(),
             named: NamedSource::new(manifest_path.display().to_string(), toml).into(),
             // this isn't actually a legit way to get the span
-            location: e.line_col().map(|(line, col)| Span {
-                start: line,
-                end: col,
+            location: e.span().map(|range| Span {
+                start: range.start,
+                end: range.end,
             }),
             help: e.to_string(),
         })?;

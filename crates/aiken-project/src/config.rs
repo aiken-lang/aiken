@@ -88,9 +88,9 @@ impl Config {
             src: raw_config.clone(),
             named: NamedSource::new(config_path.display().to_string(), raw_config).into(),
             // this isn't actually a legit way to get the span
-            location: e.line_col().map(|(line, col)| Span {
-                start: line,
-                end: col,
+            location: e.span().map(|range| Span {
+                start: range.start,
+                end: range.end,
             }),
             help: e.to_string(),
         })?;
