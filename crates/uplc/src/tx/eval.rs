@@ -295,7 +295,8 @@ fn get_tx_info_v1(
     let outputs = body
         .outputs
         .iter()
-        .map(|output| TxOut::V1(sort_tx_out_value(output)))
+        .cloned()
+        .map(|output| TxOut::V1(sort_tx_out_value(&output.into())))
         .collect();
 
     let fee = Value::Coin(body.fee);
@@ -341,7 +342,7 @@ fn get_tx_info_v1(
         .sorted()
         .collect();
 
-    let id = tx.transaction_body.compute_hash();
+    let id = tx.transaction_body.original_hash();
 
     Ok(TxInfo::V1(TxInfoV1 {
         inputs,
@@ -372,7 +373,8 @@ fn get_tx_info_v2(
     let outputs = body
         .outputs
         .iter()
-        .map(|output| TxOut::V2(sort_tx_out_value(output)))
+        .cloned()
+        .map(|output| TxOut::V2(sort_tx_out_value(&output.into())))
         .collect();
 
     let fee = Value::Coin(body.fee);
@@ -443,7 +445,7 @@ fn get_tx_info_v2(
             .collect(),
     );
 
-    let id = tx.transaction_body.compute_hash();
+    let id = tx.transaction_body.original_hash();
 
     Ok(TxInfo::V2(TxInfoV2 {
         inputs,

@@ -5,11 +5,10 @@ use pallas_primitives::babbage::{
     AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer, StakeCredential,
     TransactionInput, TransactionOutput, Value,
 };
-use serde::Deserialize;
 
 use super::to_plutus_data::MintValue;
 
-#[derive(Debug, PartialEq, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ResolvedInput {
     pub input: TransactionInput,
     pub output: TransactionOutput,
