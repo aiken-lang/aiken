@@ -21,7 +21,7 @@ deno run --allow-net --allow-write generate-credentials.ts
 > **Warning** Require `BLOCKFROST_API_KEY` environment variable to be set.
 
 ```
-deno run --allow-net --allow-read hello_world-lock.ts
+deno run --allow-net --allow-read --allow-env hello_world-lock.ts
 ```
 
 ## Unlocking Funds
@@ -29,5 +29,5 @@ deno run --allow-net --allow-read hello_world-lock.ts
 > **Warning** Require `BLOCKFROST_API_KEY` environment variable to be set.
 
 ```
-deno run --allow-net --allow-read hello_world-unlock.ts -- TRANSACTION_ID_FROM_LOCK
+deno run --allow-net --allow-read --allow-env hello_world-unlock.ts TRANSACTION_ID_FROM_LOCK
 ```
