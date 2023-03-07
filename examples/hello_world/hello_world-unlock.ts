@@ -25,11 +25,11 @@ lucid.selectWalletFromPrivateKey(await Deno.readTextFile("./key.sk"));
 
 const validator = await readValidator();
 
-const lockOutRef: OutRef = { txHash: Deno.args[0], outputIndex: 0 };
+const utxo: OutRef = { txHash: Deno.args[0], outputIndex: 0 };
 
 const redeemer = Data.to(new Constr(0, [utf8ToHex("Hello, World!")]));
 
-const unlockTxHash = await unlock(lockOutRef, {
+const unlockTxHash = await unlock(utxo, {
   from: validator,
   using: redeemer,
 });
