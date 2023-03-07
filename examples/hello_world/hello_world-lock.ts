@@ -2,18 +2,18 @@ import {
   Blockfrost,
   Constr,
   Data,
+  fromHex,
   Lucid,
   SpendingValidator,
+  toHex,
   TxHash,
-  fromHex,
-  toHex
 } from "https://deno.land/x/lucid@0.8.3/mod.ts";
 import * as cbor from "https://deno.land/x/cbor@v1.4.1/index.js";
 
 const lucid = await Lucid.new(
   new Blockfrost(
     "https://cardano-preview.blockfrost.io/api/v0",
-    Deno.env.get('BLOCKFROST_API_KEY'),
+    Deno.env.get("BLOCKFROST_API_KEY"),
   ),
   "Preview",
 );
@@ -25,7 +25,8 @@ const validator = await readValidator();
 // --- Supporting functions
 
 async function readValidator(): Promise<SpendingValidator> {
-  const validator = JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
+  const validator =
+    JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
   return {
     type: "PlutusV2",
     script: toHex(cbor.encode(fromHex(validator.compiledCode))),
@@ -35,22 +36,25 @@ async function readValidator(): Promise<SpendingValidator> {
 const publicKeyHash = lucid.utils
   .getAddressDetails(await lucid.wallet.address())
   .paymentCredential
-  .hash;
+  ?.hash;
 
-const datum = Data.to(new Constr(0, [ publicKeyHash ]));
+const datum = Data.to(new Constr(0, [publicKeyHash]));
 
-const txLock = await lock(1000000, { into: validator, owner: datum });
+const txHash = await lock(BigInt(1000000), { into: validator, owner: datum });
 
-await lucid.awaitTx(txLock);
+await lucid.awaitTx(txHash);
 
-console.log(`1 ADA locked into the contract
-    Tx ID: ${txLock}
+console.log(`1 ADA locked into the contract at:
+    Tx Hash: ${txHash}
     Datum: ${datum}
 `);
 
 // --- Supporting functions
 
-async function lock(lovelace, { into, owner }): Promise<TxHash>{
+async function lock(
+  lovelace: bigint,
+  { into, owner }: { into: SpendingValidator; owner: string },
+): Promise<TxHash> {
   const contractAddress = lucid.utils.validatorToAddress(into);
 
   const tx = await lucid

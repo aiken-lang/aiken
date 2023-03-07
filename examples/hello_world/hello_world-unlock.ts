@@ -1,20 +1,22 @@
 import {
-    Blockfrost,
-    Constr,
-    Data,
-    Lucid,
-    SpendingValidator,
-    TxHash,
-    fromHex,
-    toHex,
-    utf8ToHex
-  } from "https://deno.land/x/lucid@0.8.3/mod.ts";
+  Blockfrost,
+  Constr,
+  Data,
+  fromHex,
+  Lucid,
+  OutRef,
+  Redeemer,
+  SpendingValidator,
+  toHex,
+  TxHash,
+  utf8ToHex,
+} from "https://deno.land/x/lucid@0.8.3/mod.ts";
 import * as cbor from "https://deno.land/x/cbor@v1.4.1/index.js";
 
 const lucid = await Lucid.new(
   new Blockfrost(
     "https://cardano-preview.blockfrost.io/api/v0",
-    Deno.env.get('BLOCKFROST_API_KEY'),
+    Deno.env.get("BLOCKFROST_API_KEY"),
   ),
   "Preview",
 );
@@ -23,22 +25,28 @@ lucid.selectWalletFromPrivateKey(await Deno.readTextFile("./key.sk"));
 
 const validator = await readValidator();
 
-const utxo = { txHash: Deno.args[0], outputIndex: 0 };
+const lockOutRef: OutRef = { txHash: Deno.args[0], outputIndex: 0 };
 
-const redeemer = Data.to(new Constr(0, [ utf8ToHex("Hello, World!")]) );
+const redeemer = Data.to(new Constr(0, [utf8ToHex("Hello, World!")]));
 
-const txUnlock = await unlock(utxo, { from: validator, using: redeemer });
+const unlockTxHash = await unlock(lockOutRef, {
+  from: validator,
+  using: redeemer,
+});
 
-await lucid.awaitTx(txUnlock);
+await lucid.awaitTx(unlockTxHash);
 
-console.log(`1 ADA recovered from the contract
-    Tx ID: ${txUnlock}
+console.log(`1 ADA unlocked from the contract
+    Tx Hash: ${unlockTxHash}
     Redeemer: ${redeemer}
 `);
 
 // --- Supporting functions
 
-async function unlock(ref, { from, using }): Promise<TxHash> {
+async function unlock(
+  ref: OutRef,
+  { from, using }: { from: SpendingValidator; using: Redeemer },
+): Promise<TxHash> {
   const [utxo] = await lucid.utxosByOutRef([ref]);
 
   const tx = await lucid
@@ -56,7 +64,8 @@ async function unlock(ref, { from, using }): Promise<TxHash> {
 }
 
 async function readValidator(): Promise<SpendingValidator> {
-  const validator = JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
+  const validator =
+    JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
   return {
     type: "PlutusV2",
     script: toHex(cbor.encode(fromHex(validator.compiledCode))),
