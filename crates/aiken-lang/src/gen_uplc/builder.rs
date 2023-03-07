@@ -30,7 +30,7 @@ pub struct FuncComponents {
     pub ir: Vec<Air>,
     pub dependencies: Vec<FunctionAccessKey>,
     pub args: Vec<String>,
-    pub recursive: bool,
+    pub recursive: Vec<FunctionAccessKey>,
     pub defined_by_zero_arg: bool,
     pub is_code_gen_func: bool,
 }
@@ -185,6 +185,10 @@ impl ClauseProperties {
             } => original_subject_name,
         }
     }
+}
+
+pub struct FunctionCycle {
+    cycle_complete: bool,
 }
 
 pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
@@ -1543,7 +1547,7 @@ pub fn handle_func_dependencies(
                 defined_functions.insert(dependency, ());
             }
         } else if depend_comp.args.is_empty() {
-            to_be_defined.insert(dependency, ());
+            to_be_defined_zero_arg.insert(dependency, ());
         }
     }
 }
