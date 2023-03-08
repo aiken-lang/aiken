@@ -470,6 +470,7 @@ mod test {
               "title": "test_module.spend",
               "hash": "3c6766e7a36df2aa13c0e9e6e071317ed39d05f405771c4f1a81c6cc",
               "datum": {
+                "title": "Tuple",
                 "schema": {
                   "dataType": "list",
                   "items": [
