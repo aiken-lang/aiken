@@ -37,7 +37,7 @@ use std::{
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{Constant, DeBruijn, Term},
+    ast::{DeBruijn, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -726,22 +726,16 @@ where
 
         scripts
             .into_par_iter()
-            .map(|script| match script.program.eval(initial_budget) {
-                (Ok(result), remaining_budget, logs) => EvalInfo {
-                    success: result != Term::Error
-                        && result != Term::Constant(Constant::Bool(false).into()),
+            .map(|script| {
+                let mut eval_result = script.program.eval(initial_budget);
+
+                EvalInfo {
+                    success: !eval_result.failed(),
                     script,
-                    spent_budget: initial_budget - remaining_budget,
-                    output: Some(result),
-                    logs,
-                },
-                (Err(..), remaining_budget, logs) => EvalInfo {
-                    success: false,
-                    script,
-                    spent_budget: initial_budget - remaining_budget,
-                    output: None,
-                    logs,
-                },
+                    spent_budget: eval_result.cost(),
+                    logs: eval_result.logs(),
+                    output: eval_result.result().ok(),
+                }
             })
             .collect()
     }
