@@ -22,10 +22,10 @@ pallas-crypto = "0.18.0"
 pallas-primitives = "0.18.0"
 pallas-traverse = "0.18.0"
 regex = "1.7.1"
+serde_json = "1.0.94"
 thiserror = "1.0.39"
 
 aiken-lang = { path = "../aiken-lang", version = "0.0.29" }
 aiken-lsp = { path = "../aiken-lsp", version = "0.0.29" }
 aiken-project = { path = '../aiken-project', version = "0.0.29" }
 uplc = { path = '../uplc', version = "0.0.29" }
-serde_json = "1.0.94"
