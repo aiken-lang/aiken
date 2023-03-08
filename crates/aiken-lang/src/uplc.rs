@@ -26,7 +26,7 @@ use crate::{
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
         convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
-        get_generics_and_type, handle_clause_guard, handle_func_dependencies_ir,
+        get_generic_id_and_type, handle_clause_guard, handle_func_dependencies_ir,
         handle_recursion_ir, list_access_to_uplc, lookup_data_type_by_tipo, monomorphize,
         rearrange_clauses, replace_opaque_type, wrap_validator_args, AssignmentProperties,
         ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
@@ -3275,17 +3275,23 @@ impl<'a> CodeGenerator<'a> {
                         let param_types = constructor.tipo.arg_types().unwrap();
 
                         let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
+                        let mut map = mono_types.into_iter().collect_vec();
 
                         for (index, arg) in function.arguments.iter().enumerate() {
                             if arg.tipo.is_generic() {
-                                let mut map = mono_types.into_iter().collect_vec();
                                 let param_type = &param_types[index];
 
-                                map.append(&mut get_generics_and_type(&arg.tipo, param_type));
-
-                                mono_types = map.into_iter().collect();
+                                map.append(&mut get_generic_id_and_type(&arg.tipo, param_type));
                             }
                         }
+
+                        if function.return_type.is_generic() {
+                            if let Type::Fn { ret, .. } = &*constructor.tipo {
+                                map.append(&mut get_generic_id_and_type(&function.return_type, ret))
+                            }
+                        }
+
+                        mono_types = map.into_iter().collect();
 
                         let (variant_name, func_ir) =
                             monomorphize(func_ir, mono_types, &constructor.tipo);
@@ -3347,23 +3353,32 @@ impl<'a> CodeGenerator<'a> {
                                     } else if let (Some(function), Type::Fn { .. }) =
                                         (function, &*tipo)
                                     {
+                                        let param_types = tipo.arg_types().unwrap();
+
                                         let mut mono_types: IndexMap<u64, Arc<Type>> =
                                             IndexMap::new();
-
-                                        let param_types = tipo.arg_types().unwrap();
+                                        let mut map = mono_types.into_iter().collect_vec();
 
                                         for (index, arg) in function.arguments.iter().enumerate() {
                                             if arg.tipo.is_generic() {
-                                                let mut map = mono_types.into_iter().collect_vec();
-                                                map.append(&mut get_generics_and_type(
-                                                    &arg.tipo,
-                                                    &param_types[index],
-                                                ));
+                                                let param_type = &param_types[index];
 
-                                                mono_types = map.into_iter().collect();
+                                                map.append(&mut get_generic_id_and_type(
+                                                    &arg.tipo, param_type,
+                                                ));
                                             }
                                         }
 
+                                        if function.return_type.is_generic() {
+                                            if let Type::Fn { ret, .. } = &*constructor.tipo {
+                                                map.append(&mut get_generic_id_and_type(
+                                                    &function.return_type,
+                                                    ret,
+                                                ))
+                                            }
+                                        }
+
+                                        mono_types = map.into_iter().collect();
                                         let mut func_ir = vec![];
 
                                         self.build_ir(&function.body, &mut func_ir, scope.to_vec());
