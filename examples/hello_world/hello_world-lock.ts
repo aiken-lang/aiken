@@ -25,8 +25,10 @@ const validator = await readValidator();
 // --- Supporting functions
 
 async function readValidator(): Promise<SpendingValidator> {
-  const validator =
-    JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
+  const validator = JSON
+    .parse(await Deno.readTextFile("plutus.json"))
+    .validators[0];
+
   return {
     type: "PlutusV2",
     script: toHex(cbor.encode(fromHex(validator.compiledCode))),
@@ -40,12 +42,12 @@ const publicKeyHash = lucid.utils
 
 const datum = Data.to(new Constr(0, [publicKeyHash]));
 
-const txHash = await lock(BigInt(1000000), { into: validator, owner: datum });
+const txHash = await lock(1000000n, { into: validator, owner: datum });
 
 await lucid.awaitTx(txHash);
 
-console.log(`1 ADA locked into the contract at:
-    Tx Hash: ${txHash}
+console.log(`1 tADA locked into the contract at:
+    Tx ID: ${txHash}
     Datum: ${datum}
 `);
 

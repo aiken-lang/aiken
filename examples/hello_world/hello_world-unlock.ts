@@ -34,10 +34,11 @@ const unlockTxHash = await unlock(utxo, {
   using: redeemer,
 });
 
+
 await lucid.awaitTx(unlockTxHash);
 
-console.log(`1 ADA unlocked from the contract
-    Tx Hash: ${unlockTxHash}
+console.log(`1 tADA unlocked from the contract
+    Tx ID:    ${unlockTxHash}
     Redeemer: ${redeemer}
 `);
 
@@ -64,8 +65,10 @@ async function unlock(
 }
 
 async function readValidator(): Promise<SpendingValidator> {
-  const validator =
-    JSON.parse(await Deno.readTextFile("plutus.json")).validators[0];
+  const validator = JSON
+    .parse(await Deno.readTextFile("plutus.json"))
+    .validators[0];
+
   return {
     type: "PlutusV2",
     script: toHex(cbor.encode(fromHex(validator.compiledCode))),
