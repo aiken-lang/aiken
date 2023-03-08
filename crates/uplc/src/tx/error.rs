@@ -1,6 +1,6 @@
 use crate::machine::{self, cost_model::ExBudget};
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum Error {
     #[error("{0}")]
     Address(#[from] pallas_addresses::Error),

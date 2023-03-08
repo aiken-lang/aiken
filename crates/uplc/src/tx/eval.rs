@@ -730,7 +730,7 @@ pub fn eval_redeemer(
                         .apply_data(redeemer.data.clone())
                         .apply_data(script_context.to_plutus_data());
 
-                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                    let mut eval_result = if let Some(cost_mdls) = cost_mdls_opt {
                         let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                             costs
                         } else {
@@ -742,9 +742,12 @@ pub fn eval_redeemer(
                         program.eval_v1()
                     };
 
-                    match result {
+                    let cost = eval_result.cost();
+                    let logs = eval_result.logs();
+
+                    match eval_result.result() {
                         Ok(_) => (),
-                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                        Err(err) => return Err(Error::Machine(err, cost, logs)),
                     }
 
                     let new_redeemer = Redeemer {
@@ -752,8 +755,8 @@ pub fn eval_redeemer(
                         index: redeemer.index,
                         data: redeemer.data.clone(),
                         ex_units: ExUnits {
-                            mem: (initial_budget.mem - budget.mem) as u32,
-                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                            mem: cost.mem as u32,
+                            steps: cost.cpu as u64,
                         },
                     };
 
@@ -776,7 +779,7 @@ pub fn eval_redeemer(
                         .apply_data(redeemer.data.clone())
                         .apply_data(script_context.to_plutus_data());
 
-                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                    let mut eval_result = if let Some(cost_mdls) = cost_mdls_opt {
                         let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                             costs
                         } else {
@@ -788,9 +791,12 @@ pub fn eval_redeemer(
                         program.eval(ExBudget::default())
                     };
 
-                    match result {
+                    let cost = eval_result.cost();
+                    let logs = eval_result.logs();
+
+                    match eval_result.result() {
                         Ok(_) => (),
-                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                        Err(err) => return Err(Error::Machine(err, cost, logs)),
                     }
 
                     let new_redeemer = Redeemer {
@@ -798,8 +804,8 @@ pub fn eval_redeemer(
                         index: redeemer.index,
                         data: redeemer.data.clone(),
                         ex_units: ExUnits {
-                            mem: (initial_budget.mem - budget.mem) as u32,
-                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                            mem: cost.mem as u32,
+                            steps: cost.cpu as u64,
                         },
                     };
 
@@ -824,7 +830,7 @@ pub fn eval_redeemer(
                         .apply_data(redeemer.data.clone())
                         .apply_data(script_context.to_plutus_data());
 
-                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                    let mut eval_result = if let Some(cost_mdls) = cost_mdls_opt {
                         let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                             costs
                         } else {
@@ -836,9 +842,12 @@ pub fn eval_redeemer(
                         program.eval_v1()
                     };
 
-                    match result {
+                    let cost = eval_result.cost();
+                    let logs = eval_result.logs();
+
+                    match eval_result.result() {
                         Ok(_) => (),
-                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                        Err(err) => return Err(Error::Machine(err, cost, logs)),
                     }
 
                     let new_redeemer = Redeemer {
@@ -846,8 +855,8 @@ pub fn eval_redeemer(
                         index: redeemer.index,
                         data: redeemer.data.clone(),
                         ex_units: ExUnits {
-                            mem: (initial_budget.mem - budget.mem) as u32,
-                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                            mem: cost.mem as u32,
+                            steps: cost.cpu as u64,
                         },
                     };
 
@@ -869,7 +878,7 @@ pub fn eval_redeemer(
                         .apply_data(redeemer.data.clone())
                         .apply_data(script_context.to_plutus_data());
 
-                    let (result, budget, logs) = if let Some(cost_mdls) = cost_mdls_opt {
+                    let mut eval_result = if let Some(cost_mdls) = cost_mdls_opt {
                         let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                             costs
                         } else {
@@ -881,9 +890,12 @@ pub fn eval_redeemer(
                         program.eval(ExBudget::default())
                     };
 
-                    match result {
+                    let cost = eval_result.cost();
+                    let logs = eval_result.logs();
+
+                    match eval_result.result() {
                         Ok(_) => (),
-                        Err(err) => return Err(Error::Machine(err, budget, logs)),
+                        Err(err) => return Err(Error::Machine(err, cost, logs)),
                     }
 
                     let new_redeemer = Redeemer {
@@ -891,8 +903,8 @@ pub fn eval_redeemer(
                         index: redeemer.index,
                         data: redeemer.data.clone(),
                         ex_units: ExUnits {
-                            mem: (initial_budget.mem - budget.mem) as u32,
-                            steps: (initial_budget.cpu - budget.cpu) as u64,
+                            mem: cost.mem as u32,
+                            steps: cost.cpu as u64,
                         },
                     };
 

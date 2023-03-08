@@ -24,6 +24,7 @@ use crate::{
     flat::Binder,
     machine::{
         cost_model::{initialize_cost_model, CostModel, ExBudget},
+        eval_result::EvalResult,
         Machine,
     },
 };
@@ -595,14 +596,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 }
 
 impl Program<NamedDeBruijn> {
-    pub fn eval(
-        &self,
-        initial_budget: ExBudget,
-    ) -> (
-        Result<Term<NamedDeBruijn>, crate::machine::Error>,
-        ExBudget,
-        Vec<String>,
-    ) {
+    pub fn eval(&self, initial_budget: ExBudget) -> EvalResult {
         let mut machine = Machine::new(
             Language::PlutusV2,
             CostModel::default(),
@@ -612,22 +606,16 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(&self.term);
 
-        (term, machine.ex_budget, machine.logs)
+        EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
     }
 
     /// Evaluate a Program as PlutusV1
-    pub fn eval_v1(
-        &self,
-    ) -> (
-        Result<Term<NamedDeBruijn>, crate::machine::Error>,
-        ExBudget,
-        Vec<String>,
-    ) {
+    pub fn eval_v1(&self) -> EvalResult {
         let mut machine = Machine::new(Language::PlutusV1, CostModel::v1(), ExBudget::v1(), 200);
 
         let term = machine.run(&self.term);
 
-        (term, machine.ex_budget, machine.logs)
+        EvalResult::new(term, machine.ex_budget, ExBudget::v1(), machine.logs)
     }
 
     pub fn eval_as(
@@ -635,11 +623,7 @@ impl Program<NamedDeBruijn> {
         version: &Language,
         costs: &[i64],
         initial_budget: Option<&ExBudget>,
-    ) -> (
-        Result<Term<NamedDeBruijn>, crate::machine::Error>,
-        ExBudget,
-        Vec<String>,
-    ) {
+    ) -> EvalResult {
         let budget = match initial_budget {
             Some(b) => *b,
             None => ExBudget::default(),
@@ -654,19 +638,12 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(&self.term);
 
-        (term, machine.ex_budget, machine.logs)
+        EvalResult::new(term, machine.ex_budget, budget, machine.logs)
     }
 }
 
 impl Program<DeBruijn> {
-    pub fn eval(
-        &self,
-        initial_budget: ExBudget,
-    ) -> (
-        Result<Term<NamedDeBruijn>, crate::machine::Error>,
-        ExBudget,
-        Vec<String>,
-    ) {
+    pub fn eval(&self, initial_budget: ExBudget) -> EvalResult {
         let program: Program<NamedDeBruijn> = self.clone().into();
 
         program.eval(initial_budget)

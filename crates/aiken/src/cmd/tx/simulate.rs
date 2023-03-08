@@ -144,7 +144,7 @@ pub fn exec(
                 eprintln!("\n");
                 println!(
                     "{}",
-                    serde_json::to_string(&total_budget_used)
+                    serde_json::to_string_pretty(&total_budget_used)
                         .map_err(|_| fmt::Error)
                         .into_diagnostic()?
                 );

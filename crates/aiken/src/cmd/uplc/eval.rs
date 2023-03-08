@@ -1,5 +1,6 @@
 use miette::IntoDiagnostic;
-use std::path::PathBuf;
+use serde_json::json;
+use std::{path::PathBuf, process};
 use uplc::{
     ast::{FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
@@ -63,32 +64,38 @@ pub fn exec(
 
     let budget = ExBudget::default();
 
-    let (term, cost, logs) = program.eval(budget);
+    let mut eval_result = program.eval(budget);
 
-    match term {
+    let cost = eval_result.cost();
+    let logs = eval_result.logs();
+
+    match eval_result.result() {
         Ok(term) => {
             let term: Term<Name> = term.try_into().into_diagnostic()?;
 
-            println!("\nResult\n------\n\n{}\n", term.to_pretty());
+            let output = json!({
+                "result": term.to_pretty(),
+                "cpu": cost.cpu,
+                "mem": cost.mem,
+            });
+
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&output).into_diagnostic()?
+            );
+
+            Ok(())
         }
         Err(err) => {
             eprintln!("\nError\n-----\n\n{err}\n");
+
+            eprintln!("\nCosts\n-----\ncpu: {}\nmemory: {}", cost.cpu, cost.mem);
+
+            if !logs.is_empty() {
+                eprintln!("\nLogs\n----\n{}", logs.join("\n"))
+            }
+
+            process::exit(1)
         }
     }
-
-    println!(
-        "\nCosts\n-----\ncpu: {}\nmemory: {}",
-        budget.cpu - cost.cpu,
-        budget.mem - cost.mem
-    );
-    println!(
-        "\nBudget\n------\ncpu: {}\nmemory: {}\n",
-        cost.cpu, cost.mem
-    );
-
-    if !logs.is_empty() {
-        println!("\nLogs\n----\n{}", logs.join("\n"))
-    }
-
-    Ok(())
 }

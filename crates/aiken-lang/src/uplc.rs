@@ -4285,7 +4285,7 @@ impl<'a> CodeGenerator<'a> {
                                     program.try_into().unwrap();
 
                                 let evaluated_term: Term<NamedDeBruijn> =
-                                    eval_program.eval(ExBudget::default()).0.unwrap();
+                                    eval_program.eval(ExBudget::default()).result().unwrap();
 
                                 arg_stack.push(evaluated_term.try_into().unwrap());
                                 anon_func = false;
@@ -5416,7 +5416,7 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).0.unwrap();
+                        eval_program.eval(ExBudget::default()).result().unwrap();
                     term = evaluated_term.try_into().unwrap();
                 }
 

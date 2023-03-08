@@ -8,6 +8,7 @@ use crate::{
 
 pub mod cost_model;
 mod error;
+pub mod eval_result;
 pub mod runtime;
 
 use cost_model::{ExBudget, StepKind};
@@ -785,9 +786,9 @@ mod tests {
             },
         };
 
-        let (eval_result, _, _) = program.eval(ExBudget::default());
+        let eval_result = program.eval(ExBudget::default());
 
-        let term = eval_result.unwrap();
+        let term = eval_result.result().unwrap();
 
         assert_eq!(
             term,
@@ -834,10 +835,10 @@ mod tests {
         ];
 
         for (fun, n, m, result) in test_data {
-            let (eval_result, _, _) = make_program(fun, n, m).eval(ExBudget::default());
+            let eval_result = make_program(fun, n, m).eval(ExBudget::default());
 
             assert_eq!(
-                eval_result.unwrap(),
+                eval_result.result().unwrap(),
                 Term::Constant(Constant::Integer(result.into()).into())
             );
         }
