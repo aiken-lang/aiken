@@ -6,13 +6,13 @@ use crate::ast::{NamedDeBruijn, Term, Type};
 
 use super::{ExBudget, Value};
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum Error {
     #[error("Over budget mem: {} & cpu: {}", .0.mem, .0.cpu)]
     OutOfExError(ExBudget),
     #[error("Invalid Stepkind: {0}")]
     InvalidStepKind(u8),
-    #[error("Cannot evaluate an open term:\n\n{0}")]
+    #[error("Cannot evaluate an open term:\\n\\n{}", .0.to_pretty())]
     OpenTermEvaluated(Term<NamedDeBruijn>),
     #[error("The provided Plutus code called 'error'.")]
     EvaluationFailure,
