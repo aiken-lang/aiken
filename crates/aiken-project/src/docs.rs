@@ -575,22 +575,40 @@ fn new_timestamp() -> Duration {
 }
 
 fn find_modules_prefix(modules: &[DocLink]) -> String {
-    modules
+    do_find_modules_prefix("", modules)
+}
+
+fn do_find_modules_prefix(current_prefix: &str, modules: &[DocLink]) -> String {
+    let prefix = modules
         .iter()
         .fold(None, |previous_prefix, module| {
-            let prefix = module
-                .name
-                .split('/')
-                .next()
-                .unwrap_or_default()
-                .to_string();
+            let name = module.name.strip_prefix(current_prefix).unwrap_or_default();
+            let name = if name.starts_with('/') {
+                name.strip_prefix('/').unwrap_or_default()
+            } else {
+                name
+            };
+
+            let prefix = name.split('/').next().unwrap_or_default().to_string();
+
             match previous_prefix {
                 None if prefix != module.name => Some(prefix),
                 Some(..) if Some(prefix) == previous_prefix => previous_prefix,
                 _ => Some(String::new()),
             }
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    if prefix.is_empty() {
+        current_prefix.to_string()
+    } else {
+        let mut current_prefix = current_prefix.to_owned();
+        if !current_prefix.is_empty() {
+            current_prefix.push('/');
+        }
+        current_prefix.push_str(&prefix);
+        do_find_modules_prefix(&current_prefix, modules)
+    }
 }
 
 #[test]
@@ -602,7 +620,7 @@ fn find_modules_prefix_test() {
             name: "aiken/list".to_string(),
             path: String::new()
         }]),
-        "aiken".to_string()
+        "aiken/list".to_string()
     );
 
     assert_eq!(
@@ -620,7 +638,7 @@ fn find_modules_prefix_test() {
                 path: String::new()
             },
             DocLink {
-                name: "aiken/byte_array".to_string(),
+                name: "aiken/bytearray".to_string(),
                 path: String::new(),
             }
         ]),
@@ -634,7 +652,56 @@ fn find_modules_prefix_test() {
                 path: String::new()
             },
             DocLink {
-                name: "foo/byte_array".to_string(),
+                name: "foo/bytearray".to_string(),
+                path: String::new(),
+            }
+        ]),
+        "".to_string()
+    );
+}
+
+#[test]
+fn find_modules_prefix_test_2() {
+    assert_eq!(
+        find_modules_prefix(&[
+            DocLink {
+                name: "aiken/trees/bst".to_string(),
+                path: String::new()
+            },
+            DocLink {
+                name: "aiken/trees/mt".to_string(),
+                path: String::new(),
+            }
+        ]),
+        "aiken/trees".to_string()
+    );
+
+    assert_eq!(
+        find_modules_prefix(&[
+            DocLink {
+                name: "aiken/trees/bst".to_string(),
+                path: String::new()
+            },
+            DocLink {
+                name: "aiken/trees/mt".to_string(),
+                path: String::new(),
+            },
+            DocLink {
+                name: "aiken/sequences".to_string(),
+                path: String::new(),
+            }
+        ]),
+        "aiken".to_string()
+    );
+
+    assert_eq!(
+        find_modules_prefix(&[
+            DocLink {
+                name: "aiken".to_string(),
+                path: String::new()
+            },
+            DocLink {
+                name: "aiken/prelude".to_string(),
                 path: String::new(),
             }
         ]),
