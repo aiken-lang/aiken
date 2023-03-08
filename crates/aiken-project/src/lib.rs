@@ -175,7 +175,10 @@ where
         let doc_files = docs::generate_all(
             &self.root,
             &self.config,
-            self.checked_modules.values().collect(),
+            self.checked_modules
+                .values()
+                .filter(|CheckedModule { package, .. }| package == &self.config.name.to_string())
+                .collect(),
         );
 
         for file in doc_files {
