@@ -4337,7 +4337,12 @@ impl<'a> CodeGenerator<'a> {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                for arg in arg_vec.iter() {
+                for (index, arg) in arg_vec.into_iter().enumerate() {
+                    let arg = if matches!(func, DefaultFunction::ChooseData) && index > 0 {
+                        Term::Delay(arg.into())
+                    } else {
+                        arg
+                    };
                     term = apply_wrap(term, arg.clone());
                 }
 
@@ -4451,6 +4456,58 @@ impl<'a> CodeGenerator<'a> {
                     }
                     DefaultFunction::MkCons => {
                         unimplemented!("Use brackets instead.");
+                    }
+                    DefaultFunction::IfThenElse
+                    | DefaultFunction::ChooseList
+                    | DefaultFunction::Trace => unimplemented!("{func:#?}"),
+                    DefaultFunction::ChooseData => {
+                        let temp_vars = (0..func.arity())
+                            .into_iter()
+                            .map(|_| format!("__item_{}", self.id_gen.next()))
+                            .collect_vec();
+
+                        if count == 0 {
+                            for (index, temp_var) in temp_vars.iter().enumerate() {
+                                term = apply_wrap(
+                                    term,
+                                    if index > 0 {
+                                        Term::Delay(
+                                            Term::Var(
+                                                Name {
+                                                    text: temp_var.clone(),
+                                                    unique: 0.into(),
+                                                }
+                                                .into(),
+                                            )
+                                            .into(),
+                                        )
+                                    } else {
+                                        Term::Var(
+                                            Name {
+                                                text: temp_var.clone(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        )
+                                    },
+                                );
+                            }
+                        }
+
+                        term = term.force_wrap();
+
+                        if count == 0 {
+                            for temp_var in temp_vars.into_iter().rev() {
+                                term = Term::Lambda {
+                                    parameter_name: Name {
+                                        text: temp_var,
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                    body: term.into(),
+                                };
+                            }
+                        }
                     }
                     _ => {}
                 }
