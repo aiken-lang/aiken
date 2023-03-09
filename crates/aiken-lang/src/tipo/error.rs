@@ -745,7 +745,7 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::record_field"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?")
+        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?\n\nAlso record access is only supported on types with one constructor.")
     ))]
     UnknownRecordField {
         #[label]

@@ -9,6 +9,7 @@
 ### Changed
 
 - **aiken-lang**: block `Data` and `String` from unifying when casting
+- **aiken-lang**: remove ability for a type with many variants with matching field labels and types to support field access
 - **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
 
 ## [v0.0.29] - 2023-MM-DD
