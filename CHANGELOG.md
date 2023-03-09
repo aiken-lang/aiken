@@ -6,6 +6,11 @@
 
 - **aiken**: new command `blueprint convert`
 
+### Changed
+
+- **aiken-lang**: block `Data` and `String` from unifying when casting
+- **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
+
 ## [v0.0.29] - 2023-MM-DD
 
 ### Added
