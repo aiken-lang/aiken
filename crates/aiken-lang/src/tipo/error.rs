@@ -264,8 +264,9 @@ You can use '{discard}' and numbers to distinguish between similar names.
     },
 
     #[error(
-        "I saw a {} fields in a context where there should be {}.\n",
+        "I saw {} field{} in a context where there should be {}.\n",
         given.if_supports_color(Stdout, |s| s.purple()),
+        if *given <= 1 { "" } else { "s"},
         expected.if_supports_color(Stdout, |s| s.purple()),
     )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types"))]
@@ -744,7 +745,7 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::record_field"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?")
+        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?\n\nAlso record access is only supported on types with one constructor.")
     ))]
     UnknownRecordField {
         #[label]

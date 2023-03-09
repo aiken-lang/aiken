@@ -26,7 +26,7 @@ use crate::{
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
         convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
-        get_generics_and_type, handle_clause_guard, handle_func_dependencies_ir,
+        get_generic_id_and_type, handle_clause_guard, handle_func_dependencies_ir,
         handle_recursion_ir, list_access_to_uplc, lookup_data_type_by_tipo, monomorphize,
         rearrange_clauses, replace_opaque_type, wrap_validator_args, AssignmentProperties,
         ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
@@ -2056,66 +2056,78 @@ impl<'a> CodeGenerator<'a> {
                         scope: scope.clone(),
                         check_last_item: false,
                     });
-                } else {
+                } else if !tipo.is_bool() {
                     pattern_vec.push(Air::Let {
                         scope: scope.clone(),
                         name: "_".to_string(),
                     });
                 }
 
-                if matches!(assignment_properties.kind, AssignmentKind::Expect) {
-                    let data_type =
-                        lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                match assignment_properties.kind {
+                    AssignmentKind::Let => {
+                        pattern_vec.append(values);
+                    }
+                    AssignmentKind::Expect => {
+                        if tipo.is_bool() {
+                            pattern_vec.push(Air::AssertBool {
+                                scope,
+                                is_true: constr_name == "True",
+                            });
 
-                    let (index, _) = data_type
-                        .constructors
-                        .iter()
-                        .enumerate()
-                        .find(|(_, constr)| &constr.name == constr_name)
-                        .unwrap();
+                            pattern_vec.append(values);
+                        } else {
+                            let data_type =
+                                lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                    let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
+                            let (index, _) = data_type
+                                .constructors
+                                .iter()
+                                .enumerate()
+                                .find(|(_, constr)| &constr.name == constr_name)
+                                .unwrap();
 
-                    pattern_vec.push(Air::Let {
-                        scope: scope.clone(),
-                        name: constr_name.clone(),
-                    });
+                            let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
 
-                    pattern_vec.append(values);
+                            pattern_vec.push(Air::Let {
+                                scope: scope.clone(),
+                                name: constr_name.clone(),
+                            });
 
-                    let mut scope = scope;
-                    scope.push(self.id_gen.next());
+                            pattern_vec.append(values);
 
-                    pattern_vec.push(Air::AssertConstr {
-                        scope: scope.clone(),
-                        constr_index: index,
-                    });
+                            let mut scope = scope;
+                            scope.push(self.id_gen.next());
 
-                    pattern_vec.push(Air::Var {
-                        scope: scope.clone(),
-                        constructor: ValueConstructor::public(
-                            tipo.clone().into(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: Span::empty(),
-                            },
-                        ),
-                        name: constr_name.clone(),
-                        variant_name: String::new(),
-                    });
+                            pattern_vec.push(Air::AssertConstr {
+                                scope: scope.clone(),
+                                constr_index: index,
+                            });
 
-                    pattern_vec.push(Air::Var {
-                        scope,
-                        constructor: ValueConstructor::public(
-                            tipo.clone().into(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: Span::empty(),
-                            },
-                        ),
-                        name: constr_name,
-                        variant_name: String::new(),
-                    });
-                } else {
-                    pattern_vec.append(values);
+                            pattern_vec.push(Air::Var {
+                                scope: scope.clone(),
+                                constructor: ValueConstructor::public(
+                                    tipo.clone().into(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: constr_name.clone(),
+                                variant_name: String::new(),
+                            });
+
+                            pattern_vec.push(Air::Var {
+                                scope,
+                                constructor: ValueConstructor::public(
+                                    tipo.clone().into(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: constr_name,
+                                variant_name: String::new(),
+                            });
+                        }
+                    }
                 }
 
                 pattern_vec.append(&mut nested_pattern);
@@ -3275,17 +3287,23 @@ impl<'a> CodeGenerator<'a> {
                         let param_types = constructor.tipo.arg_types().unwrap();
 
                         let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
+                        let mut map = mono_types.into_iter().collect_vec();
 
                         for (index, arg) in function.arguments.iter().enumerate() {
                             if arg.tipo.is_generic() {
-                                let mut map = mono_types.into_iter().collect_vec();
                                 let param_type = &param_types[index];
 
-                                map.append(&mut get_generics_and_type(&arg.tipo, param_type));
-
-                                mono_types = map.into_iter().collect();
+                                map.append(&mut get_generic_id_and_type(&arg.tipo, param_type));
                             }
                         }
+
+                        if function.return_type.is_generic() {
+                            if let Type::Fn { ret, .. } = &*constructor.tipo {
+                                map.append(&mut get_generic_id_and_type(&function.return_type, ret))
+                            }
+                        }
+
+                        mono_types = map.into_iter().collect();
 
                         let (variant_name, func_ir) =
                             monomorphize(func_ir, mono_types, &constructor.tipo);
@@ -3347,23 +3365,32 @@ impl<'a> CodeGenerator<'a> {
                                     } else if let (Some(function), Type::Fn { .. }) =
                                         (function, &*tipo)
                                     {
+                                        let param_types = tipo.arg_types().unwrap();
+
                                         let mut mono_types: IndexMap<u64, Arc<Type>> =
                                             IndexMap::new();
-
-                                        let param_types = tipo.arg_types().unwrap();
+                                        let mut map = mono_types.into_iter().collect_vec();
 
                                         for (index, arg) in function.arguments.iter().enumerate() {
                                             if arg.tipo.is_generic() {
-                                                let mut map = mono_types.into_iter().collect_vec();
-                                                map.append(&mut get_generics_and_type(
-                                                    &arg.tipo,
-                                                    &param_types[index],
-                                                ));
+                                                let param_type = &param_types[index];
 
-                                                mono_types = map.into_iter().collect();
+                                                map.append(&mut get_generic_id_and_type(
+                                                    &arg.tipo, param_type,
+                                                ));
                                             }
                                         }
 
+                                        if function.return_type.is_generic() {
+                                            if let Type::Fn { ret, .. } = &*constructor.tipo {
+                                                map.append(&mut get_generic_id_and_type(
+                                                    &function.return_type,
+                                                    ret,
+                                                ))
+                                            }
+                                        }
+
+                                        mono_types = map.into_iter().collect();
                                         let mut func_ir = vec![];
 
                                         self.build_ir(&function.body, &mut func_ir, scope.to_vec());
@@ -4310,7 +4337,12 @@ impl<'a> CodeGenerator<'a> {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                for arg in arg_vec.iter() {
+                for (index, arg) in arg_vec.into_iter().enumerate() {
+                    let arg = if matches!(func, DefaultFunction::ChooseData) && index > 0 {
+                        Term::Delay(arg.into())
+                    } else {
+                        arg
+                    };
                     term = apply_wrap(term, arg.clone());
                 }
 
@@ -4424,6 +4456,58 @@ impl<'a> CodeGenerator<'a> {
                     }
                     DefaultFunction::MkCons => {
                         unimplemented!("Use brackets instead.");
+                    }
+                    DefaultFunction::IfThenElse
+                    | DefaultFunction::ChooseList
+                    | DefaultFunction::Trace => unimplemented!("{func:#?}"),
+                    DefaultFunction::ChooseData => {
+                        let temp_vars = (0..func.arity())
+                            .into_iter()
+                            .map(|_| format!("__item_{}", self.id_gen.next()))
+                            .collect_vec();
+
+                        if count == 0 {
+                            for (index, temp_var) in temp_vars.iter().enumerate() {
+                                term = apply_wrap(
+                                    term,
+                                    if index > 0 {
+                                        Term::Delay(
+                                            Term::Var(
+                                                Name {
+                                                    text: temp_var.clone(),
+                                                    unique: 0.into(),
+                                                }
+                                                .into(),
+                                            )
+                                            .into(),
+                                        )
+                                    } else {
+                                        Term::Var(
+                                            Name {
+                                                text: temp_var.clone(),
+                                                unique: 0.into(),
+                                            }
+                                            .into(),
+                                        )
+                                    },
+                                );
+                            }
+                        }
+
+                        term = term.force_wrap();
+
+                        if count == 0 {
+                            for temp_var in temp_vars.into_iter().rev() {
+                                term = Term::Lambda {
+                                    parameter_name: Name {
+                                        text: temp_var,
+                                        unique: 0.into(),
+                                    }
+                                    .into(),
+                                    body: term.into(),
+                                };
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -4828,7 +4912,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
                         Term::Constant(
                             UplcConstant::String(
-                                "Asserted on incorrect constructor variant.".to_string(),
+                                "Expected on incorrect constructor variant.".to_string(),
                             )
                             .into(),
                         ),
@@ -4849,6 +4933,31 @@ impl<'a> CodeGenerator<'a> {
                     error_term,
                 );
 
+                arg_stack.push(term);
+            }
+            Air::AssertBool { is_true, .. } => {
+                let value = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                let error_term = apply_wrap(
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                        Term::Constant(
+                            UplcConstant::String(
+                                "Expected on incorrect boolean variant.".to_string(),
+                            )
+                            .into(),
+                        ),
+                    ),
+                    Term::Delay(Term::Error.into()),
+                )
+                .force_wrap();
+
+                if is_true {
+                    term = delayed_if_else(value, term, error_term);
+                } else {
+                    term = delayed_if_else(value, error_term, term);
+                }
                 arg_stack.push(term);
             }
             Air::When {

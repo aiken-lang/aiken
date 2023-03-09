@@ -177,6 +177,7 @@ impl<'a> Environment<'a> {
                 },
             );
         }
+
         Ok(Some(fields))
     }
 
@@ -1289,6 +1290,7 @@ impl<'a> Environment<'a> {
             && !(t1.is_unbound() || t2.is_unbound())
             && !(t1.is_function() || t2.is_function())
             && !(t1.is_generic() || t2.is_generic())
+            && !(t1.is_string() || t2.is_string())
         {
             return Ok(());
         }
@@ -1779,44 +1781,22 @@ fn get_compatible_record_fields<A>(
 ) -> Vec<(usize, &str, &Annotation)> {
     let mut compatible = vec![];
 
+    if constructors.len() > 1 {
+        return compatible;
+    }
+
     let first = match constructors.get(0) {
         Some(first) => first,
         None => return compatible,
     };
 
-    'next_argument: for (index, first_argument) in first.arguments.iter().enumerate() {
+    for (index, first_argument) in first.arguments.iter().enumerate() {
         // Fields without labels do not have accessors
         let label = match first_argument.label.as_ref() {
             Some(label) => label.as_str(),
-            None => continue 'next_argument,
+            None => continue,
         };
 
-        // Check each variant to see if they have an field in the same position
-        // with the same label and the same type
-        for constructor in constructors.iter().skip(1) {
-            // The field must exist in all variants
-            let argument = match constructor.arguments.get(index) {
-                Some(argument) => argument,
-                None => continue 'next_argument,
-            };
-
-            // The labels must be the same
-            if argument.label != first_argument.label {
-                continue 'next_argument;
-            }
-
-            // The types must be the same
-            if !argument
-                .annotation
-                .is_logically_equal(&first_argument.annotation)
-            {
-                continue 'next_argument;
-            }
-        }
-
-        // The previous loop did not find any incompatible fields in the other
-        // variants so this field is compatible across variants and we should
-        // generate an accessor for it.
         compatible.push((index, label, &first_argument.annotation))
     }
 

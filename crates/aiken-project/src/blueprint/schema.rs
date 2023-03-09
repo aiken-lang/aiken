@@ -250,36 +250,22 @@ impl Annotated<Schema> {
                     Err(Error::new(ErrorContext::UnboundTypeVariable, type_info))
                 }
             },
-            Type::Tuple { elems } => match &elems[..] {
-                [left, right] => {
-                    let left = Annotated::from_type(modules, left, type_parameters)?
-                        .into_data(left)
-                        .map_err(|e| e.backtrack(type_info))?;
-                    let right = Annotated::from_type(modules, right, type_parameters)?
-                        .into_data(right)
-                        .map_err(|e| e.backtrack(type_info))?;
-                    Ok(Schema::Data(Data::List(Items::Many(vec![
-                        left.annotated,
-                        right.annotated,
-                    ])))
-                    .into())
-                }
-                _ => {
-                    let elems = elems
-                        .iter()
-                        .map(|e| {
-                            Annotated::from_type(modules, e, type_parameters)
-                                .and_then(|s| s.into_data(e).map(|s| s.annotated))
-                        })
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|e| e.backtrack(type_info))?;
-                    Ok(Annotated {
-                        title: Some("Tuple".to_owned()),
-                        description: None,
-                        annotated: Schema::Data(Data::List(Items::Many(elems))),
+            Type::Tuple { elems } => {
+                let elems = elems
+                    .iter()
+                    .map(|e| {
+                        Annotated::from_type(modules, e, type_parameters)
+                            .and_then(|s| s.into_data(e).map(|s| s.annotated))
                     })
-                }
-            },
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| e.backtrack(type_info))?;
+
+                Ok(Annotated {
+                    title: Some("Tuple".to_owned()),
+                    description: None,
+                    annotated: Schema::Data(Data::List(Items::Many(elems))),
+                })
+            }
             Type::Fn { .. } => Err(Error::new(ErrorContext::UnexpectedFunction, type_info)),
         }
     }

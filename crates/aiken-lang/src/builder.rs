@@ -1200,7 +1200,7 @@ pub fn find_and_replace_generics(tipo: &mut Arc<Type>, mono_types: &IndexMap<u64
     }
 }
 
-pub fn get_generics_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)> {
+pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)> {
     let mut generics_ids = vec![];
 
     if let Some(id) = tipo.get_generic() {
@@ -1213,7 +1213,7 @@ pub fn get_generics_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)>
         .iter()
         .zip(param.get_inner_types().iter())
     {
-        generics_ids.append(&mut get_generics_and_type(tipo, param_type));
+        generics_ids.append(&mut get_generic_id_and_type(tipo, param_type));
     }
     generics_ids
 }
@@ -1990,7 +1990,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
 
         for (tipo, param) in new_type_fields.iter().zip(t.arg_types().unwrap()) {
             let mut map = mono_types.into_iter().collect_vec();
-            map.append(&mut get_generics_and_type(tipo, &param));
+            map.append(&mut get_generic_id_and_type(tipo, &param));
             mono_types = map.into_iter().collect();
         }
 
