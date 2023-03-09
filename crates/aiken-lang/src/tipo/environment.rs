@@ -1289,6 +1289,7 @@ impl<'a> Environment<'a> {
             && !(t1.is_unbound() || t2.is_unbound())
             && !(t1.is_function() || t2.is_function())
             && !(t1.is_generic() || t2.is_generic())
+            && !(t1.is_string() || t2.is_string())
         {
             return Ok(());
         }
