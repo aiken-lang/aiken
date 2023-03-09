@@ -291,13 +291,13 @@ where
                 verbose,
                 exact_match,
             } => {
-                let tests = self.collect_tests(verbose)?;
+                let tests = self.collect_tests(verbose, match_tests, exact_match)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let results = self.eval_scripts(tests, match_tests, exact_match);
+                let results = self.eval_scripts(tests);
 
                 let errors: Vec<Error> = results
                     .iter()
@@ -589,20 +589,84 @@ where
         Ok(())
     }
 
-    fn collect_tests(&mut self, verbose: bool) -> Result<Vec<Script>, Error> {
+    fn collect_tests(
+        &mut self,
+        verbose: bool,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+    ) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
-        for module in self.checked_modules.values() {
-            if module.package != self.config.name.to_string() {
+
+        let match_tests = match_tests.map(|mt| {
+            mt.into_iter()
+                .map(|match_test| {
+                    let mut match_split_dot = match_test.split('.');
+
+                    let match_module = if match_test.contains('.') || match_test.contains('/') {
+                        match_split_dot.next().unwrap_or("")
+                    } else {
+                        ""
+                    };
+
+                    let match_names = match_split_dot.next().map(|names| {
+                        let names = names.replace(&['{', '}'][..], "");
+
+                        let names_split_comma = names.split(',');
+
+                        names_split_comma.map(str::to_string).collect()
+                    });
+
+                    (match_module.to_string(), match_names)
+                })
+                .collect::<Vec<(String, Option<Vec<String>>)>>()
+        });
+
+        for checked_module in self.checked_modules.values() {
+            if checked_module.package != self.config.name.to_string() {
                 continue;
             }
-            for def in module.ast.definitions() {
+
+            for def in checked_module.ast.definitions() {
                 if let Definition::Test(func) = def {
-                    scripts.push((module.input_path.clone(), module.name.clone(), func))
+                    if let Some(match_tests) = &match_tests {
+                        let is_match = match_tests.iter().any(|(module, names)| {
+                            let matched_module =
+                                module.is_empty() || checked_module.name.contains(module);
+
+                            let matched_name = match names {
+                                None => true,
+                                Some(names) => names.iter().any(|name| {
+                                    if exact_match {
+                                        name == &func.name
+                                    } else {
+                                        func.name.contains(name)
+                                    }
+                                }),
+                            };
+
+                            matched_module && matched_name
+                        });
+
+                        if is_match {
+                            scripts.push((
+                                checked_module.input_path.clone(),
+                                checked_module.name.clone(),
+                                func,
+                            ))
+                        }
+                    } else {
+                        scripts.push((
+                            checked_module.input_path.clone(),
+                            checked_module.name.clone(),
+                            func,
+                        ))
+                    }
                 }
             }
         }
 
         let mut programs = Vec::new();
+
         for (input_path, module_name, func_def) in scripts {
             let Function {
                 arguments,
@@ -663,12 +727,7 @@ where
         Ok(programs)
     }
 
-    fn eval_scripts(
-        &self,
-        scripts: Vec<Script>,
-        match_tests: Option<Vec<String>>,
-        exact_match: bool,
-    ) -> Vec<EvalInfo> {
+    fn eval_scripts(&self, scripts: Vec<Script>) -> Vec<EvalInfo> {
         use rayon::prelude::*;
 
         // TODO: in the future we probably just want to be able to
@@ -676,55 +735,6 @@ where
         let initial_budget = ExBudget {
             mem: i64::MAX,
             cpu: i64::MAX,
-        };
-
-        let scripts = if let Some(match_tests) = match_tests {
-            let match_tests: Vec<(&str, Option<Vec<String>>)> = match_tests
-                .iter()
-                .map(|match_test| {
-                    let mut match_split_dot = match_test.split('.');
-
-                    let match_module = if match_test.contains('.') || match_test.contains('/') {
-                        match_split_dot.next().unwrap_or("")
-                    } else {
-                        ""
-                    };
-
-                    let match_names = match_split_dot.next().map(|names| {
-                        let names = names.replace(&['{', '}'][..], "");
-
-                        let names_split_comma = names.split(',');
-
-                        names_split_comma.map(str::to_string).collect()
-                    });
-
-                    (match_module, match_names)
-                })
-                .collect();
-
-            scripts
-                .into_iter()
-                .filter(|script| -> bool {
-                    match_tests.iter().any(|(module, names)| {
-                        let matched_module = module == &"" || script.module.contains(module);
-
-                        let matched_name = match names {
-                            None => true,
-                            Some(names) => names.iter().any(|name| {
-                                if exact_match {
-                                    name == &script.name
-                                } else {
-                                    script.name.contains(name)
-                                }
-                            }),
-                        };
-
-                        matched_module && matched_name
-                    })
-                })
-                .collect::<Vec<Script>>()
-        } else {
-            scripts
         };
 
         scripts
