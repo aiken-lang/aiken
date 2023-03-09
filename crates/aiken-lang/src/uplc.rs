@@ -2056,66 +2056,78 @@ impl<'a> CodeGenerator<'a> {
                         scope: scope.clone(),
                         check_last_item: false,
                     });
-                } else {
+                } else if !tipo.is_bool() {
                     pattern_vec.push(Air::Let {
                         scope: scope.clone(),
                         name: "_".to_string(),
                     });
                 }
 
-                if matches!(assignment_properties.kind, AssignmentKind::Expect) {
-                    let data_type =
-                        lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                match assignment_properties.kind {
+                    AssignmentKind::Let => {
+                        pattern_vec.append(values);
+                    }
+                    AssignmentKind::Expect => {
+                        if tipo.is_bool() {
+                            pattern_vec.push(Air::AssertBool {
+                                scope,
+                                is_true: constr_name == "True",
+                            });
 
-                    let (index, _) = data_type
-                        .constructors
-                        .iter()
-                        .enumerate()
-                        .find(|(_, constr)| &constr.name == constr_name)
-                        .unwrap();
+                            pattern_vec.append(values);
+                        } else {
+                            let data_type =
+                                lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                    let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
+                            let (index, _) = data_type
+                                .constructors
+                                .iter()
+                                .enumerate()
+                                .find(|(_, constr)| &constr.name == constr_name)
+                                .unwrap();
 
-                    pattern_vec.push(Air::Let {
-                        scope: scope.clone(),
-                        name: constr_name.clone(),
-                    });
+                            let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
 
-                    pattern_vec.append(values);
+                            pattern_vec.push(Air::Let {
+                                scope: scope.clone(),
+                                name: constr_name.clone(),
+                            });
 
-                    let mut scope = scope;
-                    scope.push(self.id_gen.next());
+                            pattern_vec.append(values);
 
-                    pattern_vec.push(Air::AssertConstr {
-                        scope: scope.clone(),
-                        constr_index: index,
-                    });
+                            let mut scope = scope;
+                            scope.push(self.id_gen.next());
 
-                    pattern_vec.push(Air::Var {
-                        scope: scope.clone(),
-                        constructor: ValueConstructor::public(
-                            tipo.clone().into(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: Span::empty(),
-                            },
-                        ),
-                        name: constr_name.clone(),
-                        variant_name: String::new(),
-                    });
+                            pattern_vec.push(Air::AssertConstr {
+                                scope: scope.clone(),
+                                constr_index: index,
+                            });
 
-                    pattern_vec.push(Air::Var {
-                        scope,
-                        constructor: ValueConstructor::public(
-                            tipo.clone().into(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: Span::empty(),
-                            },
-                        ),
-                        name: constr_name,
-                        variant_name: String::new(),
-                    });
-                } else {
-                    pattern_vec.append(values);
+                            pattern_vec.push(Air::Var {
+                                scope: scope.clone(),
+                                constructor: ValueConstructor::public(
+                                    tipo.clone().into(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: constr_name.clone(),
+                                variant_name: String::new(),
+                            });
+
+                            pattern_vec.push(Air::Var {
+                                scope,
+                                constructor: ValueConstructor::public(
+                                    tipo.clone().into(),
+                                    ValueConstructorVariant::LocalVariable {
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                name: constr_name,
+                                variant_name: String::new(),
+                            });
+                        }
+                    }
                 }
 
                 pattern_vec.append(&mut nested_pattern);
@@ -4843,7 +4855,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::Builtin(DefaultFunction::Trace).force_wrap(),
                         Term::Constant(
                             UplcConstant::String(
-                                "Asserted on incorrect constructor variant.".to_string(),
+                                "Expected on incorrect constructor variant.".to_string(),
                             )
                             .into(),
                         ),
@@ -4864,6 +4876,31 @@ impl<'a> CodeGenerator<'a> {
                     error_term,
                 );
 
+                arg_stack.push(term);
+            }
+            Air::AssertBool { is_true, .. } => {
+                let value = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                let error_term = apply_wrap(
+                    apply_wrap(
+                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                        Term::Constant(
+                            UplcConstant::String(
+                                "Expected on incorrect boolean variant.".to_string(),
+                            )
+                            .into(),
+                        ),
+                    ),
+                    Term::Delay(Term::Error.into()),
+                )
+                .force_wrap();
+
+                if is_true {
+                    term = delayed_if_else(value, term, error_term);
+                } else {
+                    term = delayed_if_else(value, error_term, term);
+                }
                 arg_stack.push(term);
             }
             Air::When {

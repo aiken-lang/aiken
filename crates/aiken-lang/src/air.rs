@@ -117,6 +117,11 @@ pub enum Air {
         constr_index: usize,
     },
 
+    AssertBool {
+        scope: Vec<u64>,
+        is_true: bool,
+    },
+
     // When
     When {
         scope: Vec<u64>,
@@ -268,6 +273,7 @@ impl Air {
             | Air::UnWrapData { scope, .. }
             | Air::WrapData { scope, .. }
             | Air::AssertConstr { scope, .. }
+            | Air::AssertBool { scope, .. }
             | Air::When { scope, .. }
             | Air::Clause { scope, .. }
             | Air::ListClause { scope, .. }
@@ -375,6 +381,7 @@ impl Air {
             | Air::Let { .. }
             | Air::WrapClause { .. }
             | Air::AssertConstr { .. }
+            | Air::AssertBool { .. }
             | Air::Finally { .. }
             | Air::FieldsExpose { .. } => None,
 
