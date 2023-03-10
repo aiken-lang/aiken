@@ -1,0 +1,14 @@
+name = 'aiken-lang/one_shot'
+version = '0.0.0'
+license = 'Apache-2.0'
+description = "Aiken contracts for project 'aiken-lang/mint_lock_burn'"
+
+[repository]
+user = 'aiken-lang'
+project = 'mint_lock_burn'
+platform = 'github'
+
+[[dependencies]]
+name = 'aiken-lang/stdlib'
+version = 'main'
+source = 'github'

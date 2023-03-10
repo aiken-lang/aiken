@@ -1,0 +1,124 @@
+{
+  "preamble": {
+    "title": "aiken-lang/one_shot",
+    "description": "Aiken contracts for project 'aiken-lang/mint_lock_burn'",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "main.mint",
+      "redeemer": {
+        "title": "Action",
+        "schema": {
+          "anyOf": [
+            {
+              "title": "Mint",
+              "dataType": "constructor",
+              "index": 0,
+              "fields": []
+            },
+            {
+              "title": "Burn",
+              "dataType": "constructor",
+              "index": 1,
+              "fields": []
+            }
+          ]
+        }
+      },
+      "parameters": [
+        {
+          "title": "token_name",
+          "schema": {
+            "dataType": "bytes"
+          }
+        },
+        {
+          "title": "OutputReference",
+          "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
+          "schema": {
+            "anyOf": [
+              {
+                "title": "OutputReference",
+                "dataType": "constructor",
+                "index": 0,
+                "fields": [
+                  {
+                    "title": "transaction_id",
+                    "description": "A unique transaction identifier, as the hash of a transaction body. Note that the transaction id\n isn't a direct hash of the `Transaction` as visible on-chain. Rather, they correspond to hash\n digests of transaction body as they are serialized on the network.",
+                    "anyOf": [
+                      {
+                        "title": "TransactionId",
+                        "dataType": "constructor",
+                        "index": 0,
+                        "fields": [
+                          {
+                            "title": "hash",
+                            "dataType": "bytes"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "output_index",
+                    "dataType": "integer"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "compiledCode": "59029b0100003232323232323232323232232222533300832323232323232323232323232323232533301d30200021323232533301b3370e0029000099299980e19b87003480084cdc780200c0a50301332533301c3370e9000180f9baa0011001153301e4912a4578706563746564206f6e20696e636f727265637420636f6e7374727563746f722076617269616e742e001632323300100d23375e6644646660020029000001911199981199b8700400202a23330040043370000690011816000800980b000a40000326002002444a666046004266e9520024bd700991929998101801801099ba548000cc0980092f5c0266600a00a002006604e006604a0042a66603666e1c008cdc0a40009001099b8f00301714a0603a6ea8050dd6980e8011bae301b001153301a491364c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2069742065787065637465640016301e00132320010013232332232332232533301e3370e00290010801099190009bab302600130160033020375400400297adef6c6033223300500200100200100300a3001001222533301e00213374a900125eb804c8c8c8c94ccc074cdc7802800899ba548000cc08cdd300125eb804ccc01c01c00c014dd7180f8019bab301f002302200330200023756603800260380026036002603400260320046eb0c05c004c01c014dd7180a8009802a99980699b8748000c040dd500088008a99807a492a4578706563746564206f6e20696e636f727265637420636f6e7374727563746f722076617269616e742e001630130013013002301100130010022300d37540022930b1bae0013001001222533300900214984cc014c004c02c008ccc00c00cc0300080055cd2b9b5738aae7555cf2ab9f5740ae855d101",
+      "hash": "9185bf20c9bbdd7062d9b2dc11a03290bfb256938395d56855baee81"
+    },
+    {
+      "title": "main.lock",
+      "datum": {
+        "title": "Unit",
+        "description": "The nullary constructor.",
+        "schema": {
+          "anyOf": [
+            {
+              "dataType": "constructor",
+              "index": 0,
+              "fields": []
+            }
+          ]
+        }
+      },
+      "redeemer": {
+        "title": "Unit",
+        "description": "The nullary constructor.",
+        "schema": {
+          "anyOf": [
+            {
+              "dataType": "constructor",
+              "index": 0,
+              "fields": []
+            }
+          ]
+        }
+      },
+      "parameters": [
+        {
+          "title": "token_name",
+          "schema": {
+            "dataType": "bytes"
+          }
+        },
+        {
+          "title": "policy_id",
+          "schema": {
+            "dataType": "bytes"
+          }
+        }
+      ],
+      "compiledCode": "5901980100003232323232323232323232232232222533300a323232323232323232323232533301b301e0021323253330183370e00266e052000480084cdc780100a0a50375a60360046eb8c06400454cc0612401364c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2069742065787065637465640016301c00132320010013232332232332232533301c3370e00290010801099190009bab30240013012003301e375400400297adef6c603322330050020010020010030103001001222533301c00213374a900125eb804c8c8c8c94ccc06ccdc7802800899ba548000cc084dd300125eb804ccc01c01c00c014dd7180e8019bab301d0023020003301e00237566034002603400260320026030002602e00260080026028002600400644646660020029000001911199980819b870040020172333004004337000069001180c800800918079baa001149858dd70009bae0013001001222533300900214984cc014c004c02c008ccc00c00cc0300080055cd2b9b5738aae7555cf2ab9f5740ae855d11",
+      "hash": "e1c247d17b275dc889a0437d23f7791a2ea60a6d1b84612572668ec2"
+    }
+  ]
+}
