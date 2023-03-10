@@ -109,7 +109,7 @@ where
     }
 }
 
-impl Display for Blueprint<Schema> {
+impl<T: serde::Serialize + Default> Display for Blueprint<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
         f.write_str(&s)

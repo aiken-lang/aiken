@@ -334,9 +334,10 @@ impl Data {
     }
 }
 
+// Needed because of Blueprint's default, but actually never used.
 impl Default for Schema {
     fn default() -> Self {
-        Schema::Unit
+        Schema::Data(Data::Opaque)
     }
 }
 
