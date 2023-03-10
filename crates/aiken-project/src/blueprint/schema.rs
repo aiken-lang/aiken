@@ -61,7 +61,15 @@ pub enum Items<T> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Constructor {
     pub index: usize,
-    pub fields: Vec<Annotated<Data>>,
+    pub fields: Vec<Field>,
+}
+
+/// A field of a constructor. Can be either an inlined Data schema or a reference to another type.
+/// References are mostly only used for recursive types.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Field {
+    Inline(Annotated<Data>),
+    Reference { path: String },
 }
 
 impl<T> From<T> for Annotated<T> {
@@ -179,7 +187,7 @@ impl Annotated<Schema> {
                                 description: Some("An optional value.".to_string()),
                                 annotated: Constructor {
                                     index: 0,
-                                    fields: vec![generic],
+                                    fields: vec![Field::Inline(generic)],
                                 },
                             },
                             Annotated {
@@ -308,7 +316,7 @@ impl Data {
                     schema.description = field.doc.clone().map(|s| s.trim().to_string());
                 }
 
-                fields.push(schema);
+                fields.push(Field::Inline(schema));
             }
 
             let variant = Annotated {
@@ -324,7 +332,7 @@ impl Data {
         // are erased completely at compilation time.
         if data_type.opaque {
             if let [variant] = &variants[..] {
-                if let [field] = &variant.annotated.fields[..] {
+                if let [Field::Inline(field)] = &variant.annotated.fields[..] {
                     return Ok(field.annotated.clone());
                 }
             }
@@ -450,6 +458,19 @@ impl Serialize for Constructor {
         s.serialize_field("index", &self.index)?;
         s.serialize_field("fields", &self.fields)?;
         s.end()
+    }
+}
+
+impl Serialize for Field {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Field::Inline(schema) => schema.serialize(serializer),
+            Field::Reference { path } => {
+                let mut s = serializer.serialize_struct("$ref", 1)?;
+                s.serialize_field("$ref", path)?;
+                s.end()
+            }
+        }
     }
 }
 
@@ -743,12 +764,12 @@ pub mod test {
         let schema = Schema::Data(Data::AnyOf(vec![
             Constructor {
                 index: 0,
-                fields: vec![Data::Integer.into()],
+                fields: vec![Field::Inline(Data::Integer.into())],
             }
             .into(),
             Constructor {
                 index: 1,
-                fields: vec![Data::Bytes.into()],
+                fields: vec![Field::Inline(Data::Bytes.into())],
             }
             .into(),
         ]));
