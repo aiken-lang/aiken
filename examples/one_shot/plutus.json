@@ -1,7 +1,7 @@
 {
   "preamble": {
     "title": "aiken-lang/one_shot",
-    "description": "Aiken contracts for project 'aiken-lang/mint_lock_burn'",
+    "description": "One shot parameterized minting and burning of tokens",
     "version": "0.0.0",
     "plutusVersion": "v2",
     "license": "Apache-2.0"
