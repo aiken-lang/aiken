@@ -265,7 +265,7 @@ mod test {
         }
     }
 
-    fn assert_validator(source_code: &str, json: serde_json::Value) {
+    fn assert_validator(source_code: &str, expected: serde_json::Value) {
         let mut project = TestProject::new();
 
         let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
@@ -283,7 +283,9 @@ mod test {
         let validator = Validator::from_checked_module(&modules, &mut generator, validator, def)
             .expect("Failed to create validator blueprint");
 
-        assert_json_eq!(serde_json::to_value(&validator).unwrap(), json);
+        println!("{}", serde_json::to_string_pretty(&validator).unwrap());
+
+        assert_json_eq!(serde_json::to_value(&validator).unwrap(), expected);
     }
 
     #[test]
@@ -733,5 +735,65 @@ mod test {
                 }
             ),
         );
+    }
+
+    #[test]
+    fn recursive_type() {
+        assert_validator(
+            r#"
+            pub type LinkedList<a> {
+              Nil
+              Cons(a, LinkedList<a>)
+            }
+
+            pub type Foo {
+                Foo {
+                    foo: LinkedList<Bool>,
+                }
+                Bar {
+                    bar: Int,
+                    baz: (ByteArray, List<LinkedList<Int>>)
+                }
+            }
+
+            validator spend {
+              fn(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
+                True
+              }
+            }
+            "#,
+            json!({
+                "redeemer": {
+                  "schema": {
+                    "$ref": "#/$defs/LinkedList_Int"
+                  }
+                },
+                "$defs": {
+                  "LinkedList_Int": {
+                    "anyOf": [
+                      {
+                        "title": "Nil",
+                        "dataType": "constructor",
+                        "index": 0,
+                        "fields": []
+                      },
+                      {
+                        "title": "Cons",
+                        "dataType": "constructor",
+                        "index": 1,
+                        "fields": [
+                          {
+                            "dataType": "integer"
+                          },
+                          {
+                            "$ref": "#/$defs/LinkedList_Int"
+                          },
+                        ]
+                      }
+                    ],
+                  },
+                }
+            }),
+        )
     }
 }
