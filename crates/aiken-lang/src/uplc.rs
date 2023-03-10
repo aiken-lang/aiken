@@ -1939,8 +1939,15 @@ impl<'a> CodeGenerator<'a> {
                         | Pattern::Constructor { .. }
                         | Pattern::Tuple { .. }) => {
                             let mut var_vec = vec![];
+
                             let item_name = format!("list_item_id_{}", self.id_gen.next());
+
                             names.push(item_name.clone());
+
+                            let mut scope = scope.clone();
+
+                            scope.push(self.id_gen.next());
+
                             var_vec.push(Air::Var {
                                 constructor: ValueConstructor::public(
                                     Type::App {
