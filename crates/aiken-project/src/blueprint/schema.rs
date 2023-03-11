@@ -57,7 +57,7 @@ pub enum Items<T> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Constructor {
     pub index: usize,
-    pub fields: Vec<Reference>,
+    pub fields: Vec<Annotated<Reference>>,
 }
 
 impl<T> From<T> for Annotated<T> {
@@ -191,7 +191,7 @@ impl Annotated<Schema> {
                                         description: Some("An optional value.".to_string()),
                                         annotated: Constructor {
                                             index: 0,
-                                            fields: vec![generic],
+                                            fields: vec![generic.into()],
                                         },
                                     },
                                     Annotated {
@@ -367,7 +367,11 @@ impl Data {
                     return Ok(schema.into_data(&field.tipo)?.annotated);
                 }
 
-                fields.push(reference);
+                fields.push(Annotated {
+                    title: field.label.clone(),
+                    description: field.doc.clone().map(|s| s.trim().to_string()),
+                    annotated: reference,
+                });
             }
 
             let variant = Annotated {
@@ -750,12 +754,12 @@ pub mod test {
         let schema = Schema::Data(Data::AnyOf(vec![
             Constructor {
                 index: 0,
-                fields: vec![Reference::new("Int")],
+                fields: vec![Reference::new("Int").into()],
             }
             .into(),
             Constructor {
                 index: 1,
-                fields: vec![Reference::new("Bytes")],
+                fields: vec![Reference::new("Bytes").into()],
             }
             .into(),
         ]));

@@ -39,9 +39,11 @@
           "index": 0,
           "fields": [
             {
+              "title": "policy_id",
               "$ref": "#/definitions/ByteArray"
             },
             {
+              "title": "asset_name",
               "$ref": "#/definitions/ByteArray"
             }
           ]
@@ -57,9 +59,11 @@
           "index": 0,
           "fields": [
             {
+              "title": "input_cs",
               "$ref": "#/definitions/spend~1CurrencySymbol"
             },
             {
+              "title": "input_amount",
               "$ref": "#/definitions/Int"
             }
           ]
@@ -75,12 +79,15 @@
           "index": 0,
           "fields": [
             {
+              "title": "currency_symbol",
               "$ref": "#/definitions/spend~1CurrencySymbol"
             },
             {
+              "title": "balance",
               "$ref": "#/definitions/Int"
             },
             {
+              "title": "lent_out",
               "$ref": "#/definitions/Int"
             }
           ]
@@ -96,9 +103,11 @@
           "index": 0,
           "fields": [
             {
+              "title": "input_cs",
               "$ref": "#/definitions/spend~1CurrencySymbol"
             },
             {
+              "title": "input_amount",
               "$ref": "#/definitions/Int"
             }
           ]
@@ -114,6 +123,7 @@
           "index": 0,
           "fields": [
             {
+              "title": "action",
               "$ref": "#/definitions/spend~1PoolRedeemerType"
             }
           ]
