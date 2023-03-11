@@ -1,8 +1,6 @@
 {
   "imports": {
     "$fresh/": "https://deno.land/x/fresh@1.1.4/",
-    "cbor": "https://deno.land/x/cbor@v1.4.1/index.js",
-    "lucid": "https://deno.land/x/lucid@0.8.3/mod.ts",
     "preact": "https://esm.sh/preact@10.11.0",
     "preact/": "https://esm.sh/preact@10.11.0/",
     "preact-render-to-string": "https://esm.sh/*preact-render-to-string@5.2.4",

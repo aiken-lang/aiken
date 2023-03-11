@@ -1,12 +1,12 @@
 import {
+  applyDoubleCborEncoding,
   applyParamsToScript,
   Data,
-  fromHex,
+  Lucid,
   MintingPolicy,
+  OutRef,
   SpendingValidator,
-  toHex,
-} from "lucid";
-import * as cbor from "cbor";
+} from "~/vendor/lucid@0.9.4/mod.ts";
 
 import { Blueprint } from "~/blueprint.ts";
 
@@ -15,9 +15,10 @@ export type Validators = {
   mint: MintingPolicy;
 };
 
-async function readValidators(): Promise<Validators> {
-  const blueprint: Blueprint = JSON
-    .parse(await Deno.readTextFile("plutus.json"));
+export async function readValidators(): Promise<Validators> {
+  const blueprint: Blueprint = JSON.parse(
+    await Deno.readTextFile("plutus.json"),
+  );
 
   const lock = blueprint.validators.find((v) => v.title === "main.lock");
 
@@ -34,29 +35,37 @@ async function readValidators(): Promise<Validators> {
   return {
     lock: {
       type: "PlutusV2",
-      script: toHex(cbor.encode(fromHex(lock.compiledCode))),
+      script: lock.compiledCode,
     },
     mint: {
       type: "PlutusV2",
-      script: toHex(cbor.encode(fromHex(mint.compiledCode))),
+      script: mint.compiledCode,
     },
   };
 }
 
 export async function applyParams(
-  // bytes
   tokenName: string,
-  // bytes
-  policyId: string,
-  // aiken/transaction.{OutputReference}
-  outputReference: any,
+  outputReference: OutRef,
 ): Promise<{ lock: string; mint: string }> {
   const validators = await readValidators();
 
+  const mint = applyParamsToScript(validators.mint.script, [
+    tokenName,
+    outputReference,
+  ]);
+
+  const lucid = new Lucid();
+
+  const policyId = lucid.utils.validatorToScriptHash(validators.mint);
+
+  const lock = applyParamsToScript(validators.lock.script, [
+    tokenName,
+    policyId,
+  ]);
+
   return {
-    // TODO: apply tokenName and policyId
-    lock: applyParamsToScript(validators.lock.script, []),
-    // TODO: apply tokenName and outputReference
-    mint: applyParamsToScript(validators.mint.script, []),
+    lock: applyDoubleCborEncoding(lock),
+    mint: applyDoubleCborEncoding(mint),
   };
 }
