@@ -44,12 +44,11 @@ export async function readValidators(): Promise<Validators> {
   };
 }
 
-export async function applyParams(
+export function applyParams(
   tokenName: string,
   outputReference: OutRef,
-): Promise<{ lock: string; mint: string }> {
-  const validators = await readValidators();
-
+  validators: Validators,
+): { lock: string; mint: string } {
   const mint = applyParamsToScript(validators.mint.script, [
     tokenName,
     outputReference,
