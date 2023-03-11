@@ -459,12 +459,17 @@ mod test {
                       "index": 0,
                       "fields": [
                         {
+                          "title": "contestationPeriod",
+                          "description": "The contestation period as a number of seconds",
                           "$ref": "#/definitions/test_module~1ContestationPeriod"
                         },
                         {
+                          "title": "parties",
+                          "description": "List of public key hashes of all participants",
                           "$ref": "#/definitions/List$ByteArray"
                         },
                         {
+                          "title": "utxoHash",
                           "$ref": "#/definitions/ByteArray"
                         }
                       ]
@@ -680,6 +685,7 @@ mod test {
                       "index": 0,
                       "fields": [
                         {
+                          "title": "inner",
                           "$ref": "#/definitions/List$Tuple$ByteArray_Int"
                         }
                       ]
@@ -786,6 +792,7 @@ mod test {
                       "index": 0,
                       "fields": [
                         {
+                          "title": "foo",
                           "$ref": "#/definitions/Data"
                         }
                       ]
@@ -965,6 +972,7 @@ mod test {
                       "index": 0,
                       "fields": [
                         {
+                          "title": "foo",
                           "$ref": "#/definitions/test_module~1LinkedList$Bool"
                         }
                       ]
@@ -975,9 +983,11 @@ mod test {
                       "index": 1,
                       "fields": [
                         {
+                          "title": "bar",
                           "$ref": "#/definitions/Int"
                         },
                         {
+                          "title": "baz",
                           "$ref": "#/definitions/Tuple$ByteArray_List$test_module~1LinkedList$Int"
                         }
                       ]

@@ -37,6 +37,7 @@
           "index": 0,
           "fields": [
             {
+              "title": "owner",
               "$ref": "#/definitions/ByteArray"
             }
           ]
@@ -52,6 +53,7 @@
           "index": 0,
           "fields": [
             {
+              "title": "msg",
               "$ref": "#/definitions/ByteArray"
             }
           ]

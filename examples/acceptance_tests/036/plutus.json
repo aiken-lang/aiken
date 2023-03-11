@@ -74,9 +74,11 @@
           "index": 0,
           "fields": [
             {
+              "title": "transaction_id",
               "$ref": "#/definitions/aiken~1transaction~1TransactionId"
             },
             {
+              "title": "output_index",
               "$ref": "#/definitions/Int"
             }
           ]
@@ -93,6 +95,7 @@
           "index": 0,
           "fields": [
             {
+              "title": "hash",
               "$ref": "#/definitions/ByteArray"
             }
           ]
