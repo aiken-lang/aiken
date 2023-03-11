@@ -1,7 +1,10 @@
 import {
   applyDoubleCborEncoding,
   applyParamsToScript,
+  C,
+  Constr,
   Data,
+  fromText,
   Lucid,
   MintingPolicy,
   OutRef,
@@ -48,18 +51,22 @@ export function applyParams(
   tokenName: string,
   outputReference: OutRef,
   validators: Validators,
+  lucid: Lucid,
 ): { lock: string; mint: string } {
-  const mint = applyParamsToScript(validators.mint.script, [
-    tokenName,
-    outputReference,
+  const outRef = new Constr(0, [
+    new Constr(0, [outputReference.txHash]),
+    BigInt(outputReference.outputIndex),
   ]);
 
-  const lucid = new Lucid();
+  const mint = applyParamsToScript(validators.mint.script, [
+    fromText(tokenName),
+    outRef,
+  ]);
 
   const policyId = lucid.utils.validatorToScriptHash(validators.mint);
 
   const lock = applyParamsToScript(validators.lock.script, [
-    tokenName,
+    fromText(tokenName),
     policyId,
   ]);
 
