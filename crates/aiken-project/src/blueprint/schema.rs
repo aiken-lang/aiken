@@ -1,3 +1,4 @@
+use crate::blueprint::definitions::{Definitions, Reference};
 use crate::CheckedModule;
 use aiken_lang::{
     ast::{DataType, Definition, TypedDefinition},
@@ -8,13 +9,8 @@ use serde::{
     self,
     ser::{Serialize, SerializeStruct, Serializer},
 };
-use serde_json;
 use std::ops::Deref;
-use std::{
-    collections::HashMap,
-    fmt::{self, Display},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Annotated<T> {
@@ -44,8 +40,8 @@ pub enum Schema {
 pub enum Data {
     Integer,
     Bytes,
-    List(Items<Data>),
-    Map(Box<Data>, Box<Data>),
+    List(Items<Reference>),
+    Map(Box<Reference>, Box<Reference>),
     AnyOf(Vec<Annotated<Constructor>>),
     Opaque,
 }
@@ -61,15 +57,7 @@ pub enum Items<T> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Constructor {
     pub index: usize,
-    pub fields: Vec<Field>,
-}
-
-/// A field of a constructor. Can be either an inlined Data schema or a reference to another type.
-/// References are mostly only used for recursive types.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Field {
-    Inline(Annotated<Data>),
-    Reference { path: String },
+    pub fields: Vec<Reference>,
 }
 
 impl<T> From<T> for Annotated<T> {
@@ -86,195 +74,251 @@ impl Annotated<Schema> {
     pub fn from_type(
         modules: &HashMap<String, CheckedModule>,
         type_info: &Type,
-        type_parameters: &HashMap<u64, &Arc<Type>>,
-    ) -> Result<Self, Error> {
+        definitions: &mut Definitions<Self>,
+    ) -> Result<Reference, Error> {
+        Annotated::do_from_type(type_info, modules, &mut HashMap::new(), definitions)
+    }
+
+    fn do_from_type(
+        type_info: &Type,
+        modules: &HashMap<String, CheckedModule>,
+        type_parameters: &mut HashMap<u64, Arc<Type>>,
+        definitions: &mut Definitions<Self>,
+    ) -> Result<Reference, Error> {
         match type_info {
             Type::App {
                 module: module_name,
                 name: type_name,
                 args,
                 ..
-            } if module_name.is_empty() => match &type_name[..] {
-                "Data" => Ok(Annotated {
-                    title: Some("Data".to_string()),
-                    description: Some("Any Plutus data.".to_string()),
-                    annotated: Schema::Data(Data::Opaque),
-                }),
+            } if module_name.is_empty() => {
+                definitions.register(type_info, &type_parameters.clone(), |definitions| {
+                    match &type_name[..] {
+                        "Data" => Ok(Annotated {
+                            title: Some("Data".to_string()),
+                            description: Some("Any Plutus data.".to_string()),
+                            annotated: Schema::Data(Data::Opaque),
+                        }),
 
-                "ByteArray" => Ok(Schema::Data(Data::Bytes).into()),
+                        "ByteArray" => Ok(Schema::Data(Data::Bytes).into()),
 
-                "Int" => Ok(Schema::Data(Data::Integer).into()),
+                        "Int" => Ok(Schema::Data(Data::Integer).into()),
 
-                "String" => Ok(Schema::String.into()),
+                        "String" => Ok(Schema::String.into()),
 
-                "Void" => Ok(Annotated {
-                    title: Some("Unit".to_string()),
-                    description: Some("The nullary constructor.".to_string()),
-                    annotated: Schema::Data(Data::AnyOf(vec![Annotated {
-                        title: None,
-                        description: None,
-                        annotated: Constructor {
-                            index: 0,
-                            fields: vec![],
-                        },
-                    }])),
-                }),
-
-                "Bool" => Ok(Annotated {
-                    title: Some("Bool".to_string()),
-                    description: None,
-                    annotated: Schema::Data(Data::AnyOf(vec![
-                        Annotated {
-                            title: Some("False".to_string()),
-                            description: None,
-                            annotated: Constructor {
-                                index: 0,
-                                fields: vec![],
-                            },
-                        },
-                        Annotated {
-                            title: Some("True".to_string()),
-                            description: None,
-                            annotated: Constructor {
-                                index: 1,
-                                fields: vec![],
-                            },
-                        },
-                    ])),
-                }),
-
-                "Ordering" => Ok(Annotated {
-                    title: Some("Ordering".to_string()),
-                    description: None,
-                    annotated: Schema::Data(Data::AnyOf(vec![
-                        Annotated {
-                            title: Some("Less".to_string()),
-                            description: None,
-                            annotated: Constructor {
-                                index: 0,
-                                fields: vec![],
-                            },
-                        },
-                        Annotated {
-                            title: Some("Equal".to_string()),
-                            description: None,
-                            annotated: Constructor {
-                                index: 1,
-                                fields: vec![],
-                            },
-                        },
-                        Annotated {
-                            title: Some("Greater".to_string()),
-                            description: None,
-                            annotated: Constructor {
-                                index: 2,
-                                fields: vec![],
-                            },
-                        },
-                    ])),
-                }),
-
-                "Option" => {
-                    let generic =
-                        Annotated::from_type(modules, args.get(0).unwrap(), type_parameters)
-                            .and_then(|s| s.into_data(type_info))?;
-                    Ok(Annotated {
-                        title: Some("Optional".to_string()),
-                        description: None,
-                        annotated: Schema::Data(Data::AnyOf(vec![
-                            Annotated {
-                                title: Some("Some".to_string()),
-                                description: Some("An optional value.".to_string()),
+                        "Void" => Ok(Annotated {
+                            title: Some("Unit".to_string()),
+                            description: Some("The nullary constructor.".to_string()),
+                            annotated: Schema::Data(Data::AnyOf(vec![Annotated {
+                                title: None,
+                                description: None,
                                 annotated: Constructor {
                                     index: 0,
-                                    fields: vec![Field::Inline(generic)],
-                                },
-                            },
-                            Annotated {
-                                title: Some("None".to_string()),
-                                description: Some("Nothing.".to_string()),
-                                annotated: Constructor {
-                                    index: 1,
                                     fields: vec![],
                                 },
-                            },
-                        ])),
-                    })
-                }
+                            }])),
+                        }),
 
-                "List" => {
-                    let generic =
-                        Annotated::from_type(modules, args.get(0).unwrap(), type_parameters)?;
+                        "Bool" => Ok(Annotated {
+                            title: Some("Bool".to_string()),
+                            description: None,
+                            annotated: Schema::Data(Data::AnyOf(vec![
+                                Annotated {
+                                    title: Some("False".to_string()),
+                                    description: None,
+                                    annotated: Constructor {
+                                        index: 0,
+                                        fields: vec![],
+                                    },
+                                },
+                                Annotated {
+                                    title: Some("True".to_string()),
+                                    description: None,
+                                    annotated: Constructor {
+                                        index: 1,
+                                        fields: vec![],
+                                    },
+                                },
+                            ])),
+                        }),
 
-                    // NOTE: Lists of 2-tuples are treated as Maps. This is an oddity we inherit
-                    // from the PlutusTx / LedgerApi Haskell codebase, which encodes some elements
-                    // as such. We don't have a concept of language maps in Aiken, so we simply
-                    // make all types abide by this convention.
-                    let data = match generic.annotated {
-                        Schema::Data(Data::List(Items::Many(xs))) if xs.len() == 2 => Data::Map(
-                            Box::new(xs.first().unwrap().to_owned()),
-                            Box::new(xs.last().unwrap().to_owned()),
-                        ),
-                        _ => {
-                            let inner = generic.into_data(type_info)?.annotated;
-                            Data::List(Items::One(Box::new(inner)))
+                        "Ordering" => Ok(Annotated {
+                            title: Some("Ordering".to_string()),
+                            description: None,
+                            annotated: Schema::Data(Data::AnyOf(vec![
+                                Annotated {
+                                    title: Some("Less".to_string()),
+                                    description: None,
+                                    annotated: Constructor {
+                                        index: 0,
+                                        fields: vec![],
+                                    },
+                                },
+                                Annotated {
+                                    title: Some("Equal".to_string()),
+                                    description: None,
+                                    annotated: Constructor {
+                                        index: 1,
+                                        fields: vec![],
+                                    },
+                                },
+                                Annotated {
+                                    title: Some("Greater".to_string()),
+                                    description: None,
+                                    annotated: Constructor {
+                                        index: 2,
+                                        fields: vec![],
+                                    },
+                                },
+                            ])),
+                        }),
+
+                        "Option" => {
+                            let generic = Annotated::do_from_type(
+                                args.get(0)
+                                    .expect("Option types have always one generic argument"),
+                                modules,
+                                type_parameters,
+                                definitions,
+                            )?;
+
+                            Ok(Annotated {
+                                title: Some("Optional".to_string()),
+                                description: None,
+                                annotated: Schema::Data(Data::AnyOf(vec![
+                                    Annotated {
+                                        title: Some("Some".to_string()),
+                                        description: Some("An optional value.".to_string()),
+                                        annotated: Constructor {
+                                            index: 0,
+                                            fields: vec![generic],
+                                        },
+                                    },
+                                    Annotated {
+                                        title: Some("None".to_string()),
+                                        description: Some("Nothing.".to_string()),
+                                        annotated: Constructor {
+                                            index: 1,
+                                            fields: vec![],
+                                        },
+                                    },
+                                ])),
+                            })
                         }
-                    };
 
-                    Ok(Schema::Data(data).into())
-                }
+                        "List" => {
+                            let generic = Annotated::do_from_type(
+                                args.get(0)
+                                    .expect("List types have always one generic argument"),
+                                modules,
+                                type_parameters,
+                                definitions,
+                            )?;
 
-                _ => Err(Error::new(ErrorContext::UnsupportedType, type_info)),
-            },
+                            // NOTE: Lists of 2-tuples are treated as Maps. This is an oddity we inherit
+                            // from the PlutusTx / LedgerApi Haskell codebase, which encodes some elements
+                            // as such. We don't have a concept of language maps in Aiken, so we simply
+                            // make all types abide by this convention.
+                            let data = match definitions
+                                .lookup(&generic)
+                                .expect(
+                                    "Generic type argument definition was registered just above.",
+                                )
+                                .clone()
+                            {
+                                Annotated {
+                                    annotated: Schema::Data(Data::List(Items::Many(xs))),
+                                    ..
+                                } if xs.len() == 2 => {
+                                    definitions.remove(&generic);
+                                    Data::Map(
+                                        Box::new(
+                                            xs.first()
+                                                .expect("length (== 2) checked in pattern clause")
+                                                .to_owned(),
+                                        ),
+                                        Box::new(
+                                            xs.last()
+                                                .expect("length (== 2) checked in pattern clause")
+                                                .to_owned(),
+                                        ),
+                                    )
+                                }
+                                _ => {
+                                    // let inner = schema.clone().into_data(type_info)?.annotated;
+                                    Data::List(Items::One(Box::new(generic)))
+                                }
+                            };
+
+                            Ok(Schema::Data(data).into())
+                        }
+
+                        _ => Err(Error::new(ErrorContext::UnsupportedType, type_info)),
+                    }
+                })
+            }
+
             Type::App {
-                module: module_name,
-                name: type_name,
-                args,
-                ..
-            } => {
-                let module = modules.get(module_name).unwrap();
-                let constructor = find_definition(type_name, &module.ast.definitions).unwrap();
-                let type_parameters = collect_type_parameters(&constructor.typed_parameters, args);
+                name, module, args, ..
+            } => definitions.register(type_info, &type_parameters.clone(), |definitions| {
+                let module = modules
+                    .get(module)
+                    .unwrap_or_else(|| panic!("unknown module '{module}'\n\n{modules:?}"));
+
+                let data_type =
+                    find_data_type(name, &module.ast.definitions).unwrap_or_else(|| {
+                        panic!(
+                            "unknown data-type for '{name:?}' \n\n{definitions:?}",
+                            definitions = module.ast.definitions
+                        )
+                    });
+
+                collect_type_parameters(type_parameters, &data_type.typed_parameters, args);
+
                 let annotated = Schema::Data(
-                    Data::from_data_type(modules, constructor, &type_parameters)
+                    Data::from_data_type(&data_type, modules, type_parameters, definitions)
                         .map_err(|e| e.backtrack(type_info))?,
                 );
 
                 Ok(Annotated {
-                    title: Some(constructor.name.clone()),
-                    description: constructor.doc.clone().map(|s| s.trim().to_string()),
+                    title: Some(data_type.name.clone()),
+                    description: data_type.doc.clone().map(|s| s.trim().to_string()),
                     annotated,
+                })
+            }),
+            Type::Tuple { elems } => {
+                definitions.register(type_info, &type_parameters.clone(), |definitions| {
+                    let elems = elems
+                        .iter()
+                        .map(|elem| {
+                            Annotated::do_from_type(elem, modules, type_parameters, definitions)
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| e.backtrack(type_info))?;
+
+                    Ok(Annotated {
+                        title: Some("Tuple".to_owned()),
+                        description: None,
+                        annotated: Schema::Data(Data::List(Items::Many(elems))),
+                    })
                 })
             }
             Type::Var { tipo } => match tipo.borrow().deref() {
-                TypeVar::Link { tipo } => Annotated::from_type(modules, tipo, type_parameters),
+                TypeVar::Link { tipo } => {
+                    Annotated::do_from_type(tipo, modules, type_parameters, definitions)
+                }
                 TypeVar::Generic { id } => {
                     let tipo = type_parameters
                         .get(id)
-                        .ok_or_else(|| Error::new(ErrorContext::FreeTypeVariable, type_info))?;
-                    Annotated::from_type(modules, tipo, type_parameters)
+                        .ok_or_else(|| Error::new(ErrorContext::FreeTypeVariable, type_info))?
+                        .clone();
+                    Annotated::do_from_type(&tipo, modules, type_parameters, definitions)
                 }
                 TypeVar::Unbound { .. } => {
                     Err(Error::new(ErrorContext::UnboundTypeVariable, type_info))
                 }
             },
-            Type::Tuple { elems } => {
-                let elems = elems
-                    .iter()
-                    .map(|e| {
-                        Annotated::from_type(modules, e, type_parameters)
-                            .and_then(|s| s.into_data(e).map(|s| s.annotated))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| e.backtrack(type_info))?;
-
-                Ok(Annotated {
-                    title: Some("Tuple".to_owned()),
-                    description: None,
-                    annotated: Schema::Data(Data::List(Items::Many(elems))),
-                })
-            }
-            Type::Fn { .. } => Err(Error::new(ErrorContext::UnexpectedFunction, type_info)),
+            Type::Fn { .. } => unreachable!(),
         }
     }
 
@@ -295,28 +339,35 @@ impl Annotated<Schema> {
 }
 
 impl Data {
-    pub fn from_data_type(
-        modules: &HashMap<String, CheckedModule>,
+    fn from_data_type(
         data_type: &DataType<Arc<Type>>,
-        type_parameters: &HashMap<u64, &Arc<Type>>,
+        modules: &HashMap<String, CheckedModule>,
+        type_parameters: &mut HashMap<u64, Arc<Type>>,
+        definitions: &mut Definitions<Annotated<Schema>>,
     ) -> Result<Self, Error> {
         let mut variants = vec![];
 
+        let len_constructors = data_type.constructors.len();
         for (index, constructor) in data_type.constructors.iter().enumerate() {
             let mut fields = vec![];
+
+            let len_arguments = data_type.constructors.len();
             for field in constructor.arguments.iter() {
-                let mut schema = Annotated::from_type(modules, &field.tipo, type_parameters)
-                    .and_then(|t| t.into_data(&field.tipo))?;
+                let reference =
+                    Annotated::do_from_type(&field.tipo, modules, type_parameters, definitions)?;
 
-                if field.label.is_some() {
-                    schema.title = field.label.clone();
+                // NOTE: Opaque data-types with a single variant and a single field are transparent, they
+                // are erased completely at compilation time.
+                if data_type.opaque && len_constructors == 1 && len_arguments == 1 {
+                    let schema = definitions
+                        .lookup(&reference)
+                        .expect("Schema definition registered just above")
+                        .clone();
+                    definitions.remove(&reference);
+                    return Ok(schema.into_data(&field.tipo)?.annotated);
                 }
 
-                if field.doc.is_some() {
-                    schema.description = field.doc.clone().map(|s| s.trim().to_string());
-                }
-
-                fields.push(Field::Inline(schema));
+                fields.push(reference);
             }
 
             let variant = Annotated {
@@ -328,31 +379,56 @@ impl Data {
             variants.push(variant);
         }
 
-        // NOTE: Opaque data-types with a single variant and a single field are transparent, they
-        // are erased completely at compilation time.
-        if data_type.opaque {
-            if let [variant] = &variants[..] {
-                if let [Field::Inline(field)] = &variant.annotated.fields[..] {
-                    return Ok(field.annotated.clone());
-                }
-            }
-        }
-
         Ok(Data::AnyOf(variants))
     }
 }
 
-// Needed because of Blueprint's default, but actually never used.
-impl Default for Schema {
-    fn default() -> Self {
-        Schema::Data(Data::Opaque)
+fn collect_type_parameters<'a>(
+    type_parameters: &'a mut HashMap<u64, Arc<Type>>,
+    generics: &'a [Arc<Type>],
+    applications: &'a [Arc<Type>],
+) {
+    for (index, generic) in generics.iter().enumerate() {
+        match &**generic {
+            Type::Var { tipo } => match *tipo.borrow() {
+                TypeVar::Generic { id } => {
+                    type_parameters.insert(
+                        id,
+                        applications
+                            .get(index)
+                            .unwrap_or_else(|| panic!("Couldn't find generic identifier ({id}) in applied types: {applications:?}"))
+                            .to_owned()
+                    );
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
     }
 }
 
-impl Display for Schema {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
-        f.write_str(&s)
+fn find_data_type(name: &str, definitions: &[TypedDefinition]) -> Option<DataType<Arc<Type>>> {
+    for def in definitions {
+        match def {
+            Definition::DataType(data_type) if name == data_type.name => {
+                return Some(data_type.clone())
+            }
+            Definition::Fn { .. }
+            | Definition::Validator { .. }
+            | Definition::DataType { .. }
+            | Definition::TypeAlias { .. }
+            | Definition::Use { .. }
+            | Definition::ModuleConstant { .. }
+            | Definition::Test { .. } => continue,
+        }
+    }
+    None
+}
+
+// Needed because of Blueprint's default, but actually never used.
+impl Default for Annotated<Schema> {
+    fn default() -> Self {
+        Schema::Data(Data::Opaque).into()
     }
 }
 
@@ -439,11 +515,6 @@ impl Serialize for Data {
                 s.end()
             }
             Data::AnyOf(constructors) => {
-                // TODO: Avoid 'anyOf' applicator when there's only one constructor
-                //
-                // match &constructors[..] {
-                // [constructor] => constructor.serialize(serializer),
-                // _ => {
                 let mut s = serializer.serialize_struct("AnyOf", 1)?;
                 s.serialize_field("anyOf", &constructors)?;
                 s.end()
@@ -458,19 +529,6 @@ impl Serialize for Constructor {
         s.serialize_field("index", &self.index)?;
         s.serialize_field("fields", &self.fields)?;
         s.end()
-    }
-}
-
-impl Serialize for Field {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Field::Inline(schema) => schema.serialize(serializer),
-            Field::Reference { path } => {
-                let mut s = serializer.serialize_struct("$ref", 1)?;
-                s.serialize_field("$ref", path)?;
-                s.end()
-            }
-        }
     }
 }
 
@@ -524,7 +582,11 @@ impl Error {
 ╰─▶ {signature}
 
 This is likely a bug. I should know. May you be kind enough and report this on <https://github.com/aiken-lang/aiken>."#,
-                signature = Error::fmt_breadcrumbs(&[self.breadcrumbs.last().unwrap().to_owned()]),
+                signature = Error::fmt_breadcrumbs(&[self
+                    .breadcrumbs
+                    .last()
+                    .expect("always at least one breadcrumb")
+                    .to_owned()]),
             ),
 
             ErrorContext::FreeTypeVariable => format!(
@@ -584,46 +646,6 @@ Here's the types I followed and that led me to this problem:
     }
 }
 
-fn collect_type_parameters<'a>(
-    generics: &'a [Arc<Type>],
-    applications: &'a [Arc<Type>],
-) -> HashMap<u64, &'a Arc<Type>> {
-    let mut type_parameters = HashMap::new();
-
-    for (index, generic) in generics.iter().enumerate() {
-        match &**generic {
-            Type::Var { tipo } => match *tipo.borrow() {
-                TypeVar::Generic { id } => {
-                    type_parameters.insert(id, applications.get(index).unwrap());
-                }
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
-    }
-
-    type_parameters
-}
-
-fn find_definition<'a>(
-    name: &str,
-    definitions: &'a Vec<TypedDefinition>,
-) -> Option<&'a DataType<Arc<Type>>> {
-    for def in definitions {
-        match def {
-            Definition::DataType(data_type) if name == data_type.name => return Some(data_type),
-            Definition::Fn { .. }
-            | Definition::Validator { .. }
-            | Definition::DataType { .. }
-            | Definition::TypeAlias { .. }
-            | Definition::Use { .. }
-            | Definition::ModuleConstant { .. }
-            | Definition::Test { .. } => continue,
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -657,13 +679,14 @@ pub mod test {
 
     #[test]
     fn serialize_data_list_1() {
-        let schema = Schema::Data(Data::List(Items::One(Box::new(Data::Integer))));
+        let ref_integer = Reference::new("Int");
+        let schema = Schema::Data(Data::List(Items::One(Box::new(ref_integer))));
         assert_json(
             &schema,
             json!({
                 "dataType": "list",
                 "items": {
-                    "dataType": "integer"
+                    "$ref": "#/definitions/Int"
                 }
             }),
         );
@@ -671,70 +694,33 @@ pub mod test {
 
     #[test]
     fn serialize_data_list_2() {
-        let schema = Schema::Data(Data::List(Items::One(Box::new(Data::List(Items::One(
-            Box::new(Data::Integer),
-        ))))));
+        let ref_list_integer = Reference::new("List$Int");
+        let schema = Schema::Data(Data::List(Items::One(Box::new(ref_list_integer))));
         assert_json(
             &schema,
             json!({
                 "dataType": "list",
-                "items":
-                    {
-                        "dataType": "list",
-                        "items": { "dataType": "integer" }
-                    }
-            }),
-        );
-    }
-
-    #[test]
-    fn serialize_data_list_3() {
-        let schema = Schema::Data(Data::List(Items::Many(vec![Data::Integer, Data::Bytes])));
-        assert_json(
-            &schema,
-            json!({
-                "dataType": "list",
-                "items": [
-                    { "dataType": "integer" },
-                    { "dataType": "bytes" },
-                ]
+                "items": {
+                    "$ref": "#/definitions/List$Int"
+                }
             }),
         );
     }
 
     #[test]
     fn serialize_data_map_1() {
-        let schema = Schema::Data(Data::Map(Box::new(Data::Integer), Box::new(Data::Bytes)));
+        let ref_integer = Reference::new("Int");
+        let ref_bytes = Reference::new("ByteArray");
+        let schema = Schema::Data(Data::Map(Box::new(ref_integer), Box::new(ref_bytes)));
         assert_json(
             &schema,
             json!({
                 "dataType": "map",
                 "keys": {
-                    "dataType": "integer"
+                    "$ref": "#/definitions/Int"
                 },
                 "values": {
-                    "dataType": "bytes"
-                }
-            }),
-        )
-    }
-
-    #[test]
-    fn serialize_data_map_2() {
-        let schema = Schema::Data(Data::Map(
-            Box::new(Data::Bytes),
-            Box::new(Data::List(Items::One(Box::new(Data::Integer)))),
-        ));
-        assert_json(
-            &schema,
-            json!({
-                "dataType": "map",
-                "keys": {
-                    "dataType": "bytes"
-                },
-                "values": {
-                    "dataType": "list",
-                    "items": { "dataType": "integer" }
+                    "$ref": "#/definitions/ByteArray"
                 }
             }),
         )
@@ -764,12 +750,12 @@ pub mod test {
         let schema = Schema::Data(Data::AnyOf(vec![
             Constructor {
                 index: 0,
-                fields: vec![Field::Inline(Data::Integer.into())],
+                fields: vec![Reference::new("Int")],
             }
             .into(),
             Constructor {
                 index: 1,
-                fields: vec![Field::Inline(Data::Bytes.into())],
+                fields: vec![Reference::new("Bytes")],
             }
             .into(),
         ]));
@@ -780,12 +766,12 @@ pub mod test {
                     {
                         "dataType": "constructor",
                         "index": 0,
-                        "fields": [{ "dataType": "integer" }]
+                        "fields": [{ "$ref": "#/definitions/Int" }]
                     },
                     {
                         "dataType": "constructor",
                         "index": 1,
-                        "fields": [{ "dataType": "bytes" }]
+                        "fields": [{ "$ref": "#/definitions/Bytes" }]
                     }
                 ]
             }),

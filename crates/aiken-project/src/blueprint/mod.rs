@@ -1,18 +1,22 @@
+pub mod definitions;
 pub mod error;
 pub mod schema;
 pub mod validator;
 
 use crate::{config::Config, module::CheckedModules};
 use aiken_lang::uplc::CodeGenerator;
+use definitions::{Definitions, Reference};
 use error::Error;
-use schema::Schema;
-use std::fmt::{self, Debug, Display};
+use schema::{Annotated, Schema};
+use std::fmt::Debug;
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Blueprint<T: Default> {
+pub struct Blueprint<R: Default, S: Default> {
     pub preamble: Preamble,
-    pub validators: Vec<Validator<T>>,
+    pub validators: Vec<Validator<R, S>>,
+    #[serde(skip_serializing_if = "Definitions::is_empty", default)]
+    pub definitions: Definitions<S>,
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -44,7 +48,7 @@ pub enum LookupResult<'a, T> {
     Many,
 }
 
-impl Blueprint<Schema> {
+impl Blueprint<Reference, Annotated<Schema>> {
     pub fn new(
         config: &Config,
         modules: &CheckedModules,
@@ -52,25 +56,35 @@ impl Blueprint<Schema> {
     ) -> Result<Self, Error> {
         let preamble = config.into();
 
+        let mut definitions = Definitions::new();
+
         let validators: Result<Vec<_>, Error> = modules
             .validators()
             .map(|(validator, def)| {
-                Validator::from_checked_module(modules, generator, validator, def)
+                Validator::from_checked_module(modules, generator, validator, def).map(
+                    |mut schema| {
+                        definitions.merge(&mut schema.definitions);
+                        schema.definitions = Definitions::new();
+                        schema
+                    },
+                )
             })
             .collect();
 
         Ok(Blueprint {
             preamble,
             validators: validators?,
+            definitions,
         })
     }
 }
 
-impl<T> Blueprint<T>
+impl<R, S> Blueprint<R, S>
 where
-    T: Clone + Default,
+    R: Clone + Default,
+    S: Clone + Default,
 {
-    pub fn lookup(&self, title: Option<&String>) -> Option<LookupResult<Validator<T>>> {
+    pub fn lookup(&self, title: Option<&String>) -> Option<LookupResult<Validator<R, S>>> {
         let mut validator = None;
 
         for v in self.validators.iter() {
@@ -95,7 +109,7 @@ where
         action: F,
     ) -> Result<A, E>
     where
-        F: Fn(Validator<T>) -> Result<A, E>,
+        F: Fn(Validator<R, S>) -> Result<A, E>,
     {
         match self.lookup(title) {
             Some(LookupResult::One(validator)) => action(validator.to_owned()),
@@ -106,13 +120,6 @@ where
                 self.validators.iter().map(|v| v.title.clone()).collect(),
             )),
         }
-    }
-}
-
-impl<T: serde::Serialize + Default> Display for Blueprint<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
-        f.write_str(&s)
     }
 }
 
@@ -135,11 +142,14 @@ impl From<&Config> for Preamble {
 #[cfg(test)]
 mod test {
     use super::*;
+    use aiken_lang::builtins;
+    use schema::{Data, Items, Schema};
     use serde_json::{self, json};
+    use std::collections::HashMap;
 
     #[test]
     fn serialize_no_description() {
-        let blueprint: Blueprint<Schema> = Blueprint {
+        let blueprint: Blueprint<Reference, Annotated<Schema>> = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: None,
@@ -148,6 +158,7 @@ mod test {
                 license: Some("Apache-2.0".to_string()),
             },
             validators: vec![],
+            definitions: Definitions::new(),
         };
         assert_eq!(
             serde_json::to_value(&blueprint).unwrap(),
@@ -165,7 +176,7 @@ mod test {
 
     #[test]
     fn serialize_with_description() {
-        let blueprint: Blueprint<Schema> = Blueprint {
+        let blueprint: Blueprint<Reference, Annotated<Schema>> = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: Some("Lorem ipsum".to_string()),
@@ -174,6 +185,7 @@ mod test {
                 license: None,
             },
             validators: vec![],
+            definitions: Definitions::new(),
         };
         assert_eq!(
             serde_json::to_value(&blueprint).unwrap(),
@@ -185,6 +197,67 @@ mod test {
                     "plutusVersion": "v2"
                 },
                 "validators": []
+            }),
+        );
+    }
+
+    #[test]
+    fn serialize_with_definitions() {
+        let mut definitions = Definitions::new();
+        definitions
+            .register::<_, Error>(&builtins::int(), &HashMap::new(), |_| {
+                Ok(Schema::Data(Data::Integer).into())
+            })
+            .unwrap();
+        definitions
+            .register::<_, Error>(
+                &builtins::list(builtins::byte_array()),
+                &HashMap::new(),
+                |definitions| {
+                    let ref_bytes = definitions.register::<_, Error>(
+                        &builtins::byte_array(),
+                        &HashMap::new(),
+                        |_| Ok(Schema::Data(Data::Bytes).into()),
+                    )?;
+                    Ok(Schema::Data(Data::List(Items::One(Box::new(ref_bytes)))).into())
+                },
+            )
+            .unwrap();
+
+        let blueprint: Blueprint<Reference, Annotated<Schema>> = Blueprint {
+            preamble: Preamble {
+                title: "Foo".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+                plutus_version: PlutusVersion::V2,
+                license: None,
+            },
+            validators: vec![],
+            definitions,
+        };
+        assert_eq!(
+            serde_json::to_value(&blueprint).unwrap(),
+            json!({
+                "preamble": {
+                    "title": "Foo",
+                    "version": "1.0.0",
+                    "plutusVersion": "v2"
+                },
+                "validators": [],
+                "definitions": {
+                    "ByteArray": {
+                        "dataType": "bytes"
+                    },
+                    "Int": {
+                        "dataType": "integer"
+                    },
+                    "List$ByteArray": {
+                        "dataType": "list",
+                        "items": {
+                            "$ref": "#/definitions/ByteArray"
+                        }
+                    }
+                }
             }),
         );
     }

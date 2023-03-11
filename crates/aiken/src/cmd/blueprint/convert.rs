@@ -65,7 +65,7 @@ pub fn exec(
         .map_err(|_| BlueprintError::InvalidOrMissingFile)
         .into_diagnostic()?;
 
-    let blueprint: Blueprint<serde_json::Value> =
+    let blueprint: Blueprint<serde_json::Value, serde_json::Value> =
         serde_json::from_reader(BufReader::new(blueprint)).into_diagnostic()?;
 
     // Perform the conversion
