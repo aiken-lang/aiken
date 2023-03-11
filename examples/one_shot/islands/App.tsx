@@ -4,7 +4,7 @@ import { Blockfrost, Lucid } from "~/vendor/lucid@0.9.4/mod.ts";
 import { Input } from "~/components/Input.tsx";
 import { Button } from "~/components/Button.tsx";
 
-import { Validators } from "~/utils.ts";
+import { applyParams, Validators } from "~/utils.ts";
 
 export interface AppProps {
   validators: Validators;
@@ -12,6 +12,7 @@ export interface AppProps {
 
 export default function App({ validators }: AppProps) {
   const [lucid, setLucid] = useState<Lucid | null>(null);
+  const [tokenName, setTokenName] = useState<string>("");
 
   const setupLucid = async (blockfrostApiKey: string) => {
     const lucid = await Lucid.new(
@@ -32,12 +33,25 @@ export default function App({ validators }: AppProps) {
         .enable()
         .then((wallet) => {
           lucid.selectWallet(wallet);
-
-          return lucid.wallet.getUtxos();
-        })
-        .then((utxos) => console.log(utxos));
+        });
     }
   }, [lucid]);
+
+  const submitTokenName = async (e: Event) => {
+    e.preventDefault();
+
+    const utxos = await lucid?.wallet.getUtxos()!;
+
+    const utxo = utxos[0];
+    const outputReference = {
+      txHash: utxo.txHash,
+      outputIndex: utxo.outputIndex,
+    };
+
+    const { lock, mint } = applyParams(tokenName, outputReference, validators);
+
+    console.log(lock, mint);
+  };
 
   return (
     <div>
@@ -56,14 +70,24 @@ export default function App({ validators }: AppProps) {
           </Input>
         )
         : (
-          <form class="mt-10 grid grid-cols-1 gap-y-8">
-            <Input type="text" name="tokenName" id="tokenName">
+          <form
+            class="mt-10 grid grid-cols-1 gap-y-8"
+            onSubmit={submitTokenName}
+          >
+            <Input
+              type="text"
+              name="tokenName"
+              id="tokenName"
+              onInput={(e) => setTokenName(e.currentTarget.value)}
+            >
               Token Name
             </Input>
 
-            <Button type="submit">
-              Make Contract
-            </Button>
+            {tokenName && (
+              <Button type="submit">
+                Make Contracts
+              </Button>
+            )}
           </form>
         )}
     </div>
