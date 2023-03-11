@@ -12,7 +12,11 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::{schema::Schema, Blueprint};
+use crate::blueprint::{
+    definitions::Reference,
+    schema::{Annotated, Schema},
+    Blueprint,
+};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
     builder::{DataTypeKey, FunctionAccessKey},
@@ -214,7 +218,10 @@ where
         self.compile(options)
     }
 
-    pub fn dump_uplc(&self, blueprint: &Blueprint<Schema>) -> Result<(), Error> {
+    pub fn dump_uplc(
+        &self,
+        blueprint: &Blueprint<Reference, Annotated<Schema>>,
+    ) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
 
         self.event_listener
@@ -355,7 +362,7 @@ where
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let blueprint: Blueprint<serde_json::Value> =
+        let blueprint: Blueprint<serde_json::Value, serde_json::Value> =
             serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Calculate the address
@@ -379,11 +386,11 @@ where
         &self,
         title: Option<&String>,
         param: &Term<DeBruijn>,
-    ) -> Result<Blueprint<serde_json::Value>, Error> {
+    ) -> Result<Blueprint<serde_json::Value, serde_json::Value>, Error> {
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let mut blueprint: Blueprint<serde_json::Value> =
+        let mut blueprint: Blueprint<serde_json::Value, serde_json::Value> =
             serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Apply parameters
