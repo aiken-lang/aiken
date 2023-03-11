@@ -1,9 +1,7 @@
 import {
   applyDoubleCborEncoding,
   applyParamsToScript,
-  C,
   Constr,
-  Data,
   fromText,
   Lucid,
   MintingPolicy,
@@ -16,6 +14,13 @@ import { Blueprint } from "~/blueprint.ts";
 export type Validators = {
   lock: SpendingValidator;
   mint: MintingPolicy;
+};
+
+export type LocalCache = {
+  tokenName: string;
+  giftADA: string;
+  lockTxHash: string;
+  parameterizedValidators: AppliedValidators;
 };
 
 export async function readValidators(): Promise<Validators> {
@@ -47,12 +52,19 @@ export async function readValidators(): Promise<Validators> {
   };
 }
 
+export type AppliedValidators = {
+  lock: SpendingValidator;
+  mint: MintingPolicy;
+  policyId: string;
+  lockAddress: string;
+};
+
 export function applyParams(
   tokenName: string,
   outputReference: OutRef,
   validators: Validators,
   lucid: Lucid,
-): { lock: string; mint: string } {
+): AppliedValidators {
   const outRef = new Constr(0, [
     new Constr(0, [outputReference.txHash]),
     BigInt(outputReference.outputIndex),
@@ -63,15 +75,25 @@ export function applyParams(
     outRef,
   ]);
 
-  const policyId = lucid.utils.validatorToScriptHash(validators.mint);
+  const policyId = lucid.utils.validatorToScriptHash({
+    type: "PlutusV2",
+    script: mint,
+  });
 
   const lock = applyParamsToScript(validators.lock.script, [
     fromText(tokenName),
     policyId,
   ]);
 
+  const lockAddress = lucid.utils.validatorToAddress({
+    type: "PlutusV2",
+    script: lock,
+  });
+
   return {
-    lock: applyDoubleCborEncoding(lock),
-    mint: applyDoubleCborEncoding(mint),
+    lock: { type: "PlutusV2", script: applyDoubleCborEncoding(lock) },
+    mint: { type: "PlutusV2", script: applyDoubleCborEncoding(mint) },
+    policyId,
+    lockAddress,
   };
 }
