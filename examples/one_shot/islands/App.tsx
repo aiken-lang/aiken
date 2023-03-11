@@ -13,6 +13,9 @@ export interface AppProps {
 export default function App({ validators }: AppProps) {
   const [lucid, setLucid] = useState<Lucid | null>(null);
   const [tokenName, setTokenName] = useState<string>("");
+  const [parameterizedContracts, setParameterizedContracts] = useState<
+    { lock: string; mint: string } | null
+  >(null);
 
   const setupLucid = async (blockfrostApiKey: string) => {
     const lucid = await Lucid.new(
@@ -42,15 +45,22 @@ export default function App({ validators }: AppProps) {
 
     const utxos = await lucid?.wallet.getUtxos()!;
 
+    console.log(utxos);
+
     const utxo = utxos[0];
     const outputReference = {
       txHash: utxo.txHash,
       outputIndex: utxo.outputIndex,
     };
 
-    const { lock, mint } = applyParams(tokenName, outputReference, validators);
+    const contracts = applyParams(
+      tokenName,
+      outputReference,
+      validators,
+      lucid!,
+    );
 
-    console.log(lock, mint);
+    setParameterizedContracts(contracts);
   };
 
   return (
@@ -90,6 +100,19 @@ export default function App({ validators }: AppProps) {
             )}
           </form>
         )}
+      {parameterizedContracts && (
+        <>
+          <h3 class="mt-4 mb-2">Lock</h3>
+          <pre class="bg-gray-200 p-2 rounded overflow-x-scroll">
+            {parameterizedContracts.lock}
+          </pre>
+
+          <h3 class="mt-4 mb-2">Mint</h3>
+          <pre class="bg-gray-200 p-2 rounded overflow-x-scroll">
+            {parameterizedContracts.mint}
+          </pre>
+        </>
+      )}
     </div>
   );
 }
