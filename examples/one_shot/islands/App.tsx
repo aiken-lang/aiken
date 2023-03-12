@@ -95,102 +95,110 @@ export default function App({ validators }: AppProps) {
     setParameterizedContracts(contracts);
   };
 
-  const submitADAGift = async (e: Event) => {
+  const createGiftCard = async (e: Event) => {
     e.preventDefault();
 
     setWaitingLockTx(true);
 
-    const lovelace = Number(giftADA) * 1000000;
+    try {
+      const lovelace = Number(giftADA) * 1000000;
 
-    const assetName = `${parameterizedContracts!.policyId}${
-      fromText(tokenName)
-    }`;
+      const assetName = `${parameterizedContracts!.policyId}${
+        fromText(tokenName)
+      }`;
 
-    // Action::Mint
-    const mintRedeemer = Data.to(new Constr(0, []));
+      // Action::Mint
+      const mintRedeemer = Data.to(new Constr(0, []));
 
-    const utxos = await lucid?.wallet.getUtxos()!;
-    const utxo = utxos[0];
+      const utxos = await lucid?.wallet.getUtxos()!;
+      const utxo = utxos[0];
 
-    const tx = await lucid!
-      .newTx()
-      .collectFrom([utxo])
-      .attachMintingPolicy(parameterizedContracts!.mint)
-      .mintAssets(
-        { [assetName]: BigInt(1) },
-        mintRedeemer,
-      )
-      .payToContract(
-        parameterizedContracts!.lockAddress,
-        { inline: Data.void() },
-        { "lovelace": BigInt(lovelace) },
-      )
-      .complete();
+      const tx = await lucid!
+        .newTx()
+        .collectFrom([utxo])
+        .attachMintingPolicy(parameterizedContracts!.giftCard)
+        .mintAssets(
+          { [assetName]: BigInt(1) },
+          mintRedeemer,
+        )
+        .payToContract(
+          parameterizedContracts!.lockAddress,
+          { inline: Data.void() },
+          { "lovelace": BigInt(lovelace) },
+        )
+        .complete();
 
-    const txSigned = await tx.sign().complete();
+      const txSigned = await tx.sign().complete();
 
-    const txHash = await txSigned.submit();
+      const txHash = await txSigned.submit();
 
-    const success = await lucid!.awaitTx(txHash);
+      const success = await lucid!.awaitTx(txHash);
 
-    // Wait a little bit longer so ExhuastedUTxOError doesn't happen
-    // in the next Tx
-    setTimeout(() => {
+      // Wait a little bit longer so ExhuastedUTxOError doesn't happen
+      // in the next Tx
+      setTimeout(() => {
+        setWaitingLockTx(false);
+
+        if (success) {
+          localStorage.setItem(
+            "cache",
+            JSON.stringify({
+              tokenName,
+              giftADA,
+              parameterizedValidators: parameterizedContracts,
+              lockTxHash: txHash,
+            }),
+          );
+
+          setLockTxHash(txHash);
+        }
+      }, 3000);
+    } catch {
       setWaitingLockTx(false);
-
-      if (success) {
-        localStorage.setItem(
-          "cache",
-          JSON.stringify({
-            tokenName,
-            giftADA,
-            parameterizedValidators: parameterizedContracts,
-            lockTxHash: txHash,
-          }),
-        );
-
-        setLockTxHash(txHash);
-      }
-    }, 3000);
+    }
   };
 
-  const submitRedeemADAGift = async (e: Event) => {
+  const redeemGiftCard = async (e: Event) => {
     e.preventDefault();
 
     setWaitingUnlockTx(true);
 
-    const utxos = await lucid!.utxosAt(parameterizedContracts!.lockAddress);
+    try {
+      const utxos = await lucid!.utxosAt(parameterizedContracts!.lockAddress);
 
-    const assetName = `${parameterizedContracts!.policyId}${
-      fromText(tokenName)
-    }`;
+      const assetName = `${parameterizedContracts!.policyId}${
+        fromText(tokenName)
+      }`;
 
-    // Action::Burn
-    const burnRedeemer = Data.to(new Constr(1, []));
+      // Action::Burn
+      const burnRedeemer = Data.to(new Constr(1, []));
 
-    const tx = await lucid!
-      .newTx()
-      .collectFrom(utxos, Data.void())
-      .attachMintingPolicy(parameterizedContracts!.mint)
-      .attachSpendingValidator(parameterizedContracts!.lock)
-      .mintAssets(
-        { [assetName]: BigInt(-1) },
-        burnRedeemer,
-      )
-      .complete();
+      const tx = await lucid!
+        .newTx()
+        .collectFrom(utxos, Data.void())
+        .attachMintingPolicy(parameterizedContracts!.giftCard)
+        .attachSpendingValidator(parameterizedContracts!.redeem)
+        .mintAssets(
+          { [assetName]: BigInt(-1) },
+          burnRedeemer,
+        )
+        .complete();
 
-    const txSigned = await tx.sign().complete();
+      const txSigned = await tx.sign().complete();
 
-    const txHash = await txSigned.submit();
+      const txHash = await txSigned.submit();
 
-    const success = await lucid!.awaitTx(txHash);
+      const success = await lucid!.awaitTx(txHash);
 
-    setWaitingUnlockTx(false);
+      setWaitingUnlockTx(false);
 
-    if (success) {
-      localStorage.removeItem("cache");
+      if (success) {
+        localStorage.removeItem("cache");
 
-      setUnlockTxHash(txHash);
+        setUnlockTxHash(txHash);
+      }
+    } catch {
+      setWaitingUnlockTx(false);
     }
   };
 
@@ -234,14 +242,14 @@ export default function App({ validators }: AppProps) {
         )}
       {lucid && parameterizedContracts && (
         <>
-          <h3 class="mt-4 mb-2">Lock</h3>
+          <h3 class="mt-4 mb-2">Redeem</h3>
           <pre class="bg-gray-200 p-2 rounded overflow-x-scroll">
-            {parameterizedContracts.lock.script}
+            {parameterizedContracts.redeem.script}
           </pre>
 
-          <h3 class="mt-4 mb-2">Mint</h3>
+          <h3 class="mt-4 mb-2">Gift Card</h3>
           <pre class="bg-gray-200 p-2 rounded overflow-x-scroll">
-            {parameterizedContracts.mint.script}
+            {parameterizedContracts.giftCard.script}
           </pre>
 
           <div class="mt-10 grid grid-cols-1 gap-y-8">
@@ -256,12 +264,12 @@ export default function App({ validators }: AppProps) {
             </Input>
 
             <Button
-              onClick={submitADAGift}
+              onClick={createGiftCard}
               disabled={waitingLockTx || !!lockTxHash}
             >
               {waitingLockTx
                 ? "Waiting for Tx..."
-                : "Send Gift Card (Locks ADA)"}
+                : "Create Gift Card (Locks ADA)"}
             </Button>
 
             {lockTxHash && (
@@ -277,7 +285,7 @@ export default function App({ validators }: AppProps) {
                 </a>
 
                 <Button
-                  onClick={submitRedeemADAGift}
+                  onClick={redeemGiftCard}
                   disabled={waitingLockTx || !!unlockTxHash}
                 >
                   {waitingUnlockTx

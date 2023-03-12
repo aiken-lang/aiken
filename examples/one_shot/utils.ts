@@ -10,10 +10,11 @@ import {
 } from "~/vendor/lucid@0.9.4/mod.ts";
 
 import { Blueprint } from "~/blueprint.ts";
+import blueprint from "~/plutus.json" assert { type: "json" };
 
 export type Validators = {
-  lock: SpendingValidator;
-  mint: MintingPolicy;
+  redeem: SpendingValidator;
+  giftCard: MintingPolicy;
 };
 
 export type LocalCache = {
@@ -23,38 +24,38 @@ export type LocalCache = {
   parameterizedValidators: AppliedValidators;
 };
 
-export async function readValidators(): Promise<Validators> {
-  const blueprint: Blueprint = JSON.parse(
-    await Deno.readTextFile("plutus.json"),
+export function readValidators(): Validators {
+  const redeem = (blueprint as Blueprint).validators.find((v) =>
+    v.title === "main.redeem"
   );
 
-  const lock = blueprint.validators.find((v) => v.title === "main.lock");
-
-  if (!lock) {
-    throw new Error("Lock validator not found");
+  if (!redeem) {
+    throw new Error("Redeem validator not found");
   }
 
-  const mint = blueprint.validators.find((v) => v.title === "main.mint");
+  const giftCard = (blueprint as Blueprint).validators.find((v) =>
+    v.title === "main.gift_card"
+  );
 
-  if (!mint) {
-    throw new Error("Mint validator not found");
+  if (!giftCard) {
+    throw new Error("Gift Card validator not found");
   }
 
   return {
-    lock: {
+    redeem: {
       type: "PlutusV2",
-      script: lock.compiledCode,
+      script: redeem.compiledCode,
     },
-    mint: {
+    giftCard: {
       type: "PlutusV2",
-      script: mint.compiledCode,
+      script: giftCard.compiledCode,
     },
   };
 }
 
 export type AppliedValidators = {
-  lock: SpendingValidator;
-  mint: MintingPolicy;
+  redeem: SpendingValidator;
+  giftCard: MintingPolicy;
   policyId: string;
   lockAddress: string;
 };
@@ -70,29 +71,29 @@ export function applyParams(
     BigInt(outputReference.outputIndex),
   ]);
 
-  const mint = applyParamsToScript(validators.mint.script, [
+  const giftCard = applyParamsToScript(validators.giftCard.script, [
     fromText(tokenName),
     outRef,
   ]);
 
   const policyId = lucid.utils.validatorToScriptHash({
     type: "PlutusV2",
-    script: mint,
+    script: giftCard,
   });
 
-  const lock = applyParamsToScript(validators.lock.script, [
+  const redeem = applyParamsToScript(validators.redeem.script, [
     fromText(tokenName),
     policyId,
   ]);
 
   const lockAddress = lucid.utils.validatorToAddress({
     type: "PlutusV2",
-    script: lock,
+    script: redeem,
   });
 
   return {
-    lock: { type: "PlutusV2", script: applyDoubleCborEncoding(lock) },
-    mint: { type: "PlutusV2", script: applyDoubleCborEncoding(mint) },
+    redeem: { type: "PlutusV2", script: applyDoubleCborEncoding(redeem) },
+    giftCard: { type: "PlutusV2", script: applyDoubleCborEncoding(giftCard) },
     policyId,
     lockAddress,
   };

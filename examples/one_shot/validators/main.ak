@@ -8,7 +8,7 @@ type Action {
   Burn
 }
 
-validator mint(token_name: ByteArray, utxo_ref: OutputReference) {
+validator gift_card(token_name: ByteArray, utxo_ref: OutputReference) {
   fn(rdmr: Action, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, purpose } = ctx
 
@@ -32,7 +32,7 @@ validator mint(token_name: ByteArray, utxo_ref: OutputReference) {
   }
 }
 
-validator lock(token_name: ByteArray, policy_id: ByteArray) {
+validator redeem(token_name: ByteArray, policy_id: ByteArray) {
   fn(_d: Void, _r: Void, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, .. } = ctx
 
