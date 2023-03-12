@@ -1,11 +1,11 @@
-name = 'aiken-lang/one_shot'
+name = 'aiken-lang/gift_card'
 version = '0.0.0'
 license = 'Apache-2.0'
-description = "One shot parameterized minting and burning of tokens"
+description = "Create a gift card that can be used to redeem locked assets"
 
 [repository]
 user = 'aiken-lang'
-project = 'one_shot'
+project = 'gift_card'
 platform = 'github'
 
 [[dependencies]]

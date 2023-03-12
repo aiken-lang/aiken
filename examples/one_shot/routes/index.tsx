@@ -10,8 +10,8 @@ interface Data {
 }
 
 export const handler: Handlers<Data> = {
-  async GET(_req, ctx) {
-    const validators = await readValidators();
+  GET(_req, ctx) {
+    const validators = readValidators();
 
     return ctx.render({ validators });
   },
@@ -32,14 +32,14 @@ export default function Home({ data }: PageProps<Data>) {
             Make a one shot minting and lock contract
           </h2>
 
-          <h3 class="mt-4 mb-2">Lock</h3>
+          <h3 class="mt-4 mb-2">Redeem</h3>
           <pre class="bg-gray-200 p-2 rounded overflow-x-scroll">
-            {validators.lock.script}
+            {validators.redeem.script}
           </pre>
 
-          <h3 class="mt-4 mb-2">Mint</h3>
+          <h3 class="mt-4 mb-2">Gift Card</h3>
           <pre class="bg-gray-200 p-2 rounded overflow-x-scroll">
-            {validators.mint.script}
+            {validators.giftCard.script}
           </pre>
         </div>
 

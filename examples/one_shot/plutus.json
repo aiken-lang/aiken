@@ -1,14 +1,14 @@
 {
   "preamble": {
-    "title": "aiken-lang/one_shot",
-    "description": "One shot parameterized minting and burning of tokens",
+    "title": "aiken-lang/gift_card",
+    "description": "Create a gift card that can be used to redeem locked assets",
     "version": "0.0.0",
     "plutusVersion": "v2",
     "license": "Apache-2.0"
   },
   "validators": [
     {
-      "title": "main.mint",
+      "title": "main.gift_card",
       "redeemer": {
         "title": "Action",
         "schema": {
@@ -76,7 +76,7 @@
       "hash": "9185bf20c9bbdd7062d9b2dc11a03290bfb256938395d56855baee81"
     },
     {
-      "title": "main.lock",
+      "title": "main.redeem",
       "datum": {
         "title": "Unit",
         "description": "The nullary constructor.",
