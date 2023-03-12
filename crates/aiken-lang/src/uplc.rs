@@ -1860,7 +1860,6 @@ impl<'a> CodeGenerator<'a> {
                     );
                 }
             }
-            // TODO: Check constr for assert on all cases
             constr @ Pattern::Constructor { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
@@ -2095,15 +2094,15 @@ impl<'a> CodeGenerator<'a> {
 
                             let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
 
+                            let mut scope = scope;
+                            scope.push(self.id_gen.next());
+
                             pattern_vec.push(Air::Let {
                                 scope: scope.clone(),
                                 name: constr_name.clone(),
                             });
 
                             pattern_vec.append(values);
-
-                            let mut scope = scope;
-                            scope.push(self.id_gen.next());
 
                             pattern_vec.push(Air::AssertConstr {
                                 scope: scope.clone(),
