@@ -1,6 +1,6 @@
 # fresh project
 
-### Usage
+## Usage
 
 Start the project:
 
@@ -10,7 +10,15 @@ deno task start
 
 This will watch the project directory and restart as necessary.
 
-### Important
+## What's This?
 
-There is some very hacky things that need to be done to make lucid work correctly.
-It involved vendoring lucid and making some adjustments to the `core/core.ts` file.
+This is an example of a gift card. With these contracts you can lock anything
+and have it be unlockable only with a simultaneously minted NFT. This
+minted NFT holds the power to unlock the assets and is considered the "gift card".
+
+## Tech
+
+* [Aiken](https://aiken-lang.org)
+* [Deno](https://deno.land)
+* [fresh](https://fresh.deno.dev)
+* [lucid](https://github.com/spacebudz/lucid)
