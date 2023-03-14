@@ -347,7 +347,7 @@ fn test_nested_function_calls() {
               _ -> error @"expected inline datum"
             },
           ]
-          |> list.and
+            |> list.and
         }
     "#};
 
@@ -559,4 +559,51 @@ fn test_unicode() {
     "#};
 
     assert_fmt(src, src);
+}
+
+#[test]
+fn test_preserve_pipe() {
+    let src = indoc! { r#"
+        fn foo() {
+          a |> b |> c |> d
+        }
+
+        fn foo() {
+          a
+            // Foo
+            |> b// Some comments
+            |> c
+            |> d
+        }
+
+        fn baz() {
+          // Commented
+          however |> it_automatically_breaks |> into_multiple_lines |> anytime_when |> it_is_too_long // What?
+        }
+    "#};
+
+    let expected = indoc! { r#"
+        fn foo() {
+          a |> b |> c |> d
+        }
+
+        fn foo() {
+          a // Foo
+            |> b // Some comments
+            |> c
+            |> d
+        }
+
+        fn baz() {
+          // Commented
+          however
+            |> it_automatically_breaks
+            |> into_multiple_lines
+            |> anytime_when
+            |> it_is_too_long
+          // What?
+        }
+    "#};
+
+    assert_fmt(src, expected);
 }

@@ -54,7 +54,6 @@ pub fn module(
                 extra.empty_lines.push(span.start);
                 None
             }
-            Token::NewLine => None,
             Token::LeftParen => {
                 if previous_is_newline {
                     Some((Token::NewLineLeftParen, *span))
@@ -62,6 +61,14 @@ pub fn module(
                     Some((Token::LeftParen, *span))
                 }
             }
+            Token::Pipe => {
+                if previous_is_newline {
+                    Some((Token::NewLinePipe, *span))
+                } else {
+                    Some((Token::Pipe, *span))
+                }
+            }
+            Token::NewLine => None,
             _ => Some((token, *span)),
         };
         previous_is_newline = current_is_newline;
@@ -1309,17 +1316,30 @@ pub fn expr_parser(
         // Pipeline
         disjunction
             .clone()
-            .then(just(Token::Pipe).ignore_then(disjunction).repeated())
-            .foldl(|l, r| {
-                let expressions = if let expr::UntypedExpr::PipeLine { mut expressions } = l {
+            .then(
+                choice((just(Token::Pipe), just(Token::NewLinePipe)))
+                    .then(disjunction)
+                    .repeated(),
+            )
+            .foldl(|l, (pipe, r)| {
+                if let expr::UntypedExpr::PipeLine {
+                    mut expressions,
+                    one_liner,
+                } = l
+                {
                     expressions.push(r);
-                    expressions
-                } else {
-                    let mut expressions = Vec1::new(l);
-                    expressions.push(r);
-                    expressions
-                };
-                expr::UntypedExpr::PipeLine { expressions }
+                    return expr::UntypedExpr::PipeLine {
+                        expressions,
+                        one_liner,
+                    };
+                }
+
+                let mut expressions = Vec1::new(l);
+                expressions.push(r);
+                expr::UntypedExpr::PipeLine {
+                    expressions,
+                    one_liner: pipe != Token::NewLinePipe,
+                }
             })
     })
 }

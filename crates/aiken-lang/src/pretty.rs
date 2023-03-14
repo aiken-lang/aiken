@@ -139,6 +139,7 @@ pub enum Document<'a> {
     Break {
         broken: &'a str,
         unbroken: &'a str,
+        break_first: bool,
         kind: BreakKind,
     },
 
@@ -207,6 +208,7 @@ fn fits(
             Document::Group(doc) => docs.push_front((indent, Mode::Unbroken, doc)),
 
             Document::Str(s) => limit -= s.len() as isize,
+
             Document::String(s) => limit -= s.len() as isize,
 
             Document::Break { unbroken, .. } => match mode {
@@ -255,31 +257,39 @@ fn format(
             Document::Break {
                 broken,
                 unbroken,
+                break_first,
                 kind: BreakKind::Flex,
             } => {
                 let unbroken_width = width + unbroken.len() as isize;
 
                 if fits(limit, unbroken_width, docs.clone()) {
                     writer.push_str(unbroken);
-
                     width = unbroken_width;
-                } else {
-                    writer.push_str(broken);
+                    continue;
+                }
 
+                if *break_first {
                     writer.push('\n');
-
                     for _ in 0..indent {
                         writer.push(' ');
                     }
-
-                    width = indent;
+                    writer.push_str(broken);
+                } else {
+                    writer.push_str(broken);
+                    writer.push('\n');
+                    for _ in 0..indent {
+                        writer.push(' ');
+                    }
                 }
+
+                width = indent;
             }
 
             // Strict breaks are conditional to the mode
             Document::Break {
                 broken,
                 unbroken,
+                break_first,
                 kind: BreakKind::Strict,
             } => {
                 width = match mode {
@@ -287,6 +297,18 @@ fn format(
                         writer.push_str(unbroken);
 
                         width + unbroken.len() as isize
+                    }
+
+                    Mode::Broken | Mode::ForcedBroken if *break_first => {
+                        writer.push('\n');
+
+                        for _ in 0..indent {
+                            writer.push(' ');
+                        }
+
+                        writer.push_str(broken);
+
+                        indent
                     }
 
                     Mode::Broken | Mode::ForcedBroken => {
@@ -361,6 +383,16 @@ pub fn break_<'a>(broken: &'a str, unbroken: &'a str) -> Document<'a> {
         broken,
         unbroken,
         kind: BreakKind::Strict,
+        break_first: false,
+    }
+}
+
+pub fn prebreak<'a>(broken: &'a str, unbroken: &'a str) -> Document<'a> {
+    Document::Break {
+        broken,
+        unbroken,
+        kind: BreakKind::Strict,
+        break_first: true,
     }
 }
 
@@ -369,6 +401,16 @@ pub fn flex_break<'a>(broken: &'a str, unbroken: &'a str) -> Document<'a> {
         broken,
         unbroken,
         kind: BreakKind::Flex,
+        break_first: false,
+    }
+}
+
+pub fn flex_prebreak<'a>(broken: &'a str, unbroken: &'a str) -> Document<'a> {
+    Document::Break {
+        broken,
+        unbroken,
+        kind: BreakKind::Flex,
+        break_first: true,
     }
 }
 
