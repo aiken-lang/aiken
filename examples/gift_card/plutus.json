@@ -10,65 +10,22 @@
     {
       "title": "main.gift_card",
       "redeemer": {
-        "title": "Action",
+        "title": "rdmr",
         "schema": {
-          "anyOf": [
-            {
-              "title": "Mint",
-              "dataType": "constructor",
-              "index": 0,
-              "fields": []
-            },
-            {
-              "title": "Burn",
-              "dataType": "constructor",
-              "index": 1,
-              "fields": []
-            }
-          ]
+          "$ref": "#/definitions/main~1Action"
         }
       },
       "parameters": [
         {
           "title": "token_name",
           "schema": {
-            "dataType": "bytes"
+            "$ref": "#/definitions/ByteArray"
           }
         },
         {
-          "title": "OutputReference",
-          "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
+          "title": "utxo_ref",
           "schema": {
-            "anyOf": [
-              {
-                "title": "OutputReference",
-                "dataType": "constructor",
-                "index": 0,
-                "fields": [
-                  {
-                    "title": "transaction_id",
-                    "description": "A unique transaction identifier, as the hash of a transaction body. Note that the transaction id\n isn't a direct hash of the `Transaction` as visible on-chain. Rather, they correspond to hash\n digests of transaction body as they are serialized on the network.",
-                    "anyOf": [
-                      {
-                        "title": "TransactionId",
-                        "dataType": "constructor",
-                        "index": 0,
-                        "fields": [
-                          {
-                            "title": "hash",
-                            "dataType": "bytes"
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "title": "output_index",
-                    "dataType": "integer"
-                  }
-                ]
-              }
-            ]
+            "$ref": "#/definitions/aiken~1transaction~1OutputReference"
           }
         }
       ],
@@ -78,47 +35,100 @@
     {
       "title": "main.redeem",
       "datum": {
-        "title": "Unit",
-        "description": "The nullary constructor.",
+        "title": "_d",
         "schema": {
-          "anyOf": [
-            {
-              "dataType": "constructor",
-              "index": 0,
-              "fields": []
-            }
-          ]
+          "$ref": "#/definitions/Data"
         }
       },
       "redeemer": {
-        "title": "Unit",
-        "description": "The nullary constructor.",
+        "title": "_r",
         "schema": {
-          "anyOf": [
-            {
-              "dataType": "constructor",
-              "index": 0,
-              "fields": []
-            }
-          ]
+          "$ref": "#/definitions/Data"
         }
       },
       "parameters": [
         {
           "title": "token_name",
           "schema": {
-            "dataType": "bytes"
+            "$ref": "#/definitions/ByteArray"
           }
         },
         {
           "title": "policy_id",
           "schema": {
-            "dataType": "bytes"
+            "$ref": "#/definitions/ByteArray"
           }
         }
       ],
       "compiledCode": "5901980100003232323232323232323232232232222533300a323232323232323232323232533301b301e0021323253330183370e00266e052000480084cdc780100a0a50375a60360046eb8c06400454cc0612401364c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2069742065787065637465640016301c00132320010013232332232332232533301c3370e00290010801099190009bab30240013012003301e375400400297adef6c603322330050020010020010030103001001222533301c00213374a900125eb804c8c8c8c94ccc06ccdc7802800899ba548000cc084dd300125eb804ccc01c01c00c014dd7180e8019bab301d0023020003301e00237566034002603400260320026030002602e00260080026028002600400644646660020029000001911199980819b870040020172333004004337000069001180c800800918079baa001149858dd70009bae0013001001222533300900214984cc014c004c02c008ccc00c00cc0300080055cd2b9b5738aae7555cf2ab9f5740ae855d11",
       "hash": "e1c247d17b275dc889a0437d23f7791a2ea60a6d1b84612572668ec2"
     }
-  ]
+  ],
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "aiken/transaction/OutputReference": {
+      "title": "OutputReference",
+      "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
+      "anyOf": [
+        {
+          "title": "OutputReference",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "transaction_id",
+              "$ref": "#/definitions/aiken~1transaction~1TransactionId"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "aiken/transaction/TransactionId": {
+      "title": "TransactionId",
+      "description": "A unique transaction identifier, as the hash of a transaction body. Note that the transaction id\n isn't a direct hash of the `Transaction` as visible on-chain. Rather, they correspond to hash\n digests of transaction body as they are serialized on the network.",
+      "anyOf": [
+        {
+          "title": "TransactionId",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "hash",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "main/Action": {
+      "title": "Action",
+      "anyOf": [
+        {
+          "title": "Mint",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "Burn",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    }
+  }
 }
