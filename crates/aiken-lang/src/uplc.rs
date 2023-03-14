@@ -1780,6 +1780,9 @@ impl<'a> CodeGenerator<'a> {
         scope: Vec<u64>,
     ) {
         if assignment_properties.value_type.is_data() && !tipo.is_data() && !pattern.is_discard() {
+            let mut scope = scope.clone();
+            scope.push(self.id_gen.next());
+
             value_vec.insert(
                 0,
                 Air::UnWrapData {
@@ -1789,6 +1792,9 @@ impl<'a> CodeGenerator<'a> {
             );
         }
         if !assignment_properties.value_type.is_data() && tipo.is_data() && !pattern.is_discard() {
+            let mut scope = scope.clone();
+            scope.push(self.id_gen.next());
+
             value_vec.insert(
                 0,
                 Air::WrapData {
