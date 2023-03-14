@@ -10,7 +10,6 @@
 //! ## Extensions
 //!
 //! - `ForcedBreak` from Elixir.
-//! - `FlexBreak` from Elixir.
 #![allow(clippy::wrong_self_convention)]
 
 use std::collections::VecDeque;
@@ -132,9 +131,6 @@ pub enum Document<'a> {
     /// Forces contained groups to break
     ForceBroken(Box<Self>),
 
-    /// May break contained document based on best fit, thus flex break
-    FlexBreak(Box<Self>),
-
     /// Renders `broken` if group is broken, `unbroken` otherwise
     Break {
         broken: &'a str,
@@ -215,8 +211,6 @@ fn fits(
                 Mode::Broken | Mode::ForcedBroken => return true,
                 Mode::Unbroken => current_width += unbroken.len() as isize,
             },
-
-            Document::FlexBreak(doc) => docs.push_front((indent, mode, doc)),
 
             Document::Vec(vec) => {
                 for doc in vec.iter().rev() {
@@ -347,7 +341,7 @@ fn format(
                 docs.push_front((indent + i, mode, doc));
             }
 
-            Document::Group(doc) | Document::FlexBreak(doc) => {
+            Document::Group(doc) => {
                 let mut group_docs = VecDeque::new();
 
                 group_docs.push_front((indent, Mode::Unbroken, doc.as_ref()));
@@ -467,7 +461,7 @@ impl<'a> Document<'a> {
             Str(s) => s.is_empty(),
             // assuming `broken` and `unbroken` are equivalent
             Break { broken, .. } => broken.is_empty(),
-            ForceBroken(d) | FlexBreak(d) | Nest(_, d) | Group(d) => d.is_empty(),
+            ForceBroken(d) | Nest(_, d) | Group(d) => d.is_empty(),
             Vec(docs) => docs.iter().all(|d| d.is_empty()),
         }
     }
