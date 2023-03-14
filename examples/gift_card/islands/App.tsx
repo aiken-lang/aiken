@@ -1,11 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import {
-  Blockfrost,
-  Constr,
-  Data,
-  fromText,
-  Lucid,
-} from "~/vendor/lucid@0.9.4/mod.ts";
+import { Blockfrost, Constr, Data, fromText, Lucid } from "lucid/mod.ts";
 
 import { Input } from "~/components/Input.tsx";
 import { Button } from "~/components/Button.tsx";
