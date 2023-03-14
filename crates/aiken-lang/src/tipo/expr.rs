@@ -274,7 +274,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location, value, ..
             } => Ok(self.infer_string(value, location)),
 
-            UntypedExpr::PipeLine { expressions } => self.infer_pipeline(expressions),
+            UntypedExpr::PipeLine { expressions, .. } => self.infer_pipeline(expressions),
 
             UntypedExpr::Fn {
                 location,

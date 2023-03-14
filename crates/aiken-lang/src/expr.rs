@@ -456,6 +456,7 @@ pub enum UntypedExpr {
 
     PipeLine {
         expressions: Vec1<Self>,
+        one_liner: bool,
     },
 
     Assignment {

@@ -545,6 +545,7 @@ fn pipeline() {
                 tipo: (),
             }],
             body: expr::UntypedExpr::PipeLine {
+                one_liner: false,
                 expressions: vec1::vec1![
                     expr::UntypedExpr::BinOp {
                         location: Span::new((), 31..36),
@@ -717,6 +718,7 @@ fn let_bindings() {
                     expr::UntypedExpr::Assignment {
                         location: Span::new((), 23..70),
                         value: Box::new(expr::UntypedExpr::PipeLine {
+                            one_liner: false,
                             expressions: vec1::vec1![
                                 expr::UntypedExpr::BinOp {
                                     location: Span::new((), 35..40),
@@ -1105,6 +1107,7 @@ fn anonymous_function() {
                         annotation: None,
                     },
                     expr::UntypedExpr::PipeLine {
+                        one_liner: true,
                         expressions: vec1::vec1![
                             expr::UntypedExpr::Int {
                                 location: Span::new((), 71..72),

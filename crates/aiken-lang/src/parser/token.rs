@@ -44,15 +44,16 @@ pub enum Token {
     Bang,     // '!'
     Question, // '?'
     Equal,
-    EqualEqual, // '=='
-    NotEqual,   // '!='
-    Vbar,       // '|'
-    VbarVbar,   // '||'
-    AmperAmper, // '&&'
-    Pipe,       // '|>'
-    Dot,        // '.'
-    RArrow,     // '->'
-    DotDot,     // '..'
+    EqualEqual,  // '=='
+    NotEqual,    // '!='
+    Vbar,        // '|'
+    VbarVbar,    // '||'
+    AmperAmper,  // '&&'
+    NewLinePipe, // '↳|>'
+    Pipe,        // '|>'
+    Dot,         // '.'
+    RArrow,      // '->'
+    DotDot,      // '..'
     EndOfFile,
     // Docs/Extra
     Comment,
@@ -134,6 +135,7 @@ impl fmt::Display for Token {
             Token::Vbar => "|",
             Token::VbarVbar => "||",
             Token::AmperAmper => "&&",
+            Token::NewLinePipe => "↳|>",
             Token::Pipe => "|>",
             Token::Dot => ".",
             Token::RArrow => "->",

@@ -15,7 +15,9 @@ use crate::{
     docvec,
     expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
     parser::extra::{Comment, ModuleExtra},
-    pretty::{break_, concat, flex_break, join, line, lines, nil, Document, Documentable},
+    pretty::{
+        break_, concat, flex_break, join, line, lines, nil, prebreak, Document, Documentable,
+    },
     tipo::{self, Type},
 };
 
@@ -683,7 +685,10 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.if_expr(branches, final_else),
 
-            UntypedExpr::PipeLine { expressions, .. } => self.pipeline(expressions),
+            UntypedExpr::PipeLine {
+                expressions,
+                one_liner,
+            } => self.pipeline(expressions, *one_liner),
 
             UntypedExpr::Int { value, .. } => value.to_doc(),
 
@@ -1013,7 +1018,11 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn pipeline<'a>(&mut self, expressions: &'a Vec1<UntypedExpr>) -> Document<'a> {
+    fn pipeline<'a>(
+        &mut self,
+        expressions: &'a Vec1<UntypedExpr>,
+        one_liner: bool,
+    ) -> Document<'a> {
         let mut docs = Vec::with_capacity(expressions.len() * 3);
         let first = expressions.first();
         let first_precedence = first.binop_precedence();
@@ -1031,12 +1040,29 @@ impl<'comments> Formatter<'comments> {
 
                 _ => self.wrap_expr(expr),
             };
-            docs.push(line());
-            docs.push(commented("|> ".to_doc(), comments));
-            docs.push(self.operator_side(doc, 4, expr.binop_precedence()));
+
+            let expr = self.operator_side(doc, 4, expr.binop_precedence());
+
+            match printed_comments(comments, true) {
+                None => {
+                    let pipe = prebreak("|> ", " |> ").nest(2);
+                    docs.push(pipe.append(expr));
+                }
+                Some(comments) => {
+                    let pipe = prebreak("|> ", "|> ");
+                    docs.push(
+                        " ".to_doc()
+                            .append(comments.nest(2).append(pipe.append(expr).group())),
+                    );
+                }
+            }
         }
 
-        docs.to_doc().force_break()
+        if one_liner {
+            docs.to_doc().group()
+        } else {
+            docs.to_doc().force_break()
+        }
     }
 
     fn pipe_capture_right_hand_side<'a>(&mut self, fun: &'a UntypedExpr) -> Document<'a> {
