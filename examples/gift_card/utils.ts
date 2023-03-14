@@ -7,7 +7,7 @@ import {
   MintingPolicy,
   OutRef,
   SpendingValidator,
-} from "~/vendor/lucid@0.9.4/mod.ts";
+} from "lucid/mod.ts";
 
 import { Blueprint } from "~/blueprint.ts";
 import blueprint from "~/plutus.json" assert { type: "json" };
