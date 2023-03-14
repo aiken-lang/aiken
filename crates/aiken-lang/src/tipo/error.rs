@@ -792,7 +792,7 @@ Perhaps, try the following:
         suggest_neighbor(
             name,
             variables.iter(),
-            &if name.chars().into_iter().next().unwrap().is_uppercase() {
+            &if name.chars().next().unwrap().is_uppercase() {
                 suggest_import_constructor()
             } else {
                 "Did you forget to import it?".to_string()

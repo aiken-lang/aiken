@@ -4468,7 +4468,6 @@ impl<'a> CodeGenerator<'a> {
                     | DefaultFunction::Trace => unimplemented!("{func:#?}"),
                     DefaultFunction::ChooseData => {
                         let temp_vars = (0..func.arity())
-                            .into_iter()
                             .map(|_| format!("__item_{}", self.id_gen.next()))
                             .collect_vec();
 

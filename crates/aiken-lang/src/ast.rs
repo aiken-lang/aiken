@@ -718,16 +718,11 @@ impl Annotation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Layer {
+    #[default]
     Value,
     Type,
-}
-
-impl Default for Layer {
-    fn default() -> Self {
-        Layer::Value
-    }
 }
 
 impl Layer {

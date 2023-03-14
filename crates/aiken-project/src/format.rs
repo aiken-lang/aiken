@@ -138,7 +138,6 @@ pub fn aiken_files_excluding_gitignore(dir: &Path) -> impl Iterator<Item = PathB
         .follow_links(true)
         .require_git(false)
         .build()
-        .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
         .map(ignore::DirEntry::into_path)
