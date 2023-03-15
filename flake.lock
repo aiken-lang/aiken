@@ -130,7 +130,8 @@
         "nixpkgs": [
           "cargo2nix",
           "nixpkgs"
-        ]
+        ],
+        "unstable": "unstable"
       }
     },
     "rust-overlay": {
@@ -155,6 +156,21 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "unstable": {
+      "locked": {
+        "lastModified": 1678874551,
+        "narHash": "sha256-Gsq92n94Ikgmpxn7MsRhw+LXnQXo7KqgIG6tsLrpw3M=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "5979bc90e21e79c158fa9616bf405b829e0ab7b9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "repo": "nixpkgs",
         "type": "github"
       }
     }
