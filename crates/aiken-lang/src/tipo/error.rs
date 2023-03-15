@@ -1287,7 +1287,12 @@ pub enum Warning {
     },
 
     #[error("I found a todo left in the code.\n")]
-    #[diagnostic(help("You probably want to replace that one with real code... eventually."))]
+    #[diagnostic(
+        help(
+            "You probably want to replace that one with real code... eventually. The expected type is {}",
+            tipo.to_pretty_with_names(HashMap::new(), 0).if_supports_color(Stderr, |s| s.purple())
+        )
+    )]
     #[diagnostic(code("todo"))]
     Todo {
         #[label]
