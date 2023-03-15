@@ -32,10 +32,10 @@ export default function App({ validators }: AppProps) {
   const setupLucid = async (blockfrostApiKey: string) => {
     const lucid = await Lucid.new(
       new Blockfrost(
-        "https://cardano-mainnet.blockfrost.io/api/v0",
+        "https://cardano-preprod.blockfrost.io/api/v0",
         blockfrostApiKey,
       ),
-      "Mainnet",
+      "Preprod",
     );
 
     const cache = localStorage.getItem("cache");
