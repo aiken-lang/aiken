@@ -10,6 +10,7 @@
     flake-utils.follows = "cargo2nix/flake-utils";
     nixpkgs.follows = "cargo2nix/nixpkgs";
     devshell.url = "github:numtide/devshell";
+    unstable.url = "github:nixos/nixpkgs";
   };
 
   outputs = {
@@ -18,6 +19,7 @@
     nixpkgs,
     flake-utils,
     devshell,
+    unstable,
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
@@ -25,6 +27,8 @@
           inherit system;
           overlays = [cargo2nix.overlays.default devshell.overlays.default];
         };
+
+        deno = unstable.legacyPackages.${system}.deno;
 
         rustPkgs = pkgs.rustBuilder.makePackageSet {
           rustVersion = "1.64.0";
@@ -47,7 +51,9 @@
         ];
       in rec {
         inherit packages;
-        devShell = rustPkgs.workspaceShell {};
+        devShell = rustPkgs.workspaceShell {
+          packages = [deno];
+        };
         devShells = {
           aiken = pkgs.devshell.mkShell {
             name = "aiken";
