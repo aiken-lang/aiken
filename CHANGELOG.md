@@ -13,6 +13,7 @@
 - **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
 - **aiken-lang**: various uplc code gen fixes
 - **aiken-project**: recursive issue with blueprints fixed
+- **aiken-lang**: update todo warning to include type
 
 ## [v0.0.29] - 2023-MM-DD
 
