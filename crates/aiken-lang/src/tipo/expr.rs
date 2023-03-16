@@ -1888,7 +1888,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let mut typed_subjects = Vec::with_capacity(subjects_count);
         let mut subject_types = Vec::with_capacity(subjects_count);
-        let mut typed_clauses = Vec::with_capacity(clauses.len());
+        let mut typed_clauses = Vec::new();
 
         let return_type = self.new_unbound_var();
 
@@ -1911,7 +1911,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             )
             .map_err(|e| e.case_clause_mismatch())?;
 
-            typed_clauses.push(typed_clause);
+            typed_clauses.append(&mut typed_clause.desugarize());
         }
 
         if let Err(unmatched) =

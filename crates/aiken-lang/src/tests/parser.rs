@@ -11,14 +11,14 @@ fn assert_definitions(code: &str, definitions: Vec<ast::UntypedDefinition>) {
     let (module, _extra) = parser::module(code, ast::ModuleKind::Validator).unwrap();
 
     assert_eq!(
-        module,
         ast::UntypedModule {
             docs: vec![],
             kind: ast::ModuleKind::Validator,
             name: "".to_string(),
             type_info: (),
             definitions,
-        }
+        },
+        module
     )
 }
 
@@ -901,11 +901,10 @@ fn block() {
 fn when() {
     let code = indoc! {r#"
         pub fn wow2(a: Int){
-          when a, b is {
-            1, 2 -> 3
-            1 | 4, 5 -> {
+          when a is {
+            2 -> 3
+            1 | 4 | 5 -> {
               let amazing = 5
-
               amazing
             }
             3 -> 9
@@ -933,100 +932,88 @@ fn when() {
                 tipo: (),
             }],
             body: expr::UntypedExpr::When {
-                location: Span::new((), 23..138),
-                subjects: vec![
-                    expr::UntypedExpr::Var {
-                        location: Span::new((), 28..29),
-                        name: "a".to_string(),
-                    },
-                    expr::UntypedExpr::Var {
-                        location: Span::new((), 31..32),
-                        name: "b".to_string(),
-                    },
-                ],
+                location: Span::new((), 23..132),
+                subjects: vec![expr::UntypedExpr::Var {
+                    location: Span::new((), 28..29),
+                    name: "a".to_string(),
+                }],
                 clauses: vec![
                     ast::Clause {
-                        location: Span::new((), 42..51),
-                        pattern: vec![
-                            ast::Pattern::Int {
-                                location: Span::new((), 42..43),
-                                value: "1".to_string(),
-                            },
-                            ast::Pattern::Int {
-                                location: Span::new((), 45..46),
-                                value: "2".to_string(),
-                            },
-                        ],
+                        location: Span::new((), 39..45),
+                        pattern: vec![ast::Pattern::Int {
+                            location: Span::new((), 39..40),
+                            value: "2".to_string(),
+                        }],
                         alternative_patterns: vec![],
                         guard: None,
                         then: expr::UntypedExpr::Int {
-                            location: Span::new((), 50..51),
+                            location: Span::new((), 44..45),
                             value: "3".to_string(),
                         },
                     },
                     ast::Clause {
-                        location: Span::new((), 56..112),
+                        location: Span::new((), 50..106),
                         pattern: vec![ast::Pattern::Int {
-                            location: Span::new((), 56..57),
+                            location: Span::new((), 50..51),
                             value: "1".to_string(),
                         }],
-                        alternative_patterns: vec![vec![
-                            ast::Pattern::Int {
-                                location: Span::new((), 60..61),
+                        alternative_patterns: vec![
+                            vec![ast::Pattern::Int {
+                                location: Span::new((), 54..55),
                                 value: "4".to_string(),
-                            },
-                            ast::Pattern::Int {
-                                location: Span::new((), 63..64),
+                            }],
+                            vec![ast::Pattern::Int {
+                                location: Span::new((), 58..59),
                                 value: "5".to_string(),
-                            },
-                        ]],
+                            }],
+                        ],
                         guard: None,
                         then: expr::UntypedExpr::Sequence {
-                            location: Span::new((), 76..106),
+                            location: Span::new((), 71..100),
                             expressions: vec![
                                 expr::UntypedExpr::Assignment {
-                                    location: Span::new((), 76..91),
+                                    location: Span::new((), 71..86),
                                     value: Box::new(expr::UntypedExpr::Int {
-                                        location: Span::new((), 90..91),
+                                        location: Span::new((), 85..86),
                                         value: "5".to_string(),
                                     }),
                                     pattern: ast::Pattern::Var {
-                                        location: Span::new((), 80..87),
+                                        location: Span::new((), 75..82),
                                         name: "amazing".to_string(),
                                     },
                                     kind: ast::AssignmentKind::Let,
                                     annotation: None,
                                 },
                                 expr::UntypedExpr::Var {
-                                    location: Span::new((), 99..106),
+                                    location: Span::new((), 93..100),
                                     name: "amazing".to_string(),
                                 },
                             ],
                         },
                     },
                     ast::Clause {
-                        location: Span::new((), 117..123),
+                        location: Span::new((), 111..117),
                         pattern: vec![ast::Pattern::Int {
-                            location: Span::new((), 117..118),
+                            location: Span::new((), 111..112),
                             value: "3".to_string(),
                         }],
                         alternative_patterns: vec![],
                         guard: None,
                         then: expr::UntypedExpr::Int {
-                            location: Span::new((), 122..123),
+                            location: Span::new((), 116..117),
                             value: "9".to_string(),
                         },
                     },
                     ast::Clause {
-                        location: Span::new((), 128..134),
+                        location: Span::new((), 122..128),
                         pattern: vec![ast::Pattern::Discard {
                             name: "_".to_string(),
-                            location: Span::new((), 128..129),
+                            location: Span::new((), 122..123),
                         }],
                         alternative_patterns: vec![],
                         guard: None,
                         then: expr::UntypedExpr::Int {
-                            location: Span::new((), 133..134),
+                            location: Span::new((), 127..128),
                             value: "4".to_string(),
                         },
                     },
@@ -1038,7 +1025,7 @@ fn when() {
             public: true,
             return_annotation: None,
             return_type: (),
-            end_position: 139,
+            end_position: 133,
         })],
     )
 }
