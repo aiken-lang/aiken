@@ -16,7 +16,7 @@ TARGET="$WORKDIR/$(basename $1)"
 
 TMP=$(mktemp)
 VALIDATORS=$(find $TARGET -type f -path "*validators/*.ak")
-if [ -z $VALIDATORS ]; then
+if [ -z "$VALIDATORS" ]; then
   RESULT=$(cargo run --quiet -- check $TARGET 2>$TMP)
 else
   RESULT=$(cargo run --quiet -- build $TARGET 2>$TMP)

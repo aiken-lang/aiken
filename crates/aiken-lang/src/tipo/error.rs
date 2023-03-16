@@ -254,7 +254,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     #[error("I found a discarded expression not bound to a variable.\n")]
     #[diagnostic(code("implicit_discard"))]
     #[diagnostic(help(
-        "A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'.",
+        "A function can contain a sequence of expressions. However, any expression but the last one must be assigned to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'.",
         keyword_let = "let".if_supports_color(Stdout, |s| s.yellow()),
         discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
@@ -1337,13 +1337,6 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I found a literal that is unused.\n")]
-    #[diagnostic(code("unused::literal"))]
-    UnusedLiteral {
-        #[label]
-        location: Span,
-    },
-
     #[error(
         "I found an unused private function: '{}'.\n",
         name.if_supports_color(Stderr, |s| s.purple()),
@@ -1389,9 +1382,18 @@ pub enum Warning {
     },
 
     #[error("I came across an unused variable.\n")]
-    #[diagnostic(help(
-        "No big deal, but you might want to remove it to get rid of that warning."
-    ))]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"No big deal, but you might want to remove it to get rid of that warning.
+
+           You should also know that, unlike in typical imperative languages, unused let-bindings are {fully_ignored} in Aiken.
+           They will not produce any side-effect (such as error calls). Programs with or without unused variables are semantically equivalent.
+
+           If you do want to enforce some side-effects, use {keyword_expect} instead of {keyword_let}.
+        "#,
+        fully_ignored = "fully_ignored".if_supports_color(Stderr, |s| s.bold()),
+        keyword_expect = "expect".if_supports_color(Stderr, |s| s.yellow()),
+        keyword_let = "let".if_supports_color(Stderr, |s| s.yellow()),
+    }))]
     #[diagnostic(code("unused::variable"))]
     UnusedVariable {
         #[label("unused")]

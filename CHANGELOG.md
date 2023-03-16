@@ -18,6 +18,7 @@
 - **aiken-lang**: `|>` operator can now be formatted as a single (short) line or forced over multiline in a flexible manner
 - **aiken-lang**: the compiler now provides better feedback for type holes (i.e. `_`) in type annotations
 - **aiken-lang**: assignment and clause guard are now always formatted on a new line
+- **aiken-lang**: unused let-bindings are now fully removed from generated code and discarded unused let-binding now raise a warning
 
 ## [v0.0.29] - 2023-MM-DD
 

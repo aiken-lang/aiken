@@ -145,78 +145,11 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         // Unify each pattern in the multi-pattern with the corresponding subject
         let mut typed_multi = Vec::with_capacity(multi_pattern.len());
         for (pattern, subject_type) in multi_pattern.into_iter().zip(subjects) {
-            let pattern = self.unify(pattern, subject_type.clone(), None)?;
+            let pattern = self.unify(pattern, subject_type.clone(), None, false)?;
             typed_multi.push(pattern);
         }
         Ok(typed_multi)
     }
-
-    // fn infer_pattern_bit_string(
-    //     &mut self,
-    //     mut segments: Vec<UntypedPatternBitStringSegment>,
-    //     location: Span,
-    // ) -> Result<TypedPattern, Error> {
-    //     let last_segment = segments.pop();
-
-    //     let mut typed_segments: Vec<_> = segments
-    //         .into_iter()
-    //         .map(|s| self.infer_pattern_segment(s, false))
-    //         .try_collect()?;
-
-    //     if let Some(s) = last_segment {
-    //         let typed_last_segment = self.infer_pattern_segment(s, true)?;
-    //         typed_segments.push(typed_last_segment)
-    //     }
-
-    //     Ok(TypedPattern::BitString {
-    //         location,
-    //         segments: typed_segments,
-    //     })
-    // }
-
-    // fn infer_pattern_segment(
-    //     &mut self,
-    //     segment: UntypedPatternBitStringSegment,
-    //     is_last_segment: bool,
-    // ) -> Result<TypedPatternBitStringSegment, Error> {
-    //     let UntypedPatternBitStringSegment {
-    //         location,
-    //         options,
-    //         value,
-    //         ..
-    //     } = segment;
-
-    //     let options: Vec<_> = options
-    //         .into_iter()
-    //         .map(|o| infer_bit_string_segment_option(o, |value, typ| self.unify(value, typ)))
-    //         .try_collect()?;
-
-    //     let segment_type = bit_string::type_options_for_pattern(&options, !is_last_segment)
-    //         .map_err(|error| Error::BitStringSegmentError {
-    //             error: error.error,
-    //             location: error.location,
-    //         })?;
-
-    //     let typ = {
-    //         match value.deref() {
-    //             Pattern::Var { .. } if segment_type == string() => {
-    //                 Err(Error::BitStringSegmentError {
-    //                     error: bit_string::ErrorType::VariableUtfSegmentInPattern,
-    //                     location,
-    //                 })
-    //             }
-    //             _ => Ok(segment_type),
-    //         }
-    //     }?;
-    //     let typed_value = self.unify(*value, typ.clone())?;
-
-    //     Ok(BitStringSegment {
-    //         location,
-    //         value: Box::new(typed_value),
-    //         options,
-    //         type_: typ,
-    //     })
-    // }
 
     /// When we have an assignment or a case expression we unify the pattern with the
     /// inferred type of the subject in order to determine what variables to insert
@@ -226,9 +159,17 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         pattern: UntypedPattern,
         tipo: Arc<Type>,
         ann_type: Option<Arc<Type>>,
+        is_assignment: bool,
     ) -> Result<TypedPattern, Error> {
         match pattern {
-            Pattern::Discard { name, location } => Ok(Pattern::Discard { name, location }),
+            Pattern::Discard { name, location } => {
+                if is_assignment {
+                    // Register declaration for the unused variable detection
+                    self.environment
+                        .init_usage(name.to_string(), EntityKind::Variable, location);
+                };
+                Ok(Pattern::Discard { name, location })
+            }
 
             Pattern::Var { name, location } => {
                 self.insert_variable(&name, ann_type.unwrap_or(tipo), location, location)?;
@@ -236,29 +177,6 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 Ok(Pattern::Var { name, location })
             }
 
-            // Pattern::Concatenate {
-            //     location,
-            //     left_location,
-            //     right_location,
-            //     left_side_string,
-            //     right_side_assignment,
-            // } => {
-            //     // The entire concatenate pattern must be a string
-            //     self.environment.unify(tipo, string(), location)?;
-
-            //     // The right hand side may assign a variable, which is the suffix of the string
-            //     if let AssignName::Variable(right) = &right_side_assignment {
-            //         self.insert_variable(right.as_ref(), string(), right_location, location)?;
-            //     };
-
-            //     Ok(Pattern::Concatenate {
-            //         location,
-            //         left_location,
-            //         right_location,
-            //         left_side_string,
-            //         right_side_assignment,
-            //     })
-            // }
             Pattern::Assign {
                 name,
                 pattern,
@@ -271,7 +189,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     pattern.location(),
                 )?;
 
-                let pattern = self.unify(*pattern, tipo, ann_type)?;
+                let pattern = self.unify(*pattern, tipo, ann_type, false)?;
 
                 Ok(Pattern::Assign {
                     name,
@@ -299,11 +217,11 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                     let elements = elements
                         .into_iter()
-                        .map(|element| self.unify(element, tipo.clone(), None))
+                        .map(|element| self.unify(element, tipo.clone(), None, false))
                         .try_collect()?;
 
                     let tail = match tail {
-                        Some(tail) => Some(Box::new(self.unify(*tail, list(tipo), None)?)),
+                        Some(tail) => Some(Box::new(self.unify(*tail, list(tipo), None, false)?)),
                         None => None,
                     };
 
@@ -336,7 +254,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     let mut patterns = vec![];
 
                     for (pattern, typ) in elems.into_iter().zip(type_elems) {
-                        let typed_pattern = self.unify(pattern, typ.clone(), None)?;
+                        let typed_pattern = self.unify(pattern, typ.clone(), None, false)?;
 
                         patterns.push(typed_pattern);
                     }
@@ -358,7 +276,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     let mut patterns = vec![];
 
                     for (pattern, type_) in elems.into_iter().zip(elems_types) {
-                        let typed_pattern = self.unify(pattern, type_, None)?;
+                        let typed_pattern = self.unify(pattern, type_, None, false)?;
 
                         patterns.push(typed_pattern);
                     }
@@ -498,7 +416,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                         label,
                                     } = arg;
 
-                                    let value = self.unify(value, typ.clone(), None)?;
+                                    let value = self.unify(value, typ.clone(), None, false)?;
 
                                     Ok::<_, Error>(CallArg {
                                         value,

@@ -1,6 +1,8 @@
 use crate::{
-    ast::{ModuleKind, Tracing, TypedModule, UntypedModule},
-    builtins, parser,
+    ast::{Definition, ModuleKind, Tracing, TypedModule, UntypedModule},
+    builtins,
+    expr::TypedExpr,
+    parser,
     tipo::error::{Error, Warning},
     IdGenerator,
 };
@@ -318,4 +320,56 @@ fn utf8_hex_literal_warning() {
         warnings[0],
         Warning::Utf8ByteArrayIsValidHexString { .. }
     ))
+}
+
+#[test]
+fn discarded_let_bindings() {
+    let source_code = r#"
+        fn foo() {
+            let result = when 42 is {
+                1 -> {
+                    let unused = "foo"
+                    Void
+                }
+                _ -> {
+                    Void
+                }
+            }
+
+            let _ = "foo"
+
+            result
+        }
+    "#;
+
+    let (warnings, ast) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(warnings[0], Warning::UnusedVariable { ref name, .. } if name == "unused"));
+    assert!(matches!(warnings[1], Warning::UnusedVariable { ref name, .. } if name == "_"));
+
+    // Controls that unused let-bindings have been erased from the transformed AST.
+    match ast.definitions.first() {
+        Some(Definition::Fn(def)) => match &def.body {
+            TypedExpr::Sequence { expressions, .. } => {
+                assert_eq!(expressions.len(), 2);
+                assert!(
+                    matches!(expressions[1], TypedExpr::Var { .. }),
+                    "last expression isn't return variable"
+                );
+                match &expressions[0] {
+                    TypedExpr::Assignment { value, .. } => match **value {
+                        TypedExpr::When { ref clauses, .. } => {
+                            assert!(
+                                matches!(clauses[0].then, TypedExpr::Sequence { ref expressions, ..} if expressions.len() == 1)
+                            )
+                        }
+                        _ => unreachable!("first expression isn't when/is"),
+                    },
+                    _ => unreachable!("first expression isn't assignment"),
+                }
+            }
+            _ => unreachable!("body isn't a Sequence"),
+        },
+        _ => unreachable!("ast isn't a Fn"),
+    }
 }

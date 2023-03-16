@@ -795,14 +795,20 @@ pub enum Pattern<Constructor, Type> {
     },
 
     /// The creation of a variable.
-    /// e.g. `assert [this_is_a_var, .._] = x`
+    /// e.g. `expect [this_is_a_var, .._] = x`
+    /// e.g. `let foo = 42`
     Var {
         location: Span,
         name: String,
     },
 
     /// A name given to a sub-pattern using the `as` keyword.
-    /// e.g. `assert (1, [_, _] as the_list) = x`
+    ///
+    /// ```aiken
+    /// when foo is {
+    ///    [_, _] as the_list -> ...
+    /// }
+    /// ```
     Assign {
         name: String,
         location: Span,
@@ -849,7 +855,6 @@ impl<A, B> Pattern<A, B> {
             | Pattern::List { location, .. }
             | Pattern::Discard { location, .. }
             | Pattern::Tuple { location, .. }
-            // | Pattern::Concatenate { location, .. }
             | Pattern::Constructor { location, .. } => *location,
         }
     }
