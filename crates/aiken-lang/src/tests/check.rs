@@ -323,25 +323,6 @@ fn utf8_hex_literal_warning() {
 }
 
 #[test]
-fn weird_comments() {
-    let source_code = r#"
-        // A
-
-        /// B
-
-        // C
-        fn foo () {
-          todo
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::UnexpectedDocComment { .. }))
-    ))
-}
-
-#[test]
 fn discarded_let_bindings() {
     let source_code = r#"
         fn foo() {

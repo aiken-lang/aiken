@@ -892,13 +892,6 @@ The best thing to do from here is to remove it."#))]
         #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
         location: Span,
     },
-
-    #[error("I ran into a lonely doc comment not attached to any function definition.")]
-    #[diagnostic(code("unexpected::doc_comment"))]
-    UnexpectedDocComment {
-        #[label("unexpected doc comment")]
-        location: Span,
-    },
 }
 
 impl Error {

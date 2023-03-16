@@ -1799,29 +1799,33 @@ fn printed_comments<'a, 'comments>(
 
     let mut doc = Vec::new();
     while let Some(c) = comments.next() {
-        // There will never be consecutive empty lines (None values),
-        // and whenever we peek a None, we advance past it.
-        let c = c.expect("no consecutive empty lines");
-        doc.push("//".to_doc().append(Document::String(c.to_string())));
-        match comments.peek() {
-            // Next line is a comment
-            Some(Some(_)) => doc.push(line()),
-            // Next line is empty
-            Some(None) => {
-                comments.next();
+        match c {
+            None => continue,
+            Some(c) => {
+                // There will never be consecutive empty lines (None values),
+                // and whenever we peek a None, we advance past it.
+                doc.push("//".to_doc().append(Document::String(c.to_string())));
                 match comments.peek() {
-                    Some(_) => doc.push(lines(2)),
-                    None => {
-                        if trailing_newline {
-                            doc.push(lines(2));
+                    // Next line is a comment
+                    Some(Some(_)) => doc.push(line()),
+                    // Next line is empty
+                    Some(None) => {
+                        comments.next();
+                        match comments.peek() {
+                            Some(_) => doc.push(lines(2)),
+                            None => {
+                                if trailing_newline {
+                                    doc.push(lines(2));
+                                }
+                            }
                         }
                     }
-                }
-            }
-            // We've reached the end, there are no more lines
-            None => {
-                if trailing_newline {
-                    doc.push(line());
+                    // We've reached the end, there are no more lines
+                    None => {
+                        if trailing_newline {
+                            doc.push(line());
+                        }
+                    }
                 }
             }
         }

@@ -638,7 +638,16 @@ fn weird_comments() {
         /// B
 
         /// C
-        fn bar () {
+        fn foo() {
+          todo
+        }
+
+        // E
+
+        /// F
+
+        // G
+        fn bar() {
           todo
         }
     "#};
@@ -648,7 +657,15 @@ fn weird_comments() {
 
         /// B
         /// C
-        fn bar () {
+        fn foo() {
+          todo
+        }
+
+        // E
+
+        // G
+        /// F
+        fn bar() {
           todo
         }
     "#};
