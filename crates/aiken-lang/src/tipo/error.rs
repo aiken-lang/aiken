@@ -1337,13 +1337,6 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I found a literal that is unused.\n")]
-    #[diagnostic(code("unused::literal"))]
-    UnusedLiteral {
-        #[label]
-        location: Span,
-    },
-
     #[error(
         "I found an unused private function: '{}'.\n",
         name.if_supports_color(Stderr, |s| s.purple()),
