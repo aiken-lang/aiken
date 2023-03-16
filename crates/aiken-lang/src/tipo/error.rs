@@ -833,7 +833,7 @@ The best thing to do from here is to remove it."#))]
     },
 
     #[error(
-        "A validator must return {}",
+        "A validator must return {}.\n",
         "Bool"
             .if_supports_color(Stdout, |s| s.bright_blue())
             .if_supports_color(Stdout, |s| s.bold())
@@ -855,10 +855,10 @@ The best thing to do from here is to remove it."#))]
         return_type: Arc<Type>,
     },
 
-    #[error("Validators require at least 2 arguments and at most 3 arguments.")]
+    #[error("Validators require at least 2 arguments and at most 3 arguments.\n")]
     #[diagnostic(code("illegal::validator_arity"))]
     #[diagnostic(help(
-        "Validators require either 2 or 3 arguments {}.\nIf you don't need one of the required arguments use an underscore `_datum`.",
+        "Please {}.\nIf you don't need one of the required arguments use an underscore (e.g. `_datum`).",
         if *count < 2 {
             let missing = 2 - count;
 
@@ -869,7 +869,7 @@ The best thing to do from here is to remove it."#))]
             }
 
             format!(
-                "please add the {} missing {arguments}",
+                "add the {} missing {arguments}",
                 missing.to_string().if_supports_color(Stdout, |s| s.yellow()),
             )
         } else {
@@ -882,7 +882,7 @@ The best thing to do from here is to remove it."#))]
             }
 
             format!(
-                "please remove the {} extra {arguments}",
+                "remove the {} extra {arguments}",
                 extra.to_string().if_supports_color(Stdout, |s| s.yellow()),
             )
         }
