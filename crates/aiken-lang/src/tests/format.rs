@@ -629,3 +629,29 @@ fn test_preserve_pipe() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn weird_comments() {
+    let src = indoc! { r#"
+        // A
+
+        /// B
+
+        /// C
+        fn bar () {
+          todo
+        }
+    "#};
+
+    let expected = indoc! { r#"
+        // A
+
+        /// B
+        /// C
+        fn bar () {
+          todo
+        }
+    "#};
+
+    assert_fmt(src, expected);
+}
