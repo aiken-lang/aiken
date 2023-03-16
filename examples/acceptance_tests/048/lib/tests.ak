@@ -46,27 +46,27 @@ test foo_4() {
   }
 }
 
-// type Seasons {
-//   Winter
-//   Spring
-//   Summer
-//   Fall
-// }
+type Seasons {
+  Winter
+  Spring
+  Summer
+  Fall
+}
 
-// fn is_cold(season, hour) {
-//   when season is {
-//     Winter | Fall ->
-//       True
-//     _ if hour >= 18 ->
-//       True
-//     _ ->
-//       False
-//   }
-// }
+fn is_cold(season, hour) {
+  when season is {
+    Winter | Fall ->
+      True
+    _ if hour >= 18 ->
+      True
+    _ ->
+      False
+  }
+}
 
-// test foo_5() {
-//   !is_cold(Spring, 15) && is_cold(Summer, 22)
-// }
+test foo_5() {
+  !is_cold(Spring, 15) && is_cold(Summer, 22)
+}
 
 fn when_tuple(a: (Int, Int)) -> Int {
   when a is {
@@ -75,6 +75,6 @@ fn when_tuple(a: (Int, Int)) -> Int {
   }
 }
 
-test spend() {
+test foo_6() {
   when_tuple((4, 1)) == 4
 }
