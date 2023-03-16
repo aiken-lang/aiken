@@ -254,7 +254,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     #[error("I found a discarded expression not bound to a variable.\n")]
     #[diagnostic(code("implicit_discard"))]
     #[diagnostic(help(
-        "A function can contain a sequence of expressions. However, any expression but the last one must be assign to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'.",
+        "A function can contain a sequence of expressions. However, any expression but the last one must be assigned to a variable using the {keyword_let} keyword. If you really wish to discard an expression that is unused, you can assign it to '{discard}'.",
         keyword_let = "let".if_supports_color(Stdout, |s| s.yellow()),
         discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
