@@ -272,8 +272,8 @@ mod test {
     fn mint_basic() {
         assert_validator(
             r#"
-            validator mint {
-              fn(redeemer: Data, ctx: Data) {
+            validator {
+              fn mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -302,8 +302,8 @@ mod test {
     fn mint_parameterized() {
         assert_validator(
             r#"
-            validator mint(utxo_ref: Int) {
-              fn(redeemer: Data, ctx: Data) {
+            validator(utxo_ref: Int) {
+              fn mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -373,8 +373,8 @@ mod test {
                 Abort
             }
 
-            validator simplified_hydra {
-              fn(datum: State, redeemer: Input, ctx: Data) {
+            validator {
+              fn simplified_hydra(datum: State, redeemer: Input, ctx: Data) {
                 True
               }
             }
@@ -485,8 +485,8 @@ mod test {
     fn tuples() {
         assert_validator(
             r#"
-            validator tuples {
-              fn(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
+            validator {
+              fn tuples(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
                 True
               }
             }
@@ -560,8 +560,8 @@ mod test {
                 Infinite
             }
 
-            validator generics {
-              fn(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+            validator {
+              fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
                 True
               }
             }
@@ -644,8 +644,8 @@ mod test {
 
             type UUID { UUID }
 
-            validator list_2_tuples_as_map {
-              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator {
+              fn list_2_tuples_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -707,8 +707,8 @@ mod test {
 
             type UUID { UUID }
 
-            validator opaque_singleton_variants {
-              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator {
+              fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -753,8 +753,8 @@ mod test {
                 foo: Data
             }
 
-            validator nested_data {
-              fn(datum: Foo, redeemer: Int, ctx: Void) {
+            validator {
+              fn nested_data(datum: Foo, redeemer: Int, ctx: Void) {
                 True
               }
             }
@@ -814,8 +814,8 @@ mod test {
               Mul(Expr, Expr)
             }
 
-            validator recursive_types {
-              fn(redeemer: Expr, ctx: Void) {
+            validator {
+              fn recursive_types(redeemer: Expr, ctx: Void) {
                 True
               }
             }
@@ -899,8 +899,8 @@ mod test {
                 }
             }
 
-            validator recursive_generic_types {
-              fn(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
+            validator {
+              fn recursive_generic_types(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
                 True
               }
             }

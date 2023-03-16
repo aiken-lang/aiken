@@ -41,8 +41,8 @@ fn windows_newline() {
 #[test]
 fn validator() {
     let code = indoc! {r#"
-        validator foo {
-          fn(datum, rdmr, ctx) {
+        validator {
+          fn foo(datum, rdmr, ctx) {
             True
           }
         }
@@ -91,14 +91,120 @@ fn validator() {
                     name: "True".to_string(),
                 },
                 doc: None,
-                location: Span::new((), 18..38),
+                location: Span::new((), 14..38),
                 name: "foo".to_string(),
                 public: false,
                 return_annotation: None,
                 return_type: (),
                 end_position: 52,
             },
-            location: Span::new((), 0..13),
+            other_fun: None,
+            location: Span::new((), 0..9),
+            params: vec![],
+        })],
+    )
+}
+
+#[test]
+fn double_validator() {
+    let code = indoc! {r#"
+        validator {
+          fn foo(datum, rdmr, ctx) {
+            True
+          }
+
+          fn bar(rdmr, ctx) {
+            True
+          }
+        }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Validator(ast::Validator {
+            doc: None,
+            end_position: 90,
+            fun: Function {
+                arguments: vec![
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "datum".to_string(),
+                            label: "datum".to_string(),
+                            location: Span::new((), 21..26),
+                        },
+                        location: Span::new((), 21..26),
+                        annotation: None,
+                        tipo: (),
+                    },
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "rdmr".to_string(),
+                            label: "rdmr".to_string(),
+                            location: Span::new((), 28..32),
+                        },
+                        location: Span::new((), 28..32),
+                        annotation: None,
+                        tipo: (),
+                    },
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "ctx".to_string(),
+                            label: "ctx".to_string(),
+                            location: Span::new((), 34..37),
+                        },
+                        location: Span::new((), 34..37),
+                        annotation: None,
+                        tipo: (),
+                    },
+                ],
+                body: expr::UntypedExpr::Var {
+                    location: Span::new((), 45..49),
+                    name: "True".to_string(),
+                },
+                doc: None,
+                location: Span::new((), 14..38),
+                name: "foo".to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 52,
+            },
+            other_fun: Some(Function {
+                arguments: vec![
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "rdmr".to_string(),
+                            label: "rdmr".to_string(),
+                            location: Span::new((), 64..68),
+                        },
+                        location: Span::new((), 64..68),
+                        annotation: None,
+                        tipo: (),
+                    },
+                    ast::Arg {
+                        arg_name: ast::ArgName::Named {
+                            name: "ctx".to_string(),
+                            label: "ctx".to_string(),
+                            location: Span::new((), 70..73),
+                        },
+                        location: Span::new((), 70..73),
+                        annotation: None,
+                        tipo: (),
+                    },
+                ],
+                body: expr::UntypedExpr::Var {
+                    location: Span::new((), 81..85),
+                    name: "True".to_string(),
+                },
+                doc: None,
+                location: Span::new((), 57..74),
+                name: "bar".to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 88,
+            }),
+            location: Span::new((), 0..9),
             params: vec![],
         })],
     )

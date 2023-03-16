@@ -58,16 +58,16 @@ fn test_format_if() {
 #[test]
 fn test_format_validator() {
     let src = indoc! {r#"
-      validator foo ( ) {
-      fn(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+      validator ( ) {
+      fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
       True
       }
       }
     "#};
 
     let expected = indoc! {r#"
-      validator foo {
-        fn(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+      validator {
+        fn foo(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
           True
         }
       }

@@ -242,9 +242,43 @@ pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error =
 }
 
 pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    just(Token::Validator)
-        .ignore_then(select! {Token::Name {name} => name}.map_with_span(|name, span| (name, span)))
+    let func_parser = just(Token::Fn)
+        .ignore_then(select! {Token::Name {name} => name})
         .then(
+            fn_param_parser()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                .map_with_span(|arguments, span| (arguments, span)),
+        )
+        .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
+        .then(
+            expr_seq_parser()
+                .or_not()
+                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+        )
+        .map_with_span(
+            |(((name, (arguments, args_span)), return_annotation), body), span| ast::Function {
+                arguments,
+                body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
+                doc: None,
+                location: Span {
+                    start: span.start,
+                    end: return_annotation
+                        .as_ref()
+                        .map(|l| l.location().end)
+                        .unwrap_or_else(|| args_span.end),
+                },
+                end_position: span.end - 1,
+                name,
+                public: false,
+                return_annotation,
+                return_type: (),
+            },
+        );
+
+    just(Token::Validator)
+        .ignore_then(
             fn_param_parser()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
@@ -253,51 +287,32 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
                 .or_not(),
         )
         .then(
-            just(Token::Fn)
-                .ignore_then(
-                    fn_param_parser()
-                        .separated_by(just(Token::Comma))
-                        .allow_trailing()
-                        .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                        .map_with_span(|arguments, span| (arguments, span)),
-                )
-                .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
-                .then(
-                    expr_seq_parser()
-                        .or_not()
-                        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-                )
-                .map_with_span(
-                    |(((arguments, args_span), return_annotation), body), span| ast::Function {
-                        arguments,
-                        body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
-                        doc: None,
-                        location: Span {
-                            start: span.start,
-                            end: return_annotation
-                                .as_ref()
-                                .map(|l| l.location().end)
-                                .unwrap_or_else(|| args_span.end),
-                        },
-                        end_position: span.end - 1,
-                        name: "".to_string(),
-                        public: false,
-                        return_annotation,
-                        return_type: (),
-                    },
-                )
-                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+            func_parser
+                .repeated()
+                .at_least(1)
+                .at_most(2)
+                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
+                .map(IntoIterator::into_iter),
         )
-        .map_with_span(|((name, opt_extra_params), mut fun), span| {
-            fun.name = name.0;
-
-            let (params, params_span) = opt_extra_params.unwrap_or((vec![], name.1));
+        .map_with_span(|(opt_extra_params, mut functions), span| {
+            let (params, params_span) = opt_extra_params.unwrap_or((
+                vec![],
+                Span {
+                    start: 0,
+                    // just needs to be the word `validator` at this point
+                    end: span.start + 9,
+                },
+            ));
 
             ast::UntypedDefinition::Validator(ast::Validator {
                 doc: None,
-                fun,
+                // unwrap is safe to do here because
+                // above we use `.at_least(1)`
+                fun: functions.next().unwrap(),
+                other_fun: functions.next(),
                 location: Span {
                     start: span.start,
+                    // capture the span from the optional params
                     end: params_span.end,
                 },
                 params,

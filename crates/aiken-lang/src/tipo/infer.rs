@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         DataType, Definition, Function, Layer, ModuleConstant, ModuleKind, RecordConstructor,
-        RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition, TypedModule,
-        UntypedDefinition, UntypedModule, Use, Validator,
+        RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition, TypedFunction,
+        TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
     builtins::function,
@@ -255,11 +255,12 @@ fn infer_definition(
             location,
             end_position,
             mut fun,
-            mut params,
+            other_fun,
+            params,
         }) => {
             let params_length = params.len();
-            params.append(&mut fun.arguments);
-            fun.arguments = params;
+            let temp_params = params.iter().cloned().chain(fun.arguments);
+            fun.arguments = temp_params.collect();
 
             if let Definition::Fn(mut typed_fun) = infer_definition(
                 Definition::Fn(fun),
@@ -285,10 +286,51 @@ fn infer_definition(
                     });
                 }
 
+                let typed_other_fun = other_fun
+                    .map(|mut other| -> Result<TypedFunction, Error> {
+                        let params = params.into_iter().chain(other.arguments);
+                        other.arguments = params.collect();
+
+                        if let Definition::Fn(mut other_typed_fun) = infer_definition(
+                            Definition::Fn(other),
+                            module_name,
+                            hydrators,
+                            environment,
+                            tracing,
+                            kind,
+                        )? {
+                            if !other_typed_fun.return_type.is_bool() {
+                                return Err(Error::ValidatorMustReturnBool {
+                                    return_type: other_typed_fun.return_type.clone(),
+                                    location: other_typed_fun.location,
+                                });
+                            }
+
+                            other_typed_fun.arguments.drain(0..params_length);
+
+                            if other_typed_fun.arguments.len() < 2
+                                || other_typed_fun.arguments.len() > 3
+                            {
+                                return Err(Error::IncorrectValidatorArity {
+                                    count: typed_fun.arguments.len() as u32,
+                                    location: typed_fun.location,
+                                });
+                            }
+
+                            Ok(other_typed_fun)
+                        } else {
+                            unreachable!(
+                                "validator definition inferred as something other than a function?"
+                            )
+                        }
+                    })
+                    .transpose();
+
                 Ok(Definition::Validator(Validator {
                     doc,
                     end_position,
                     fun: typed_fun,
+                    other_fun: typed_other_fun?,
                     location,
                     params: typed_params,
                 }))

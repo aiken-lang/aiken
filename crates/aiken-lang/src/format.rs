@@ -504,12 +504,17 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         params: &'a [UntypedArg],
         fun: &'a UntypedFunction,
+        other_fun: &'a Option<UntypedFunction>,
         end_position: usize,
     ) -> Document<'a> {
         // Fn and args
-        let head = "fn".to_doc().append(wrap_args(
-            fun.arguments.iter().map(|e| (self.fn_arg(e), false)),
-        ));
+        let head = "fn"
+            .to_doc()
+            .append(" ")
+            .append(fun.name.to_doc())
+            .append(wrap_args(
+                fun.arguments.iter().map(|e| (self.fn_arg(e), false)),
+            ));
 
         // Add return annotation
         let head = match &fun.return_annotation {
@@ -528,15 +533,11 @@ impl<'comments> Formatter<'comments> {
         };
 
         // validator name(params)
-        let v_head = "validator"
-            .to_doc()
-            .append(" ")
-            .append(fun.name.as_str())
-            .append(if !params.is_empty() {
-                wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
-            } else {
-                "".to_doc()
-            });
+        let v_head = "validator".to_doc().append(if !params.is_empty() {
+            wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
+        } else {
+            "".to_doc()
+        });
 
         // Stick it all together
         let inner_fn = head
