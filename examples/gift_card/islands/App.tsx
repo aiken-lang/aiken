@@ -87,8 +87,6 @@ export default function App({ validators }: AppProps) {
       setParameterizedContracts(parameterizedValidators);
       setLockTxHash(lockTxHash);
     }
-    console.log("hello", lucid);
-
     setLucid(lucid);
   };
 
