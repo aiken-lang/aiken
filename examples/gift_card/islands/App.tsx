@@ -273,7 +273,7 @@ export default function App({ validators }: AppProps) {
                 <a
                   class="mb-2"
                   target="_blank"
-                  href={`https://cardanoscan.io/transaction/${lockTxHash}`}
+                  href={`https://preprod.cardanoscan.io/transaction/${lockTxHash}`}
                 >
                   {lockTxHash}
                 </a>
@@ -296,7 +296,7 @@ export default function App({ validators }: AppProps) {
                 <a
                   class="mb-2"
                   target="_blank"
-                  href={`https://cardanoscan.io/transaction/${unlockTxHash}`}
+                  href={`https://preprod.cardanoscan.io/transaction/${unlockTxHash}`}
                 >
                   {unlockTxHash}
                 </a>
