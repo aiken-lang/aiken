@@ -936,6 +936,29 @@ impl TypedClause {
     pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
         self.then.find_node(byte_index)
     }
+
+    pub fn desugarize(self) -> Vec<Self> {
+        let mut alternative_patterns = self
+            .alternative_patterns
+            .into_iter()
+            .map(|pattern| Self {
+                location: self.location,
+                pattern,
+                alternative_patterns: vec![],
+                guard: self.guard.clone(),
+                then: self.then.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        let mut clauses = vec![Self {
+            alternative_patterns: vec![],
+            ..self
+        }];
+
+        clauses.append(&mut alternative_patterns);
+
+        clauses
+    }
 }
 
 pub type UntypedClauseGuard = ClauseGuard<()>;

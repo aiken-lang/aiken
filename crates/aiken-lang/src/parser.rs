@@ -921,15 +921,9 @@ pub fn expr_parser(
             );
 
         let when_clause_parser = pattern_parser()
-            .separated_by(just(Token::Comma))
-            .at_least(1)
             .then(
                 just(Token::Vbar)
-                    .ignore_then(
-                        pattern_parser()
-                            .separated_by(just(Token::Comma))
-                            .at_least(1),
-                    )
+                    .ignore_then(pattern_parser().map(|pattern| vec![pattern]))
                     .repeated()
                     .or_not(),
             )
@@ -968,9 +962,9 @@ pub fn expr_parser(
                     }),
             )))
             .map_with_span(
-                |(((patterns, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
+                |(((pattern, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
                     location: span,
-                    pattern: patterns,
+                    pattern: vec![pattern],
                     alternative_patterns: alternative_patterns_opt.unwrap_or_default(),
                     guard,
                     then,
