@@ -969,46 +969,51 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // We currently only do limited exhaustiveness checking of custom types
         // at the top level of patterns.
         // Do not perform exhaustiveness checking if user explicitly used `assert`.
-        if kind != AssignmentKind::Expect {
-            if let Err(unmatched) = self.environment.check_exhaustiveness(
-                vec![pattern.clone()],
-                collapse_links(value_typ.clone()),
-                location,
-            ) {
-                return Err(Error::NotExhaustivePatternMatch {
-                    location,
-                    unmatched,
-                    is_let: true,
-                });
-            }
-        } else if !value_is_data
-            && !value_typ.is_list()
-            && self
-                .environment
-                .check_exhaustiveness(
+        match kind {
+            AssignmentKind::Let => {
+                if let Err(unmatched) = self.environment.check_exhaustiveness(
                     vec![pattern.clone()],
                     collapse_links(value_typ.clone()),
                     location,
-                )
-                .is_ok()
-        {
-            self.environment
-                .warnings
-                .push(Warning::SingleConstructorExpect {
-                    location: Span {
-                        start: location.start,
-                        end: location.start + kind.location_offset(),
-                    },
-                    pattern_location: untyped_pattern.location(),
-                    value_location: untyped_value.location(),
-                    sample: UntypedExpr::Assignment {
-                        location: Span::empty(),
-                        value: Box::new(untyped_value),
-                        pattern: untyped_pattern,
-                        kind: AssignmentKind::Let,
-                        annotation: None,
-                    },
-                })
+                ) {
+                    return Err(Error::NotExhaustivePatternMatch {
+                        location,
+                        unmatched,
+                        is_let: true,
+                    });
+                }
+            }
+
+            AssignmentKind::Expect => {
+                let is_exaustive_pattern = self
+                    .environment
+                    .check_exhaustiveness(
+                        vec![pattern.clone()],
+                        collapse_links(value_typ.clone()),
+                        location,
+                    )
+                    .is_ok();
+
+                if !value_is_data && !value_typ.is_list() && is_exaustive_pattern {
+                    self.environment
+                        .warnings
+                        .push(Warning::SingleConstructorExpect {
+                            location: Span {
+                                start: location.start,
+                                end: location.start + kind.location_offset(),
+                            },
+                            pattern_location: untyped_pattern.location(),
+                            value_location: untyped_value.location(),
+                            sample: UntypedExpr::Assignment {
+                                location: Span::empty(),
+                                value: Box::new(untyped_value),
+                                pattern: untyped_pattern,
+                                kind: AssignmentKind::Let,
+                                annotation: None,
+                            },
+                        });
+                }
+            }
         }
 
         Ok(TypedExpr::Assignment {
