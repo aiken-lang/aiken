@@ -3,9 +3,14 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     ast::Annotation,
     builtins::{function, tuple},
+    tipo::Span,
 };
 
-use super::{environment::Environment, error::Error, Type, TypeConstructor};
+use super::{
+    environment::Environment,
+    error::{Error, Warning},
+    Type, TypeConstructor,
+};
 
 /// The Hydrator takes an AST representing a type (i.e. a type annotation
 /// for a function argument) and returns a Type for that annotation.
@@ -28,7 +33,6 @@ pub struct Hydrator {
     /// annotated name on error.
     rigid_type_names: HashMap<u64, String>,
     permit_new_type_variables: bool,
-    permit_holes: bool,
 }
 
 #[derive(Debug)]
@@ -49,7 +53,6 @@ impl Hydrator {
             created_type_variables: HashMap::new(),
             rigid_type_names: HashMap::new(),
             permit_new_type_variables: true,
-            permit_holes: false,
         }
     }
 
@@ -70,10 +73,6 @@ impl Hydrator {
 
     pub fn disallow_new_type_variables(&mut self) {
         self.permit_new_type_variables = false
-    }
-
-    pub fn permit_holes(&mut self, flag: bool) {
-        self.permit_holes = flag
     }
 
     /// A rigid type is a generic type that was specified as being generic in
@@ -98,12 +97,31 @@ impl Hydrator {
         }
     }
 
-    /// Construct a Type from an AST Type annotation.
-    ///
     pub fn type_from_annotation(
         &mut self,
         annotation: &Annotation,
         environment: &mut Environment,
+    ) -> Result<Arc<Type>, Error> {
+        let mut unbounds = vec![];
+        let tipo = self.do_type_from_annotation(annotation, environment, &mut unbounds)?;
+
+        if let Some(location) = unbounds.last() {
+            environment.warnings.push(Warning::UnexpectedTypeHole {
+                location: **location,
+                tipo: tipo.clone(),
+            });
+        }
+
+        Ok(tipo)
+    }
+
+    /// Construct a Type from an AST Type annotation.
+    ///
+    fn do_type_from_annotation<'a>(
+        &mut self,
+        annotation: &'a Annotation,
+        environment: &mut Environment,
+        unbounds: &mut Vec<&'a Span>,
     ) -> Result<Arc<Type>, Error> {
         match annotation {
             Annotation::Constructor {
@@ -115,7 +133,7 @@ impl Hydrator {
                 // Hydrate the type argument AST into types
                 let mut argument_types = Vec::with_capacity(args.len());
                 for t in args {
-                    let typ = self.type_from_annotation(t, environment)?;
+                    let typ = self.do_type_from_annotation(t, environment, unbounds)?;
                     argument_types.push((t.location(), typ));
                 }
 
@@ -170,12 +188,12 @@ impl Hydrator {
                 let mut args = Vec::with_capacity(arguments.len());
 
                 for arg in arguments {
-                    let arg = self.type_from_annotation(arg, environment)?;
+                    let arg = self.do_type_from_annotation(arg, environment, unbounds)?;
 
                     args.push(arg);
                 }
 
-                let ret = self.type_from_annotation(ret, environment)?;
+                let ret = self.do_type_from_annotation(ret, environment, unbounds)?;
 
                 Ok(function(args, ret))
             }
@@ -206,17 +224,16 @@ impl Hydrator {
                 }),
             },
 
-            Annotation::Hole { .. } if self.permit_holes => Ok(environment.new_unbound_var()),
-
-            Annotation::Hole { location, .. } => Err(Error::UnexpectedTypeHole {
-                location: *location,
-            }),
+            Annotation::Hole { location, .. } => {
+                unbounds.push(location);
+                Ok(environment.new_unbound_var())
+            }
 
             Annotation::Tuple { elems, .. } => {
                 let mut typed_elems = vec![];
 
                 for elem in elems {
-                    let typed_elem = self.type_from_annotation(elem, environment)?;
+                    let typed_elem = self.do_type_from_annotation(elem, environment, unbounds)?;
 
                     typed_elems.push(typed_elem)
                 }
