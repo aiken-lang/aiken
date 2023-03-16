@@ -1,7 +1,9 @@
 pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
   when xs is {
-    [] -> zero
-    [x, ..rest] -> f(x, foldr(rest, f, zero))
+    [] ->
+      zero
+    [x, ..rest] ->
+      f(x, foldr(rest, f, zero))
   }
 }
 

@@ -9,7 +9,9 @@ fn fibonnaci(n) {
 }
 
 test foo() {
-  let right = fn() { fibonnaci(15) == 610 }
-  let left = False
+  let right =
+    fn() { fibonnaci(15) == 610 }
+  let left =
+    False
   left || right()
 }

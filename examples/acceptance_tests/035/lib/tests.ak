@@ -16,9 +16,9 @@ pub fn from_asset(
 ) -> Value {
   let asset =
     dict.new()
-    |> dict.insert(asset_name, quantity)
+      |> dict.insert(asset_name, quantity)
   dict.new()
-  |> dict.insert(policy_id, asset)
+    |> dict.insert(policy_id, asset)
 }
 
 pub fn from_lovelace(quantity: Int) -> Value {
@@ -35,7 +35,8 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
           a0,
           a1,
           fn(_, q0, q1) {
-            let q = q0 + q1
+            let q =
+              q0 + q1
             if q == 0 {
               None
             } else {
@@ -45,15 +46,19 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
         )
 
       when dict.toList(asset) is {
-        [] -> None
-        _ -> Some(asset)
+        [] ->
+          None
+        _ ->
+          Some(asset)
       }
     },
   )
 }
 
 test add_1() {
-  let v1 = from_lovelace(1)
-  let v2 = from_lovelace(-1)
+  let v1 =
+    from_lovelace(1)
+  let v2 =
+    from_lovelace(-1)
   add(v1, v2) == dict.new()
 }

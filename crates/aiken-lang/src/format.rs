@@ -285,7 +285,11 @@ impl<'comments> Formatter<'comments> {
                     None => head,
                     Some(t) => head.append(": ").append(self.annotation(t)),
                 };
-                head.append(" = ").append(self.const_expr(value))
+                head.append(" =")
+                    .append(line())
+                    .append(self.const_expr(value))
+                    .nest(INDENT)
+                    .group()
             }
         }
     }
@@ -602,16 +606,14 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         pattern: &'a UntypedPattern,
         value: &'a UntypedExpr,
-        then: Option<&'a UntypedExpr>,
-        kind: Option<AssignmentKind>,
+        kind: AssignmentKind,
         annotation: &'a Option<Annotation>,
     ) -> Document<'a> {
         self.pop_empty_lines(pattern.location().end);
 
         let keyword = match kind {
-            Some(AssignmentKind::Let) => "let ",
-            Some(AssignmentKind::Expect) => "expect ",
-            None => "try ",
+            AssignmentKind::Let => "let ",
+            AssignmentKind::Expect => "expect ",
         };
 
         let pattern = self.pattern(pattern);
@@ -620,25 +622,11 @@ impl<'comments> Formatter<'comments> {
             .as_ref()
             .map(|a| ": ".to_doc().append(self.annotation(a)));
 
-        let doc = if then.is_some() {
-            keyword.to_doc().force_break()
-        } else {
-            keyword.to_doc()
-        }
-        .append(pattern.append(annotation).group())
-        .append(" =")
-        .append(self.assigned_value(value));
-
-        if let Some(then) = then {
-            doc.append(if self.pop_empty_lines(then.start_byte_index()) {
-                lines(2)
-            } else {
-                line()
-            })
-            .append(self.expr(then))
-        } else {
-            doc
-        }
+        keyword
+            .to_doc()
+            .append(pattern.append(annotation).group())
+            .append(" =")
+            .append(self.case_clause_value(value))
     }
 
     pub fn bytearray<'a>(
@@ -733,7 +721,7 @@ impl<'comments> Formatter<'comments> {
                 annotation,
                 kind,
                 ..
-            } => self.assignment(pattern, value, None, Some(*kind), annotation),
+            } => self.assignment(pattern, value, *kind, annotation),
 
             UntypedExpr::Trace {
                 kind, text, then, ..
@@ -1448,19 +1436,12 @@ impl<'comments> Formatter<'comments> {
                 .force_break(),
 
             UntypedExpr::Fn { .. } | UntypedExpr::List { .. } => {
-                " ".to_doc().append(self.expr(expr)).group()
+                line().append(self.expr(expr)).nest(INDENT).group()
             }
 
             UntypedExpr::When { .. } => line().append(self.expr(expr)).nest(INDENT).group(),
 
-            _ => break_("", " ").append(self.expr(expr)).nest(INDENT).group(),
-        }
-    }
-
-    fn assigned_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
-        match expr {
-            UntypedExpr::When { .. } => " ".to_doc().append(self.expr(expr)).group(),
-            _ => self.case_clause_value(expr),
+            _ => line().append(self.expr(expr)).nest(INDENT).group(),
         }
     }
 

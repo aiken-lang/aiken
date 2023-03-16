@@ -37,13 +37,13 @@ fn inspect_list(_data: Data) -> Data {
 fn inspect_integer(data: Data) -> Data {
   let result: Data =
     builtin.un_i_data(data)
-    |> Integer
+      |> Integer
   result
 }
 
 fn inspect_bytearray(data: Data) -> Data {
   let result: Data =
     builtin.un_b_data(data)
-    |> Bytes
+      |> Bytes
   result
 }

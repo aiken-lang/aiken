@@ -3,19 +3,20 @@ use aiken/list
 use aiken/transaction.{Output, OutputReference, ScriptContext}
 use aiken/transaction/value.{PolicyId}
 
-const my_policy_id: PolicyId = #"0000000000"
+const my_policy_id: PolicyId =
+  #"0000000000"
 
 pub fn has_policy_id(self: Output, policy_id: PolicyId) -> Bool {
   self.value
-  |> value.tokens(policy_id)
-  |> dict.is_empty
-  |> not
+    |> value.tokens(policy_id)
+    |> dict.is_empty
+    |> not
 }
 
 validator spend {
   fn(_datum: Data, _redeemer: Data, ctx: ScriptContext) -> Bool {
     ctx.transaction.outputs
-    |> list.any(has_policy_id(_, my_policy_id))
+      |> list.any(has_policy_id(_, my_policy_id))
   }
 }
 
@@ -27,8 +28,10 @@ validator mint(output_reference: OutputReference) {
         fn(input) { input.output_reference == output_reference },
       )
     is {
-      Some(_) -> True
-      None -> False
+      Some(_) ->
+        True
+      None ->
+        False
     }
   }
 }
