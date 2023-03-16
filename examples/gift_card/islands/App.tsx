@@ -1,5 +1,12 @@
 import { useEffect, useState } from "preact/hooks";
-import { Blockfrost, Constr, Data, fromText, Lucid } from "lucid/mod.ts";
+import {
+  Blockfrost,
+  Constr,
+  Data,
+  fromText,
+  Lucid,
+  Network,
+} from "lucid/mod.ts";
 
 import { Input } from "~/components/Input.tsx";
 import { Button } from "~/components/Button.tsx";
@@ -13,6 +20,35 @@ import {
 
 export interface AppProps {
   validators: Validators;
+}
+
+type BlockfrostLucidConfig = {
+  url: string;
+  network: Network;
+};
+
+function getBlockfrostLucidConfig(key: string): BlockfrostLucidConfig {
+  const configs: Record<string, BlockfrostLucidConfig> = {
+    mainnet: {
+      url: "https://cardano-mainnet.blockfrost.io/api/v0",
+      network: "Mainnet",
+    },
+    preprod: {
+      url: "https://cardano-preprod.blockfrost.io/api/v0",
+      network: "Preprod",
+    },
+    preview: {
+      url: "https://cardano-preview.blockfrost.io/api/v0",
+      network: "Preview",
+    },
+  };
+  if (key.startsWith("preview")) {
+    return configs.preview;
+  }
+  if (key.startsWith("preprod")) {
+    return configs.preprod;
+  }
+  return configs.mainnet;
 }
 
 export default function App({ validators }: AppProps) {
@@ -30,12 +66,10 @@ export default function App({ validators }: AppProps) {
   >(null);
 
   const setupLucid = async (blockfrostApiKey: string) => {
+    const conf = getBlockfrostLucidConfig(blockfrostApiKey);
     const lucid = await Lucid.new(
-      new Blockfrost(
-        "https://cardano-preprod.blockfrost.io/api/v0",
-        blockfrostApiKey,
-      ),
-      "Preprod",
+      new Blockfrost(conf.url, blockfrostApiKey),
+      conf.network,
     );
 
     const cache = localStorage.getItem("cache");
@@ -53,6 +87,7 @@ export default function App({ validators }: AppProps) {
       setParameterizedContracts(parameterizedValidators);
       setLockTxHash(lockTxHash);
     }
+    console.log("hello", lucid);
 
     setLucid(lucid);
   };
@@ -188,13 +223,23 @@ export default function App({ validators }: AppProps) {
 
       if (success) {
         localStorage.removeItem("cache");
-
         setUnlockTxHash(txHash);
       }
     } catch {
       setWaitingUnlockTx(false);
     }
   };
+
+  function cardanoscanUrl(network: string) {
+    let subdomain = "";
+    if (network == "Preview") {
+      subdomain = "preview.";
+    }
+    if (network == "Preprod") {
+      subdomain = "preprod.";
+    }
+    return `https://${subdomain}cardanoscan.io/transaction/`;
+  }
 
   return (
     <div>
@@ -273,7 +318,7 @@ export default function App({ validators }: AppProps) {
                 <a
                   class="mb-2"
                   target="_blank"
-                  href={`https://cardanoscan.io/transaction/${lockTxHash}`}
+                  href={`${cardanoscanUrl(lucid.network)}${lockTxHash}`}
                 >
                   {lockTxHash}
                 </a>
@@ -296,7 +341,8 @@ export default function App({ validators }: AppProps) {
                 <a
                   class="mb-2"
                   target="_blank"
-                  href={`https://cardanoscan.io/transaction/${unlockTxHash}`}
+                  href={`${cardanoscanUrl(lucid.network)}${unlockTxHash}`}
+                  data-x={`X${lucid.network}X`}
                 >
                   {unlockTxHash}
                 </a>
