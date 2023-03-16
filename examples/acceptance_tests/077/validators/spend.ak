@@ -4,12 +4,15 @@ use aiken/transaction/value.{add, zero}
 
 validator staking {
   fn(_datum: Void, _redeemer: Void, context: ScriptContext) -> Bool {
-    expect Spend(ref) = context.purpose
+    expect Spend(ref) =
+      context.purpose
 
     expect Some(i) =
       find(context.transaction.inputs, fn(x) { x.output_reference == ref })
-    let Input { output, .. } = i
-    let staking_addr = output.address
+    let Input { output, .. } =
+      i
+    let staking_addr =
+      output.address
 
     let v_in =
       foldr(

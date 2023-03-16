@@ -24,10 +24,10 @@ pub fn from_asset(
 ) -> Value {
   let asset =
     dict.new()
-    |> dict.insert(asset_name, quantity, bytearray.compare)
+      |> dict.insert(asset_name, quantity, bytearray.compare)
   dict.new()
-  |> dict.insert(policy_id, asset, bytearray.compare)
-  |> Value
+    |> dict.insert(policy_id, asset, bytearray.compare)
+    |> Value
 }
 
 pub fn add(left v0: Value, right v1: Value) -> Value {
@@ -40,7 +40,8 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
           a0,
           a1,
           fn(_, q0, q1) {
-            let q = q0 + q1
+            let q =
+              q0 + q1
             if q == 0 {
               None
             } else {
@@ -58,7 +59,7 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
     },
     bytearray.compare,
   )
-  |> Value
+    |> Value
 }
 
 /// Flatten a value as a list of results, possibly discarding some along the way.
@@ -75,8 +76,10 @@ pub fn flatten_with(
         asset,
         fn(asset_name, quantity, xs) {
           when transform(policy_id, asset_name, quantity) is {
-            None -> xs
-            Some(x) -> [x, ..xs]
+            None ->
+              xs
+            Some(x) ->
+              [x, ..xs]
           }
         },
         assets,
@@ -93,9 +96,9 @@ test flatten_with_1() {
 test flatten_with_2() {
   let v =
     zero()
-    |> add(from_asset("a", "1", 14))
-    |> add(from_asset("b", "", 42))
-    |> add(from_asset("a", "2", 42))
+      |> add(from_asset("a", "1", 14))
+      |> add(from_asset("b", "", 42))
+      |> add(from_asset("a", "2", 42))
 
   flatten_with(
     v,

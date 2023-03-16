@@ -5,7 +5,7 @@ fn concat(left: String, right: String) -> String {
     builtin.encode_utf8(left),
     builtin.encode_utf8(right),
   )
-  |> builtin.decode_utf8
+    |> builtin.decode_utf8
 }
 
 fn is_negative(i: Int) -> Bool {

@@ -15,14 +15,16 @@ test foo() {
 
 fn map(list: List<a>, f: fn(a) -> b) -> List<b> {
   when list is {
-    [] -> []
-    [x, ..xs] -> [f(x), ..map(xs, f)]
+    [] ->
+      []
+    [x, ..xs] ->
+      [f(x), ..map(xs, f)]
   }
 }
 
 fn get_fields(data: Data) -> List<Int> {
   builtin.un_constr_data(data).2nd
-  |> map(builtin.un_i_data)
+    |> map(builtin.un_i_data)
 }
 
 test bar() {

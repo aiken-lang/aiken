@@ -33,20 +33,29 @@ pub type ProofItem {
 /// Deconstruct a 'MerkleTree' back to a list of elements.
 pub fn to_list(self: MerkleTree<a>) -> List<a> {
   when self is {
-    Empty -> []
-    Leaf { value, .. } -> [value]
-    Node { left, right, .. } -> list.concat(to_list(left), to_list(right))
+    Empty ->
+      []
+    Leaf { value, .. } ->
+      [value]
+    Node { left, right, .. } ->
+      list.concat(to_list(left), to_list(right))
   }
 }
 
 test to_list_1() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let items = [dog, cat, mouse]
-  let hash_fn = create_string_item_hash_fn()
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let items =
+    [dog, cat, mouse]
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list(items, hash_fn)
+  let mt =
+    from_list(items, hash_fn)
 
   items == to_list(mt)
 }
@@ -54,47 +63,68 @@ test to_list_1() {
 // Function returning a hash of a given Merkle Tree element
 pub fn root_hash(self: MerkleTree<a>) -> Hash<Sha2_256, ByteArray> {
   when self is {
-    Empty -> ""
-    Leaf { hash, .. } -> hash
-    Node { hash, .. } -> hash
+    Empty ->
+      ""
+    Leaf { hash, .. } ->
+      hash
+    Node { hash, .. } ->
+      hash
   }
 }
 
 test root_hash_1() {
-  let dog = "dog"
-  let items = [dog]
-  let hash_fn = create_string_item_hash_fn()
+  let dog =
+    "dog"
+  let items =
+    [dog]
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list(items, hash_fn)
+  let mt =
+    from_list(items, hash_fn)
 
-  let node_hash = hash_fn(dog)
+  let node_hash =
+    hash_fn(dog)
 
   root_hash(mt) == node_hash
 }
 
 test root_hash_3() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let items = [dog, cat, mouse]
-  let hash_fn = create_string_item_hash_fn()
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let items =
+    [dog, cat, mouse]
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list(items, hash_fn)
+  let mt =
+    from_list(items, hash_fn)
 
-  let node_hash = sha2_256(bytearray.concat(hash_fn(cat), hash_fn(mouse)))
-  let rh = sha2_256(bytearray.concat(hash_fn(dog), node_hash))
+  let node_hash =
+    sha2_256(bytearray.concat(hash_fn(cat), hash_fn(mouse)))
+  let rh =
+    sha2_256(bytearray.concat(hash_fn(dog), node_hash))
 
-  expect Node { hash: root_hash, .. } = mt
+  expect Node { hash: root_hash, .. } =
+    mt
 
   rh == root_hash
 }
 
 test root_hash_2() {
-  let items = []
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    []
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let node_hash = #""
+  let node_hash =
+    #""
 
   root_hash(mt) == node_hash
 }
@@ -107,52 +137,78 @@ pub fn is_equal(left: MerkleTree<a>, right: MerkleTree<a>) -> Bool {
 /// Function returns a total numbers of leaves in the tree.
 pub fn size(self: MerkleTree<a>) -> Int {
   when self is {
-    Empty -> 0
-    Leaf{..} -> 1
-    Node { left, right, .. } -> size(left) + size(right)
+    Empty ->
+      0
+    Leaf{..} ->
+      1
+    Node { left, right, .. } ->
+      size(left) + size(right)
   }
 }
 
 test size_1() {
-  let items = []
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    []
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
   size(mt) == 0
 }
 
 test size_2() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let hash_fn = create_string_item_hash_fn()
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list([dog, cat, mouse], hash_fn)
+  let mt =
+    from_list([dog, cat, mouse], hash_fn)
   size(mt) == 3
 }
 
 test size_3() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let items = [dog, cat, mouse]
-  let hash_fn = create_string_item_hash_fn()
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let items =
+    [dog, cat, mouse]
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list(items, hash_fn)
+  let mt =
+    from_list(items, hash_fn)
   size(mt) == 3
 }
 
 test size_4() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
-  let pig = "pig"
-  let bull = "bull"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
+  let pig =
+    "pig"
+  let bull =
+    "bull"
 
-  let hash_fn = create_string_item_hash_fn()
-  let items = [dog, cat, mouse, horse, pig, bull]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let items =
+    [dog, cat, mouse, horse, pig, bull]
 
-  let mt = from_list(items, hash_fn)
+  let mt =
+    from_list(items, hash_fn)
   size(mt) == 6
 }
 
@@ -166,22 +222,28 @@ fn combine_hash(
 /// Function that returns whether merkle tree has any elements
 pub fn is_empty(self: MerkleTree<a>) -> Bool {
   when self is {
-    Empty -> True
-    _ -> False
+    Empty ->
+      True
+    _ ->
+      False
   }
 }
 
 test is_empty_1() {
-  let mt = Empty
+  let mt =
+    Empty
 
   is_empty(mt)
 }
 
 test is_empty_2() {
-  let dog = "dog"
-  let hash = create_string_item_hash_fn()
+  let dog =
+    "dog"
+  let hash =
+    create_string_item_hash_fn()
 
-  let mt = Leaf { value: dog, hash: hash(dog) }
+  let mt =
+    Leaf { value: dog, hash: hash(dog) }
 
   is_empty(mt) == False
 }
@@ -193,7 +255,8 @@ fn do_proof(
   hash_fn: fn(a) -> Hash<Sha2_256, a>,
 ) -> Option<Proof> {
   when self is {
-    Empty -> None
+    Empty ->
+      None
     Leaf { hash, .. } ->
       if hash == item_hash {
         Some(proof)
@@ -201,8 +264,10 @@ fn do_proof(
         None
       }
     Node { left, right, .. } -> {
-      let rh = root_hash(right)
-      let lh = root_hash(left)
+      let rh =
+        root_hash(right)
+      let lh =
+        root_hash(left)
       let go_left: Option<Proof> =
         do_proof(left, item_hash, list.push(proof, Right { hash: rh }), hash_fn)
       let go_right: Option<Proof> =
@@ -220,93 +285,137 @@ pub fn get_proof(
   item: a,
   hash_fn: fn(a) -> Hash<Sha2_256, a>,
 ) -> Option<Proof> {
-  let empty: Proof = []
+  let empty: Proof =
+    []
 
   do_proof(self, hash_fn(item), empty, hash_fn)
 }
 
 test get_proof_1() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
-  let pig = "pig"
-  let bull = "bull"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
+  let pig =
+    "pig"
+  let bull =
+    "bull"
 
-  let items = [dog, cat, mouse, horse, pig, bull]
-  let hash_fn = create_string_item_hash_fn()
+  let items =
+    [dog, cat, mouse, horse, pig, bull]
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list(items, hash_fn)
-  let hash_fn = create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let maybe_proof: Option<Proof> = get_proof(mt, "parrot", hash_fn)
+  let maybe_proof: Option<Proof> =
+    get_proof(mt, "parrot", hash_fn)
 
   is_none(maybe_proof)
 }
 
 test get_proof_2() {
-  let dog = "dog"
+  let dog =
+    "dog"
 
-  let items = [dog]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let maybe_proof: Option<Proof> = get_proof(mt, dog, hash_fn)
+  let maybe_proof: Option<Proof> =
+    get_proof(mt, dog, hash_fn)
 
-  expect Some(proof) = maybe_proof
+  expect Some(proof) =
+    maybe_proof
 
   // when proof is empty list it actually means that root of the tree is in fact element
   proof == []
 }
 
 test get_proof_3() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
 
-  let items = [dog, cat, mouse]
+  let items =
+    [dog, cat, mouse]
 
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let node_hash = sha2_256(bytearray.concat(hash_fn(cat), hash_fn(mouse)))
+  let node_hash =
+    sha2_256(bytearray.concat(hash_fn(cat), hash_fn(mouse)))
 
-  let maybe_proof: Option<Proof> = get_proof(mt, dog, hash_fn)
+  let maybe_proof: Option<Proof> =
+    get_proof(mt, dog, hash_fn)
 
-  expect Some(proof) = maybe_proof
+  expect Some(proof) =
+    maybe_proof
 
-  let size_match = list.length(proof) == 1
+  let size_match =
+    list.length(proof) == 1
 
-  expect Some(p1) = list.at(proof, 0)
+  expect Some(p1) =
+    list.at(proof, 0)
 
-  let h1: ByteArray = get_proof_item_value(p1)
+  let h1: ByteArray =
+    get_proof_item_value(p1)
 
   size_match && h1 == node_hash
 }
 
 test get_proof_4() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
 
-  let items = [dog, cat, mouse, horse]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat, mouse, horse]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
   let right_node_hash =
     sha2_256(bytearray.concat(hash_fn(mouse), hash_fn(horse)))
-  let maybe_proof: Option<Proof> = get_proof(mt, dog, hash_fn)
+  let maybe_proof: Option<Proof> =
+    get_proof(mt, dog, hash_fn)
 
-  expect Some(proof) = maybe_proof
+  expect Some(proof) =
+    maybe_proof
 
-  let size_match = list.length(proof) == 2
+  let size_match =
+    list.length(proof) == 2
 
-  expect Some(p1) = list.at(proof, 0)
-  expect Some(p2) = list.at(proof, 1)
+  expect Some(p1) =
+    list.at(proof, 0)
+  expect Some(p2) =
+    list.at(proof, 1)
 
-  let h1: ByteArray = get_proof_item_value(p1)
-  let h2: ByteArray = get_proof_item_value(p2)
+  let h1: ByteArray =
+    get_proof_item_value(p1)
+  let h2: ByteArray =
+    get_proof_item_value(p2)
 
   size_match && h1 == hash_fn(cat) && h2 == right_node_hash
 }
@@ -317,22 +426,26 @@ fn do_from_list(
   hash_fn: fn(a) -> Hash<Sha2_256, a>,
 ) -> MerkleTree<a> {
   when items is {
-    [] -> Empty
+    [] ->
+      Empty
     [item] -> {
-      let hashed_item = hash_fn(item)
+      let hashed_item =
+        hash_fn(item)
       Leaf { value: item, hash: hashed_item }
     }
     all -> {
-      let cutoff: Int = len / 2
+      let cutoff: Int =
+        len / 2
       let left =
         all
-        |> list.take(cutoff)
-        |> do_from_list(cutoff, hash_fn)
+          |> list.take(cutoff)
+          |> do_from_list(cutoff, hash_fn)
       let right =
         all
-        |> list.drop(cutoff)
-        |> do_from_list(len - cutoff, hash_fn)
-      let hash = combine_hash(root_hash(left), root_hash(right))
+          |> list.drop(cutoff)
+          |> do_from_list(len - cutoff, hash_fn)
+      let hash =
+        combine_hash(root_hash(left), root_hash(right))
       Node { hash, left, right }
     }
   }
@@ -349,32 +462,46 @@ pub fn from_list(
 }
 
 test from_1() {
-  let _a = -1
-  let items = []
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let _a =
+    -1
+  let items =
+    []
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
   Empty == mt
 }
 
 test from_2() {
-  let dog = "dog"
-  let items = [dog]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let dog =
+    "dog"
+  let items =
+    [dog]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
   Leaf { value: dog, hash: hash_fn(dog) } == mt
 }
 
 test from_3() {
-  let dog = "dog"
-  let cat = "cat"
-  let items = [dog, cat]
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let items =
+    [dog, cat]
 
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let root_hash = sha2_256(bytearray.concat(hash_fn(dog), hash_fn(cat)))
+  let root_hash =
+    sha2_256(bytearray.concat(hash_fn(dog), hash_fn(cat)))
 
   Node {
     hash: root_hash,
@@ -384,17 +511,25 @@ test from_3() {
 }
 
 test from_4() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
 
-  let items = [dog, cat, mouse]
-  let hash_fn = create_string_item_hash_fn()
+  let items =
+    [dog, cat, mouse]
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let mt = from_list(items, hash_fn)
+  let mt =
+    from_list(items, hash_fn)
 
-  let node_hash = sha2_256(bytearray.concat(hash_fn(cat), hash_fn(mouse)))
-  let root_hash = sha2_256(bytearray.concat(hash_fn(dog), node_hash))
+  let node_hash =
+    sha2_256(bytearray.concat(hash_fn(cat), hash_fn(mouse)))
+  let root_hash =
+    sha2_256(bytearray.concat(hash_fn(dog), node_hash))
 
   Node {
     hash: root_hash,
@@ -408,21 +543,30 @@ test from_4() {
 }
 
 test from_5() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
 
-  let hash_fn = create_string_item_hash_fn()
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let items = [dog, cat, mouse, horse]
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat, mouse, horse]
+  let mt =
+    from_list(items, hash_fn)
 
-  let left_node_hash = sha2_256(bytearray.concat(hash_fn(dog), hash_fn(cat)))
+  let left_node_hash =
+    sha2_256(bytearray.concat(hash_fn(dog), hash_fn(cat)))
   let right_node_hash =
     sha2_256(bytearray.concat(hash_fn(mouse), hash_fn(horse)))
 
-  let root_hash = sha2_256(bytearray.concat(left_node_hash, right_node_hash))
+  let root_hash =
+    sha2_256(bytearray.concat(left_node_hash, right_node_hash))
 
   Node {
     hash: root_hash,
@@ -450,7 +594,8 @@ pub fn member_from_hash(
   hash_fn: fn(a) -> Hash<Sha2_256, a>,
 ) -> Bool {
   when proof is {
-    [] -> root_hash == item_hash
+    [] ->
+      root_hash == item_hash
     [head, ..tail] ->
       when head is {
         Left { hash: l } ->
@@ -469,113 +614,173 @@ pub fn member(
   proof: Proof,
   hash_fn: fn(a) -> Hash<Sha2_256, a>,
 ) -> Bool {
-  let item_hash = hash_fn(item)
+  let item_hash =
+    hash_fn(item)
   member_from_hash(item_hash, root_hash, proof, hash_fn)
 }
 
 test member_1() {
-  let dog = "dog"
-  let items = [dog]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let dog =
+    "dog"
+  let items =
+    [dog]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let item = dog
-  let rh = root_hash(mt)
+  let item =
+    dog
+  let rh =
+    root_hash(mt)
 
-  expect Some(proof) = get_proof(mt, item, hash_fn)
+  expect Some(proof) =
+    get_proof(mt, item, hash_fn)
   member(item: item, root_hash: rh, proof: proof, hash_fn: hash_fn)
 }
 
 test member_2() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
 
-  let items = [dog, cat, mouse, horse]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat, mouse, horse]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let item = cat
-  let rh = root_hash(mt)
+  let item =
+    cat
+  let rh =
+    root_hash(mt)
 
-  expect Some(proof) = get_proof(mt, item, hash_fn)
+  expect Some(proof) =
+    get_proof(mt, item, hash_fn)
   member(item: item, root_hash: rh, proof: proof, hash_fn: hash_fn)
 }
 
 test member_3() {
-  let dog = "dog"
-  let cat = "cat"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
 
-  let items = [dog, cat]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let item = cat
-  let rh = root_hash(mt)
+  let item =
+    cat
+  let rh =
+    root_hash(mt)
 
-  expect Some(proof) = get_proof(mt, item, hash_fn)
+  expect Some(proof) =
+    get_proof(mt, item, hash_fn)
   member(item: item, root_hash: rh, proof: proof, hash_fn: hash_fn)
 }
 
 test member_4() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
 
-  let items = [dog, cat, mouse]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat, mouse]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let item = mouse
-  let rh = root_hash(mt)
+  let item =
+    mouse
+  let rh =
+    root_hash(mt)
 
-  expect Some(proof) = get_proof(mt, item, hash_fn)
+  expect Some(proof) =
+    get_proof(mt, item, hash_fn)
   member(item: item, root_hash: rh, proof: proof, hash_fn: hash_fn)
 }
 
 test member_5() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
-  let pig = "pig"
-  let bull = "bull"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
+  let pig =
+    "pig"
+  let bull =
+    "bull"
 
-  let items = [dog, cat, mouse, horse, pig, bull]
-  let hash_fn = create_string_item_hash_fn()
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat, mouse, horse, pig, bull]
+  let hash_fn =
+    create_string_item_hash_fn()
+  let mt =
+    from_list(items, hash_fn)
 
-  let item = pig
-  let rh = root_hash(mt)
+  let item =
+    pig
+  let rh =
+    root_hash(mt)
 
-  expect Some(proof) = get_proof(mt, item, hash_fn)
+  expect Some(proof) =
+    get_proof(mt, item, hash_fn)
   member(item: item, root_hash: rh, proof: proof, hash_fn: hash_fn)
 }
 
 test member_6() {
-  let dog = "dog"
-  let cat = "cat"
-  let mouse = "mouse"
-  let horse = "horse"
-  let pig = "pig"
-  let bull = "bull"
+  let dog =
+    "dog"
+  let cat =
+    "cat"
+  let mouse =
+    "mouse"
+  let horse =
+    "horse"
+  let pig =
+    "pig"
+  let bull =
+    "bull"
 
-  let hash_fn = create_string_item_hash_fn()
+  let hash_fn =
+    create_string_item_hash_fn()
 
-  let items = [dog, cat, mouse, horse, pig, bull]
-  let mt = from_list(items, hash_fn)
+  let items =
+    [dog, cat, mouse, horse, pig, bull]
+  let mt =
+    from_list(items, hash_fn)
 
-  let item = "parrot"
+  let item =
+    "parrot"
 
-  let proof = get_proof(mt, item, hash_fn)
+  let proof =
+    get_proof(mt, item, hash_fn)
   proof == None
 }
 
 fn get_proof_item_value(proof_item: ProofItem) -> Hash<Sha2_256, ByteArray> {
   when proof_item is {
-    Left(x) -> x
-    Right(y) -> y
+    Left(x) ->
+      x
+    Right(y) ->
+      y
   }
 }
 

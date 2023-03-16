@@ -1,7 +1,9 @@
 pub fn map(opt: Option<a>, f: fn(a) -> b) -> Option<b> {
   when opt is {
-    None -> None
-    Some(a) -> Some(f(a))
+    None ->
+      None
+    Some(a) ->
+      Some(f(a))
   }
 }
 

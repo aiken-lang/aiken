@@ -90,8 +90,10 @@ fn test_format_when() {
     let expected = indoc! {r#"
         pub fn foo(a) {
           when a is {
-            True -> 14
-            False -> 42
+            True ->
+              14
+            False ->
+              42
           }
         }
     "#};
@@ -134,8 +136,10 @@ fn test_format_nested_when_if() {
             xs
           } else {
             when xs is {
-            [] -> []
-            [_x, ..rest] -> drop(rest, n - 1)
+            [] ->
+              []
+            [_x, ..rest] ->
+              drop(rest, n - 1)
           }
           }
         }
@@ -147,8 +151,10 @@ fn test_format_nested_when_if() {
             xs
           } else {
             when xs is {
-              [] -> []
-              [_x, ..rest] -> drop(rest, n - 1)
+              [] ->
+                []
+              [_x, ..rest] ->
+                drop(rest, n - 1)
             }
           }
         }
@@ -177,14 +183,18 @@ fn test_format_nested_when() {
     let expected = indoc! {r#"
         fn foo() {
           when a is {
-            None -> "foo"
+            None ->
+              "foo"
             Some(b) ->
               when b is {
-                None -> "foo"
+                None ->
+                  "foo"
                 Some(c) ->
                   when c is {
-                    None -> "foo"
-                    Some(_) -> "foo"
+                    None ->
+                      "foo"
+                    Some(_) ->
+                      "foo"
                   }
               }
           }
@@ -343,8 +353,10 @@ fn test_nested_function_calls() {
               ),
             ),
             when output.datum is {
-              InlineDatum(_) -> True
-              _ -> error @"expected inline datum"
+              InlineDatum(_) ->
+                True
+              _ ->
+                error @"expected inline datum"
             },
           ]
             |> list.and
@@ -393,8 +405,10 @@ fn format_trace_todo_error() {
 
         fn foo_3() {
           when x is {
-            Foo -> True
-            _ -> error
+            Foo ->
+              True
+            _ ->
+              error
           }
         }
 
@@ -517,18 +531,24 @@ fn test_newline_module_comments() {
 #[test]
 fn test_bytearray_literals() {
     let src = indoc! {r#"
-        const foo_const_array = #[102, 111, 111]
+        const foo_const_array =
+          #[102, 111, 111]
 
-        const foo_const_hex = #"666f6f"
+        const foo_const_hex =
+          #"666f6f"
 
-        const foo_const_utf8 = "foo"
+        const foo_const_utf8 =
+          "foo"
 
         fn foo() {
-          let foo_const_array = #[102, 111, 111]
+          let foo_const_array =
+            #[102, 111, 111]
 
-          let foo_const_hex = #"666f6f"
+          let foo_const_hex =
+            #"666f6f"
 
-          let foo_const_utf8 = "foo"
+          let foo_const_utf8 =
+            "foo"
         }
     "#};
 
@@ -538,10 +558,12 @@ fn test_bytearray_literals() {
 #[test]
 fn test_string_literal() {
     let src = indoc! {r#"
-        const foo_const: String = @"foo"
+        const foo_const: String =
+          @"foo"
 
         fn foo() {
-          let foo_var: String = @"foo"
+          let foo_var: String =
+            @"foo"
         }
     "#};
 

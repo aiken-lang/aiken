@@ -20,7 +20,8 @@ pub fn insert(
 
 fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
   when elems is {
-    [] -> [(k, v)]
+    [] ->
+      [(k, v)]
     [(k2, v2), ..rest] ->
       if k == k2 {
         [(k, v), ..rest]
@@ -32,8 +33,8 @@ fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> 
 
 fn fixture_1() {
   new()
-  |> insert("foo", 42)
-  |> insert("bar", 14)
+    |> insert("foo", 42)
+    |> insert("bar", 14)
 }
 
 test to_list_2() {

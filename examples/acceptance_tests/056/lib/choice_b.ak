@@ -1,8 +1,11 @@
 pub fn choice(self: List<Option<a>>) -> Option<a> {
   when self is {
-    [] -> None
-    [Some(x), ..] -> Some(x)
-    [None, ..others] -> choice(others)
+    [] ->
+      None
+    [Some(x), ..] ->
+      Some(x)
+    [None, ..others] ->
+      choice(others)
   }
 }
 

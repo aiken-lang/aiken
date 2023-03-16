@@ -69,10 +69,13 @@ pub fn validate_pool_deposit(
   datum: PoolDatum,
   redeemer: PoolDepositRedeemer,
 ) -> Bool {
-  let validator_address = scripthash_address(#"ff")
+  let validator_address =
+    scripthash_address(#"ff")
 
-  expect Some(pool_output) = get_output(ctx, validator_address)
-  expect Some(pool_input) = get_input(ctx, validator_address)
+  expect Some(pool_output) =
+    get_output(ctx, validator_address)
+  expect Some(pool_input) =
+    get_input(ctx, validator_address)
 
   True
 }
@@ -83,28 +86,34 @@ pub fn validate_pool_borrow(
   datum: PoolDatum,
   redeemer: PoolBorrowRedeemer,
 ) -> Bool {
-  let validator_address = scripthash_address(#"ff")
+  let validator_address =
+    scripthash_address(#"ff")
 
-  expect Some(pool_output) = get_output(ctx, validator_address)
-  expect Some(pool_input) = get_input(ctx, validator_address)
+  expect Some(pool_output) =
+    get_output(ctx, validator_address)
+  expect Some(pool_input) =
+    get_input(ctx, validator_address)
   True
 }
 
 validator pool_contract {
   fn(datum: PoolDatum, redeemer: PoolRedeemer, ctx: ScriptContext) {
     when redeemer.action is {
-      PoolWithdraw(_) -> True
+      PoolWithdraw(_) ->
+        True
       PoolDeposit(pool_deposit_redeemer) ->
         when ctx.purpose is {
           Spend(output_ref) ->
             validate_pool_deposit(ctx, output_ref, datum, pool_deposit_redeemer)
-          _ -> False
+          _ ->
+            False
         }
       PoolBorrow(pool_borrow_redeemer) ->
         when ctx.purpose is {
           Spend(output_ref) ->
             validate_pool_borrow(ctx, output_ref, datum, pool_borrow_redeemer)
-          _ -> False
+          _ ->
+            False
         }
     }
   }

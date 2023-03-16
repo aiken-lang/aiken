@@ -17,6 +17,7 @@
 - **aiken-lang**: update todo warning to include type
 - **aiken-lang**: `|>` operator can now be formatted as a single (short) line or forced over multiline in a flexible manner
 - **aiken-lang**: the compiler now provides better feedback for type holes (i.e. `_`) in type annotations
+- **aiken-lang**: assignment and clause guard are now always formatted on a new line
 
 ## [v0.0.29] - 2023-MM-DD
 

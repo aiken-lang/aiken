@@ -2,7 +2,8 @@ use aiken/builtin
 
 pub fn filter(xs: List<a>, f: fn(a) -> Bool) -> List<a> {
   when xs is {
-    [] -> []
+    [] ->
+      []
     [x, ..rest] ->
       if f(x) {
         [x, ..filter(rest, f)]
