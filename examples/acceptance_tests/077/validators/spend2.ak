@@ -13,3 +13,4 @@ fn find_stuff(context) -> Output {
   expect Some(stuff) = list.find(context.transaction.outputs, fn(_) { True })
   stuff
 }
+
