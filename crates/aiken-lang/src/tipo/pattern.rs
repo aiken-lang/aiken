@@ -145,7 +145,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         // Unify each pattern in the multi-pattern with the corresponding subject
         let mut typed_multi = Vec::with_capacity(multi_pattern.len());
         for (pattern, subject_type) in multi_pattern.into_iter().zip(subjects) {
-            let pattern = self.unify(pattern, subject_type.clone(), None)?;
+            let pattern = self.unify(pattern, subject_type.clone(), None, false)?;
             typed_multi.push(pattern);
         }
         Ok(typed_multi)
@@ -159,9 +159,17 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         pattern: UntypedPattern,
         tipo: Arc<Type>,
         ann_type: Option<Arc<Type>>,
+        is_assignment: bool,
     ) -> Result<TypedPattern, Error> {
         match pattern {
-            Pattern::Discard { name, location } => Ok(Pattern::Discard { name, location }),
+            Pattern::Discard { name, location } => {
+                if is_assignment {
+                    // Register declaration for the unused variable detection
+                    self.environment
+                        .init_usage(name.to_string(), EntityKind::Variable, location);
+                };
+                Ok(Pattern::Discard { name, location })
+            }
 
             Pattern::Var { name, location } => {
                 self.insert_variable(&name, ann_type.unwrap_or(tipo), location, location)?;
@@ -181,7 +189,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     pattern.location(),
                 )?;
 
-                let pattern = self.unify(*pattern, tipo, ann_type)?;
+                let pattern = self.unify(*pattern, tipo, ann_type, false)?;
 
                 Ok(Pattern::Assign {
                     name,
@@ -209,11 +217,11 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                     let elements = elements
                         .into_iter()
-                        .map(|element| self.unify(element, tipo.clone(), None))
+                        .map(|element| self.unify(element, tipo.clone(), None, false))
                         .try_collect()?;
 
                     let tail = match tail {
-                        Some(tail) => Some(Box::new(self.unify(*tail, list(tipo), None)?)),
+                        Some(tail) => Some(Box::new(self.unify(*tail, list(tipo), None, false)?)),
                         None => None,
                     };
 
@@ -246,7 +254,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     let mut patterns = vec![];
 
                     for (pattern, typ) in elems.into_iter().zip(type_elems) {
-                        let typed_pattern = self.unify(pattern, typ.clone(), None)?;
+                        let typed_pattern = self.unify(pattern, typ.clone(), None, false)?;
 
                         patterns.push(typed_pattern);
                     }
@@ -268,7 +276,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     let mut patterns = vec![];
 
                     for (pattern, type_) in elems.into_iter().zip(elems_types) {
-                        let typed_pattern = self.unify(pattern, type_, None)?;
+                        let typed_pattern = self.unify(pattern, type_, None, false)?;
 
                         patterns.push(typed_pattern);
                     }
@@ -408,7 +416,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                         label,
                                     } = arg;
 
-                                    let value = self.unify(value, typ.clone(), None)?;
+                                    let value = self.unify(value, typ.clone(), None, false)?;
 
                                     Ok::<_, Error>(CallArg {
                                         value,

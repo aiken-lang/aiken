@@ -912,8 +912,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         annotation: &Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let typed_value =
-            self.in_new_scope(|value_typer| value_typer.infer(untyped_value.clone()))?;
+        let typed_value = self.infer(untyped_value.clone())?;
         let mut value_typ = typed_value.tipo();
 
         let value_is_data = value_typ.is_data();
@@ -938,6 +937,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 untyped_pattern.clone(),
                 value_typ.clone(),
                 Some(ann_typ),
+                kind.is_let(),
             )?
         } else {
             if value_is_data && !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
@@ -963,6 +963,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 untyped_pattern.clone(),
                 value_typ.clone(),
                 None,
+                kind.is_let(),
             )?
         };
 
@@ -1102,22 +1103,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
         } = clause;
 
-        let (guard, then, typed_pattern, typed_alternatives) =
-            self.in_new_scope(|clause_typer| {
-                // Check the types
-                let (typed_pattern, typed_alternatives) = clause_typer.infer_clause_pattern(
-                    pattern,
-                    alternative_patterns,
-                    subjects,
-                    &location,
-                )?;
+        let (guard, then, typed_pattern, typed_alternatives) = self.in_new_scope(|scope| {
+            // Check the types
+            let (typed_pattern, typed_alternatives) =
+                scope.infer_clause_pattern(pattern, alternative_patterns, subjects, &location)?;
 
-                let guard = clause_typer.infer_optional_clause_guard(guard)?;
+            let guard = scope.infer_optional_clause_guard(guard)?;
 
-                let then = clause_typer.infer(then)?;
+            let then = scope.infer(then)?;
 
-                Ok::<_, Error>((guard, then, typed_pattern, typed_alternatives))
-            })?;
+            Ok::<_, Error>((guard, then, typed_pattern, typed_alternatives))
+        })?;
 
         Ok(Clause {
             location,
@@ -1421,7 +1417,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             false,
         )?;
 
-        let body = self.in_new_scope(|body_typer| body_typer.infer(first.body.clone()))?;
+        let body = self.infer(first.body.clone())?;
 
         let tipo = body.tipo();
 
@@ -1441,7 +1437,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 false,
             )?;
 
-            let body = self.in_new_scope(|body_typer| body_typer.infer(branch.body.clone()))?;
+            let body = self.infer(branch.body.clone())?;
 
             self.unify(
                 tipo.clone(),
@@ -1457,7 +1453,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             });
         }
 
-        let typed_final_else = self.in_new_scope(|body_typer| body_typer.infer(final_else))?;
+        let typed_final_else = self.infer(final_else)?;
 
         self.unify(
             tipo.clone(),
@@ -1507,30 +1503,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
         self.assert_no_assignment(&body)?;
 
-        let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
-            for (arg, t) in args.iter().zip(args.iter().map(|arg| arg.tipo.clone())) {
-                match &arg.arg_name {
-                    ArgName::Named { name, .. } => {
-                        body_typer.environment.insert_variable(
-                            name.to_string(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: arg.location,
-                            },
-                            t,
-                        );
+        for (arg, t) in args.iter().zip(args.iter().map(|arg| arg.tipo.clone())) {
+            match &arg.arg_name {
+                ArgName::Named { name, .. } => {
+                    self.environment.insert_variable(
+                        name.to_string(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: arg.location,
+                        },
+                        t,
+                    );
 
-                        body_typer.environment.init_usage(
-                            name.to_string(),
-                            EntityKind::Variable,
-                            arg.location,
-                        );
-                    }
-                    ArgName::Discarded { .. } => (),
-                };
-            }
+                    self.environment.init_usage(
+                        name.to_string(),
+                        EntityKind::Variable,
+                        arg.location,
+                    );
+                }
+                ArgName::Discarded { .. } => (),
+            };
+        }
 
-            (body_typer.hydrator.rigid_names(), body_typer.infer(body))
-        });
+        let (body_rigid_names, body_infer) = (self.hydrator.rigid_names(), self.infer(body));
 
         let body = body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names))?;
 
@@ -1625,26 +1619,51 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     fn infer_seq(&mut self, location: Span, untyped: Vec<UntypedExpr>) -> Result<TypedExpr, Error> {
-        let count = untyped.len();
+        let sequence = self.in_new_scope(|scope| {
+            let count = untyped.len();
 
-        let mut expressions = Vec::with_capacity(count);
+            let mut expressions = Vec::with_capacity(count);
 
-        for (i, expression) in untyped.into_iter().enumerate() {
-            match i.cmp(&(count - 1)) {
-                // When the expression is the last in a sequence, we enforce it is NOT
-                // an assignment (kind of treat assignments like statements).
-                Ordering::Equal => self.assert_no_assignment(&expression)?,
+            for (i, expression) in untyped.into_iter().enumerate() {
+                match i.cmp(&(count - 1)) {
+                    // When the expression is the last in a sequence, we enforce it is NOT
+                    // an assignment (kind of treat assignments like statements).
+                    Ordering::Equal => scope.assert_no_assignment(&expression)?,
 
-                // This isn't the final expression in the sequence, so it *must*
-                // be a let-binding; we do not allow anything else.
-                Ordering::Less => self.assert_assignment(&expression)?,
+                    // This isn't the final expression in the sequence, so it *must*
+                    // be a let-binding; we do not allow anything else.
+                    Ordering::Less => scope.assert_assignment(&expression)?,
 
-                // Can't actually happen
-                Ordering::Greater => (),
+                    // Can't actually happen
+                    Ordering::Greater => (),
+                }
+
+                expressions.push(scope.infer(expression)?);
             }
 
-            expressions.push(self.infer(expression)?);
-        }
+            Ok(expressions)
+        })?;
+
+        let unused = self
+            .environment
+            .warnings
+            .iter()
+            .filter_map(|w| match w {
+                Warning::UnusedVariable { location, .. } => Some(*location),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        let expressions = sequence
+            .into_iter()
+            .filter(|expr| {
+                if let TypedExpr::Assignment { pattern, .. } = expr {
+                    !unused.contains(&pattern.location())
+                } else {
+                    true
+                }
+            })
+            .collect::<Vec<_>>();
 
         Ok(TypedExpr::Sequence {
             location,
@@ -1874,11 +1893,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let return_type = self.new_unbound_var();
 
         for subject in subjects {
-            let subject = self.in_new_scope(|subject_typer| {
-                let subject = subject_typer.infer(subject)?;
-
-                Ok::<_, Error>(subject)
-            })?;
+            let subject = self.infer(subject)?;
 
             subject_types.push(subject.tipo());
 
