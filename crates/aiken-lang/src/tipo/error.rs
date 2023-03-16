@@ -568,7 +568,7 @@ You can help me by providing a type-annotation for 'x', as such:
         , type_ScriptContext = "ScriptContext".if_supports_color(Stdout, |s| s.green())
     ))]
     RecordAccessUnknownType {
-        #[label]
+        #[label("annotation needed")]
         location: Span,
     },
 
@@ -640,15 +640,6 @@ Perhaps, try the following:
         args: Vec<CallArg<UntypedPattern>>,
         module: Option<String>,
         with_spread: bool,
-    },
-
-    // TODO: Seems like we can't really trigger this error because we allow type holes everywhere
-    // anyway. We need to revise that perhaps.
-    #[error("I stumbled upon an unexpected type hole.\n")]
-    #[diagnostic(code("unexpected::type_hole"))]
-    UnexpectedTypeHole {
-        #[label]
-        location: Span,
     },
 
     #[error("I tripped over some unknown labels in a pattern or function.\n")]
@@ -745,7 +736,7 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::record_field"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?\n\nAlso record access is only supported on types with one constructor.")
+        suggest_neighbor(label, fields.iter(), "Did you forget to make it public?\nNote also that record access is only supported on types with a single constructor.")
     ))]
     UnknownRecordField {
         #[label]
@@ -1271,7 +1262,7 @@ pub enum Warning {
         help(
             "If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}",
             "from".if_supports_color(Stderr, |s| s.bold()),
-            "Data".if_supports_color(Stderr, |s| s.purple()),
+            "Data".if_supports_color(Stderr, |s| s.bright_blue()),
             "let".if_supports_color(Stderr, |s| s.purple()),
             format_suggestion(sample)
         )
@@ -1287,15 +1278,18 @@ pub enum Warning {
     },
 
     #[error("I found a todo left in the code.\n")]
-    #[diagnostic(
-        help(
-            "You probably want to replace that one with real code... eventually. The expected type is {}",
-            tipo.to_pretty_with_names(HashMap::new(), 0).if_supports_color(Stderr, |s| s.purple())
-        )
-    )]
+    #[diagnostic(help("You probably want to replace that with actual code... eventually."))]
     #[diagnostic(code("todo"))]
     Todo {
-        #[label]
+        #[label("An expression of type {} is expected here.", tipo.to_pretty(0))]
+        location: Span,
+        tipo: Arc<Type>,
+    },
+
+    #[error("I found a type hole in an annotation.\n")]
+    #[diagnostic(code("unexpected::type_hole"))]
+    UnexpectedTypeHole {
+        #[label("{}", tipo.to_pretty(0))]
         location: Span,
         tipo: Arc<Type>,
     },

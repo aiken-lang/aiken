@@ -1039,8 +1039,6 @@ impl<'a> Environment<'a> {
                 // Construct type from annotations
                 let mut hydrator = Hydrator::new();
 
-                hydrator.permit_holes(true);
-
                 let mut arg_types = Vec::new();
 
                 for arg in args {
@@ -1097,8 +1095,6 @@ impl<'a> Environment<'a> {
 
                 // Construct type from annotations
                 let mut hydrator = Hydrator::new();
-
-                hydrator.permit_holes(false);
 
                 let mut arg_types = Vec::new();
 

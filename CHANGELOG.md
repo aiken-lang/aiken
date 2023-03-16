@@ -8,12 +8,15 @@
 
 ### Changed
 
+- **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
+- **aiken-project**: fixed generation of blueprints for recursive and mutually recursive data-types
+
 - **aiken-lang**: block `Data` and `String` from unifying when casting
 - **aiken-lang**: remove ability for a type with many variants with matching field labels and types to support field access
-- **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
 - **aiken-lang**: various uplc code gen fixes
-- **aiken-project**: recursive issue with blueprints fixed
 - **aiken-lang**: update todo warning to include type
+- **aiken-lang**: `|>` operator can now be formatted as a single (short) line or forced over multiline in a flexible manner
+- **aiken-lang**: the compiler now provides better feedback for type holes (i.e. `_`) in type annotations
 
 ## [v0.0.29] - 2023-MM-DD
 

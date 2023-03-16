@@ -1917,12 +1917,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
-        let mut hydrator = Hydrator::new();
-
-        hydrator.permit_holes(true);
-
         Self {
-            hydrator,
+            hydrator: Hydrator::new(),
             environment,
             tracing,
             ungeneralised_function_used: false,
