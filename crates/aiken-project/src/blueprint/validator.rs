@@ -10,7 +10,7 @@ use aiken_lang::{
 };
 use miette::NamedSource;
 use serde;
-use uplc::ast::{DeBruijn, Name, Program, Term};
+use uplc::ast::{DeBruijn, Program, Term};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator<R, S> {
@@ -51,18 +51,28 @@ impl Validator<Reference, Annotated<Schema>> {
         module: &CheckedModule,
         def: &TypedValidator,
     ) -> Vec<Result<Validator<Reference, Annotated<Schema>>, Error>> {
-        let program: Program<Name> = generator.generate(def).try_into().unwrap();
+        let program = generator.generate(def).try_into().unwrap();
 
-        let mut definitions = Definitions::new();
+        let is_multi_validator = def.other_fun.is_some();
 
         let mut validators = vec![Validator::create_validator_blueprint(
-            modules, def.params, def.fun,
+            modules,
+            module,
+            &program,
+            &def.params,
+            &def.fun,
+            is_multi_validator,
         )];
 
-        if let Some(other_func) = def.other_fun {
-            todo!()
-        } else {
-            todo!()
+        if let Some(ref other_func) = def.other_fun {
+            validators.push(Validator::create_validator_blueprint(
+                modules,
+                module,
+                &program,
+                &def.params,
+                other_func,
+                is_multi_validator,
+            ));
         }
 
         validators
@@ -70,22 +80,25 @@ impl Validator<Reference, Annotated<Schema>> {
 
     fn create_validator_blueprint(
         modules: &CheckedModules,
-        params: Vec<TypedArg>,
-        func: TypedFunction,
+        module: &CheckedModule,
+        program: &Program<DeBruijn>,
+        params: &[TypedArg],
+        func: &TypedFunction,
+        is_multi_validator: bool,
     ) -> Result<Validator<Reference, Annotated<Schema>>, Error> {
         let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
         let mut arguments = Vec::with_capacity(params.len() + func.arguments.len());
-
-        arguments.extend(params.clone());
+        arguments.extend(params.to_vec());
         arguments.extend(func.arguments.clone());
+
+        let mut definitions = Definitions::new();
 
         Ok(Validator {
             title: format!("{}.{}", &module.name, &func.name),
             description: None,
-            parameters: def
-                .params
+            parameters: params
                 .iter()
                 .map(|param| {
                     Annotated::from_type(modules.into(), &param.tipo, &mut definitions)
@@ -131,13 +144,13 @@ impl Validator<Reference, Annotated<Schema>> {
                     ),
                 })
                 .map(|schema| match datum {
-                    Some(..) if def.other_fun.is_some() => todo!(),
+                    Some(..) if is_multi_validator => todo!(),
                     _ => Argument {
                         title: Some(redeemer.arg_name.get_label()),
                         schema,
                     },
                 })?,
-            program: generator.generate(def).try_into().unwrap(),
+            program: program.clone(),
             definitions,
         })
     }
@@ -283,7 +296,15 @@ mod test {
             .next()
             .expect("source code did no yield any validator");
 
-        let validator = Validator::from_checked_module(&modules, &mut generator, validator, def)
+        let validators = Validator::from_checked_module(&modules, &mut generator, validator, def);
+
+        if validators.len() > 1 {
+            panic!("Multi-validator given to test bench. Don't do that.")
+        }
+
+        let validator = validators
+            .get(0)
+            .unwrap()
             .expect("Failed to create validator blueprint");
 
         println!("{}", serde_json::to_string_pretty(&validator).unwrap());
