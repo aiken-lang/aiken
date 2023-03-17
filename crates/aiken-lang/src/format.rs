@@ -522,7 +522,7 @@ impl<'comments> Formatter<'comments> {
             .nest(INDENT)
             .group()
             .append(if other_fun.is_some() {
-                docvec![line()]
+                line()
             } else {
                 nil()
             })
