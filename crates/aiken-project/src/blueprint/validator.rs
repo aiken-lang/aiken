@@ -4,10 +4,13 @@ use super::{
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
-use aiken_lang::{ast::TypedValidator, uplc::CodeGenerator};
+use aiken_lang::{
+    ast::{TypedArg, TypedFunction, TypedValidator},
+    uplc::CodeGenerator,
+};
 use miette::NamedSource;
 use serde;
-use uplc::ast::{DeBruijn, Program, Term};
+use uplc::ast::{DeBruijn, Name, Program, Term};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator<R, S> {
@@ -47,19 +50,39 @@ impl Validator<Reference, Annotated<Schema>> {
         generator: &mut CodeGenerator,
         module: &CheckedModule,
         def: &TypedValidator,
-    ) -> Result<Validator<Reference, Annotated<Schema>>, Error> {
-        let mut args = def.fun.arguments.iter().rev();
-        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
-
-        let mut arguments = Vec::with_capacity(def.params.len() + def.fun.arguments.len());
-
-        arguments.extend(def.params.clone());
-        arguments.extend(def.fun.arguments.clone());
+    ) -> Vec<Result<Validator<Reference, Annotated<Schema>>, Error>> {
+        let program: Program<Name> = generator.generate(def).try_into().unwrap();
 
         let mut definitions = Definitions::new();
 
+        let mut validators = vec![Validator::create_validator_blueprint(
+            modules, def.params, def.fun,
+        )];
+
+        if let Some(other_func) = def.other_fun {
+            todo!()
+        } else {
+            todo!()
+        }
+
+        validators
+    }
+
+    fn create_validator_blueprint(
+        modules: &CheckedModules,
+        params: Vec<TypedArg>,
+        func: TypedFunction,
+    ) -> Result<Validator<Reference, Annotated<Schema>>, Error> {
+        let mut args = func.arguments.iter().rev();
+        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
+
+        let mut arguments = Vec::with_capacity(params.len() + func.arguments.len());
+
+        arguments.extend(params.clone());
+        arguments.extend(func.arguments.clone());
+
         Ok(Validator {
-            title: format!("{}.{}", &module.name, &def.fun.name),
+            title: format!("{}.{}", &module.name, &func.name),
             description: None,
             parameters: def
                 .params

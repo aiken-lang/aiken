@@ -60,7 +60,7 @@ impl Blueprint<Reference, Annotated<Schema>> {
 
         let validators: Result<Vec<_>, Error> = modules
             .validators()
-            .map(|(validator, def)| {
+            .flat_map(|(validator, def)| {
                 Validator::from_checked_module(modules, generator, validator, def).map(
                     |mut schema| {
                         definitions.merge(&mut schema.definitions);
