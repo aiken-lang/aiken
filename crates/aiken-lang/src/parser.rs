@@ -299,8 +299,7 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
                 vec![],
                 Span {
                     start: 0,
-                    // just needs to be the word `validator` at this point
-                    end: span.start + 9,
+                    end: span.start + "validator".len(),
                 },
             ));
 
