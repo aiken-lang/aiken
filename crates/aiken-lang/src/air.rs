@@ -296,6 +296,49 @@ impl Air {
         }
     }
 
+    pub fn scope_mut(&mut self) -> &mut Vec<u64> {
+        match self {
+            Air::Int { scope, .. }
+            | Air::String { scope, .. }
+            | Air::ByteArray { scope, .. }
+            | Air::Bool { scope, .. }
+            | Air::List { scope, .. }
+            | Air::Tuple { scope, .. }
+            | Air::Void { scope }
+            | Air::Var { scope, .. }
+            | Air::Call { scope, .. }
+            | Air::DefineFunc { scope, .. }
+            | Air::Fn { scope, .. }
+            | Air::Builtin { scope, .. }
+            | Air::BinOp { scope, .. }
+            | Air::UnOp { scope, .. }
+            | Air::Let { scope, .. }
+            | Air::UnWrapData { scope, .. }
+            | Air::WrapData { scope, .. }
+            | Air::AssertConstr { scope, .. }
+            | Air::AssertBool { scope, .. }
+            | Air::When { scope, .. }
+            | Air::Clause { scope, .. }
+            | Air::ListClause { scope, .. }
+            | Air::WrapClause { scope }
+            | Air::TupleClause { scope, .. }
+            | Air::ClauseGuard { scope, .. }
+            | Air::ListClauseGuard { scope, .. }
+            | Air::Finally { scope }
+            | Air::If { scope, .. }
+            | Air::Record { scope, .. }
+            | Air::RecordUpdate { scope, .. }
+            | Air::RecordAccess { scope, .. }
+            | Air::FieldsExpose { scope, .. }
+            | Air::ListAccessor { scope, .. }
+            | Air::ListExpose { scope, .. }
+            | Air::TupleAccessor { scope, .. }
+            | Air::TupleIndex { scope, .. }
+            | Air::ErrorTerm { scope, .. }
+            | Air::Trace { scope, .. } => scope,
+        }
+    }
+
     pub fn tipo(&self) -> Option<Arc<Type>> {
         match self {
             Air::Int { .. } => Some(
