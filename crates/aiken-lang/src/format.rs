@@ -728,8 +728,8 @@ impl<'comments> Formatter<'comments> {
             } => self.trace(kind, text, then),
 
             UntypedExpr::When {
-                subjects, clauses, ..
-            } => self.when(subjects, clauses),
+                subject, clauses, ..
+            } => self.when(subject, clauses),
 
             UntypedExpr::FieldAccess {
                 label, container, ..
@@ -933,14 +933,11 @@ impl<'comments> Formatter<'comments> {
 
     pub fn when<'a>(
         &mut self,
-        subjects: &'a [UntypedExpr],
+        subject: &'a UntypedExpr,
         clauses: &'a [UntypedClause],
     ) -> Document<'a> {
         let subjects_doc = break_("when", "when ")
-            .append(join(
-                subjects.iter().map(|s| self.wrap_expr(s)),
-                break_(",", ", "),
-            ))
+            .append(self.wrap_expr(subject))
             .nest(INDENT)
             .append(break_("", " "))
             .append("is {")
@@ -1449,9 +1446,7 @@ impl<'comments> Formatter<'comments> {
         let space_before = self.pop_empty_lines(clause.location.start);
         let after_position = clause.location.end;
         let clause_doc = join(
-            std::iter::once(&clause.pattern)
-                .chain(&clause.alternative_patterns)
-                .map(|p| join(p.iter().map(|p| self.pattern(p)), ", ".to_doc())),
+            clause.patterns.iter().map(|p| self.pattern(p)),
             " | ".to_doc(),
         );
         let clause_doc = match &clause.guard {

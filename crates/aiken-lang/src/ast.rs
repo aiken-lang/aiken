@@ -1,5 +1,3 @@
-use std::{fmt, ops::Range, sync::Arc};
-
 use crate::{
     builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
@@ -8,6 +6,8 @@ use crate::{
 };
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
+use std::{fmt, ops::Range, sync::Arc};
+use vec1::Vec1;
 
 pub const ASSERT_VARIABLE: &str = "_try";
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -909,55 +909,32 @@ pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor
 pub type UntypedMultiPattern = MultiPattern<(), ()>;
 pub type TypedMultiPattern = MultiPattern<PatternConstructor, Arc<Type>>;
 
-pub type TypedClause = Clause<TypedExpr, PatternConstructor, Arc<Type>>;
-pub type UntypedClause = Clause<UntypedExpr, (), ()>;
+#[derive(Debug, Clone, PartialEq)]
+pub struct UntypedClause {
+    pub location: Span,
+    pub patterns: Vec1<Pattern<(), ()>>,
+    pub guard: Option<ClauseGuard<()>>,
+    pub then: UntypedExpr,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Clause<Expr, PatternConstructor, Type> {
+pub struct TypedClause {
     pub location: Span,
-    pub pattern: MultiPattern<PatternConstructor, Type>,
-    pub alternative_patterns: Vec<MultiPattern<PatternConstructor, Type>>,
-    pub guard: Option<ClauseGuard<Type>>,
-    pub then: Expr,
+    pub pattern: Pattern<PatternConstructor, Arc<Type>>,
+    pub guard: Option<ClauseGuard<Arc<Type>>>,
+    pub then: TypedExpr,
 }
 
 impl TypedClause {
     pub fn location(&self) -> Span {
         Span {
-            start: self
-                .pattern
-                .get(0)
-                .map(|p| p.location().start)
-                .unwrap_or_default(),
+            start: self.pattern.location().start,
             end: self.then.location().end,
         }
     }
 
     pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
         self.then.find_node(byte_index)
-    }
-
-    pub fn desugarize(self) -> Vec<Self> {
-        let mut alternative_patterns = self
-            .alternative_patterns
-            .into_iter()
-            .map(|pattern| Self {
-                location: self.location,
-                pattern,
-                alternative_patterns: vec![],
-                guard: self.guard.clone(),
-                then: self.then.clone(),
-            })
-            .collect::<Vec<_>>();
-
-        let mut clauses = vec![Self {
-            alternative_patterns: vec![],
-            ..self
-        }];
-
-        clauses.append(&mut alternative_patterns);
-
-        clauses
     }
 }
 

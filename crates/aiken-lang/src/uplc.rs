@@ -20,7 +20,7 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Clause, Pattern, Span, TypedArg, TypedDataType,
+        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
         TypedFunction, UnOp,
     },
     builder::{
@@ -476,13 +476,11 @@ impl<'a> CodeGenerator<'a> {
                 ir_stack.append(&mut pattern_vec);
             }
             TypedExpr::When {
-                subjects, clauses, ..
+                subject, clauses, ..
             } => {
                 let subject_name = format!("__subject_name_{}", self.id_gen.next());
                 let constr_var = format!("__constr_name_{}", self.id_gen.next());
 
-                // assuming one subject at the moment
-                let subject = subjects[0].clone();
                 let subject_tipo = subject.tipo();
                 if clauses.len() <= 1 {
                     let mut value_vec: Vec<Air> = vec![];
@@ -491,10 +489,10 @@ impl<'a> CodeGenerator<'a> {
 
                     self.build_ir(&clauses[0].then, &mut value_vec, scope.clone());
 
-                    self.build_ir(&subject, &mut subject_vec, scope.clone());
+                    self.build_ir(subject, &mut subject_vec, scope.clone());
 
                     self.assignment_ir(
-                        &clauses[0].pattern[0],
+                        &clauses[0].pattern,
                         &mut pattern_vec,
                         &mut subject_vec,
                         &subject_tipo,
@@ -508,12 +506,14 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.append(&mut pattern_vec);
                     ir_stack.append(&mut value_vec);
                 } else {
+                    println!("{clauses:?}");
                     // HERE TODO
                     let clauses = if subject_tipo.is_list() {
                         rearrange_clauses(clauses.clone())
                     } else {
                         clauses.clone()
                     };
+                    println!("{clauses:?}");
 
                     if let Some((last_clause, clauses)) = clauses.split_last() {
                         let mut pattern_vec = vec![];
@@ -532,7 +532,7 @@ impl<'a> CodeGenerator<'a> {
                             scope.clone(),
                         );
 
-                        let last_pattern = &last_clause.pattern[0];
+                        let last_pattern = &last_clause.pattern;
 
                         let mut final_scope = scope.clone();
 
@@ -571,7 +571,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut subject_scope = scope.clone();
                             subject_scope.push(self.id_gen.next());
 
-                            self.build_ir(&subject, ir_stack, subject_scope.clone());
+                            self.build_ir(subject, ir_stack, subject_scope.clone());
 
                             let mut scope = scope;
                             scope.push(self.id_gen.next());
@@ -603,7 +603,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut scope = scope;
                             scope.push(self.id_gen.next());
 
-                            self.build_ir(&subject, ir_stack, scope);
+                            self.build_ir(subject, ir_stack, scope);
                         }
 
                         ir_stack.append(&mut pattern_vec);
@@ -817,7 +817,7 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         ir_stack: &mut Vec<Air>,
         clause_properties: &mut ClauseProperties,
-        clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>>],
+        clauses: &[TypedClause],
         subject_type: &Arc<Type>,
         scope: Vec<u64>,
     ) {
@@ -876,7 +876,7 @@ impl<'a> CodeGenerator<'a> {
                 } => {
                     let subject_name = original_subject_name.clone();
                     self.when_ir(
-                        &clause.pattern[0],
+                        &clause.pattern,
                         &mut clause_subject_vec,
                         &mut clause_then_vec,
                         subject_type,
@@ -922,16 +922,16 @@ impl<'a> CodeGenerator<'a> {
                     ..
                 } => {
                     let (current_clause_index, has_tail) =
-                        if let Pattern::List { elements, tail, .. } = &clause.pattern[0] {
+                        if let Pattern::List { elements, tail, .. } = &clause.pattern {
                             (elements.len(), tail.is_some())
-                        } else if let Pattern::Assign { pattern, .. } = &clause.pattern[0] {
+                        } else if let Pattern::Assign { pattern, .. } = &clause.pattern {
                             if let Pattern::List { elements, tail, .. } = pattern.as_ref() {
                                 (elements.len(), tail.is_some())
                             } else {
                                 unreachable!("{:#?}", pattern)
                             }
                         } else {
-                            unreachable!("{:#?}", &clause.pattern[0])
+                            unreachable!("{:#?}", &clause.pattern)
                         };
 
                     let prev_index = *current_index;
@@ -943,7 +943,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     self.when_ir(
-                        &clause.pattern[0],
+                        &clause.pattern,
                         &mut clause_subject_vec,
                         &mut clause_then_vec,
                         subject_type,
@@ -955,11 +955,10 @@ impl<'a> CodeGenerator<'a> {
                         None
                     } else {
                         let next_list_size = if let Pattern::List { elements, .. } =
-                            &clauses[index + 1].pattern[0]
+                            &clauses[index + 1].pattern
                         {
                             elements.len()
-                        } else if let Pattern::Assign { pattern, .. } =
-                            &clauses[index + 1].pattern[0]
+                        } else if let Pattern::Assign { pattern, .. } = &clauses[index + 1].pattern
                         {
                             if let Pattern::List { elements, .. } = pattern.as_ref() {
                                 elements.len()
@@ -1008,7 +1007,7 @@ impl<'a> CodeGenerator<'a> {
                     let subject_name = original_subject_name.clone();
 
                     self.when_ir(
-                        &clause.pattern[0],
+                        &clause.pattern,
                         &mut clause_subject_vec,
                         &mut clause_then_vec,
                         subject_type,

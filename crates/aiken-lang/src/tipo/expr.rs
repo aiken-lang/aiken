@@ -1,3 +1,4 @@
+use crate::ast::TypedPattern;
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use vec1::Vec1;
@@ -5,10 +6,10 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        Clause, ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing,
-        TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedMultiPattern,
-        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
-        UntypedMultiPattern, UntypedPattern, UntypedRecordUpdateArg,
+        ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg,
+        TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedRecordUpdateArg, UnOp,
+        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedPattern,
+        UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{TypedExpr, UntypedExpr},
@@ -22,7 +23,7 @@ use super::{
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
-    PatternConstructor, RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
+    RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
 };
 
 #[derive(Debug)]
@@ -45,44 +46,24 @@ pub(crate) struct ExprTyper<'a, 'b> {
 impl<'a, 'b> ExprTyper<'a, 'b> {
     fn check_when_exhaustiveness(
         &mut self,
-        subjects_count: usize,
-        subjects: &[Arc<Type>],
-        typed_clauses: &[Clause<TypedExpr, PatternConstructor, Arc<Type>>],
+        subject: &Type,
+        typed_clauses: &[TypedClause],
         location: Span,
     ) -> Result<(), Vec<String>> {
-        // Because exhaustiveness checking in presence of multiple subjects is similar
-        // to full exhaustiveness checking of tuples or other nested record patterns,
-        // and we currently only do only limited exhaustiveness checking of custom types
-        // at the top level of patterns, only consider case expressions with one subject.
-        if subjects_count != 1 {
-            return Ok(());
-        }
-
-        let subject_type = subjects
-            .get(0)
-            .expect("Asserted there's one case subject but found none");
-
-        let value_typ = collapse_links(subject_type.clone());
+        let value_typ = collapse_links(Arc::new(subject.clone()));
 
         // Currently guards in exhaustiveness checking are assumed that they can fail,
         // so we go through all clauses and pluck out only the patterns
         // for clauses that don't have guards.
         let mut patterns = Vec::new();
         for clause in typed_clauses {
-            if let Clause { guard: None, .. } = clause {
-                // clause.pattern is a list of patterns for all subjects
-                if let Some(pattern) = clause.pattern.get(0) {
-                    patterns.push(pattern.clone());
-                }
-
-                // A clause can be built with alternative patterns as well, e.g. `Audio(_) | Text(_) ->`.
-                // We're interested in all patterns so we build a flattened list.
-                for alternative_pattern in &clause.alternative_patterns {
-                    // clause.alternative_pattern is a list of patterns for all subjects
-                    if let Some(pattern) = alternative_pattern.get(0) {
-                        patterns.push(pattern.clone());
-                    }
-                }
+            if let TypedClause {
+                guard: None,
+                pattern,
+                ..
+            } = clause
+            {
+                patterns.push(pattern.clone())
             }
         }
 
@@ -309,10 +290,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             UntypedExpr::When {
                 location,
-                subjects,
+                subject,
                 clauses,
                 ..
-            } => self.infer_when(subjects, clauses, location),
+            } => self.infer_when(*subject, clauses, location),
 
             UntypedExpr::List {
                 location,
@@ -1093,35 +1074,34 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     fn infer_clause(
         &mut self,
         clause: UntypedClause,
-        subjects: &[Arc<Type>],
-    ) -> Result<TypedClause, Error> {
-        let Clause {
-            pattern,
-            alternative_patterns,
+        subject: &Type,
+    ) -> Result<Vec<TypedClause>, Error> {
+        let UntypedClause {
+            patterns,
             guard,
             then,
             location,
         } = clause;
 
-        let (guard, then, typed_pattern, typed_alternatives) = self.in_new_scope(|scope| {
-            // Check the types
-            let (typed_pattern, typed_alternatives) =
-                scope.infer_clause_pattern(pattern, alternative_patterns, subjects, &location)?;
+        let (guard, then, typed_patterns) = self.in_new_scope(|scope| {
+            let typed_patterns = scope.infer_clause_pattern(patterns, subject, &location)?;
 
             let guard = scope.infer_optional_clause_guard(guard)?;
 
             let then = scope.infer(then)?;
 
-            Ok::<_, Error>((guard, then, typed_pattern, typed_alternatives))
+            Ok::<_, Error>((guard, then, typed_patterns))
         })?;
 
-        Ok(Clause {
-            location,
-            pattern: typed_pattern,
-            alternative_patterns: typed_alternatives,
-            guard,
-            then,
-        })
+        Ok(typed_patterns
+            .into_iter()
+            .map(|pattern| TypedClause {
+                location,
+                pattern,
+                guard: guard.clone(),
+                then: then.clone(),
+            })
+            .collect())
     }
 
     fn infer_clause_guard(&mut self, guard: UntypedClauseGuard) -> Result<TypedClauseGuard, Error> {
@@ -1333,26 +1313,23 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_clause_pattern(
         &mut self,
-        pattern: UntypedMultiPattern,
-        alternatives: Vec<UntypedMultiPattern>,
-        subjects: &[Arc<Type>],
+        patterns: Vec1<UntypedPattern>,
+        subject: &Type,
         location: &Span,
-    ) -> Result<(TypedMultiPattern, Vec<TypedMultiPattern>), Error> {
+    ) -> Result<Vec<TypedPattern>, Error> {
         let mut pattern_typer = PatternTyper::new(self.environment, &self.hydrator);
 
-        let typed_pattern = pattern_typer.infer_multi_pattern(pattern, subjects, location)?;
-
-        // Each case clause has one or more patterns that may match the
-        // subject in order for the clause to be selected, so we must type
-        // check every pattern.
-        let mut typed_alternatives = Vec::with_capacity(alternatives.len());
-
-        for m in alternatives {
-            typed_alternatives
-                .push(pattern_typer.infer_alternative_multi_pattern(m, subjects, location)?);
+        let mut typed_patterns = Vec::with_capacity(patterns.len());
+        for (ix, pattern) in patterns.into_iter().enumerate() {
+            if ix == 0 {
+                typed_patterns.push(pattern_typer.infer_pattern(pattern, subject)?);
+            } else {
+                typed_patterns
+                    .push(pattern_typer.infer_alternative_pattern(pattern, subject, location)?);
+            }
         }
 
-        Ok((typed_pattern, typed_alternatives))
+        Ok(typed_patterns)
     }
 
     // TODO: extract the type annotation checking into a infer_module_const
@@ -1865,7 +1842,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_when(
         &mut self,
-        subjects: Vec<UntypedExpr>,
+        subject: UntypedExpr,
         clauses: Vec<UntypedClause>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
@@ -1873,49 +1850,38 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // that suggests that a `let` binding should be used instead.
         if clauses.len() == 1 {
             self.environment.warnings.push(Warning::SingleWhenClause {
-                location: clauses[0].pattern[0].location(),
+                location: clauses[0].patterns[0].location(),
                 sample: UntypedExpr::Assignment {
                     location: Span::empty(),
-                    value: Box::new(subjects[0].clone()),
-                    pattern: clauses[0].pattern[0].clone(),
+                    value: Box::new(subject.clone()),
+                    pattern: clauses[0].patterns[0].clone(),
                     kind: AssignmentKind::Let,
                     annotation: None,
                 },
             });
         }
 
-        let subjects_count = subjects.len();
-
-        let mut typed_subjects = Vec::with_capacity(subjects_count);
-        let mut subject_types = Vec::with_capacity(subjects_count);
-        let mut typed_clauses = Vec::new();
-
+        let typed_subject = self.infer(subject)?;
+        let subject_type = typed_subject.tipo();
         let return_type = self.new_unbound_var();
 
-        for subject in subjects {
-            let subject = self.infer(subject)?;
-
-            subject_types.push(subject.tipo());
-
-            typed_subjects.push(subject);
-        }
-
+        let mut typed_clauses = Vec::new();
         for clause in clauses {
-            let typed_clause = self.infer_clause(clause, &subject_types)?;
+            for typed_clause in self.infer_clause(clause, &subject_type)? {
+                self.unify(
+                    return_type.clone(),
+                    typed_clause.then.tipo(),
+                    typed_clause.location(),
+                    false,
+                )
+                .map_err(|e| e.case_clause_mismatch())?;
 
-            self.unify(
-                return_type.clone(),
-                typed_clause.then.tipo(),
-                typed_clause.location(),
-                false,
-            )
-            .map_err(|e| e.case_clause_mismatch())?;
-
-            typed_clauses.append(&mut typed_clause.desugarize());
+                typed_clauses.push(typed_clause)
+            }
         }
 
         if let Err(unmatched) =
-            self.check_when_exhaustiveness(subjects_count, &subject_types, &typed_clauses, location)
+            self.check_when_exhaustiveness(&subject_type, &typed_clauses, location)
         {
             return Err(Error::NotExhaustivePatternMatch {
                 location,
@@ -1927,7 +1893,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok(TypedExpr::When {
             location,
             tipo: return_type,
-            subjects: typed_subjects,
+            subject: Box::new(typed_subject),
             clauses: typed_clauses,
         })
     }

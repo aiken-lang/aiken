@@ -315,22 +315,6 @@ From there, you can define 'increment', a function that takes a single argument 
         given: usize,
     },
 
-    // TODO: Since we do not actually support patterns on multiple items, we won't likely ever
-    // encounter that error. We could simplify a bit the type-checker and get rid of that error
-    // eventually.
-    #[error(
-        "I counted {} different clauses in a multi-pattern instead of {}.\n",
-        given.if_supports_color(Stdout, |s| s.purple()),
-        expected.if_supports_color(Stdout, |s| s.purple()),
-    )]
-    #[diagnostic(code("arity::clause"))]
-    IncorrectNumClausePatterns {
-        #[label]
-        location: Span,
-        expected: usize,
-        given: usize,
-    },
-
     #[error(
         "I saw a pattern on a constructor that has {} field(s) be matched with {} argument(s).\n",
         expected.if_supports_color(Stdout, |s| s.purple()),
