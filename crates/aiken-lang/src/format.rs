@@ -521,11 +521,7 @@ impl<'comments> Formatter<'comments> {
             ))
             .nest(INDENT)
             .group()
-            .append(if other_fun.is_some() {
-                line()
-            } else {
-                nil()
-            })
+            .append(if other_fun.is_some() { line() } else { nil() })
             .append(
                 other_fun
                     .as_ref()

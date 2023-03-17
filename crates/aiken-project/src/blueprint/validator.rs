@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use super::{
     definitions::{Definitions, Reference},
     error::Error,
@@ -8,7 +6,6 @@ use super::{
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{
     ast::{TypedArg, TypedFunction, TypedValidator},
-    builtins::wrapped_redeemer,
     uplc::CodeGenerator,
 };
 use miette::NamedSource;
@@ -146,15 +143,15 @@ impl Validator<Reference, Annotated<Schema>> {
                         module.code.clone(),
                     ),
                 })
-                .map(|schema| match datum {
-                    Some(..) if is_multi_validator => {
-                        let wrap_redeemer_type = wrapped_redeemer(redeemer.tipo);
-
-                        definitions.register(&wrap_redeemer_type, &HashMap::new(), todo!());
-                    }
-                    _ => Argument {
-                        title: Some(redeemer.arg_name.get_label()),
-                        schema,
+                .map(|schema| Argument {
+                    title: Some(redeemer.arg_name.get_label()),
+                    schema: match datum {
+                        Some(..) if is_multi_validator => Annotated::as_wrapped_redeemer(
+                            &mut definitions,
+                            schema,
+                            redeemer.tipo.clone(),
+                        ),
+                        _ => schema,
                     },
                 })?,
             program: program.clone(),

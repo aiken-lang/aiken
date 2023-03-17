@@ -306,8 +306,8 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
             ast::UntypedDefinition::Validator(ast::Validator {
                 doc: None,
                 fun: functions
-                  .next()
-                  .expect("unwrapping safe because there's 'at_least(1)' function"),
+                    .next()
+                    .expect("unwrapping safe because there's 'at_least(1)' function"),
                 other_fun: functions.next(),
                 location: Span {
                     start: span.start,
