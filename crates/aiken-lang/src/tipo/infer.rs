@@ -312,8 +312,8 @@ fn infer_definition(
                                 || other_typed_fun.arguments.len() > 3
                             {
                                 return Err(Error::IncorrectValidatorArity {
-                                    count: typed_fun.arguments.len() as u32,
-                                    location: typed_fun.location,
+                                    count: other_typed_fun.arguments.len() as u32,
+                                    location: other_typed_fun.location,
                                 });
                             }
 
