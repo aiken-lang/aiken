@@ -5,8 +5,8 @@ fn when_tuple(a: (Int, Int)) -> Int {
   }
 }
 
-validator spend {
-  fn(a: Data, b: Data, c) -> Bool {
+validator {
+  fn spend(a: Data, b: Data, c) -> Bool {
     when_tuple((4, 1)) == 4
   }
 }

@@ -111,10 +111,7 @@ impl Validator<Reference, Annotated<Schema>> {
                     title: Some(redeemer.arg_name.get_label()),
                     schema,
                 })?,
-            program: generator
-                .generate(&def.fun.body, &arguments, true)
-                .try_into()
-                .unwrap(),
+            program: generator.generate(def).try_into().unwrap(),
             definitions,
         })
     }

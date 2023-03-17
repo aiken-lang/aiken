@@ -2,8 +2,8 @@ use aiken/list.{find, foldr}
 use aiken/transaction.{Input, ScriptContext, Spend}
 use aiken/transaction/value.{add, zero}
 
-validator staking {
-  fn(_datum: Void, _redeemer: Void, context: ScriptContext) -> Bool {
+validator {
+  fn staking(_datum: Void, _redeemer: Void, context: ScriptContext) -> Bool {
     expect Spend(ref) =
       context.purpose
 

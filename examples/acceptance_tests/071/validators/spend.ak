@@ -96,8 +96,8 @@ pub fn validate_pool_borrow(
   True
 }
 
-validator pool_contract {
-  fn(datum: PoolDatum, redeemer: PoolRedeemer, ctx: ScriptContext) {
+validator {
+  fn pool_contract(datum: PoolDatum, redeemer: PoolRedeemer, ctx: ScriptContext) {
     when redeemer.action is {
       PoolWithdraw(_) ->
         True

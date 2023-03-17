@@ -3,8 +3,8 @@ use aiken/list
 use aiken/transaction.{Mint, ScriptContext}
 use aiken/transaction/value
 
-validator mint {
-  fn(redeemer: Data, ctx: ScriptContext) {
+validator {
+  fn mint(redeemer: Data, ctx: ScriptContext) {
     [
       assert_purpose(ctx),
       assert_mint(ctx.purpose, ctx.transaction),

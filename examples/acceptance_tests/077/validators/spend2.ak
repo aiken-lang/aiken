@@ -1,8 +1,8 @@
 use aiken/list
 use aiken/transaction.{Output, ScriptContext}
 
-validator backtrace {
-  fn(_datum: Void, _redeemer: Void, context: ScriptContext) -> Bool {
+validator {
+  fn backtrace(_datum: Void, _redeemer: Void, context: ScriptContext) -> Bool {
     expect Some(_) =
       list.find(context.transaction.outputs, fn(_) { True })
     let _ =

@@ -7,6 +7,66 @@ pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
 pub const ASSERT_ON_LIST: &str = "__assert_on_list";
 
+impl Term<Name> {
+    pub fn apply(self, arg: Self) -> Self {
+        Term::Apply {
+            function: self.into(),
+            argument: arg.into(),
+        }
+    }
+
+    pub fn lambda(self, parameter_name: impl ToString) -> Self {
+        Term::Lambda {
+            parameter_name: Name::text(parameter_name).into(),
+            body: self.into(),
+        }
+    }
+
+    pub fn force(self) -> Self {
+        Term::Force(self.into())
+    }
+
+    pub fn delay(self) -> Self {
+        Term::Delay(self.into())
+    }
+
+    pub fn var(name: impl ToString) -> Self {
+        Term::Var(Name::text(name).into())
+    }
+
+    pub fn integer(i: num_bigint::BigInt) -> Self {
+        Term::Constant(Constant::Integer(i).into())
+    }
+
+    pub fn constr_data() -> Self {
+        Term::Builtin(DefaultFunction::ConstrData)
+    }
+
+    pub fn equals_integer() -> Self {
+        Term::Builtin(DefaultFunction::EqualsInteger)
+    }
+
+    pub fn head_list() -> Self {
+        Term::Builtin(DefaultFunction::HeadList).force()
+    }
+
+    pub fn delayed_if_else(self, then_term: Self, else_term: Self) -> Self {
+        Term::Apply {
+            function: Term::Apply {
+                function: Term::Apply {
+                    function: Term::Builtin(DefaultFunction::IfThenElse).force().into(),
+                    argument: self.into(),
+                }
+                .into(),
+                argument: Term::Delay(then_term.into()).into(),
+            }
+            .into(),
+            argument: Term::Delay(else_term.into()).into(),
+        }
+        .force()
+    }
+}
+
 pub fn apply_wrap(function: Term<Name>, arg: Term<Name>) -> Term<Name> {
     Term::Apply {
         function: function.into(),
@@ -97,7 +157,7 @@ pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
                         Term::Constant(Constant::Unit.into()),
                         apply_wrap(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(),
+                                Term::Builtin(DefaultFunction::ChooseUnit).force(),
                                 apply_wrap(
                                     Term::Var(
                                         Name {
@@ -107,7 +167,7 @@ pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
                                         .into(),
                                     ),
                                     apply_wrap(
-                                        Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                        Term::Builtin(DefaultFunction::HeadList).force(),
                                         Term::Var(
                                             Name {
                                                 text: "list_to_check".to_string(),
@@ -137,7 +197,7 @@ pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
                                         ),
                                     ),
                                     apply_wrap(
-                                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                        Term::Builtin(DefaultFunction::TailList).force(),
                                         Term::Var(
                                             Name {
                                                 text: "list_to_check".to_string(),
@@ -461,9 +521,7 @@ pub fn delayed_if_else(
     Term::Apply {
         function: Term::Apply {
             function: Term::Apply {
-                function: Term::Builtin(DefaultFunction::IfThenElse)
-                    .force_wrap()
-                    .into(),
+                function: Term::Builtin(DefaultFunction::IfThenElse).force().into(),
                 argument: condition.into(),
             }
             .into(),
@@ -472,16 +530,14 @@ pub fn delayed_if_else(
         .into(),
         argument: Term::Delay(else_term.into()).into(),
     }
-    .force_wrap()
+    .force()
 }
 
 pub fn if_else(condition: Term<Name>, then_term: Term<Name>, else_term: Term<Name>) -> Term<Name> {
     Term::Apply {
         function: Term::Apply {
             function: Term::Apply {
-                function: Term::Builtin(DefaultFunction::IfThenElse)
-                    .force_wrap()
-                    .into(),
+                function: Term::Builtin(DefaultFunction::IfThenElse).force().into(),
                 argument: condition.into(),
             }
             .into(),
@@ -501,8 +557,8 @@ pub fn delayed_choose_list(
         function: Term::Apply {
             function: Term::Apply {
                 function: Term::Builtin(DefaultFunction::ChooseList)
-                    .force_wrap()
-                    .force_wrap()
+                    .force()
+                    .force()
                     .into(),
                 argument: list.into(),
             }
@@ -512,7 +568,7 @@ pub fn delayed_choose_list(
         .into(),
         argument: Term::Delay(else_term.into()).into(),
     }
-    .force_wrap()
+    .force()
 }
 
 pub fn choose_list(
@@ -524,8 +580,8 @@ pub fn choose_list(
         function: Term::Apply {
             function: Term::Apply {
                 function: Term::Builtin(DefaultFunction::ChooseList)
-                    .force_wrap()
-                    .force_wrap()
+                    .force()
+                    .force()
                     .into(),
                 argument: list.into(),
             }
@@ -542,7 +598,7 @@ pub fn repeat_tail_list(term: Term<Name>, repeat: usize) -> Term<Name> {
 
     for _ in 0..repeat {
         term = Term::Apply {
-            function: Term::Builtin(DefaultFunction::TailList).force_wrap().into(),
+            function: Term::Builtin(DefaultFunction::TailList).force().into(),
             argument: term.into(),
         };
     }

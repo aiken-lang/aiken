@@ -206,14 +206,6 @@ impl<T> Term<T> {
     pub fn is_unit(&self) -> bool {
         matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Unit)
     }
-
-    pub fn force_wrap(self) -> Self {
-        Term::Force(self.into())
-    }
-
-    pub fn delay_wrap(self) -> Self {
-        Term::Delay(self.into())
-    }
 }
 
 impl<'a, T> Display for Term<T>
@@ -283,6 +275,15 @@ impl Display for Type {
 pub struct Name {
     pub text: String,
     pub unique: Unique,
+}
+
+impl Name {
+    pub fn text(t: impl ToString) -> Name {
+        Name {
+            text: t.to_string(),
+            unique: 0.into(),
+        }
+    }
 }
 
 impl hash::Hash for Name {

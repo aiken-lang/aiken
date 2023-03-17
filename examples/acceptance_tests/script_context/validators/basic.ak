@@ -4,8 +4,8 @@ use aiken/transaction.{NoDatum, ScriptContext, Spend, TransactionId}
 use aiken/transaction/credential.{VerificationKeyCredential}
 use aiken/transaction/value
 
-validator spend {
-  fn(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
+validator {
+  fn spend(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
     [
       assert_id(ctx.transaction),
       assert_purpose(ctx.purpose),

@@ -5,8 +5,8 @@ use aiken/list
 use aiken/transaction.{DatumHash, InlineDatum, ScriptContext}
 use aiken/transaction/credential.{Inline, VerificationKeyCredential}
 
-validator spend {
-  fn(datum: Data, _redeemer: Data, ctx: ScriptContext) {
+validator {
+  fn spend(datum: Data, _redeemer: Data, ctx: ScriptContext) {
     [
       assert_datum(datum),
       assert_datums(ctx.transaction.datums),

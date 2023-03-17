@@ -699,13 +699,13 @@ where
             {
                 let left = generator
                     .clone()
-                    .generate(&left_src, &[], false)
+                    .generate_test(&left_src, &[])
                     .try_into()
                     .unwrap();
 
                 let right = generator
                     .clone()
-                    .generate(&right_src, &[], false)
+                    .generate_test(&right_src, &[])
                     .try_into()
                     .unwrap();
 
@@ -718,7 +718,7 @@ where
                 None
             };
 
-            let program = generator.generate(body, arguments, false);
+            let program = generator.generate_test(body, arguments);
 
             let script = Script::new(
                 input_path,

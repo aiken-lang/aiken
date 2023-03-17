@@ -4,7 +4,10 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{apply_wrap, delayed_choose_list, delayed_if_else, if_else},
+        builder::{
+            apply_wrap, constr_index_exposer, delayed_choose_list, delayed_if_else, if_else,
+            CONSTR_FIELDS_EXPOSER,
+        },
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -193,10 +196,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         apply_wrap(DefaultFunction::IData.into(), term)
     } else if field_type.is_void() {
         apply_wrap(
-            apply_wrap(
-                Term::Builtin(DefaultFunction::ChooseUnit).force_wrap(),
-                term,
-            ),
+            apply_wrap(Term::Builtin(DefaultFunction::ChooseUnit).force(), term),
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
                     tag: convert_constr_to_tag(0).unwrap(),
@@ -225,11 +225,9 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                     DefaultFunction::ListData.into(),
                     apply_wrap(
                         apply_wrap(
-                            Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                            Term::Builtin(DefaultFunction::MkCons).force(),
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::FstPair)
-                                    .force_wrap()
-                                    .force_wrap(),
+                                Term::Builtin(DefaultFunction::FstPair).force().force(),
                                 Term::Var(
                                     Name {
                                         text: "__pair".to_string(),
@@ -241,11 +239,9 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                         ),
                         apply_wrap(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                Term::Builtin(DefaultFunction::MkCons).force(),
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::SndPair)
-                                        .force_wrap()
-                                        .force_wrap(),
+                                    Term::Builtin(DefaultFunction::SndPair).force().force(),
                                     Term::Var(
                                         Name {
                                             text: "__pair".to_string(),
@@ -303,9 +299,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                     Term::Constant(UplcConstant::Integer(0.into()).into()),
                 ),
                 apply_wrap(
-                    Term::Builtin(DefaultFunction::FstPair)
-                        .force_wrap()
-                        .force_wrap(),
+                    Term::Builtin(DefaultFunction::FstPair).force().force(),
                     apply_wrap(DefaultFunction::UnConstrData.into(), term),
                 ),
             ),
@@ -338,7 +332,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                             apply_wrap(
                                 Term::Builtin(DefaultFunction::MkPairData),
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::HeadList).force(),
                                     Term::Var(
                                         Name {
                                             text: "__list_data".to_string(),
@@ -349,7 +343,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                                 ),
                             ),
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                Term::Builtin(DefaultFunction::HeadList).force(),
                                 Term::Var(
                                     Name {
                                         text: "__tail".to_string(),
@@ -362,7 +356,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                         .into(),
                     },
                     apply_wrap(
-                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                        Term::Builtin(DefaultFunction::TailList).force(),
                         Term::Var(
                             Name {
                                 text: "__list_data".to_string(),
@@ -385,9 +379,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
                 Term::Constant(UplcConstant::Integer(1.into()).into()),
             ),
             apply_wrap(
-                Term::Builtin(DefaultFunction::FstPair)
-                    .force_wrap()
-                    .force_wrap(),
+                Term::Builtin(DefaultFunction::FstPair).force().force(),
                 apply_wrap(DefaultFunction::UnConstrData.into(), term),
             ),
         )
@@ -576,7 +568,7 @@ pub fn list_access_to_uplc(
             && is_list_accessor
         {
             apply_wrap(
-                Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                Term::Builtin(DefaultFunction::HeadList).force(),
                 Term::Var(
                     Name {
                         text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
@@ -588,7 +580,7 @@ pub fn list_access_to_uplc(
         } else {
             convert_data_to_type(
                 apply_wrap(
-                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                    Term::Builtin(DefaultFunction::HeadList).force(),
                     Term::Var(
                         Name {
                             text: format!(
@@ -631,7 +623,7 @@ pub fn list_access_to_uplc(
                             body: term.into(),
                         },
                         apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Builtin(DefaultFunction::TailList).force(),
                             Term::Var(
                                 Name {
                                     text: format!(
@@ -690,7 +682,7 @@ pub fn list_access_to_uplc(
                                     body: term.into(),
                                 },
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::TailList).force(),
                                     Term::Var(
                                         Name {
                                             text: format!(
@@ -725,7 +717,7 @@ pub fn list_access_to_uplc(
                     body: if check_last_item {
                         delayed_choose_list(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                Term::Builtin(DefaultFunction::TailList).force(),
                                 Term::Var(
                                     Name {
                                         text: format!(
@@ -740,7 +732,7 @@ pub fn list_access_to_uplc(
                             term,
                             apply_wrap(
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                                    Term::Builtin(DefaultFunction::Trace).force(),
                                     Term::Constant(
                                         UplcConstant::String(
                                             "List/Tuple/Constr contains more items than expected"
@@ -751,7 +743,7 @@ pub fn list_access_to_uplc(
                                 ),
                                 Term::Delay(Term::Error.into()),
                             )
-                            .force_wrap(),
+                            .force(),
                         )
                         .into()
                     } else {
@@ -775,7 +767,7 @@ pub fn list_access_to_uplc(
                         body: if check_last_item {
                             delayed_choose_list(
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::TailList).force(),
                                     Term::Var(
                                         Name {
                                             text: format!(
@@ -790,7 +782,7 @@ pub fn list_access_to_uplc(
                                 term,
                                 apply_wrap(
                                     apply_wrap(
-                                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                                        Term::Builtin(DefaultFunction::Trace).force(),
                                         Term::Constant(
                                             UplcConstant::String(
                                                 "List/Tuple/Constr contains more items than it expected"
@@ -801,7 +793,7 @@ pub fn list_access_to_uplc(
                                     ),
                                     Term::Delay(Term::Error.into()),
                                 )
-                                .force_wrap(),
+                                .force(),
                             )
                             .into()
                         } else {
@@ -845,7 +837,7 @@ pub fn list_access_to_uplc(
                             body: apply_wrap(
                                 list_access_inner,
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::TailList).force(),
                                     Term::Var(
                                         Name {
                                             text: format!(
@@ -936,7 +928,7 @@ pub fn list_access_to_uplc(
                                     body: apply_wrap(
                                         list_access_inner,
                                         apply_wrap(
-                                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                            Term::Builtin(DefaultFunction::TailList).force(),
                                             Term::Var(
                                                 Name {
                                                     text: format!(
@@ -1356,6 +1348,22 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
         }
     }
     term
+}
+
+pub fn wrap_as_multi_validator(spend: Term<Name>, mint: Term<Name>) -> Term<Name> {
+    Term::equals_integer()
+        .apply(Term::integer(0.into()))
+        .apply(constr_index_exposer(Term::var("__second_arg")))
+        .delayed_if_else(
+            mint.apply(Term::var("__first_arg"))
+                .apply(Term::var("__second_arg")),
+            spend.apply(Term::var("__first_arg")).apply(
+                Term::head_list()
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg"))),
+            ),
+        )
+        .lambda("__second_arg")
+        .lambda("__first_arg")
 }
 
 pub fn monomorphize(
