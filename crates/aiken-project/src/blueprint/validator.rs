@@ -107,9 +107,12 @@ impl Validator<Reference, Annotated<Schema>> {
                         module.code.clone(),
                     ),
                 })
-                .map(|schema| Argument {
-                    title: Some(redeemer.arg_name.get_label()),
-                    schema,
+                .map(|schema| match datum {
+                    Some(..) if def.other_fun.is_some() => todo!(),
+                    _ => Argument {
+                        title: Some(redeemer.arg_name.get_label()),
+                        schema,
+                    },
                 })?,
             program: generator.generate(def).try_into().unwrap(),
             definitions,
