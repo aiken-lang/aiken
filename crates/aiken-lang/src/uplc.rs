@@ -20,8 +20,8 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
-        TypedFunction, TypedValidator, UnOp,
+        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedClause, TypedDataType, TypedFunction,
+        TypedValidator, UnOp,
     },
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
@@ -145,11 +145,7 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term, true)
     }
 
-    pub fn generate_test(
-        &mut self,
-        test_body: &TypedExpr,
-        arguments: &[TypedArg],
-    ) -> Program<Name> {
+    pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
         let mut ir_stack = vec![];
         let scope = vec![self.id_gen.next()];
 
@@ -166,8 +162,6 @@ impl<'a> CodeGenerator<'a> {
 
             term = builder::constr_fields_exposer(term);
         }
-
-        term = wrap_validator_args(term, arguments);
 
         self.finalize(term, false)
     }
