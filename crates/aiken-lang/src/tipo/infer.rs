@@ -323,6 +323,14 @@ fn infer_definition(
                         });
                     }
 
+                    if typed_fun.arguments.len() == other_typed_fun.arguments.len() {
+                        return Err(Error::MultiValidatorEqualArgs {
+                            location: typed_fun.location,
+                            other_location: other_typed_fun.location,
+                            count: other_typed_fun.arguments.len(),
+                        });
+                    }
+
                     Ok(other_typed_fun)
                 })
                 .transpose();
