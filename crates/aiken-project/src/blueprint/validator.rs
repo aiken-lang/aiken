@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{
     definitions::{Definitions, Reference},
     error::Error,
@@ -6,6 +8,7 @@ use super::{
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{
     ast::{TypedArg, TypedFunction, TypedValidator},
+    builtins::wrapped_redeemer,
     uplc::CodeGenerator,
 };
 use miette::NamedSource;
@@ -144,7 +147,11 @@ impl Validator<Reference, Annotated<Schema>> {
                     ),
                 })
                 .map(|schema| match datum {
-                    Some(..) if is_multi_validator => todo!(),
+                    Some(..) if is_multi_validator => {
+                        let wrap_redeemer_type = wrapped_redeemer(redeemer.tipo);
+
+                        definitions.register(&wrap_redeemer_type, &HashMap::new(), todo!());
+                    }
                     _ => Argument {
                         title: Some(redeemer.arg_name.get_label()),
                         schema,
@@ -305,11 +312,12 @@ mod test {
         let validator = validators
             .get(0)
             .unwrap()
+            .as_ref()
             .expect("Failed to create validator blueprint");
 
-        println!("{}", serde_json::to_string_pretty(&validator).unwrap());
+        println!("{}", serde_json::to_string_pretty(validator).unwrap());
 
-        assert_json_eq!(serde_json::to_value(&validator).unwrap(), expected);
+        assert_json_eq!(serde_json::to_value(validator).unwrap(), expected);
     }
 
     #[test]
