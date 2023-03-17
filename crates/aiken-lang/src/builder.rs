@@ -18,8 +18,8 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        AssignmentKind, BinOp, Clause, ClauseGuard, Constant, DataType, Pattern, Span, TypedArg,
-        TypedDataType, UnOp,
+        AssignmentKind, BinOp, ClauseGuard, Constant, DataType, Pattern, Span, TypedArg,
+        TypedClause, TypedDataType, UnOp,
     },
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
@@ -396,9 +396,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
     }
 }
 
-pub fn rearrange_clauses(
-    clauses: Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>>>,
-) -> Vec<Clause<TypedExpr, PatternConstructor, Arc<Type>>> {
+pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
@@ -406,11 +404,11 @@ pub fn rearrange_clauses(
     // let's sort clauses by a safer manner
     // TODO: how shall tails be weighted? Since any clause after will not run
     sorted_clauses.sort_by(|clause1, clause2| {
-        let clause1_len = match &clause1.pattern[0] {
+        let clause1_len = match &clause1.pattern {
             Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
             _ => 10000000,
         };
-        let clause2_len = match &clause2.pattern[0] {
+        let clause2_len = match &clause2.pattern {
             Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
             _ => 10000001,
         };
@@ -427,7 +425,7 @@ pub fn rearrange_clauses(
 
     // If we have a catch all, use that. Otherwise use todo which will result in error
     // TODO: fill in todo label with description
-    let plug_in_then = match &sorted_clauses[sorted_clauses.len() - 1].pattern[0] {
+    let plug_in_then = match &sorted_clauses[sorted_clauses.len() - 1].pattern {
         Pattern::Var { name, .. } => {
             assign_plug_in_name = Some(name);
             sorted_clauses[sorted_clauses.len() - 1].clone().then
@@ -452,7 +450,7 @@ pub fn rearrange_clauses(
     };
 
     for (index, clause) in sorted_clauses.iter().enumerate() {
-        if let Pattern::List { elements, .. } = &clause.pattern[0] {
+        if let Pattern::List { elements, .. } = &clause.pattern {
             // found a hole and now we plug it
             while elems_len < elements.len() {
                 let mut discard_elems = vec![];
@@ -466,9 +464,9 @@ pub fn rearrange_clauses(
 
                 // If we have a named catch all then in scope the name and create list of discards, otherwise list of discards
                 let clause_to_fill = if let Some(name) = assign_plug_in_name {
-                    Clause {
+                    TypedClause {
                         location: Span::empty(),
-                        pattern: vec![Pattern::Assign {
+                        pattern: Pattern::Assign {
                             name: name.clone(),
                             location: Span::empty(),
                             pattern: Pattern::List {
@@ -477,20 +475,18 @@ pub fn rearrange_clauses(
                                 tail: None,
                             }
                             .into(),
-                        }],
-                        alternative_patterns: vec![],
+                        },
                         guard: None,
                         then: plug_in_then.clone(),
                     }
                 } else {
-                    Clause {
+                    TypedClause {
                         location: Span::empty(),
-                        pattern: vec![Pattern::List {
+                        pattern: Pattern::List {
                             location: Span::empty(),
                             elements: discard_elems,
                             tail: None,
-                        }],
-                        alternative_patterns: vec![],
+                        },
                         guard: None,
                         then: plug_in_then.clone(),
                     }
@@ -502,7 +498,7 @@ pub fn rearrange_clauses(
         }
 
         // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
-        match &clause.pattern[0] {
+        match &clause.pattern {
             Pattern::Var { .. } => {
                 last_clause_index = index + 1;
                 last_clause_set = true;
@@ -533,14 +529,13 @@ pub fn rearrange_clauses(
 
         // If the last condition doesn't have a catch all or tail then add a catch all with a todo
         if index == sorted_clauses.len() - 1 {
-            if let Pattern::List { tail: None, .. } = &clause.pattern[0] {
-                final_clauses.push(Clause {
+            if let Pattern::List { tail: None, .. } = &clause.pattern {
+                final_clauses.push(TypedClause {
                     location: Span::empty(),
-                    pattern: vec![Pattern::Discard {
+                    pattern: Pattern::Discard {
                         name: "_".to_string(),
                         location: Span::empty(),
-                    }],
-                    alternative_patterns: vec![],
+                    },
                     guard: None,
                     then: plug_in_then.clone(),
                 });

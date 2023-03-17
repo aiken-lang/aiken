@@ -4,9 +4,9 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg, Clause,
-        DefinitionLocation, IfBranch, Pattern, RecordUpdateSpread, Span, TraceKind,
-        TypedRecordUpdateArg, UnOp, UntypedRecordUpdateArg,
+        Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        DefinitionLocation, IfBranch, Pattern, RecordUpdateSpread, Span, TraceKind, TypedClause,
+        TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
@@ -102,8 +102,8 @@ pub enum TypedExpr {
     When {
         location: Span,
         tipo: Arc<Type>,
-        subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>>>,
+        subject: Box<Self>,
+        clauses: Vec<TypedClause>,
     },
 
     If {
@@ -355,10 +355,9 @@ impl TypedExpr {
             TypedExpr::Assignment { value, .. } => value.find_node(byte_index),
 
             TypedExpr::When {
-                subjects, clauses, ..
-            } => subjects
-                .iter()
-                .find_map(|subject| subject.find_node(byte_index))
+                subject, clauses, ..
+            } => subject
+                .find_node(byte_index)
                 .or_else(|| {
                     clauses
                         .iter()
@@ -481,8 +480,8 @@ pub enum UntypedExpr {
 
     When {
         location: Span,
-        subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, (), ()>>,
+        subject: Box<Self>,
+        clauses: Vec<UntypedClause>,
     },
 
     If {

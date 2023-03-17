@@ -1,6 +1,3 @@
-use chumsky::prelude::*;
-use vec1::Vec1;
-
 pub mod error;
 pub mod extra;
 pub mod lexer;
@@ -13,10 +10,11 @@ use crate::{
     },
     expr,
 };
-
+use chumsky::prelude::*;
 use error::ParseError;
 use extra::ModuleExtra;
 use token::Token;
+use vec1::{vec1, Vec1};
 
 pub fn module(
     src: &str,
@@ -923,7 +921,7 @@ pub fn expr_parser(
         let when_clause_parser = pattern_parser()
             .then(
                 just(Token::Vbar)
-                    .ignore_then(pattern_parser().map(|pattern| vec![pattern]))
+                    .ignore_then(pattern_parser())
                     .repeated()
                     .or_not(),
             )
@@ -962,26 +960,29 @@ pub fn expr_parser(
                     }),
             )))
             .map_with_span(
-                |(((pattern, alternative_patterns_opt), guard), then), span| ast::UntypedClause {
-                    location: span,
-                    pattern: vec![pattern],
-                    alternative_patterns: alternative_patterns_opt.unwrap_or_default(),
-                    guard,
-                    then,
+                |(((pattern, alternative_patterns_opt), guard), then), span| {
+                    let mut patterns = vec1![pattern];
+                    patterns.append(&mut alternative_patterns_opt.unwrap_or_default());
+                    ast::UntypedClause {
+                        location: span,
+                        patterns,
+                        guard,
+                        then,
+                    }
                 },
             );
 
         let when_parser = just(Token::When)
             // TODO: If subject is empty we should return ParseErrorType::ExpectedExpr,
-            .ignore_then(r.clone().separated_by(just(Token::Comma)))
+            .ignore_then(r.clone().map(Box::new))
             .then_ignore(just(Token::Is))
             .then_ignore(just(Token::LeftBrace))
             // TODO: If clauses are empty we should return ParseErrorType::NoCaseClause
             .then(when_clause_parser.repeated())
             .then_ignore(just(Token::RightBrace))
-            .map_with_span(|(subjects, clauses), span| expr::UntypedExpr::When {
+            .map_with_span(|(subject, clauses), span| expr::UntypedExpr::When {
                 location: span,
-                subjects,
+                subject,
                 clauses,
             });
 

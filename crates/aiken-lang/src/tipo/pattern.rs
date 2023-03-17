@@ -15,7 +15,7 @@ use super::{
     PatternConstructor, Type, ValueConstructorVariant,
 };
 use crate::{
-    ast::{CallArg, Pattern, Span, TypedPattern, UntypedMultiPattern, UntypedPattern},
+    ast::{CallArg, Pattern, Span, TypedPattern, UntypedPattern},
     builtins::{int, list, tuple},
 };
 
@@ -96,14 +96,14 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         }
     }
 
-    pub fn infer_alternative_multi_pattern(
+    pub fn infer_alternative_pattern(
         &mut self,
-        multi_pattern: UntypedMultiPattern,
-        subjects: &[Arc<Type>],
+        pattern: UntypedPattern,
+        subject: &Type,
         location: &Span,
-    ) -> Result<Vec<TypedPattern>, Error> {
+    ) -> Result<TypedPattern, Error> {
         self.mode = PatternMode::Alternative(vec![]);
-        let typed_multi = self.infer_multi_pattern(multi_pattern, subjects, location)?;
+        let typed_pattern = self.infer_pattern(pattern, subject)?;
         match &self.mode {
             PatternMode::Initial => panic!("Pattern mode switched from Alternative to Initial"),
             PatternMode::Alternative(assigned)
@@ -123,32 +123,16 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                         .clone(),
                 })
             }
-            PatternMode::Alternative(_) => Ok(typed_multi),
+            PatternMode::Alternative(_) => Ok(typed_pattern),
         }
     }
 
-    pub fn infer_multi_pattern(
+    pub fn infer_pattern(
         &mut self,
-        multi_pattern: UntypedMultiPattern,
-        subjects: &[Arc<Type>],
-        location: &Span,
-    ) -> Result<Vec<TypedPattern>, Error> {
-        // If there are N subjects the multi-pattern is expected to be N patterns
-        if subjects.len() != multi_pattern.len() {
-            return Err(Error::IncorrectNumClausePatterns {
-                location: *location,
-                expected: subjects.len(),
-                given: multi_pattern.len(),
-            });
-        }
-
-        // Unify each pattern in the multi-pattern with the corresponding subject
-        let mut typed_multi = Vec::with_capacity(multi_pattern.len());
-        for (pattern, subject_type) in multi_pattern.into_iter().zip(subjects) {
-            let pattern = self.unify(pattern, subject_type.clone(), None, false)?;
-            typed_multi.push(pattern);
-        }
-        Ok(typed_multi)
+        pattern: UntypedPattern,
+        subject: &Type,
+    ) -> Result<TypedPattern, Error> {
+        self.unify(pattern, Arc::new(subject.clone()), None, false)
     }
 
     /// When we have an assignment or a case expression we unify the pattern with the
