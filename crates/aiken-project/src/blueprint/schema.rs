@@ -2,6 +2,7 @@ use crate::blueprint::definitions::{Definitions, Reference};
 use crate::CheckedModule;
 use aiken_lang::{
     ast::{DataType, Definition, TypedDefinition},
+    builtins::wrapped_redeemer,
     tipo::{pretty, Type, TypeVar},
 };
 use owo_colors::{OwoColorize, Stream::Stdout};
@@ -11,6 +12,9 @@ use serde::{
 };
 use std::ops::Deref;
 use std::{collections::HashMap, sync::Arc};
+
+// NOTE: Can be anything BUT 0
+pub const REDEEMER_DISCRIMINANT: usize = 1;
 
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Annotated<T> {
@@ -71,6 +75,30 @@ impl<T> From<T> for Annotated<T> {
 }
 
 impl Annotated<Schema> {
+    pub fn as_wrapped_redeemer(
+        definitions: &mut Definitions<Annotated<Schema>>,
+        schema: Reference,
+        type_info: Arc<Type>,
+    ) -> Reference {
+        definitions
+            .register(
+                &wrapped_redeemer(type_info),
+                &HashMap::new(),
+                |_| {
+                    Ok::<_, Error>(Annotated {
+                        title: Some("Wrapped Redeemer".to_string()),
+                        description: Some("A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.".to_string()),
+                        annotated: Schema::Data(Data::AnyOf(vec![Constructor {
+                            index: REDEEMER_DISCRIMINANT,
+                            fields: vec![schema.into()],
+                        }
+                        .into()])),
+                    })
+                },
+            )
+            .expect("cannot fail because Ok")
+    }
+
     pub fn from_type(
         modules: &HashMap<String, CheckedModule>,
         type_info: &Type,

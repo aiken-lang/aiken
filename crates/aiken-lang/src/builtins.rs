@@ -23,6 +23,7 @@ pub const RESULT: &str = "Result";
 pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
 pub const ORDERING: &str = "Ordering";
+pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -1056,4 +1057,13 @@ pub fn unbound_var(id: u64) -> Arc<Type> {
     let tipo = Arc::new(RefCell::new(TypeVar::Unbound { id }));
 
     Arc::new(Type::Var { tipo })
+}
+
+pub fn wrapped_redeemer(redeemer: Arc<Type>) -> Arc<Type> {
+    Arc::new(Type::App {
+        public: true,
+        module: "".to_string(),
+        name: REDEEMER_WRAPPER.to_string(),
+        args: vec![redeemer],
+    })
 }

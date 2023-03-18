@@ -240,10 +240,11 @@ impl<'comments> Formatter<'comments> {
 
             Definition::Validator(Validator {
                 end_position,
-                fun: function,
+                fun,
+                other_fun,
                 params,
                 ..
-            }) => self.definition_validator(params, function, *end_position),
+            }) => self.definition_validator(params, fun, other_fun, *end_position),
 
             Definition::Test(Function {
                 name,
@@ -504,55 +505,58 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         params: &'a [UntypedArg],
         fun: &'a UntypedFunction,
+        other_fun: &'a Option<UntypedFunction>,
         end_position: usize,
     ) -> Document<'a> {
-        // Fn and args
-        let head = "fn".to_doc().append(wrap_args(
-            fun.arguments.iter().map(|e| (self.fn_arg(e), false)),
-        ));
-
-        // Add return annotation
-        let head = match &fun.return_annotation {
-            Some(anno) => head.append(" -> ").append(self.annotation(anno)),
-            None => head,
-        }
-        .group();
-
-        // Format body
-        let body = self.expr(&fun.body);
-
-        // Add any trailing comments
-        let body = match printed_comments(self.pop_comments(fun.end_position), false) {
-            Some(comments) => body.append(line()).append(comments),
-            None => body,
-        };
-
-        // validator name(params)
-        let v_head = "validator"
-            .to_doc()
-            .append(" ")
-            .append(fun.name.as_str())
-            .append(if !params.is_empty() {
-                wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
-            } else {
-                "".to_doc()
-            });
-
         // Stick it all together
-        let inner_fn = head
-            .append(" {")
-            .append(line().append(body).nest(INDENT).group())
-            .append(line())
-            .append("}");
+        let inner_fn = line()
+            .append(self.definition_fn(
+                &false,
+                "fn",
+                &fun.name,
+                &fun.arguments,
+                &fun.return_annotation,
+                &fun.body,
+                fun.end_position,
+            ))
+            .nest(INDENT)
+            .group()
+            .append(if other_fun.is_some() { line() } else { nil() })
+            .append(
+                other_fun
+                    .as_ref()
+                    .map(|other| {
+                        line()
+                            .append(self.definition_fn(
+                                &false,
+                                "fn",
+                                &other.name,
+                                &other.arguments,
+                                &other.return_annotation,
+                                &other.body,
+                                other.end_position,
+                            ))
+                            .nest(INDENT)
+                            .group()
+                    })
+                    .unwrap_or_else(nil),
+            );
 
         let inner_fn = match printed_comments(self.pop_comments(end_position), false) {
             Some(comments) => inner_fn.append(line()).append(comments),
             None => inner_fn,
         };
 
+        // validator(params)
+        let v_head = "validator".to_doc().append(if !params.is_empty() {
+            wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
+        } else {
+            nil()
+        });
+
         v_head
             .append(" {")
-            .append(line().append(inner_fn).nest(INDENT).group())
+            .append(inner_fn)
             .append(line())
             .append("}")
     }

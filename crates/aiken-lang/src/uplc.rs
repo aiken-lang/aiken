@@ -20,16 +20,16 @@ use uplc::{
 use crate::{
     air::Air,
     ast::{
-        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
-        TypedFunction, UnOp,
+        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedClause, TypedDataType, TypedFunction,
+        TypedValidator, UnOp,
     },
     builder::{
         check_replaceable_opaque_type, check_when_pattern_needs, constants_ir,
         convert_constants_to_data, convert_data_to_type, convert_type_to_data, get_common_ancestor,
         get_generic_id_and_type, handle_clause_guard, handle_func_dependencies_ir,
         handle_recursion_ir, list_access_to_uplc, lookup_data_type_by_tipo, monomorphize,
-        rearrange_clauses, replace_opaque_type, wrap_validator_args, AssignmentProperties,
-        ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
+        rearrange_clauses, replace_opaque_type, wrap_as_multi_validator, wrap_validator_args,
+        AssignmentProperties, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
     },
     builtins::bool,
     expr::TypedExpr,
@@ -80,14 +80,17 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn generate(
         &mut self,
-        body: &TypedExpr,
-        arguments: &[TypedArg],
-        wrap_as_validator: bool,
+        TypedValidator {
+            fun,
+            other_fun,
+            params,
+            ..
+        }: &TypedValidator,
     ) -> Program<Name> {
         let mut ir_stack = vec![];
         let scope = vec![self.id_gen.next()];
 
-        self.build_ir(body, &mut ir_stack, scope);
+        self.build_ir(&fun.body, &mut ir_stack, scope);
 
         self.define_ir(&mut ir_stack);
 
@@ -102,15 +105,69 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Wrap the validator body if ifThenElse term unit error
-        term = if wrap_as_validator {
-            final_wrapper(term)
-        } else {
-            term
-        };
+        term = final_wrapper(term);
 
-        term = wrap_validator_args(term, arguments);
+        term = wrap_validator_args(term, &fun.arguments);
 
-        term = if wrap_as_validator || self.used_data_assert_on_list {
+        if let Some(other) = other_fun {
+            self.reset();
+
+            let mut other_ir_stack = vec![];
+
+            let scope = vec![self.id_gen.next()];
+
+            self.build_ir(&other.body, &mut other_ir_stack, scope);
+
+            self.define_ir(&mut other_ir_stack);
+
+            self.convert_opaque_type_to_inner_ir(&mut other_ir_stack);
+
+            let other_term = self.uplc_code_gen(&mut other_ir_stack);
+
+            let other_term = final_wrapper(other_term);
+
+            let other_term = wrap_validator_args(other_term, &other.arguments);
+
+            let (spend, mint) = if other.arguments.len() > fun.arguments.len() {
+                (other_term, term)
+            } else {
+                (term, other_term)
+            };
+
+            term = wrap_as_multi_validator(spend, mint);
+            term = builder::constr_get_field(term);
+
+            term = builder::constr_fields_exposer(term);
+        }
+
+        term = wrap_validator_args(term, params);
+
+        self.finalize(term, true)
+    }
+
+    pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
+        let mut ir_stack = vec![];
+        let scope = vec![self.id_gen.next()];
+
+        self.build_ir(test_body, &mut ir_stack, scope);
+
+        self.define_ir(&mut ir_stack);
+
+        self.convert_opaque_type_to_inner_ir(&mut ir_stack);
+
+        let mut term = self.uplc_code_gen(&mut ir_stack);
+
+        if self.needs_field_access {
+            term = builder::constr_get_field(term);
+
+            term = builder::constr_fields_exposer(term);
+        }
+
+        self.finalize(term, false)
+    }
+
+    fn finalize(&mut self, term: Term<Name>, wrap_as_validator: bool) -> Program<Name> {
+        let term = if wrap_as_validator || self.used_data_assert_on_list {
             assert_on_list(term)
         } else {
             term
@@ -4029,16 +4086,9 @@ impl<'a> CodeGenerator<'a> {
                                 UplcConstant::ProtoList(UplcType::Data, vec![]).into(),
                             );
 
-                            let term = apply_wrap(
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::ConstrData),
-                                    Term::Constant(
-                                        UplcConstant::Integer(constr_index.try_into().unwrap())
-                                            .into(),
-                                    ),
-                                ),
-                                fields,
-                            );
+                            let term = Term::constr_data()
+                                .apply(Term::integer(constr_index.try_into().unwrap()))
+                                .apply(fields);
 
                             arg_stack.push(term);
                         }
@@ -4134,10 +4184,7 @@ impl<'a> CodeGenerator<'a> {
                             convert_type_to_data(arg, &list_type)
                         };
                         term = apply_wrap(
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
-                                list_item,
-                            ),
+                            apply_wrap(Term::Builtin(DefaultFunction::MkCons).force(), list_item),
                             term,
                         );
                     }
@@ -4204,7 +4251,7 @@ impl<'a> CodeGenerator<'a> {
                             body: term.into(),
                         },
                         apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Builtin(DefaultFunction::TailList).force(),
                             Term::Var(
                                 Name {
                                     text: tail_var,
@@ -4231,7 +4278,7 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         convert_data_to_type(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                Term::Builtin(DefaultFunction::HeadList).force(),
                                 Term::Var(
                                     Name {
                                         text: tail_var,
@@ -4340,7 +4387,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let mut term: Term<Name> = Term::Builtin(func);
                 for _ in 0..func.force_count() {
-                    term = term.force_wrap();
+                    term = term.force();
                 }
 
                 let mut arg_vec = vec![];
@@ -4421,8 +4468,8 @@ impl<'a> CodeGenerator<'a> {
                                             Term::Builtin(DefaultFunction::IData),
                                             apply_wrap(
                                                 Term::Builtin(DefaultFunction::FstPair)
-                                                    .force_wrap()
-                                                    .force_wrap(),
+                                                    .force()
+                                                    .force(),
                                                 Term::Var(
                                                     Name {
                                                         text: temp_tuple.clone(),
@@ -4436,9 +4483,7 @@ impl<'a> CodeGenerator<'a> {
                                     apply_wrap(
                                         Term::Builtin(DefaultFunction::ListData),
                                         apply_wrap(
-                                            Term::Builtin(DefaultFunction::SndPair)
-                                                .force_wrap()
-                                                .force_wrap(),
+                                            Term::Builtin(DefaultFunction::SndPair).force().force(),
                                             Term::Var(
                                                 Name {
                                                     text: temp_tuple,
@@ -4504,7 +4549,7 @@ impl<'a> CodeGenerator<'a> {
                             }
                         }
 
-                        term = term.force_wrap();
+                        term = term.force();
 
                         if count == 0 {
                             for temp_var in temp_vars.into_iter().rev() {
@@ -4583,7 +4628,7 @@ impl<'a> CodeGenerator<'a> {
                                         DefaultFunction::MapData.into(),
                                         apply_wrap(
                                             apply_wrap(
-                                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                                Term::Builtin(DefaultFunction::MkCons).force(),
                                                 left,
                                             ),
                                             Term::Constant(
@@ -4603,7 +4648,7 @@ impl<'a> CodeGenerator<'a> {
                                     DefaultFunction::MapData.into(),
                                     apply_wrap(
                                         apply_wrap(
-                                            Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                            Term::Builtin(DefaultFunction::MkCons).force(),
                                             right,
                                         ),
                                         Term::Constant(
@@ -4678,7 +4723,7 @@ impl<'a> CodeGenerator<'a> {
                                         DefaultFunction::MapData.into(),
                                         apply_wrap(
                                             apply_wrap(
-                                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                                Term::Builtin(DefaultFunction::MkCons).force(),
                                                 left,
                                             ),
                                             Term::Constant(
@@ -4698,7 +4743,7 @@ impl<'a> CodeGenerator<'a> {
                                     DefaultFunction::MapData.into(),
                                     apply_wrap(
                                         apply_wrap(
-                                            Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                            Term::Builtin(DefaultFunction::MkCons).force(),
                                             right,
                                         ),
                                         Term::Constant(
@@ -4919,7 +4964,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let error_term = apply_wrap(
                     apply_wrap(
-                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                        Term::Builtin(DefaultFunction::Trace).force(),
                         Term::Constant(
                             UplcConstant::String(
                                 "Expected on incorrect constructor variant.".to_string(),
@@ -4929,7 +4974,7 @@ impl<'a> CodeGenerator<'a> {
                     ),
                     Term::Delay(Term::Error.into()),
                 )
-                .force_wrap();
+                .force();
 
                 term = delayed_if_else(
                     apply_wrap(
@@ -4951,7 +4996,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let error_term = apply_wrap(
                     apply_wrap(
-                        Term::Builtin(DefaultFunction::Trace).force_wrap(),
+                        Term::Builtin(DefaultFunction::Trace).force(),
                         Term::Constant(
                             UplcConstant::String(
                                 "Expected on incorrect boolean variant.".to_string(),
@@ -4961,7 +5006,7 @@ impl<'a> CodeGenerator<'a> {
                     ),
                     Term::Delay(Term::Error.into()),
                 )
-                .force_wrap();
+                .force();
 
                 if is_true {
                     term = delayed_if_else(value, term, error_term);
@@ -5048,7 +5093,7 @@ impl<'a> CodeGenerator<'a> {
                                     .into(),
                                 ),
                             )
-                            .force_wrap();
+                            .force();
                         } else {
                             term = if_else(
                                 Term::Var(
@@ -5067,7 +5112,7 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 Term::Delay(body.into()),
                             )
-                            .force_wrap();
+                            .force();
                         }
 
                         term = apply_wrap(
@@ -5175,7 +5220,7 @@ impl<'a> CodeGenerator<'a> {
                                         .into(),
                                     ),
                                 )
-                                .force_wrap()
+                                .force()
                                 .into(),
                             },
                             Term::Delay(term.into()),
@@ -5210,7 +5255,7 @@ impl<'a> CodeGenerator<'a> {
                             body: term.into(),
                         },
                         apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Builtin(DefaultFunction::TailList).force(),
                             Term::Var(
                                 Name {
                                     text: tail_name.clone(),
@@ -5242,7 +5287,7 @@ impl<'a> CodeGenerator<'a> {
                             .into(),
                         ),
                     )
-                    .force_wrap();
+                    .force();
 
                     term = apply_wrap(
                         Term::Lambda {
@@ -5318,7 +5363,7 @@ impl<'a> CodeGenerator<'a> {
                             Term::Delay(then.into()),
                             term,
                         )
-                        .force_wrap();
+                        .force();
                     } else {
                         term = if_else(
                             Term::Var(
@@ -5331,7 +5376,7 @@ impl<'a> CodeGenerator<'a> {
                             term,
                             Term::Delay(then.into()),
                         )
-                        .force_wrap();
+                        .force();
                     }
                     arg_stack.push(term);
                 } else {
@@ -5394,7 +5439,7 @@ impl<'a> CodeGenerator<'a> {
                             .into(),
                         ),
                     )
-                    .force_wrap();
+                    .force();
                     arg_stack.push(term);
                 }
             }
@@ -5422,7 +5467,7 @@ impl<'a> CodeGenerator<'a> {
                             body: term.into(),
                         },
                         apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                            Term::Builtin(DefaultFunction::TailList).force(),
                             Term::Var(
                                 Name {
                                     text: tail_name.clone(),
@@ -5454,7 +5499,7 @@ impl<'a> CodeGenerator<'a> {
                             .into(),
                         ),
                     )
-                    .force_wrap();
+                    .force();
                 } else {
                     term = choose_list(
                         Term::Var(
@@ -5473,7 +5518,7 @@ impl<'a> CodeGenerator<'a> {
                         ),
                         Term::Delay(term.into()),
                     )
-                    .force_wrap();
+                    .force();
                 }
 
                 arg_stack.push(term);
@@ -5507,7 +5552,7 @@ impl<'a> CodeGenerator<'a> {
                 for (index, arg) in arg_vec.iter().enumerate().rev() {
                     term = apply_wrap(
                         apply_wrap(
-                            Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                            Term::Builtin(DefaultFunction::MkCons).force(),
                             convert_type_to_data(arg.clone(), &tipo.arg_types().unwrap()[index]),
                         ),
                         term,
@@ -5677,7 +5722,7 @@ impl<'a> CodeGenerator<'a> {
                     for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()).rev() {
                         term = apply_wrap(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                Term::Builtin(DefaultFunction::MkCons).force(),
                                 convert_type_to_data(arg, &tipo),
                             ),
                             term,
@@ -5715,7 +5760,7 @@ impl<'a> CodeGenerator<'a> {
                 unchanged_field_indices.reverse();
 
                 let mut term = apply_wrap(
-                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                    Term::Builtin(DefaultFunction::TailList).force(),
                     Term::Var(
                         Name {
                             text: format!("{tail_name_prefix}_{highest_index}"),
@@ -5731,7 +5776,7 @@ impl<'a> CodeGenerator<'a> {
                     if let Some((tipo, arg)) = args.get(&current_index) {
                         term = apply_wrap(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                Term::Builtin(DefaultFunction::MkCons).force(),
                                 convert_type_to_data(arg.clone(), tipo),
                             ),
                             term,
@@ -5739,9 +5784,9 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         term = apply_wrap(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons).force_wrap(),
+                                Term::Builtin(DefaultFunction::MkCons).force(),
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::HeadList).force(),
                                     Term::Var(
                                         Name {
                                             text: tail_name,
@@ -5781,7 +5826,7 @@ impl<'a> CodeGenerator<'a> {
                         if index < prev_index {
                             for _ in index..prev_index {
                                 tail_list = apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::TailList).force(),
                                     tail_list,
                                 );
                             }
@@ -5813,10 +5858,8 @@ impl<'a> CodeGenerator<'a> {
                 );
 
                 for _ in 0..prev_index {
-                    tail_list = apply_wrap(
-                        Term::Builtin(DefaultFunction::TailList).force_wrap(),
-                        tail_list,
-                    );
+                    tail_list =
+                        apply_wrap(Term::Builtin(DefaultFunction::TailList).force(), tail_list);
                 }
                 if prev_index != 0 {
                     term = apply_wrap(
@@ -5884,9 +5927,7 @@ impl<'a> CodeGenerator<'a> {
                     if tuple_index == 0 {
                         term = convert_data_to_type(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::FstPair)
-                                    .force_wrap()
-                                    .force_wrap(),
+                                Term::Builtin(DefaultFunction::FstPair).force().force(),
                                 term,
                             ),
                             &tipo.get_inner_types()[0],
@@ -5894,9 +5935,7 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         term = convert_data_to_type(
                             apply_wrap(
-                                Term::Builtin(DefaultFunction::SndPair)
-                                    .force_wrap()
-                                    .force_wrap(),
+                                Term::Builtin(DefaultFunction::SndPair).force().force(),
                                 term,
                             ),
                             &tipo.get_inner_types()[1],
@@ -5962,8 +6001,8 @@ impl<'a> CodeGenerator<'a> {
                                         convert_data_to_type(
                                             apply_wrap(
                                                 Term::Builtin(DefaultFunction::SndPair)
-                                                    .force_wrap()
-                                                    .force_wrap(),
+                                                    .force()
+                                                    .force(),
                                                 Term::Var(
                                                     Name {
                                                         text: format!("__tuple_{list_id}"),
@@ -5979,9 +6018,7 @@ impl<'a> CodeGenerator<'a> {
                                 },
                                 convert_data_to_type(
                                     apply_wrap(
-                                        Term::Builtin(DefaultFunction::FstPair)
-                                            .force_wrap()
-                                            .force_wrap(),
+                                        Term::Builtin(DefaultFunction::FstPair).force().force(),
                                         Term::Var(
                                             Name {
                                                 text: format!("__tuple_{list_id}"),
@@ -6028,10 +6065,10 @@ impl<'a> CodeGenerator<'a> {
                 let term = arg_stack.pop().unwrap();
 
                 let term = apply_wrap(
-                    apply_wrap(Term::Builtin(DefaultFunction::Trace).force_wrap(), text),
+                    apply_wrap(Term::Builtin(DefaultFunction::Trace).force(), text),
                     Term::Delay(term.into()),
                 )
-                .force_wrap();
+                .force();
 
                 arg_stack.push(term);
             }
@@ -6077,9 +6114,7 @@ impl<'a> CodeGenerator<'a> {
                                 },
                                 convert_data_to_type(
                                     apply_wrap(
-                                        Term::Builtin(DefaultFunction::FstPair)
-                                            .force_wrap()
-                                            .force_wrap(),
+                                        Term::Builtin(DefaultFunction::FstPair).force().force(),
                                         Term::Var(
                                             Name {
                                                 text: subject_name.clone(),
@@ -6103,9 +6138,7 @@ impl<'a> CodeGenerator<'a> {
                                 },
                                 convert_data_to_type(
                                     apply_wrap(
-                                        Term::Builtin(DefaultFunction::SndPair)
-                                            .force_wrap()
-                                            .force_wrap(),
+                                        Term::Builtin(DefaultFunction::SndPair).force().force(),
                                         Term::Var(
                                             Name {
                                                 text: subject_name.clone(),
@@ -6132,7 +6165,7 @@ impl<'a> CodeGenerator<'a> {
                             },
                             convert_data_to_type(
                                 apply_wrap(
-                                    Term::Builtin(DefaultFunction::HeadList).force_wrap(),
+                                    Term::Builtin(DefaultFunction::HeadList).force(),
                                     repeat_tail_list(
                                         Term::Var(
                                             Name {

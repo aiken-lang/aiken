@@ -421,6 +421,17 @@ If you really meant to return that last expression, try to replace it with the f
         name: String,
     },
 
+    #[error("I found a multi-validator where both take the same number of arguments.\n")]
+    #[diagnostic(code("illegal::multi_validator"))]
+    #[diagnostic(help("Multi-validators cannot take the same number of arguments. One must take 3 arguments\nand the other must take 2 arguments. Both of these take {} arguments.", count.to_string().purple()))]
+    MultiValidatorEqualArgs {
+        #[label("{} here", count)]
+        location: Span,
+        #[label("and {} here", count)]
+        other_location: Span,
+        count: usize,
+    },
+
     #[error(
         "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
         name.if_supports_color(Stdout, |s| s.purple())

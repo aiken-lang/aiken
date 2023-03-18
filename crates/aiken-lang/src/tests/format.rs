@@ -58,16 +58,42 @@ fn test_format_if() {
 #[test]
 fn test_format_validator() {
     let src = indoc! {r#"
-      validator foo ( ) {
-      fn(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+      validator ( ) {
+      fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
       True
       }
       }
     "#};
 
     let expected = indoc! {r#"
-      validator foo {
-        fn(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+      validator {
+        fn foo(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+          True
+        }
+      }
+    "#};
+
+    assert_fmt(src, expected)
+}
+
+#[test]
+fn test_format_double_validator() {
+    let src = indoc! {r#"
+        validator ( param1 : ByteArray ) {
+        fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+        True
+        }
+    fn bar(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
+        }
+    "#};
+
+    let expected = indoc! {r#"
+      validator(param1: ByteArray) {
+        fn foo(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+          True
+        }
+
+        fn bar(r: Redeemer, ctx: ScriptContext) -> Bool {
           True
         }
       }

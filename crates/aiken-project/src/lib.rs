@@ -675,12 +675,7 @@ where
         let mut programs = Vec::new();
 
         for (input_path, module_name, func_def) in scripts {
-            let Function {
-                arguments,
-                name,
-                body,
-                ..
-            } = func_def;
+            let Function { name, body, .. } = func_def;
 
             if verbose {
                 self.event_listener.handle_event(Event::GeneratingUPLCFor {
@@ -695,30 +690,27 @@ where
                 &self.module_types,
             );
 
-            let evaluation_hint = if let Some((bin_op, left_src, right_src)) = func_def.test_hint()
-            {
+            let evaluation_hint = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator
                     .clone()
-                    .generate(&left_src, &[], false)
+                    .generate_test(&left_src)
                     .try_into()
                     .unwrap();
 
                 let right = generator
                     .clone()
-                    .generate(&right_src, &[], false)
+                    .generate_test(&right_src)
                     .try_into()
                     .unwrap();
 
-                Some(EvalHint {
+                EvalHint {
                     bin_op,
                     left,
                     right,
-                })
-            } else {
-                None
-            };
+                }
+            });
 
-            let program = generator.generate(body, arguments, false);
+            let program = generator.generate_test(body);
 
             let script = Script::new(
                 input_path,

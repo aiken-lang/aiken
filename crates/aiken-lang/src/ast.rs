@@ -322,6 +322,7 @@ pub struct Validator<T, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
     pub fun: Function<T, Expr>,
+    pub other_fun: Option<Function<T, Expr>>,
     pub location: Span,
     pub params: Vec<Arg<T>>,
 }

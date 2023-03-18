@@ -1,0 +1,57 @@
+{
+  "preamble": {
+    "title": "aiken-lang/acceptance_test_079",
+    "version": "0.0.0",
+    "plutusVersion": "v2"
+  },
+  "validators": [
+    {
+      "title": "foo.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/Int"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/RedeemerWrapper$Int"
+        }
+      },
+      "compiledCode": "58a7010000323232323232323232322253330063370e900018041baa0011332253330083370e004902a0a4c2c6eb40080044cc88c894ccc028cdc399b800040024815052616375a0026eb4008c02cc8c028dd50008009119199800800a4000006444666601066e1c0100080348ccc010010cdc0001a4004601e0020026002002444a666010004293099802980098048011998018019805001000ab9a5736aae7555cf2ab9f5742ae89",
+      "hash": "d5e5d02c9a5b71045eb8a0cfabd036d3a89bc3a403491bbff65a9621"
+    },
+    {
+      "title": "foo.mint",
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/Int"
+        }
+      },
+      "compiledCode": "58a7010000323232323232323232322253330063370e900018041baa0011332253330083370e004902a0a4c2c6eb40080044cc88c894ccc028cdc399b800040024815052616375a0026eb4008c02cc8c028dd50008009119199800800a4000006444666601066e1c0100080348ccc010010cdc0001a4004601e0020026002002444a666010004293099802980098048011998018019805001000ab9a5736aae7555cf2ab9f5742ae89",
+      "hash": "d5e5d02c9a5b71045eb8a0cfabd036d3a89bc3a403491bbff65a9621"
+    }
+  ],
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "RedeemerWrapper$Int": {
+      "title": "Wrapped Redeemer",
+      "description": "A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.",
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

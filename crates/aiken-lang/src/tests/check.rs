@@ -53,8 +53,8 @@ fn check_validator(
 #[test]
 fn validator_illegal_return_type() {
     let source_code = r#"
-      validator foo {
-        fn(d, r, c) {
+      validator {
+        fn foo(d, r, c) {
           1
         }
       }
@@ -69,8 +69,8 @@ fn validator_illegal_return_type() {
 #[test]
 fn validator_illegal_arity() {
     let source_code = r#"
-      validator foo {
-        fn(c) {
+      validator {
+        fn foo(c) {
           True
         }
       }
@@ -85,8 +85,8 @@ fn validator_illegal_arity() {
 #[test]
 fn validator_correct_form() {
     let source_code = r#"
-      validator foo {
-        fn(d, r, c) {
+      validator {
+        fn foo(d, r, c) {
           True
         }
       }
@@ -98,8 +98,8 @@ fn validator_correct_form() {
 #[test]
 fn validator_in_lib_warning() {
     let source_code = r#"
-      validator foo {
-        fn(c) {
+      validator {
+        fn foo(c) {
           True
         }
       }

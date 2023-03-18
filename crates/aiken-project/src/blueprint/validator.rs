@@ -4,7 +4,10 @@ use super::{
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
-use aiken_lang::{ast::TypedValidator, uplc::CodeGenerator};
+use aiken_lang::{
+    ast::{TypedArg, TypedFunction, TypedValidator},
+    uplc::CodeGenerator,
+};
 use miette::NamedSource;
 use serde;
 use uplc::ast::{DeBruijn, Program, Term};
@@ -47,22 +50,55 @@ impl Validator<Reference, Annotated<Schema>> {
         generator: &mut CodeGenerator,
         module: &CheckedModule,
         def: &TypedValidator,
+    ) -> Vec<Result<Validator<Reference, Annotated<Schema>>, Error>> {
+        let program = generator.generate(def).try_into().unwrap();
+
+        let is_multi_validator = def.other_fun.is_some();
+
+        let mut validators = vec![Validator::create_validator_blueprint(
+            modules,
+            module,
+            &program,
+            &def.params,
+            &def.fun,
+            is_multi_validator,
+        )];
+
+        if let Some(ref other_func) = def.other_fun {
+            validators.push(Validator::create_validator_blueprint(
+                modules,
+                module,
+                &program,
+                &def.params,
+                other_func,
+                is_multi_validator,
+            ));
+        }
+
+        validators
+    }
+
+    fn create_validator_blueprint(
+        modules: &CheckedModules,
+        module: &CheckedModule,
+        program: &Program<DeBruijn>,
+        params: &[TypedArg],
+        func: &TypedFunction,
+        is_multi_validator: bool,
     ) -> Result<Validator<Reference, Annotated<Schema>>, Error> {
-        let mut args = def.fun.arguments.iter().rev();
+        let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
-        let mut arguments = Vec::with_capacity(def.params.len() + def.fun.arguments.len());
-
-        arguments.extend(def.params.clone());
-        arguments.extend(def.fun.arguments.clone());
+        let mut arguments = Vec::with_capacity(params.len() + func.arguments.len());
+        arguments.extend(params.to_vec());
+        arguments.extend(func.arguments.clone());
 
         let mut definitions = Definitions::new();
 
         Ok(Validator {
-            title: format!("{}.{}", &module.name, &def.fun.name),
+            title: format!("{}.{}", &module.name, &func.name),
             description: None,
-            parameters: def
-                .params
+            parameters: params
                 .iter()
                 .map(|param| {
                     Annotated::from_type(modules.into(), &param.tipo, &mut definitions)
@@ -109,12 +145,16 @@ impl Validator<Reference, Annotated<Schema>> {
                 })
                 .map(|schema| Argument {
                     title: Some(redeemer.arg_name.get_label()),
-                    schema,
+                    schema: match datum {
+                        Some(..) if is_multi_validator => Annotated::as_wrapped_redeemer(
+                            &mut definitions,
+                            schema,
+                            redeemer.tipo.clone(),
+                        ),
+                        _ => schema,
+                    },
                 })?,
-            program: generator
-                .generate(&def.fun.body, &arguments, true)
-                .try_into()
-                .unwrap(),
+            program: program.clone(),
             definitions,
         })
     }
@@ -260,20 +300,29 @@ mod test {
             .next()
             .expect("source code did no yield any validator");
 
-        let validator = Validator::from_checked_module(&modules, &mut generator, validator, def)
+        let validators = Validator::from_checked_module(&modules, &mut generator, validator, def);
+
+        if validators.len() > 1 {
+            panic!("Multi-validator given to test bench. Don't do that.")
+        }
+
+        let validator = validators
+            .get(0)
+            .unwrap()
+            .as_ref()
             .expect("Failed to create validator blueprint");
 
-        println!("{}", serde_json::to_string_pretty(&validator).unwrap());
+        println!("{}", serde_json::to_string_pretty(validator).unwrap());
 
-        assert_json_eq!(serde_json::to_value(&validator).unwrap(), expected);
+        assert_json_eq!(serde_json::to_value(validator).unwrap(), expected);
     }
 
     #[test]
     fn mint_basic() {
         assert_validator(
             r#"
-            validator mint {
-              fn(redeemer: Data, ctx: Data) {
+            validator {
+              fn mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -302,8 +351,8 @@ mod test {
     fn mint_parameterized() {
         assert_validator(
             r#"
-            validator mint(utxo_ref: Int) {
-              fn(redeemer: Data, ctx: Data) {
+            validator(utxo_ref: Int) {
+              fn mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -373,8 +422,8 @@ mod test {
                 Abort
             }
 
-            validator simplified_hydra {
-              fn(datum: State, redeemer: Input, ctx: Data) {
+            validator {
+              fn simplified_hydra(datum: State, redeemer: Input, ctx: Data) {
                 True
               }
             }
@@ -485,8 +534,8 @@ mod test {
     fn tuples() {
         assert_validator(
             r#"
-            validator tuples {
-              fn(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
+            validator {
+              fn tuples(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
                 True
               }
             }
@@ -560,8 +609,8 @@ mod test {
                 Infinite
             }
 
-            validator generics {
-              fn(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+            validator {
+              fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
                 True
               }
             }
@@ -644,8 +693,8 @@ mod test {
 
             type UUID { UUID }
 
-            validator list_2_tuples_as_map {
-              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator {
+              fn list_2_tuples_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -707,8 +756,8 @@ mod test {
 
             type UUID { UUID }
 
-            validator opaque_singleton_variants {
-              fn(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator {
+              fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -753,8 +802,8 @@ mod test {
                 foo: Data
             }
 
-            validator nested_data {
-              fn(datum: Foo, redeemer: Int, ctx: Void) {
+            validator {
+              fn nested_data(datum: Foo, redeemer: Int, ctx: Void) {
                 True
               }
             }
@@ -814,8 +863,8 @@ mod test {
               Mul(Expr, Expr)
             }
 
-            validator recursive_types {
-              fn(redeemer: Expr, ctx: Void) {
+            validator {
+              fn recursive_types(redeemer: Expr, ctx: Void) {
                 True
               }
             }
@@ -899,8 +948,8 @@ mod test {
                 }
             }
 
-            validator recursive_generic_types {
-              fn(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
+            validator {
+              fn recursive_generic_types(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
                 True
               }
             }

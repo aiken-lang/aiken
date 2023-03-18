@@ -43,9 +43,9 @@ impl Program<Name> {
                     body: term.into(),
                 },
                 if default_func.force_count() == 1 {
-                    Term::Builtin(default_func).force_wrap()
+                    Term::Builtin(default_func).force()
                 } else {
-                    Term::Builtin(default_func).force_wrap().force_wrap()
+                    Term::Builtin(default_func).force().force()
                 },
             );
         }

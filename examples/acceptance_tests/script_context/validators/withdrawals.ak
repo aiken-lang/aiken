@@ -5,8 +5,8 @@ use aiken/transaction/credential.{
   Inline, ScriptCredential, VerificationKeyCredential,
 }
 
-validator spend {
-  fn(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
+validator {
+  fn spend(_datum: Void, _redeemer: Void, ctx: ScriptContext) {
     let alice =
       Inline(
         VerificationKeyCredential(
