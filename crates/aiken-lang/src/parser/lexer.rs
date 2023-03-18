@@ -10,22 +10,26 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
     let int = text::int(10).map(|value| Token::Int { value });
 
     let ordinal = text::int(10)
-        .from_str()
-        .unwrapped()
-        .then_with(|index: u32| {
+        .then_with(|index: String| {
             choice((just("st"), just("nd"), just("rd"), just("th")))
-                .map(move |suffix| (index, suffix))
+                .map(move |suffix| (index.to_string(), suffix))
         })
-        .validate(|(index, suffix), span, emit| {
-            let expected_suffix = Ordinal(index).suffix();
-            if expected_suffix != suffix {
-                emit(ParseError::invalid_tuple_index(
-                    span,
-                    index,
-                    Some(expected_suffix.to_string()),
-                ))
+        .validate(|(index, suffix), span, emit| match index.parse() {
+            Err { .. } => {
+                emit(ParseError::invalid_tuple_index(span, index, None));
+                Token::Ordinal { index: 0 }
             }
-            Token::Ordinal { index }
+            Ok(index) => {
+                let expected_suffix = Ordinal::<u32>(index).suffix();
+                if expected_suffix != suffix {
+                    emit(ParseError::invalid_tuple_index(
+                        span,
+                        index.to_string(),
+                        Some(expected_suffix.to_string()),
+                    ))
+                }
+                Token::Ordinal { index }
+            }
         });
 
     let op = choice((

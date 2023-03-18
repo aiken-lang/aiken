@@ -1110,7 +1110,11 @@ pub fn expr_parser(
             })
             .validate(|index, span, emit| {
                 if index < 1 {
-                    emit(ParseError::invalid_tuple_index(span, index, None));
+                    emit(ParseError::invalid_tuple_index(
+                        span,
+                        index.to_string(),
+                        None,
+                    ));
                     Chain::TupleIndex(0, span)
                 } else {
                     Chain::TupleIndex(index as usize - 1, span)

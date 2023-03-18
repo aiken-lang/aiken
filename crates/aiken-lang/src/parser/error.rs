@@ -25,7 +25,7 @@ impl ParseError {
         self
     }
 
-    pub fn invalid_tuple_index(span: Span, index: u32, suffix: Option<String>) -> Self {
+    pub fn invalid_tuple_index(span: Span, index: String, suffix: Option<String>) -> Self {
         let hint = suffix.map(|suffix| format!("Did you mean '{index}{suffix}'?"));
         Self {
             kind: ErrorKind::InvalidTupleIndex { hint },

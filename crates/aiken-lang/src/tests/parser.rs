@@ -1865,6 +1865,15 @@ fn parse_tuple2() {
 }
 
 #[test]
+fn large_integer_constants() {
+    let code = indoc! {r#"
+      pub const my_big_int = 999999999999999999999999
+    "#};
+
+    assert_definitions(code, vec![])
+}
+
+#[test]
 fn plain_bytearray_literals() {
     let code = indoc! {r#"
         pub const my_policy_id = #[0, 170, 255]

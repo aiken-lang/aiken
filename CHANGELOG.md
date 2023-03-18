@@ -20,6 +20,7 @@
 - **aiken-lang**: assignment and clause guard are now always formatted on a new line
 - **aiken-lang**: unused let-bindings are now fully removed from generated code and discarded unused let-binding now raise a warning
 - **aiken-lang**: support multi-clause patterns (only as a syntactic sugar)
+- **aiken-lang**: fix lexer panic when parsing too large (> u32) tuple-indexes
 
 ## [v0.0.29] - 2023-MM-DD
 
