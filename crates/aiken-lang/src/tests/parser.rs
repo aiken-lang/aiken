@@ -1870,7 +1870,21 @@ fn large_integer_constants() {
       pub const my_big_int = 999999999999999999999999
     "#};
 
-    assert_definitions(code, vec![])
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::ModuleConstant(ModuleConstant {
+            doc: None,
+            location: Span::new((), 0..47),
+            public: true,
+            name: "my_big_int".to_string(),
+            annotation: None,
+            value: Box::new(ast::Constant::Int {
+                location: Span::new((), 23..47),
+                value: "999999999999999999999999".to_string(),
+            }),
+            tipo: (),
+        })],
+    )
 }
 
 #[test]
