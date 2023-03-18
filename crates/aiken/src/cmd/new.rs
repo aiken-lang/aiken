@@ -105,8 +105,8 @@ fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
                 For example, as `validators/always_true.ak`
 
                 ```gleam
-                validator spend {{
-                  pub fn spend(_datum: Data, _redeemer: Data, _context: Data) -> Bool {{
+                validator {{
+                  fn spend(_datum: Data, _redeemer: Data, _context: Data) -> Bool {{
                     True
                   }}
                 }}
