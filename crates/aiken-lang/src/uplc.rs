@@ -563,14 +563,12 @@ impl<'a> CodeGenerator<'a> {
                     ir_stack.append(&mut pattern_vec);
                     ir_stack.append(&mut value_vec);
                 } else {
-                    println!("{clauses:?}");
                     // HERE TODO
                     let clauses = if subject_tipo.is_list() {
                         rearrange_clauses(clauses.clone())
                     } else {
                         clauses.clone()
                     };
-                    println!("{clauses:?}");
 
                     if let Some((last_clause, clauses)) = clauses.split_last() {
                         let mut pattern_vec = vec![];
