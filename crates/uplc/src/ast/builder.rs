@@ -38,32 +38,93 @@ impl Term<Name> {
         Term::Constant(Constant::Integer(i).into())
     }
 
+    pub fn string(s: String) -> Self {
+        Term::Constant(Constant::String(s).into())
+    }
+
+    pub fn byte_string(b: Vec<u8>) -> Self {
+        Term::Constant(Constant::ByteString(b).into())
+    }
+
+    pub fn bool(b: bool) -> Self {
+        Term::Constant(Constant::Bool(b).into())
+    }
+
     pub fn constr_data() -> Self {
         Term::Builtin(DefaultFunction::ConstrData)
+    }
+
+    pub fn map_data() -> Self {
+        Term::Builtin(DefaultFunction::MapData)
+    }
+
+    pub fn list_data() -> Self {
+        Term::Builtin(DefaultFunction::ListData)
+    }
+
+    pub fn b_data() -> Self {
+        Term::Builtin(DefaultFunction::BData)
+    }
+
+    pub fn i_data() -> Self {
+        Term::Builtin(DefaultFunction::IData)
     }
 
     pub fn equals_integer() -> Self {
         Term::Builtin(DefaultFunction::EqualsInteger)
     }
 
+    pub fn equals_string() -> Self {
+        Term::Builtin(DefaultFunction::EqualsString)
+    }
+
+    pub fn equals_bytestring() -> Self {
+        Term::Builtin(DefaultFunction::EqualsByteString)
+    }
+
+    pub fn equals_data() -> Self {
+        Term::Builtin(DefaultFunction::EqualsData)
+    }
+
     pub fn head_list() -> Self {
         Term::Builtin(DefaultFunction::HeadList).force()
     }
 
+    pub fn tail_list() -> Self {
+        Term::Builtin(DefaultFunction::TailList).force()
+    }
+
+    pub fn mk_cons() -> Self {
+        Term::Builtin(DefaultFunction::MkCons).force()
+    }
+
+    pub fn fst_pair() -> Self {
+        Term::Builtin(DefaultFunction::FstPair).force().force()
+    }
+
+    pub fn snd_pair() -> Self {
+        Term::Builtin(DefaultFunction::SndPair).force().force()
+    }
+
+    pub fn mk_pair_data() -> Self {
+        Term::Builtin(DefaultFunction::MkPairData)
+    }
+
+    pub fn if_else(self, then_term: Self, else_term: Self) -> Self {
+        Term::Builtin(DefaultFunction::IfThenElse)
+            .force()
+            .apply(self)
+            .apply(then_term)
+            .apply(else_term)
+    }
+
     pub fn delayed_if_else(self, then_term: Self, else_term: Self) -> Self {
-        Term::Apply {
-            function: Term::Apply {
-                function: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::IfThenElse).force().into(),
-                    argument: self.into(),
-                }
-                .into(),
-                argument: Term::Delay(then_term.into()).into(),
-            }
-            .into(),
-            argument: Term::Delay(else_term.into()).into(),
-        }
-        .force()
+        Term::Builtin(DefaultFunction::IfThenElse)
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .apply(else_term.delay())
+            .force()
     }
 }
 
