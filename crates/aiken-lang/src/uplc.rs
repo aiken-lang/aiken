@@ -4970,9 +4970,7 @@ impl<'a> CodeGenerator<'a> {
                     term
                 };
 
-                term = term
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER.to_string()))
-                    .apply(value);
+                term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER.to_string()).apply(value));
 
                 arg_stack.push(term);
             }
