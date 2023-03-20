@@ -1,6 +1,6 @@
 use crate::builtins::DefaultFunction;
 
-use super::{Constant, Name, Term};
+use super::{Constant, Name, Term, Type};
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
@@ -50,6 +50,16 @@ impl Term<Name> {
         Term::Constant(Constant::Bool(b).into())
     }
 
+    pub fn empty_list() -> Self {
+        Term::Constant(Constant::ProtoList(Type::Data, vec![]).into())
+    }
+
+    pub fn empty_map() -> Self {
+        Term::Constant(
+            Constant::ProtoList(Type::Pair(Type::Data.into(), Type::Data.into()), vec![]).into(),
+        )
+    }
+
     pub fn constr_data() -> Self {
         Term::Builtin(DefaultFunction::ConstrData)
     }
@@ -86,6 +96,14 @@ impl Term<Name> {
         Term::Builtin(DefaultFunction::EqualsData)
     }
 
+    pub fn add_integer() -> Self {
+        Term::Builtin(DefaultFunction::AddInteger)
+    }
+
+    pub fn sub_integer() -> Self {
+        Term::Builtin(DefaultFunction::SubtractInteger)
+    }
+
     pub fn head_list() -> Self {
         Term::Builtin(DefaultFunction::HeadList).force()
     }
@@ -118,12 +136,39 @@ impl Term<Name> {
             .apply(else_term)
     }
 
+    pub fn choose_list(self, then_term: Self, else_term: Self) -> Self {
+        Term::Builtin(DefaultFunction::ChooseList)
+            .force()
+            .force()
+            .apply(self)
+            .apply(then_term)
+            .apply(else_term)
+    }
+
     pub fn delayed_if_else(self, then_term: Self, else_term: Self) -> Self {
         Term::Builtin(DefaultFunction::IfThenElse)
             .force()
             .apply(self)
             .apply(then_term.delay())
             .apply(else_term.delay())
+            .force()
+    }
+
+    pub fn delayed_choose_list(self, then_term: Self, else_term: Self) -> Self {
+        Term::Builtin(DefaultFunction::ChooseList)
+            .force()
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .apply(else_term.delay())
+            .force()
+    }
+
+    pub fn trace(self, msg: String) -> Self {
+        Term::Builtin(DefaultFunction::Trace)
+            .force()
+            .apply(Term::string(msg))
+            .apply(self.delay())
             .force()
     }
 }
