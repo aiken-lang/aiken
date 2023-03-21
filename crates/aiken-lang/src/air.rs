@@ -432,12 +432,22 @@ impl<'a> AirEnv<'a> {
         }
     }
 
-    pub fn int(mut self, value: String) -> Self {
-        self.air.push(Air::Int {
+    pub fn merge(mut self, other: AirEnv) -> Self {
+        self.air.extend(other.air.into_iter());
+        self
+    }
+
+    pub fn int(self, value: String) -> Self {
+        let mut air = self.air.clone();
+        air.push(Air::Int {
             scope: self.scope.clone(),
             value,
         });
-        self
+        AirEnv {
+            id_gen: self.id_gen,
+            scope: self.scope,
+            air,
+        }
     }
 
     pub fn string(mut self, value: String) -> Self {
@@ -456,7 +466,5 @@ impl<'a> AirEnv<'a> {
         self
     }
 
-    // pub fn sequence(mut self, expressions: AirEnv) -> Self{
-
-    // }
+    // pub fn sequence(mut self, expressions: AirEnv) -> Self {}
 }
