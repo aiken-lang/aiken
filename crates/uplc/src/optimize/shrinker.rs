@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 
 use crate::{
-    ast::{builder::apply_wrap, Name, Program, Term},
+    ast::{Name, Program, Term},
     builtins::DefaultFunction,
 };
 // use crate::builtins::{DefaultFunction};
@@ -33,21 +33,13 @@ impl Program<Name> {
         for default_func_index in builtin_map.keys().sorted().cloned() {
             let default_func: DefaultFunction = default_func_index.try_into().unwrap();
 
-            term = apply_wrap(
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: format!("__{}_wrapped", default_func.aiken_name()),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: term.into(),
-                },
-                if default_func.force_count() == 1 {
+            term = term
+                .lambda(format!("__{}_wrapped", default_func.aiken_name()))
+                .apply(if default_func.force_count() == 1 {
                     Term::Builtin(default_func).force()
                 } else {
                     Term::Builtin(default_func).force().force()
-                },
-            );
+                });
         }
 
         Program {
