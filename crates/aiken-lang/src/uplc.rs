@@ -5,8 +5,8 @@ use itertools::Itertools;
 use uplc::{
     ast::{
         builder::{
-            self, apply_wrap, assert_on_list, constr_index_exposer, final_wrapper,
-            repeat_tail_list, ASSERT_ON_LIST, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD,
+            self, assert_on_list, final_wrapper, repeat_tail_list, ASSERT_ON_LIST,
+            CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER,
         },
         Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType,
     },
@@ -97,12 +97,6 @@ impl<'a> CodeGenerator<'a> {
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
-        if self.needs_field_access {
-            term = builder::constr_get_field(term);
-
-            term = builder::constr_fields_exposer(term);
-        }
-
         // Wrap the validator body if ifThenElse term unit error
         term = final_wrapper(term);
 
@@ -134,9 +128,7 @@ impl<'a> CodeGenerator<'a> {
             };
 
             term = wrap_as_multi_validator(spend, mint);
-            term = builder::constr_get_field(term);
-
-            term = builder::constr_fields_exposer(term);
+            self.needs_field_access = true;
         }
 
         term = wrap_validator_args(term, params);
@@ -154,23 +146,25 @@ impl<'a> CodeGenerator<'a> {
 
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
 
-        let mut term = self.uplc_code_gen(&mut ir_stack);
-
-        if self.needs_field_access {
-            term = builder::constr_get_field(term);
-
-            term = builder::constr_fields_exposer(term);
-        }
+        let term = self.uplc_code_gen(&mut ir_stack);
 
         self.finalize(term, false)
     }
 
     fn finalize(&mut self, term: Term<Name>, wrap_as_validator: bool) -> Program<Name> {
-        let term = if wrap_as_validator || self.used_data_assert_on_list {
+        let mut term = if wrap_as_validator || self.used_data_assert_on_list {
             assert_on_list(term)
         } else {
             term
         };
+
+        if self.needs_field_access {
+            term = builder::constr_get_field(term);
+
+            term = builder::constr_fields_exposer(term);
+
+            term = builder::constr_index_exposer(term);
+        }
 
         let mut program = Program {
             version: (1, 0, 0),
@@ -708,8 +702,6 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                self.needs_field_access = true;
-
                 ir_stack.push(Air::RecordAccess {
                     scope: scope.clone(),
                     record_index: *index,
@@ -4508,41 +4500,31 @@ impl<'a> CodeGenerator<'a> {
                                 .apply(right)
                                 .if_else(Term::bool(false), Term::bool(true))
                         }
-                        BinOp::LtInt => apply_wrap(
-                            apply_wrap(DefaultFunction::LessThanInteger.into(), left),
-                            right,
-                        ),
-
-                        BinOp::LtEqInt => apply_wrap(
-                            apply_wrap(DefaultFunction::LessThanEqualsInteger.into(), left),
-                            right,
-                        ),
-                        BinOp::GtEqInt => apply_wrap(
-                            apply_wrap(DefaultFunction::LessThanEqualsInteger.into(), right),
-                            left,
-                        ),
-                        BinOp::GtInt => apply_wrap(
-                            apply_wrap(DefaultFunction::LessThanInteger.into(), right),
-                            left,
-                        ),
-                        BinOp::AddInt => {
-                            apply_wrap(apply_wrap(DefaultFunction::AddInteger.into(), left), right)
-                        }
-                        BinOp::SubInt => apply_wrap(
-                            apply_wrap(DefaultFunction::SubtractInteger.into(), left),
-                            right,
-                        ),
-                        BinOp::MultInt => apply_wrap(
-                            apply_wrap(DefaultFunction::MultiplyInteger.into(), left),
-                            right,
-                        ),
-                        BinOp::DivInt => apply_wrap(
-                            apply_wrap(DefaultFunction::DivideInteger.into(), left),
-                            right,
-                        ),
-                        BinOp::ModInt => {
-                            apply_wrap(apply_wrap(DefaultFunction::ModInteger.into(), left), right)
-                        }
+                        BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
+                            .apply(left)
+                            .apply(right),
+                        BinOp::LtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
+                            .apply(left)
+                            .apply(right),
+                        BinOp::GtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
+                            .apply(right)
+                            .apply(left),
+                        BinOp::GtInt => Term::Builtin(DefaultFunction::LessThanInteger)
+                            .apply(right)
+                            .apply(left),
+                        BinOp::AddInt => Term::add_integer().apply(left).apply(right),
+                        BinOp::SubInt => Term::Builtin(DefaultFunction::SubtractInteger)
+                            .apply(left)
+                            .apply(right),
+                        BinOp::MultInt => Term::Builtin(DefaultFunction::MultiplyInteger)
+                            .apply(left)
+                            .apply(right),
+                        BinOp::DivInt => Term::Builtin(DefaultFunction::DivideInteger)
+                            .apply(left)
+                            .apply(right),
+                        BinOp::ModInt => Term::Builtin(DefaultFunction::ModInteger)
+                            .apply(left)
+                            .apply(right),
                     };
                 arg_stack.push(term);
             }
@@ -4607,6 +4589,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::AssertConstr { constr_index, .. } => {
+                self.needs_field_access = true;
                 let constr = arg_stack.pop().unwrap();
 
                 let mut term = arg_stack.pop().unwrap();
@@ -4616,7 +4599,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = Term::equals_integer()
                     .apply(Term::integer(constr_index.into()))
-                    .apply(constr_index_exposer(constr))
+                    .apply(Term::var(CONSTR_INDEX_EXPOSER.to_string()).apply(constr))
                     .delayed_if_else(term, error_term);
 
                 arg_stack.push(term);
@@ -4638,6 +4621,7 @@ impl<'a> CodeGenerator<'a> {
             Air::When {
                 subject_name, tipo, ..
             } => {
+                self.needs_field_access = true;
                 let subject = arg_stack.pop().unwrap();
 
                 let subject = if tipo.is_int()
@@ -4649,7 +4633,7 @@ impl<'a> CodeGenerator<'a> {
                 {
                     subject
                 } else {
-                    constr_index_exposer(subject)
+                    Term::var(CONSTR_INDEX_EXPOSER).apply(subject)
                 };
 
                 let mut term = arg_stack.pop().unwrap();
@@ -4813,7 +4797,7 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         Term::equals_integer()
                             .apply(checker)
-                            .apply(constr_index_exposer(Term::var(subject_name)))
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var(subject_name)))
                     };
 
                     let term = condition
@@ -5031,6 +5015,7 @@ impl<'a> CodeGenerator<'a> {
                 indices,
                 ..
             } => {
+                self.needs_field_access = true;
                 let tail_name_prefix = "__tail_index".to_string();
 
                 let record = arg_stack.pop().unwrap();
@@ -5105,7 +5090,6 @@ impl<'a> CodeGenerator<'a> {
                     term = term.lambda(tail_name).apply(tail_list);
                 }
 
-                self.needs_field_access = true;
                 term = term
                     .lambda(prev_tail_name)
                     .apply(Term::var(CONSTR_FIELDS_EXPOSER.to_string()).apply(record));

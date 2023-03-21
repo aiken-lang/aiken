@@ -4,10 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{
-        builder::{
-            apply_wrap, constr_index_exposer, delayed_choose_list, delayed_if_else, if_else,
-            CONSTR_FIELDS_EXPOSER,
-        },
+        builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
         Constant as UplcConstant, Name, Term, Type as UplcType,
     },
     builtins::DefaultFunction,
@@ -191,79 +188,39 @@ impl ClauseProperties {
 
 pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
     if field_type.is_bytearray() {
-        apply_wrap(DefaultFunction::BData.into(), term)
+        Term::b_data().apply(term)
     } else if field_type.is_int() {
-        apply_wrap(DefaultFunction::IData.into(), term)
+        Term::i_data().apply(term)
     } else if field_type.is_void() {
-        apply_wrap(
-            apply_wrap(Term::Builtin(DefaultFunction::ChooseUnit).force(), term),
-            Term::Constant(
-                UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(0).unwrap(),
-                    any_constructor: None,
-                    fields: vec![],
-                }))
-                .into(),
-            ),
-        )
+        term.choose_unit(Term::Constant(
+            UplcConstant::Data(PlutusData::Constr(Constr {
+                tag: convert_constr_to_tag(0).unwrap(),
+                any_constructor: None,
+                fields: vec![],
+            }))
+            .into(),
+        ))
     } else if field_type.is_map() {
-        apply_wrap(DefaultFunction::MapData.into(), term)
+        Term::map_data().apply(term)
     } else if field_type.is_string() {
-        apply_wrap(
-            DefaultFunction::BData.into(),
-            apply_wrap(DefaultFunction::EncodeUtf8.into(), term),
-        )
+        Term::b_data().apply(Term::Builtin(DefaultFunction::EncodeUtf8).apply(term))
     } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
-        apply_wrap(
-            Term::Lambda {
-                parameter_name: Name {
-                    text: "__pair".to_string(),
-                    unique: 0.into(),
-                }
-                .into(),
-                body: apply_wrap(
-                    DefaultFunction::ListData.into(),
-                    apply_wrap(
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::MkCons).force(),
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::FstPair).force().force(),
-                                Term::Var(
-                                    Name {
-                                        text: "__pair".to_string(),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                ),
-                            ),
-                        ),
-                        apply_wrap(
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::MkCons).force(),
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::SndPair).force().force(),
-                                    Term::Var(
-                                        Name {
-                                            text: "__pair".to_string(),
-                                            unique: 0.into(),
-                                        }
-                                        .into(),
-                                    ),
-                                ),
-                            ),
-                            Term::Constant(UplcConstant::ProtoList(UplcType::Data, vec![]).into()),
-                        ),
+        Term::list_data()
+            .apply(
+                Term::mk_cons()
+                    .apply(Term::fst_pair().apply(Term::var("__pair".to_string())))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::snd_pair().apply(Term::var("__pair".to_string())))
+                            .apply(Term::empty_list()),
                     ),
-                )
-                .into(),
-            },
-            term,
-        )
+            )
+            .lambda("__pair".to_string())
+            .apply(term)
     } else if field_type.is_list() || field_type.is_tuple() {
-        apply_wrap(DefaultFunction::ListData.into(), term)
+        Term::list_data().apply(term)
     } else if field_type.is_bool() {
-        if_else(
-            term,
+        term.if_else(
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
                     tag: convert_constr_to_tag(1).unwrap(),
@@ -288,101 +245,32 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
 
 pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
     if field_type.is_int() {
-        apply_wrap(DefaultFunction::UnIData.into(), term)
+        Term::un_i_data().apply(term)
     } else if field_type.is_bytearray() {
-        apply_wrap(DefaultFunction::UnBData.into(), term)
+        Term::un_b_data().apply(term)
     } else if field_type.is_void() {
-        delayed_if_else(
-            apply_wrap(
-                apply_wrap(
-                    DefaultFunction::EqualsInteger.into(),
-                    Term::Constant(UplcConstant::Integer(0.into()).into()),
-                ),
-                apply_wrap(
-                    Term::Builtin(DefaultFunction::FstPair).force().force(),
-                    apply_wrap(DefaultFunction::UnConstrData.into(), term),
-                ),
-            ),
-            Term::Constant(UplcConstant::Unit.into()),
-            Term::Error,
-        )
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
+            .delayed_if_else(Term::unit(), Term::Error)
     } else if field_type.is_map() {
-        apply_wrap(DefaultFunction::UnMapData.into(), term)
+        Term::unmap_data().apply(term)
     } else if field_type.is_string() {
-        apply_wrap(
-            DefaultFunction::DecodeUtf8.into(),
-            apply_wrap(DefaultFunction::UnBData.into(), term),
-        )
+        Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
     } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
-        apply_wrap(
-            Term::Lambda {
-                parameter_name: Name {
-                    text: "__list_data".to_string(),
-                    unique: 0.into(),
-                }
-                .into(),
-                body: apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: "__tail".to_string(),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                        body: apply_wrap(
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::MkPairData),
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::HeadList).force(),
-                                    Term::Var(
-                                        Name {
-                                            text: "__list_data".to_string(),
-                                            unique: 0.into(),
-                                        }
-                                        .into(),
-                                    ),
-                                ),
-                            ),
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::HeadList).force(),
-                                Term::Var(
-                                    Name {
-                                        text: "__tail".to_string(),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                ),
-                            ),
-                        )
-                        .into(),
-                    },
-                    apply_wrap(
-                        Term::Builtin(DefaultFunction::TailList).force(),
-                        Term::Var(
-                            Name {
-                                text: "__list_data".to_string(),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                        ),
-                    ),
-                )
-                .into(),
-            },
-            apply_wrap(Term::Builtin(DefaultFunction::UnListData), term),
-        )
+        Term::mk_pair_data()
+            .apply(Term::head_list().apply(Term::var("__list_data")))
+            .apply(Term::head_list().apply(Term::var("__tail".to_string())))
+            .lambda("__tail".to_string())
+            .apply(Term::tail_list().apply(Term::var("__list_data")))
+            .lambda("__list_data")
+            .apply(Term::unlist_data().apply(term))
     } else if field_type.is_list() || field_type.is_tuple() {
-        apply_wrap(DefaultFunction::UnListData.into(), term)
+        Term::unlist_data().apply(term)
     } else if field_type.is_bool() {
-        apply_wrap(
-            apply_wrap(
-                DefaultFunction::EqualsInteger.into(),
-                Term::Constant(UplcConstant::Integer(1.into()).into()),
-            ),
-            apply_wrap(
-                Term::Builtin(DefaultFunction::FstPair).force().force(),
-                apply_wrap(DefaultFunction::UnConstrData.into(), term),
-            ),
-        )
+        Term::equals_integer()
+            .apply(Term::integer(1.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
     } else {
         term
     }
@@ -564,246 +452,97 @@ pub fn list_access_to_uplc(
     if let Some((first, names)) = names.split_first() {
         let (current_tipo, tipos) = tipos.split_first().unwrap();
 
-        let head_list = if matches!(current_tipo.get_uplc_type(), UplcType::Pair(_, _))
-            && is_list_accessor
-        {
-            apply_wrap(
-                Term::Builtin(DefaultFunction::HeadList).force(),
-                Term::Var(
-                    Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                ),
-            )
-        } else {
-            convert_data_to_type(
-                apply_wrap(
-                    Term::Builtin(DefaultFunction::HeadList).force(),
-                    Term::Var(
-                        Name {
-                            text: format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                    ),
-                ),
-                &current_tipo.to_owned(),
-            )
-        };
+        let head_list =
+            if matches!(current_tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
+                Term::head_list().apply(Term::var(format!(
+                    "tail_index_{}_{}",
+                    current_index, id_list[current_index]
+                )))
+            } else {
+                convert_data_to_type(
+                    Term::head_list().apply(Term::var(format!(
+                        "tail_index_{}_{}",
+                        current_index, id_list[current_index]
+                    ))),
+                    &current_tipo.to_owned(),
+                )
+            };
 
         if names.len() == 1 && tail {
             if first == "_" && names[0] == "_" {
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: "_".to_string(),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: term.into(),
-                }
+                term.lambda("_".to_string())
             } else if first == "_" {
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: names[0].clone(),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: term.into(),
-                        },
-                        apply_wrap(
-                            Term::Builtin(DefaultFunction::TailList).force(),
-                            Term::Var(
-                                Name {
-                                    text: format!(
-                                        "tail_index_{}_{}",
-                                        current_index, id_list[current_index]
-                                    ),
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                            ),
-                        ),
-                    )
-                    .into(),
-                }
+                term.lambda(names[0].clone())
+                    .apply(Term::tail_list().apply(Term::var(format!(
+                        "tail_index_{}_{}",
+                        current_index, id_list[current_index]
+                    ))))
+                    .lambda(format!(
+                        "tail_index_{}_{}",
+                        current_index, id_list[current_index]
+                    ))
             } else if names[0] == "_" {
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: first.clone(),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: term.into(),
-                        },
-                        head_list,
-                    )
-                    .into(),
-                }
+                term.lambda(first.clone()).apply(head_list).lambda(format!(
+                    "tail_index_{}_{}",
+                    current_index, id_list[current_index]
+                ))
             } else {
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: first.clone(),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: apply_wrap(
-                                Term::Lambda {
-                                    parameter_name: Name {
-                                        text: names[0].clone(),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                    body: term.into(),
-                                },
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force(),
-                                    Term::Var(
-                                        Name {
-                                            text: format!(
-                                                "tail_index_{}_{}",
-                                                current_index, id_list[current_index]
-                                            ),
-                                            unique: 0.into(),
-                                        }
-                                        .into(),
-                                    ),
-                                ),
-                            )
-                            .into(),
-                        },
-                        head_list,
-                    )
-                    .into(),
-                }
+                term.lambda(names[0].clone())
+                    .apply(Term::tail_list().apply(Term::var(format!(
+                        "tail_index_{}_{}",
+                        current_index, id_list[current_index]
+                    ))))
+                    .lambda(first.clone())
+                    .apply(head_list)
+                    .lambda(format!(
+                        "tail_index_{}_{}",
+                        current_index, id_list[current_index]
+                    ))
             }
         } else if names.is_empty() {
             if first == "_" {
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: if check_last_item {
-                            format!("tail_index_{}_{}", current_index, id_list[current_index])
-                        } else {
-                            "_".to_string()
-                        },
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: if check_last_item {
-                        delayed_choose_list(
-                            apply_wrap(
-                                Term::Builtin(DefaultFunction::TailList).force(),
-                                Term::Var(
-                                    Name {
-                                        text: format!(
-                                            "tail_index_{}_{}",
-                                            current_index, id_list[current_index]
-                                        ),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                ),
-                            ),
+                if check_last_item {
+                    Term::tail_list()
+                        .apply(Term::var(format!(
+                            "tail_index_{}_{}",
+                            current_index, id_list[current_index]
+                        )))
+                        .delayed_choose_list(
                             term,
-                            apply_wrap(
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::Trace).force(),
-                                    Term::Constant(
-                                        UplcConstant::String(
-                                            "List/Tuple/Constr contains more items than expected"
-                                                .to_string(),
-                                        )
-                                        .into(),
-                                    ),
-                                ),
-                                Term::Delay(Term::Error.into()),
-                            )
-                            .force(),
+                            Term::Error.trace(
+                                "List/Tuple/Constr contains more items than expected".to_string(),
+                            ),
                         )
-                        .into()
-                    } else {
-                        term.into()
-                    },
+                } else {
+                    term
                 }
+                .lambda(if check_last_item {
+                    format!("tail_index_{}_{}", current_index, id_list[current_index])
+                } else {
+                    "_".to_string()
+                })
             } else {
-                Term::Lambda {
-                parameter_name: Name {
-                    text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                    unique: 0.into(),
+                if check_last_item {
+                    Term::tail_list()
+                        .apply(Term::var(format!(
+                            "tail_index_{}_{}",
+                            current_index, id_list[current_index]
+                        )))
+                        .delayed_choose_list(
+                            term,
+                            Term::Error.trace(
+                                "List/Tuple/Constr contains more items than expected".to_string(),
+                            ),
+                        )
+                } else {
+                    term
                 }
-                .into(),
-                body: apply_wrap(
-                    Term::Lambda {
-                        parameter_name: Name {
-                            text: first.clone(),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                        body: if check_last_item {
-                            delayed_choose_list(
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force(),
-                                    Term::Var(
-                                        Name {
-                                            text: format!(
-                                                "tail_index_{}_{}",
-                                                current_index, id_list[current_index]
-                                            ),
-                                            unique: 0.into(),
-                                        }
-                                        .into(),
-                                    ),
-                                ),
-                                term,
-                                apply_wrap(
-                                    apply_wrap(
-                                        Term::Builtin(DefaultFunction::Trace).force(),
-                                        Term::Constant(
-                                            UplcConstant::String(
-                                                "List/Tuple/Constr contains more items than it expected"
-                                                    .to_string(),
-                                            )
-                                            .into(),
-                                        ),
-                                    ),
-                                    Term::Delay(Term::Error.into()),
-                                )
-                                .force(),
-                            )
-                            .into()
-                        } else {
-                            term.into()
-                        },
-                    },
-                    head_list,
-                )
-                .into(),
-            }
+                .lambda(first.clone())
+                .apply(head_list)
+                .lambda(format!(
+                    "tail_index_{}_{}",
+                    current_index, id_list[current_index]
+                ))
             }
         } else if first == "_" {
             let mut list_access_inner = list_access_to_uplc(
@@ -825,33 +564,15 @@ pub fn list_access_to_uplc(
                     if &parameter_name.text == "_" {
                         body.as_ref().clone()
                     } else {
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: apply_wrap(
-                                list_access_inner,
-                                apply_wrap(
-                                    Term::Builtin(DefaultFunction::TailList).force(),
-                                    Term::Var(
-                                        Name {
-                                            text: format!(
-                                                "tail_index_{}_{}",
-                                                current_index, id_list[current_index]
-                                            ),
-                                            unique: 0.into(),
-                                        }
-                                        .into(),
-                                    ),
-                                ),
-                            )
-                            .into(),
-                        }
+                        list_access_inner
+                            .apply(Term::tail_list().apply(Term::var(format!(
+                                "tail_index_{}_{}",
+                                current_index, id_list[current_index]
+                            ))))
+                            .lambda(format!(
+                                "tail_index_{}_{}",
+                                current_index, id_list[current_index]
+                            ))
                     }
                 }
                 _ => list_access_inner,
@@ -859,14 +580,7 @@ pub fn list_access_to_uplc(
 
             match &list_access_inner {
                 Term::Lambda { .. } => list_access_inner,
-                _ => Term::Lambda {
-                    parameter_name: Name {
-                        text: "_".to_string(),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: list_access_inner.into(),
-                },
+                _ => list_access_inner.lambda("_".to_string()),
             }
         } else {
             let mut list_access_inner = list_access_to_uplc(
@@ -886,88 +600,35 @@ pub fn list_access_to_uplc(
                     body,
                 } => {
                     if &parameter_name.text == "_" {
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: apply_wrap(
-                                Term::Lambda {
-                                    parameter_name: Name {
-                                        text: first.clone(),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                    body: body.as_ref().clone().into(),
-                                },
-                                head_list,
-                            )
-                            .into(),
-                        }
+                        body.as_ref()
+                            .clone()
+                            .lambda(first.clone())
+                            .apply(head_list)
+                            .lambda(format!(
+                                "tail_index_{}_{}",
+                                current_index, id_list[current_index]
+                            ))
                     } else {
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: format!(
-                                    "tail_index_{}_{}",
-                                    current_index, id_list[current_index]
-                                ),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: apply_wrap(
-                                Term::Lambda {
-                                    parameter_name: Name {
-                                        text: first.clone(),
-                                        unique: 0.into(),
-                                    }
-                                    .into(),
-                                    body: apply_wrap(
-                                        list_access_inner,
-                                        apply_wrap(
-                                            Term::Builtin(DefaultFunction::TailList).force(),
-                                            Term::Var(
-                                                Name {
-                                                    text: format!(
-                                                        "tail_index_{}_{}",
-                                                        current_index, id_list[current_index]
-                                                    ),
-                                                    unique: 0.into(),
-                                                }
-                                                .into(),
-                                            ),
-                                        ),
-                                    )
-                                    .into(),
-                                },
-                                head_list,
-                            )
-                            .into(),
-                        }
+                        list_access_inner
+                            .apply(Term::tail_list().apply(Term::var(format!(
+                                "tail_index_{}_{}",
+                                current_index, id_list[current_index]
+                            ))))
+                            .lambda(first.clone())
+                            .apply(head_list)
+                            .lambda(format!(
+                                "tail_index_{}_{}",
+                                current_index, id_list[current_index]
+                            ))
                     }
                 }
-                _ => Term::Lambda {
-                    parameter_name: Name {
-                        text: format!("tail_index_{}_{}", current_index, id_list[current_index]),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: apply_wrap(
-                        Term::Lambda {
-                            parameter_name: Name {
-                                text: first.clone(),
-                                unique: 0.into(),
-                            }
-                            .into(),
-                            body: list_access_inner.into(),
-                        },
-                        head_list,
-                    )
-                    .into(),
-                },
+                _ => list_access_inner
+                    .lambda(first.clone())
+                    .apply(head_list)
+                    .lambda(format!(
+                        "tail_index_{}_{}",
+                        current_index, id_list[current_index]
+                    )),
             };
             list_access_inner
         }
@@ -1316,36 +977,15 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
     let mut term = term;
     for arg in arguments.iter().rev() {
         if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
-            term = apply_wrap(
-                Term::Lambda {
-                    parameter_name: Name {
-                        text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                    body: term.into(),
-                },
-                convert_data_to_type(
-                    Term::Var(
-                        Name {
-                            text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                            unique: 0.into(),
-                        }
-                        .into(),
-                    ),
+            term = term
+                .lambda(arg.arg_name.get_variable_name().unwrap_or("_").to_string())
+                .apply(convert_data_to_type(
+                    Term::var(arg.arg_name.get_variable_name().unwrap_or("_").to_string()),
                     &arg.tipo,
-                ),
-            );
+                ));
         }
 
-        term = Term::Lambda {
-            parameter_name: Name {
-                text: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
-                unique: 0.into(),
-            }
-            .into(),
-            body: term.into(),
-        }
+        term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_").to_string())
     }
     term
 }
@@ -1353,7 +993,7 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
 pub fn wrap_as_multi_validator(spend: Term<Name>, mint: Term<Name>) -> Term<Name> {
     Term::equals_integer()
         .apply(Term::integer(0.into()))
-        .apply(constr_index_exposer(Term::var("__second_arg")))
+        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
         .delayed_if_else(
             mint.apply(Term::var("__first_arg"))
                 .apply(Term::var("__second_arg")),
