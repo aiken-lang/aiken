@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
-use indexmap::IndexSet;
-use uplc::builtins::DefaultFunction;
-
 use crate::{
     ast::{BinOp, UnOp},
     tipo::{Type, ValueConstructor},
+    IdGenerator,
 };
-
+use indexmap::IndexSet;
+use std::sync::Arc;
+use uplc::builtins::DefaultFunction;
 #[derive(Debug, Clone)]
 pub enum Air {
     // Primitives
@@ -15,53 +13,44 @@ pub enum Air {
         scope: Vec<u64>,
         value: String,
     },
-
     String {
         scope: Vec<u64>,
         value: String,
     },
-
     ByteArray {
         scope: Vec<u64>,
         bytes: Vec<u8>,
     },
-
     Bool {
         scope: Vec<u64>,
         value: bool,
     },
-
     List {
         scope: Vec<u64>,
         count: usize,
         tipo: Arc<Type>,
         tail: bool,
     },
-
     Tuple {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         count: usize,
     },
-
     Void {
         scope: Vec<u64>,
     },
-
     Var {
         scope: Vec<u64>,
         constructor: ValueConstructor,
         name: String,
         variant_name: String,
     },
-
     // Functions
     Call {
         scope: Vec<u64>,
         count: usize,
         tipo: Arc<Type>,
     },
-
     DefineFunc {
         scope: Vec<u64>,
         func_name: String,
@@ -70,19 +59,16 @@ pub enum Air {
         recursive: bool,
         variant_name: String,
     },
-
     Fn {
         scope: Vec<u64>,
         params: Vec<String>,
     },
-
     Builtin {
         scope: Vec<u64>,
         count: usize,
         func: DefaultFunction,
         tipo: Arc<Type>,
     },
-
     // Operators
     BinOp {
         scope: Vec<u64>,
@@ -90,52 +76,43 @@ pub enum Air {
         count: usize,
         tipo: Arc<Type>,
     },
-
     UnOp {
         scope: Vec<u64>,
         op: UnOp,
     },
-
     // Assignment
     Let {
         scope: Vec<u64>,
         name: String,
     },
-
     UnWrapData {
         scope: Vec<u64>,
         tipo: Arc<Type>,
     },
-
     WrapData {
         scope: Vec<u64>,
         tipo: Arc<Type>,
     },
-
     AssertConstr {
         scope: Vec<u64>,
         constr_index: usize,
     },
-
     AssertBool {
         scope: Vec<u64>,
         is_true: bool,
     },
-
     // When
     When {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         subject_name: String,
     },
-
     Clause {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         subject_name: String,
         complex_clause: bool,
     },
-
     ListClause {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -143,11 +120,9 @@ pub enum Air {
         next_tail_name: Option<String>,
         complex_clause: bool,
     },
-
     WrapClause {
         scope: Vec<u64>,
     },
-
     TupleClause {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -157,13 +132,11 @@ pub enum Air {
         count: usize,
         complex_clause: bool,
     },
-
     ClauseGuard {
         scope: Vec<u64>,
         subject_name: String,
         tipo: Arc<Type>,
     },
-
     ListClauseGuard {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -171,17 +144,14 @@ pub enum Air {
         next_tail_name: Option<String>,
         inverse: bool,
     },
-
     Finally {
         scope: Vec<u64>,
     },
-
     // If
     If {
         scope: Vec<u64>,
         tipo: Arc<Type>,
     },
-
     // Record Creation
     Record {
         scope: Vec<u64>,
@@ -189,27 +159,23 @@ pub enum Air {
         tipo: Arc<Type>,
         count: usize,
     },
-
     RecordUpdate {
         scope: Vec<u64>,
         highest_index: usize,
         indices: Vec<(usize, Arc<Type>)>,
         tipo: Arc<Type>,
     },
-
     // Field Access
     RecordAccess {
         scope: Vec<u64>,
         record_index: u64,
         tipo: Arc<Type>,
     },
-
     FieldsExpose {
         scope: Vec<u64>,
         indices: Vec<(usize, String, Arc<Type>)>,
         check_last_item: bool,
     },
-
     // ListAccess
     ListAccessor {
         scope: Vec<u64>,
@@ -218,14 +184,12 @@ pub enum Air {
         tail: bool,
         check_last_item: bool,
     },
-
     ListExpose {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
     },
-
     // Tuple Access
     TupleAccessor {
         scope: Vec<u64>,
@@ -233,19 +197,16 @@ pub enum Air {
         tipo: Arc<Type>,
         check_last_item: bool,
     },
-
     TupleIndex {
         scope: Vec<u64>,
         tipo: Arc<Type>,
         tuple_index: usize,
     },
-
     // Misc.
     ErrorTerm {
         scope: Vec<u64>,
         tipo: Arc<Type>,
     },
-
     Trace {
         scope: Vec<u64>,
         tipo: Arc<Type>,
@@ -295,7 +256,6 @@ impl Air {
             | Air::Trace { scope, .. } => scope.clone(),
         }
     }
-
     pub fn scope_mut(&mut self) -> &mut Vec<u64> {
         match self {
             Air::Int { scope, .. }
@@ -338,7 +298,6 @@ impl Air {
             | Air::Trace { scope, .. } => scope,
         }
     }
-
     pub fn tipo(&self) -> Option<Arc<Type>> {
         match self {
             Air::Int { .. } => Some(
@@ -418,7 +377,6 @@ impl Air {
             | Air::TupleIndex { tipo, .. }
             | Air::ErrorTerm { tipo, .. }
             | Air::Trace { tipo, .. } => Some(tipo.clone()),
-
             Air::DefineFunc { .. }
             | Air::Fn { .. }
             | Air::Let { .. }
@@ -427,7 +385,6 @@ impl Air {
             | Air::AssertBool { .. }
             | Air::Finally { .. }
             | Air::FieldsExpose { .. } => None,
-
             Air::UnOp { op, .. } => match op {
                 UnOp::Not => Some(
                     Type::App {
@@ -450,4 +407,56 @@ impl Air {
             },
         }
     }
+}
+
+pub struct AirEnv<'a> {
+    pub id_gen: &'a mut IdGenerator,
+    pub scope: Vec<u64>,
+    pub air: Vec<Air>,
+}
+
+impl<'a> AirEnv<'a> {
+    pub fn new(id_gen: &'a mut IdGenerator) -> Self {
+        AirEnv {
+            id_gen,
+            scope: vec![0],
+            air: vec![],
+        }
+    }
+
+    pub fn new_with_scope(id_gen: &'a mut IdGenerator, scope: Vec<u64>) -> Self {
+        AirEnv {
+            id_gen,
+            scope,
+            air: vec![],
+        }
+    }
+
+    pub fn int(mut self, value: String) -> Self {
+        self.air.push(Air::Int {
+            scope: self.scope.clone(),
+            value,
+        });
+        self
+    }
+
+    pub fn string(mut self, value: String) -> Self {
+        self.air.push(Air::String {
+            scope: self.scope.clone(),
+            value,
+        });
+        self
+    }
+
+    pub fn byte_array(mut self, bytes: Vec<u8>) -> Self {
+        self.air.push(Air::ByteArray {
+            scope: self.scope.clone(),
+            bytes,
+        });
+        self
+    }
+
+    // pub fn sequence(mut self, expressions: AirEnv) -> Self{
+
+    // }
 }

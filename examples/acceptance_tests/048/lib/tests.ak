@@ -45,3 +45,36 @@ test foo_4() {
       False
   }
 }
+
+// type Seasons {
+//   Winter
+//   Spring
+//   Summer
+//   Fall
+// }
+
+// fn is_cold(season, hour) {
+//   when season is {
+//     Winter | Fall ->
+//       True
+//     _ if hour >= 18 ->
+//       True
+//     _ ->
+//       False
+//   }
+// }
+
+// test foo_5() {
+//   !is_cold(Spring, 15) && is_cold(Summer, 22)
+// }
+
+fn when_tuple(a: (Int, Int)) -> Int {
+  when a is {
+    (a, _b) ->
+      a
+  }
+}
+
+test spend() {
+  when_tuple((4, 1)) == 4
+}
