@@ -208,14 +208,14 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
         Term::list_data()
             .apply(
                 Term::mk_cons()
-                    .apply(Term::fst_pair().apply(Term::var("__pair".to_string())))
+                    .apply(Term::fst_pair().apply(Term::var("__pair")))
                     .apply(
                         Term::mk_cons()
-                            .apply(Term::snd_pair().apply(Term::var("__pair".to_string())))
+                            .apply(Term::snd_pair().apply(Term::var("__pair")))
                             .apply(Term::empty_list()),
                     ),
             )
-            .lambda("__pair".to_string())
+            .lambda("__pair")
             .apply(term)
     } else if field_type.is_list() || field_type.is_tuple() {
         Term::list_data().apply(term)
@@ -260,8 +260,8 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Na
     } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
         Term::mk_pair_data()
             .apply(Term::head_list().apply(Term::var("__list_data")))
-            .apply(Term::head_list().apply(Term::var("__tail".to_string())))
-            .lambda("__tail".to_string())
+            .apply(Term::head_list().apply(Term::var("__tail")))
+            .lambda("__tail")
             .apply(Term::tail_list().apply(Term::var("__list_data")))
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term))
@@ -470,7 +470,7 @@ pub fn list_access_to_uplc(
 
         if names.len() == 1 && tail {
             if first == "_" && names[0] == "_" {
-                term.lambda("_".to_string())
+                term.lambda("_")
             } else if first == "_" {
                 term.lambda(names[0].clone())
                     .apply(Term::tail_list().apply(Term::var(format!(
@@ -580,7 +580,7 @@ pub fn list_access_to_uplc(
 
             match &list_access_inner {
                 Term::Lambda { .. } => list_access_inner,
-                _ => list_access_inner.lambda("_".to_string()),
+                _ => list_access_inner.lambda("_"),
             }
         } else {
             let mut list_access_inner = list_access_to_uplc(
@@ -978,14 +978,14 @@ pub fn wrap_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
     for arg in arguments.iter().rev() {
         if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
             term = term
-                .lambda(arg.arg_name.get_variable_name().unwrap_or("_").to_string())
+                .lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
                 .apply(convert_data_to_type(
-                    Term::var(arg.arg_name.get_variable_name().unwrap_or("_").to_string()),
+                    Term::var(arg.arg_name.get_variable_name().unwrap_or("_")),
                     &arg.tipo,
                 ));
         }
 
-        term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_").to_string())
+        term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
     }
     term
 }

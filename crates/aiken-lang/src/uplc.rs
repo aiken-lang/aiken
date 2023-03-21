@@ -4615,7 +4615,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = Term::equals_integer()
                     .apply(Term::integer(constr_index.into()))
-                    .apply(Term::var(CONSTR_INDEX_EXPOSER.to_string()).apply(constr))
+                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(constr))
                     .delayed_if_else(term, error_term);
 
                 arg_stack.push(term);
@@ -4675,7 +4675,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if tipo.is_bool() {
                     let other_clauses = if complex_clause {
-                        Term::var("__other_clauses_delayed".to_string())
+                        Term::var("__other_clauses_delayed")
                     } else {
                         term.clone()
                     };
@@ -4692,9 +4692,7 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     if complex_clause {
-                        term = body
-                            .lambda("__other_clauses_delayed".to_string())
-                            .apply(term.delay());
+                        term = body.lambda("__other_clauses_delayed").apply(term.delay());
                     }
                 } else {
                     let condition = if tipo.is_int() {
@@ -4719,12 +4717,9 @@ impl<'a> CodeGenerator<'a> {
 
                     if complex_clause {
                         term = condition
-                            .if_else(
-                                body.delay(),
-                                Term::var("__other_clauses_delayed".to_string()),
-                            )
+                            .if_else(body.delay(), Term::var("__other_clauses_delayed"))
                             .force()
-                            .lambda("__other_clauses_delayed".to_string())
+                            .lambda("__other_clauses_delayed")
                             .apply(term.delay());
                     } else {
                         term = condition.delayed_if_else(body, term);
@@ -4754,12 +4749,9 @@ impl<'a> CodeGenerator<'a> {
 
                 if complex_clause {
                     term = Term::var(tail_name)
-                        .choose_list(
-                            body.delay(),
-                            Term::var("__other_clauses_delayed".to_string()),
-                        )
+                        .choose_list(body.delay(), Term::var("__other_clauses_delayed"))
                         .force()
-                        .lambda("__other_clauses_delayed".to_string())
+                        .lambda("__other_clauses_delayed")
                         .apply(arg.delay());
                 } else {
                     term = Term::var(tail_name).delayed_choose_list(body, arg);
@@ -4773,9 +4765,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let arg = arg_stack.pop().unwrap();
 
-                term = term
-                    .lambda("__other_clauses_delayed".to_string())
-                    .apply(arg.delay());
+                term = term.lambda("__other_clauses_delayed").apply(arg.delay());
 
                 arg_stack.push(term);
             }
@@ -4787,7 +4777,7 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
 
                 if tipo.is_bool() {
-                    let mut term = Term::var("__other_clauses_delayed".to_string());
+                    let mut term = Term::var("__other_clauses_delayed");
                     if matches!(checker, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
                         term = Term::var(subject_name).if_else(then.delay(), term).force();
@@ -4817,10 +4807,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     let term = condition
-                        .if_else(
-                            then.delay(),
-                            Term::var("__other_clauses_delayed".to_string()),
-                        )
+                        .if_else(then.delay(), Term::var("__other_clauses_delayed"))
                         .force();
                     arg_stack.push(term);
                 }
@@ -4847,17 +4834,11 @@ impl<'a> CodeGenerator<'a> {
 
                 if !inverse {
                     term = Term::var(tail_name)
-                        .choose_list(
-                            term.delay(),
-                            Term::var("__other_clauses_delayed".to_string()),
-                        )
+                        .choose_list(term.delay(), Term::var("__other_clauses_delayed"))
                         .force();
                 } else {
                     term = Term::var(tail_name)
-                        .choose_list(
-                            Term::var("__other_clauses_delayed".to_string()),
-                            term.delay(),
-                        )
+                        .choose_list(Term::var("__other_clauses_delayed"), term.delay())
                         .force();
                 }
 
@@ -4925,8 +4906,8 @@ impl<'a> CodeGenerator<'a> {
                 self.needs_field_access = true;
                 let constr = arg_stack.pop().unwrap();
 
-                let mut term = Term::var(CONSTR_GET_FIELD.to_string())
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER.to_string()).apply(constr))
+                let mut term = Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(constr))
                     .apply(Term::integer(record_index.into()));
 
                 term = convert_data_to_type(term, &tipo);
@@ -4970,7 +4951,7 @@ impl<'a> CodeGenerator<'a> {
                     term
                 };
 
-                term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER.to_string()).apply(value));
+                term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(value));
 
                 arg_stack.push(term);
             }
@@ -5032,7 +5013,7 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 self.needs_field_access = true;
-                let tail_name_prefix = "__tail_index".to_string();
+                let tail_name_prefix = "__tail_index";
 
                 let record = arg_stack.pop().unwrap();
 
@@ -5108,7 +5089,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = term
                     .lambda(prev_tail_name)
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER.to_string()).apply(record));
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(record));
 
                 arg_stack.push(term);
             }
@@ -5144,7 +5125,7 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     self.needs_field_access = true;
                     term = convert_data_to_type(
-                        Term::var(CONSTR_GET_FIELD.to_string())
+                        Term::var(CONSTR_GET_FIELD)
                             .apply(term)
                             .apply(Term::integer(tuple_index.into())),
                         &tipo.get_inner_types()[tuple_index],
@@ -5226,7 +5207,7 @@ impl<'a> CodeGenerator<'a> {
                     let next_clause = arg_stack.pop().unwrap();
 
                     term = term
-                        .lambda("__other_clauses_delayed".to_string())
+                        .lambda("__other_clauses_delayed")
                         .apply(next_clause.delay());
                 }
 
