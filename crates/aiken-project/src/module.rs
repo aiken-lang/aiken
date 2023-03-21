@@ -4,10 +4,12 @@ use aiken_lang::{
         DataType, Definition, Located, ModuleKind, TypedDataType, TypedFunction, TypedModule,
         TypedValidator, UntypedModule,
     },
-    builder::{DataTypeKey, FunctionAccessKey},
+    gen_uplc::{
+        builder::{DataTypeKey, FunctionAccessKey},
+        CodeGenerator,
+    },
     parser::extra::{comments_before, Comment, ModuleExtra},
     tipo::TypeInfo,
-    uplc::CodeGenerator,
 };
 use indexmap::IndexMap;
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};

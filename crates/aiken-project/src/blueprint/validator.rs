@@ -6,7 +6,7 @@ use super::{
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{
     ast::{TypedArg, TypedFunction, TypedValidator},
-    uplc::CodeGenerator,
+    gen_uplc::CodeGenerator,
 };
 use miette::NamedSource;
 use serde;
@@ -187,8 +187,9 @@ mod test {
     use aiken_lang::{
         self,
         ast::{ModuleKind, Tracing, TypedDataType, TypedFunction},
-        builder::{DataTypeKey, FunctionAccessKey},
-        builtins, parser,
+        builtins,
+        gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
+        parser,
         tipo::TypeInfo,
         IdGenerator,
     };

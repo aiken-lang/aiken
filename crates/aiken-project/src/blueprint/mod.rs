@@ -4,7 +4,7 @@ pub mod schema;
 pub mod validator;
 
 use crate::{config::Config, module::CheckedModules};
-use aiken_lang::uplc::CodeGenerator;
+use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::{Definitions, Reference};
 use error::Error;
 use schema::{Annotated, Schema};

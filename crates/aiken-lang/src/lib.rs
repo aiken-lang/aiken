@@ -3,17 +3,15 @@ use std::sync::{
     Arc,
 };
 
-pub mod air;
 pub mod ast;
-pub mod builder;
 pub mod builtins;
 pub mod expr;
 pub mod format;
+pub mod gen_uplc;
 pub mod levenshtein;
 pub mod parser;
 pub mod pretty;
 pub mod tipo;
-pub mod uplc;
 
 #[derive(Debug, Default, Clone)]
 pub struct IdGenerator {

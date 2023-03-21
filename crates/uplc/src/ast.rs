@@ -29,8 +29,6 @@ use crate::{
     },
 };
 
-pub mod builder;
-
 /// This represents a program in Untyped Plutus Core.
 /// A program contains a version tuple and a term.
 /// It is generic because Term requires a generic type.

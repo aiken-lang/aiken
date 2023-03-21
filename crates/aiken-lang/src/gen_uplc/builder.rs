@@ -3,10 +3,8 @@ use std::{rc::Rc, sync::Arc};
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
-    ast::{
-        builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
-        Constant as UplcConstant, Name, Term, Type as UplcType,
-    },
+    ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
     machine::{
         runtime::{convert_constr_to_tag, ANY_TAG},
@@ -16,7 +14,6 @@ use uplc::{
 };
 
 use crate::{
-    air::Air,
     ast::{
         AssignmentKind, BinOp, ClauseGuard, Constant, DataType, Pattern, Span, TypedArg,
         TypedClause, TypedDataType, UnOp,
@@ -24,6 +21,8 @@ use crate::{
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
+
+use super::air::Air;
 
 #[derive(Clone, Debug)]
 pub struct FuncComponents {

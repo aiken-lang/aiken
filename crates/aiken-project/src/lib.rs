@@ -19,8 +19,8 @@ use crate::blueprint::{
 };
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
-    builder::{DataTypeKey, FunctionAccessKey},
     builtins,
+    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::TypeInfo,
     IdGenerator,
 };
