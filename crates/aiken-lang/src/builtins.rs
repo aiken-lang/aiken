@@ -1,7 +1,7 @@
 use crate::{
     ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedDataType, TypedFunction, UnOp},
-    builder::{DataTypeKey, FunctionAccessKey},
     expr::TypedExpr,
+    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::{
         fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant,

@@ -1,6 +1,7 @@
-use crate::builtins::DefaultFunction;
-
-use super::{Constant, Name, Term, Type};
+use crate::{
+    ast::{Constant, Name, Term, Type},
+    builtins::DefaultFunction,
+};
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
@@ -210,95 +211,100 @@ impl Term<Name> {
             .apply(self.delay())
             .force()
     }
-}
 
-pub fn final_wrapper(term: Term<Name>) -> Term<Name> {
-    term.delayed_if_else(Term::unit(), Term::Error)
-}
-
-pub fn assert_on_list(term: Term<Name>) -> Term<Name> {
-    term.lambda(ASSERT_ON_LIST.to_string())
-        .apply(Term::var(ASSERT_ON_LIST.to_string()).apply(Term::var(ASSERT_ON_LIST.to_string())))
-        .lambda(ASSERT_ON_LIST.to_string())
-        .apply(
-            Term::var("__list_to_check".to_string())
-                .delayed_choose_list(
-                    Term::unit(),
-                    Term::var("__check_with".to_string())
-                        .apply(Term::head_list().apply(Term::var("__list_to_check".to_string())))
-                        .choose_unit(
-                            Term::var(ASSERT_ON_LIST.to_string())
-                                .apply(Term::var(ASSERT_ON_LIST.to_string()))
-                                .apply(
-                                    Term::tail_list()
-                                        .apply(Term::var("__list_to_check".to_string())),
-                                )
-                                .apply(Term::var("__check_with".to_string())),
-                        ),
-                )
-                .lambda("__check_with".to_string())
-                .lambda("__list_to_check".to_string())
-                .lambda(ASSERT_ON_LIST),
-        )
-}
-
-pub fn constr_fields_exposer(term: Term<Name>) -> Term<Name> {
-    term.lambda(CONSTR_FIELDS_EXPOSER.to_string()).apply(
-        Term::snd_pair()
-            .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
-            .lambda("__constr_var"),
-    )
-}
-
-pub fn constr_index_exposer(term: Term<Name>) -> Term<Name> {
-    term.lambda(CONSTR_INDEX_EXPOSER.to_string()).apply(
-        Term::fst_pair()
-            .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
-            .lambda("__constr_var".to_string()),
-    )
-}
-
-pub fn constr_get_field(term: Term<Name>) -> Term<Name> {
-    term.lambda(CONSTR_GET_FIELD.to_string())
-        .apply(
-            Term::var(CONSTR_GET_FIELD.to_string())
-                .apply(Term::var(CONSTR_GET_FIELD.to_string()))
-                .apply(Term::integer(0.into())),
-        )
-        .lambda(CONSTR_GET_FIELD)
-        .apply(
-            Term::equals_integer()
-                .apply(Term::var("__wanted_arg".to_string()))
-                .apply(Term::var("__current_arg_number".to_string()))
-                .if_else(
-                    Term::head_list(),
-                    Term::var(CONSTR_GET_FIELD)
-                        .apply(Term::var(CONSTR_GET_FIELD))
-                        .apply(
-                            Term::add_integer()
-                                .apply(Term::var("__current_arg_number".to_string()))
-                                .apply(Term::integer(1.into())),
-                        )
-                        .apply(
-                            Term::tail_list()
-                                .apply(Term::var("__current_list_of_constr_args".to_string())),
-                        )
-                        .apply(Term::var("__wanted_arg"))
-                        .lambda("__current_list_of_constr_args".to_string()),
-                )
-                .apply(Term::var("__list_of_constr_args".to_string()))
-                .lambda("__wanted_arg".to_string())
-                .lambda("__list_of_constr_args")
-                .lambda("__current_arg_number".to_string())
-                .lambda(CONSTR_GET_FIELD.to_string()),
-        )
-}
-
-pub fn repeat_tail_list(term: Term<Name>, repeat: usize) -> Term<Name> {
-    let mut term = term;
-
-    for _ in 0..repeat {
-        term = Term::tail_list().apply(term);
+    pub fn assert_on_list(self) -> Term<Name> {
+        self.lambda(ASSERT_ON_LIST.to_string())
+            .apply(
+                Term::var(ASSERT_ON_LIST.to_string()).apply(Term::var(ASSERT_ON_LIST.to_string())),
+            )
+            .lambda(ASSERT_ON_LIST.to_string())
+            .apply(
+                Term::var("__list_to_check".to_string())
+                    .delayed_choose_list(
+                        Term::unit(),
+                        Term::var("__check_with".to_string())
+                            .apply(
+                                Term::head_list().apply(Term::var("__list_to_check".to_string())),
+                            )
+                            .choose_unit(
+                                Term::var(ASSERT_ON_LIST.to_string())
+                                    .apply(Term::var(ASSERT_ON_LIST.to_string()))
+                                    .apply(
+                                        Term::tail_list()
+                                            .apply(Term::var("__list_to_check".to_string())),
+                                    )
+                                    .apply(Term::var("__check_with".to_string())),
+                            ),
+                    )
+                    .lambda("__check_with".to_string())
+                    .lambda("__list_to_check".to_string())
+                    .lambda(ASSERT_ON_LIST),
+            )
     }
-    term
+
+    pub fn final_wrapper(self: Term<Name>) -> Term<Name> {
+        self.delayed_if_else(Term::unit(), Term::Error)
+    }
+
+    pub fn constr_fields_exposer(self: Term<Name>) -> Term<Name> {
+        self.lambda(CONSTR_FIELDS_EXPOSER.to_string()).apply(
+            Term::snd_pair()
+                .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
+                .lambda("__constr_var"),
+        )
+    }
+
+    pub fn constr_index_exposer(self: Term<Name>) -> Term<Name> {
+        self.lambda(CONSTR_INDEX_EXPOSER.to_string()).apply(
+            Term::fst_pair()
+                .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
+                .lambda("__constr_var".to_string()),
+        )
+    }
+
+    pub fn constr_get_field(self: Term<Name>) -> Term<Name> {
+        self.lambda(CONSTR_GET_FIELD.to_string())
+            .apply(
+                Term::var(CONSTR_GET_FIELD.to_string())
+                    .apply(Term::var(CONSTR_GET_FIELD.to_string()))
+                    .apply(Term::integer(0.into())),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::var("__wanted_arg".to_string()))
+                    .apply(Term::var("__current_arg_number".to_string()))
+                    .if_else(
+                        Term::head_list(),
+                        Term::var(CONSTR_GET_FIELD)
+                            .apply(Term::var(CONSTR_GET_FIELD))
+                            .apply(
+                                Term::add_integer()
+                                    .apply(Term::var("__current_arg_number".to_string()))
+                                    .apply(Term::integer(1.into())),
+                            )
+                            .apply(
+                                Term::tail_list()
+                                    .apply(Term::var("__current_list_of_constr_args".to_string())),
+                            )
+                            .apply(Term::var("__wanted_arg"))
+                            .lambda("__current_list_of_constr_args".to_string()),
+                    )
+                    .apply(Term::var("__list_of_constr_args".to_string()))
+                    .lambda("__wanted_arg".to_string())
+                    .lambda("__list_of_constr_args")
+                    .lambda("__current_arg_number".to_string())
+                    .lambda(CONSTR_GET_FIELD.to_string()),
+            )
+    }
+
+    pub fn repeat_tail_list(self: Term<Name>, repeat: usize) -> Term<Name> {
+        let mut term = self;
+
+        for _ in 0..repeat {
+            term = Term::tail_list().apply(term);
+        }
+
+        term
+    }
 }
