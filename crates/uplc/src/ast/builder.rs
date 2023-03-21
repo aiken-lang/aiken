@@ -38,8 +38,8 @@ impl Term<Name> {
         Term::Constant(Constant::Integer(i).into())
     }
 
-    pub fn string(s: String) -> Self {
-        Term::Constant(Constant::String(s).into())
+    pub fn string(s: impl ToString) -> Self {
+        Term::Constant(Constant::String(s.to_string()).into())
     }
 
     pub fn byte_string(b: Vec<u8>) -> Self {
@@ -203,10 +203,10 @@ impl Term<Name> {
             .force()
     }
 
-    pub fn trace(self, msg: String) -> Self {
+    pub fn trace(self, msg_term: Term<Name>) -> Self {
         Term::Builtin(DefaultFunction::Trace)
             .force()
-            .apply(Term::string(msg))
+            .apply(msg_term)
             .apply(self.delay())
             .force()
     }

@@ -509,9 +509,9 @@ pub fn list_access_to_uplc(
                         )))
                         .delayed_choose_list(
                             term,
-                            Term::Error.trace(
-                                "List/Tuple/Constr contains more items than expected".to_string(),
-                            ),
+                            Term::Error.trace(Term::string(
+                                "List/Tuple/Constr contains more items than expected",
+                            )),
                         )
                 } else {
                     term
@@ -530,9 +530,9 @@ pub fn list_access_to_uplc(
                         )))
                         .delayed_choose_list(
                             term,
-                            Term::Error.trace(
-                                "List/Tuple/Constr contains more items than expected".to_string(),
-                            ),
+                            Term::Error.trace(Term::string(
+                                "List/Tuple/Constr contains more items than expected",
+                            )),
                         )
                 } else {
                     term

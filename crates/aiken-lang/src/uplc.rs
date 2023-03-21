@@ -879,7 +879,10 @@ impl<'a> CodeGenerator<'a> {
             // reset complex clause setting per clause back to default
             *clause_properties.is_complex_clause() = false;
 
-            self.build_ir(&clause.then, &mut clause_then_vec, scope.clone());
+            let mut clause_scope = scope.clone();
+            clause_scope.push(self.id_gen.next());
+
+            self.build_ir(&clause.then, &mut clause_then_vec, clause_scope);
 
             if let Some(clause_guard) = &clause.guard {
                 let mut clause_guard_vec = vec![];
@@ -921,13 +924,16 @@ impl<'a> CodeGenerator<'a> {
                     ..
                 } => {
                     let subject_name = original_subject_name.clone();
+
+                    let mut clause_scope = scope.clone();
+                    clause_scope.push(self.id_gen.next());
                     self.when_ir(
                         &clause.pattern,
                         &mut clause_subject_vec,
                         &mut clause_then_vec,
                         subject_type,
                         clause_properties,
-                        scope.clone(),
+                        clause_scope,
                     );
 
                     let data_type = lookup_data_type_by_tipo(self.data_types.clone(), subject_type);
@@ -947,6 +953,8 @@ impl<'a> CodeGenerator<'a> {
                                 complex_clause: *clause_properties.is_complex_clause(),
                                 subject_name,
                             });
+                            let mut scope = scope;
+                            scope.push(self.id_gen.next());
 
                             ir_stack.push(Air::Int {
                                 scope,
@@ -2088,13 +2096,15 @@ impl<'a> CodeGenerator<'a> {
                         } else {
                             index
                         };
+                        let mut inner_scope = scope.clone();
+                        inner_scope.push(self.id_gen.next());
                         self.extract_arg_and_index(
                             &item.value,
                             field_index,
                             &mut nested_pattern,
                             type_map.get(&field_index).unwrap(),
                             &assignment_properties,
-                            &scope,
+                            &inner_scope,
                         )
                         .map_or(Some(("_".to_string(), index)), Some)
                     })
@@ -2202,13 +2212,15 @@ impl<'a> CodeGenerator<'a> {
                     .iter()
                     .enumerate()
                     .filter_map(|(tuple_index, item)| {
+                        let mut inner_scope = scope.clone();
+                        inner_scope.push(self.id_gen.next());
                         self.extract_arg_and_index(
                             item,
                             tuple_index,
                             &mut nested_pattern,
                             type_map.get(&tuple_index).unwrap(),
                             &assignment_properties,
-                            &scope,
+                            &inner_scope,
                         )
                     })
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
@@ -2364,13 +2376,15 @@ impl<'a> CodeGenerator<'a> {
                     .filter_map(|item| {
                         let label = item.label.clone().unwrap_or_default();
                         let field_index = field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+                        let mut inner_scope = scope.clone();
+                        inner_scope.push(self.id_gen.next());
                         self.extract_arg_and_index(
                             &item.value,
                             *field_index,
                             &mut nested_pattern,
                             type_map.get(field_index).unwrap(),
                             &assignment_properties,
-                            &scope,
+                            &inner_scope,
                         )
                     })
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
@@ -2466,13 +2480,15 @@ impl<'a> CodeGenerator<'a> {
                     .enumerate()
                     .filter_map(|(index, item)| {
                         let field_index = index;
+                        let mut inner_scope = scope.clone();
+                        inner_scope.push(self.id_gen.next());
                         self.extract_arg_and_index(
                             item,
                             field_index,
                             &mut nested_pattern,
                             type_map.get(&field_index).unwrap(),
                             &assignment_properties,
-                            &scope,
+                            &inner_scope,
                         )
                     })
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
@@ -4595,7 +4611,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let error_term =
-                    Term::Error.trace("Expected on incorrect constructor variant.".to_string());
+                    Term::Error.trace(Term::string("Expected on incorrect constructor variant."));
 
                 term = Term::equals_integer()
                     .apply(Term::integer(constr_index.into()))
@@ -4609,7 +4625,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let error_term =
-                    Term::Error.trace("Expected on incorrect boolean variant".to_string());
+                    Term::Error.trace(Term::string("Expected on incorrect boolean variant"));
 
                 if is_true {
                     term = value.delayed_if_else(term, error_term)
@@ -5190,7 +5206,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let term = arg_stack.pop().unwrap();
 
-                let term = term.trace(text.to_string());
+                let term = term.trace(text);
 
                 arg_stack.push(term);
             }
