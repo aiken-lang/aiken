@@ -22,7 +22,7 @@ use crate::{
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
 
-use super::air::Air;
+use super::{air::Air, stack::AirStack};
 
 #[derive(Clone, Debug)]
 pub struct FuncComponents {
@@ -713,25 +713,16 @@ pub fn check_when_pattern_needs(
     }
 }
 
-pub fn constants_ir(literal: &Constant, ir_stack: &mut Vec<Air>, scope: Vec<u64>) {
+pub fn constants_ir(literal: &Constant, ir_stack: &mut AirStack) {
     match literal {
         Constant::Int { value, .. } => {
-            ir_stack.push(Air::Int {
-                scope,
-                value: value.clone(),
-            });
+            ir_stack.integer(value.clone());
         }
         Constant::String { value, .. } => {
-            ir_stack.push(Air::String {
-                scope,
-                value: value.clone(),
-            });
+            ir_stack.string(value.clone());
         }
         Constant::ByteArray { bytes, .. } => {
-            ir_stack.push(Air::ByteArray {
-                scope,
-                bytes: bytes.clone(),
-            });
+            ir_stack.byte_array(bytes.clone());
         }
     };
 }
@@ -1110,22 +1101,12 @@ pub fn monomorphize(
                     needs_variant = true;
                 }
             }
-            Air::BinOp {
-                scope,
-                name,
-                count,
-                tipo,
-            } => {
+            Air::BinOp { scope, name, tipo } => {
                 if tipo.is_generic() {
                     let mut tipo = tipo.clone();
                     find_and_replace_generics(&mut tipo, &mono_types);
 
-                    new_air[index] = Air::BinOp {
-                        scope,
-                        name,
-                        tipo,
-                        count,
-                    };
+                    new_air[index] = Air::BinOp { scope, name, tipo };
                     needs_variant = true;
                 }
             }
@@ -1332,7 +1313,7 @@ pub fn monomorphize(
             }
             Air::Record {
                 scope,
-                constr_index,
+                tag: constr_index,
                 tipo,
                 count,
             } => {
@@ -1343,7 +1324,7 @@ pub fn monomorphize(
                     new_air[index] = Air::Record {
                         scope,
                         tipo,
-                        constr_index,
+                        tag: constr_index,
                         count,
                     };
                     needs_variant = true;
@@ -1719,7 +1700,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::Eq,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1729,7 +1709,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::NotEq,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1739,7 +1718,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::GtInt,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1749,7 +1727,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::GtEqInt,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1759,7 +1736,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::LtInt,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1769,7 +1745,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::LtEqInt,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1779,7 +1754,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::Or,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
@@ -1789,7 +1763,6 @@ pub fn handle_clause_guard(
             clause_guard_vec.push(Air::BinOp {
                 scope: scope.clone(),
                 name: BinOp::And,
-                count: 2,
                 tipo: left.tipo(),
             });
             handle_clause_guard(left, clause_guard_vec, scope.clone());
