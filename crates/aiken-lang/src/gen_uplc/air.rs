@@ -74,7 +74,6 @@ pub enum Air {
     BinOp {
         scope: Vec<u64>,
         name: BinOp,
-        count: usize,
         tipo: Arc<Type>,
     },
     UnOp {
@@ -156,7 +155,7 @@ pub enum Air {
     // Record Creation
     Record {
         scope: Vec<u64>,
-        constr_index: usize,
+        tag: usize,
         tipo: Arc<Type>,
         count: usize,
     },

@@ -34,6 +34,8 @@ use builder::{
     AssignmentProperties, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
 };
 
+use self::stack::AirStack;
+
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     defined_functions: IndexMap<FunctionAccessKey, ()>,
@@ -81,10 +83,9 @@ impl<'a> CodeGenerator<'a> {
             ..
         }: &TypedValidator,
     ) -> Program<Name> {
-        let mut ir_stack = vec![];
-        let scope = vec![self.id_gen.next()];
+        let mut ir_stack = AirStack::new(&mut self.id_gen);
 
-        self.build_ir(&fun.body, &mut ir_stack, scope);
+        self.build_ir(&fun.body, &mut ir_stack);
 
         self.define_ir(&mut ir_stack);
 
@@ -132,10 +133,9 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
-        let mut ir_stack = vec![];
-        let scope = vec![self.id_gen.next()];
+        let mut ir_stack = AirStack::new(&mut self.id_gen);
 
-        self.build_ir(test_body, &mut ir_stack, scope);
+        self.build_ir(test_body, &mut ir_stack);
 
         self.define_ir(&mut ir_stack);
 
@@ -179,75 +179,52 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
-    pub(crate) fn build_ir(&mut self, body: &TypedExpr, ir_stack: &mut Vec<Air>, scope: Vec<u64>) {
+    pub(crate) fn build_ir(&mut self, body: &TypedExpr, ir_stack: &mut AirStack) {
         match body {
-            TypedExpr::Int { value, .. } => ir_stack.push(Air::Int {
-                scope,
-                value: value.to_string(),
-            }),
-            TypedExpr::String { value, .. } => ir_stack.push(Air::String {
-                scope,
-                value: value.to_string(),
-            }),
-            TypedExpr::ByteArray { bytes, .. } => ir_stack.push(Air::ByteArray {
-                scope,
-                bytes: bytes.to_vec(),
-            }),
+            TypedExpr::Int { value, .. } => ir_stack.integer(value.to_string()),
+            TypedExpr::String { value, .. } => ir_stack.string(value.to_string()),
+            TypedExpr::ByteArray { bytes, .. } => ir_stack.byte_array(bytes.to_vec()),
             TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
+                let stacks = Vec::new();
+
                 for (index, expr) in expressions.iter().enumerate() {
                     if index == 0 {
-                        self.build_ir(expr, ir_stack, scope.clone());
+                        self.build_ir(expr, ir_stack);
                     } else {
-                        let mut branch_scope = scope.clone();
-                        branch_scope.push(self.id_gen.next());
-                        self.build_ir(expr, ir_stack, branch_scope);
+                        let mut stack = ir_stack.in_new_scope();
+                        self.build_ir(expr, &mut stack);
                     }
                 }
+
+                ir_stack.sequence(stacks);
             }
             TypedExpr::Var {
                 constructor, name, ..
             } => match &constructor.variant {
                 ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                    builder::constants_ir(literal, ir_stack, scope);
+                    builder::constants_ir(literal, ir_stack);
                 }
                 ValueConstructorVariant::ModuleFn {
                     builtin: Some(builtin),
                     ..
                 } => {
-                    ir_stack.push(Air::Builtin {
-                        scope,
-                        func: *builtin,
-                        tipo: constructor.tipo.clone(),
-                        count: 0,
-                    });
+                    ir_stack.builtin(*builtin, constructor.tipo.clone(), vec![]);
                 }
                 _ => {
-                    ir_stack.push(Air::Var {
-                        scope,
-                        constructor: constructor.clone(),
-                        name: name.clone(),
-                        variant_name: String::new(),
-                    });
+                    ir_stack.var(constructor.clone(), name, "");
                 }
             },
             TypedExpr::Fn { args, body, .. } => {
-                let mut func_body = vec![];
-                let mut func_scope = scope.clone();
-                func_scope.push(self.id_gen.next());
-                self.build_ir(body, &mut func_body, func_scope);
-                let mut arg_names = vec![];
-                for arg in args {
-                    let name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+                let mut body_stack = ir_stack.in_new_scope();
 
-                    arg_names.push(name);
-                }
+                self.build_ir(body, &mut body_stack);
 
-                ir_stack.push(Air::Fn {
-                    scope,
-                    params: arg_names,
-                });
+                let mut params = args
+                    .iter()
+                    .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
+                    .collect();
 
-                ir_stack.append(&mut func_body);
+                ir_stack.anonymous_function(params, body_stack);
             }
             TypedExpr::List {
                 elements,
@@ -255,25 +232,24 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                ir_stack.push(Air::List {
-                    scope: scope.clone(),
-                    count: elements.len(),
-                    tipo: tipo.clone(),
-                    tail: tail.is_some(),
+                let stacks = Vec::new();
+                for element in elements {
+                    let mut stack = ir_stack.in_new_scope();
+
+                    self.build_ir(element, &mut stack);
+
+                    stacks.push(stack);
+                }
+
+                let tail = tail.as_ref().map(|tail| {
+                    let mut tail_stack = ir_stack.in_new_scope();
+
+                    self.build_ir(tail, &mut tail_stack);
+
+                    tail_stack
                 });
 
-                for element in elements {
-                    let mut scope = scope.clone();
-                    scope.push(self.id_gen.next());
-                    self.build_ir(element, ir_stack, scope.clone())
-                }
-
-                if let Some(tail) = tail {
-                    let mut scope = scope;
-                    scope.push(self.id_gen.next());
-
-                    self.build_ir(tail, ir_stack, scope);
-                }
+                ir_stack.list(tipo.clone(), stacks, tail);
             }
             TypedExpr::Call {
                 fun, args, tipo, ..
@@ -293,30 +269,26 @@ impl<'a> CodeGenerator<'a> {
                                     .find(|(_, dt)| &dt.name == constr_name)
                                     .unwrap();
 
-                                ir_stack.push(Air::Record {
-                                    scope: scope.clone(),
-                                    constr_index,
-                                    tipo: constructor.tipo.clone(),
-                                    count: args.len(),
-                                });
-
-                                if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                        let mut scope = scope.clone();
-                                        scope.push(self.id_gen.next());
-
-                                        if func_type.is_data() && !arg.value.tipo().is_data() {
-                                            ir_stack.push(Air::WrapData {
-                                                scope: scope.clone(),
-                                                tipo: arg.value.tipo(),
-                                            })
-                                        }
-
-                                        self.build_ir(&arg.value, ir_stack, scope);
-                                    }
-                                } else {
+                                let Some(fun_arg_types) = fun.tipo().arg_types() else {
                                     unreachable!()
+                                };
+
+                                let stacks = Vec::new();
+
+                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                    let mut stack = ir_stack.in_new_scope();
+
+                                    if func_type.is_data() && !arg.value.tipo().is_data() {
+                                        stack.wrap_data(arg.value.tipo());
+                                    }
+
+                                    self.build_ir(&arg.value, &mut stack);
+
+                                    stacks.push(stack);
                                 }
+
+                                ir_stack.record(constructor.tipo.clone(), constr_index, stacks);
+
                                 return;
                             }
                         }
@@ -324,30 +296,21 @@ impl<'a> CodeGenerator<'a> {
                             builtin: Some(func),
                             ..
                         } => {
-                            ir_stack.push(Air::Builtin {
-                                scope: scope.clone(),
-                                count: func.arity(),
-                                func: *func,
-                                tipo: tipo.clone(),
-                            });
+                            let Some(fun_arg_types) = fun.tipo().arg_types() else {unreachable!()};
 
-                            if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                    let mut scope = scope.clone();
-                                    scope.push(self.id_gen.next());
+                            let stacks = Vec::new();
 
-                                    if func_type.is_data() && !arg.value.tipo().is_data() {
-                                        ir_stack.push(Air::WrapData {
-                                            scope: scope.clone(),
-                                            tipo: arg.value.tipo(),
-                                        })
-                                    }
+                            for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                let mut stack = ir_stack.in_new_scope();
 
-                                    self.build_ir(&arg.value, ir_stack, scope);
+                                if func_type.is_data() && !arg.value.tipo().is_data() {
+                                    stack.wrap_data(arg.value.tipo());
                                 }
-                            } else {
-                                unreachable!()
+
+                                self.build_ir(&arg.value, &mut stack);
                             }
+
+                            ir_stack.builtin(*func, tipo.clone(), stacks);
 
                             return;
                         }
@@ -373,30 +336,22 @@ impl<'a> CodeGenerator<'a> {
                                     .find(|(_, dt)| &dt.name == constr_name)
                                     .unwrap();
 
-                                ir_stack.push(Air::Record {
-                                    scope: scope.clone(),
-                                    constr_index,
-                                    tipo: tipo.clone(),
-                                    count: args.len(),
-                                });
+                                let Some(fun_arg_types) = fun.tipo().arg_types() else {unreachable!()};
 
-                                if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                        let mut scope = scope.clone();
-                                        scope.push(self.id_gen.next());
+                                let mut stacks = Vec::new();
 
-                                        if func_type.is_data() && !arg.value.tipo().is_data() {
-                                            ir_stack.push(Air::WrapData {
-                                                scope: scope.clone(),
-                                                tipo: arg.value.tipo(),
-                                            })
-                                        }
+                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                    let mut stack = ir_stack.in_new_scope();
 
-                                        self.build_ir(&arg.value, ir_stack, scope);
+                                    if func_type.is_data() && !arg.value.tipo().is_data() {
+                                        stack.wrap_data(arg.value.tipo());
                                     }
-                                } else {
-                                    unreachable!()
+
+                                    self.build_ir(&arg.value, &mut stack);
                                 }
+
+                                ir_stack.record(tipo.clone(), constr_index, stacks);
+
                                 return;
                             }
                         }
@@ -404,39 +359,25 @@ impl<'a> CodeGenerator<'a> {
                             let type_info = self.module_types.get(module_name).unwrap();
                             let value = type_info.values.get(name).unwrap();
 
-                            match &value.variant {
-                                ValueConstructorVariant::ModuleFn { builtin, .. } => {
-                                    if let Some(func) = builtin {
-                                        ir_stack.push(Air::Builtin {
-                                            scope: scope.clone(),
-                                            count: func.arity(),
-                                            func: *func,
-                                            tipo: tipo.clone(),
-                                        });
+                            let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant else {unreachable!()};
 
-                                        if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                                            for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                                let mut scope = scope.clone();
-                                                scope.push(self.id_gen.next());
+                            if let Some(func) = builtin {
+                                let Some(fun_arg_types) = fun.tipo().arg_types() else {unreachable!()};
 
-                                                if func_type.is_data()
-                                                    && !arg.value.tipo().is_data()
-                                                {
-                                                    ir_stack.push(Air::WrapData {
-                                                        scope: scope.clone(),
-                                                        tipo: arg.value.tipo(),
-                                                    })
-                                                }
+                                let mut stacks = Vec::new();
+                                for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                                    let mut stack = ir_stack.in_new_scope();
 
-                                                self.build_ir(&arg.value, ir_stack, scope);
-                                            }
-                                        } else {
-                                            unreachable!()
-                                        }
-                                        return;
+                                    if func_type.is_data() && !arg.value.tipo().is_data() {
+                                        stack.wrap_data(arg.value.tipo());
                                     }
+
+                                    self.build_ir(&arg.value, &mut stack);
                                 }
-                                _ => unreachable!(),
+
+                                ir_stack.builtin(*func, tipo.clone(), stacks);
+
+                                return;
                             }
                         }
                         _ => {}
@@ -444,48 +385,35 @@ impl<'a> CodeGenerator<'a> {
                     _ => {}
                 }
 
-                ir_stack.push(Air::Call {
-                    scope: scope.clone(),
-                    count: args.len(),
-                    tipo: tipo.clone(),
-                });
-                let mut scope_fun = scope.clone();
-                scope_fun.push(self.id_gen.next());
-                self.build_ir(fun, ir_stack, scope_fun);
+                let mut fun_stack = ir_stack.in_new_scope();
 
-                if let Some(fun_arg_types) = fun.tipo().arg_types() {
-                    for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                        let mut scope = scope.clone();
-                        scope.push(self.id_gen.next());
+                self.build_ir(fun, &mut fun_stack);
 
-                        if func_type.is_data() && !arg.value.tipo().is_data() {
-                            ir_stack.push(Air::WrapData {
-                                scope: scope.clone(),
-                                tipo: arg.value.tipo(),
-                            })
-                        }
+                let fun_arg_types = fun.tipo().arg_types().unwrap_or_default();
 
-                        self.build_ir(&arg.value, ir_stack, scope);
+                let mut stacks = Vec::new();
+                for (arg, func_type) in args.iter().zip(fun_arg_types) {
+                    let mut stack = ir_stack.in_new_scope();
+
+                    if func_type.is_data() && !arg.value.tipo().is_data() {
+                        stack.wrap_data(arg.value.tipo());
                     }
+
+                    self.build_ir(&arg.value, &mut stack);
                 }
+
+                ir_stack.call(tipo.clone(), fun_stack, stacks);
             }
             TypedExpr::BinOp {
                 name, left, right, ..
             } => {
-                ir_stack.push(Air::BinOp {
-                    scope: scope.clone(),
-                    name: *name,
-                    count: 2,
-                    tipo: left.tipo(),
-                });
-                let mut scope_left = scope.clone();
-                scope_left.push(self.id_gen.next());
+                let mut left_stack = ir_stack.in_new_scope();
+                let mut right_stack = ir_stack.in_new_scope();
 
-                let mut scope_right = scope;
-                scope_right.push(self.id_gen.next());
+                self.build_ir(left, &mut left_stack);
+                self.build_ir(right, &mut right_stack);
 
-                self.build_ir(left, ir_stack, scope_left);
-                self.build_ir(right, ir_stack, scope_right);
+                ir_stack.binop(*name, left.tipo(), left_stack, right_stack);
             }
             TypedExpr::Assignment {
                 value,
@@ -494,30 +422,26 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let mut value_vec: Vec<Air> = vec![];
-                let mut pattern_vec: Vec<Air> = vec![];
-
-                let mut value_scope = scope.clone();
-                value_scope.push(self.id_gen.next());
+                let mut value_stack = ir_stack.in_new_scope();
+                let mut pattern_stack = ir_stack.in_new_scope();
 
                 let mut replaced_type = tipo.clone();
                 builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
-                self.build_ir(value, &mut value_vec, value_scope);
+                self.build_ir(value, &mut value_stack);
 
                 self.assignment_ir(
                     pattern,
-                    &mut pattern_vec,
-                    &mut value_vec,
+                    &mut pattern_stack,
+                    value_stack,
                     &replaced_type,
                     AssignmentProperties {
                         value_type: value.tipo(),
                         kind: *kind,
                     },
-                    scope,
                 );
 
-                ir_stack.append(&mut pattern_vec);
+                ir_stack.merge(pattern_stack);
             }
             TypedExpr::When {
                 subject, clauses, ..
@@ -1823,74 +1747,57 @@ impl<'a> CodeGenerator<'a> {
     fn assignment_ir(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
-        pattern_vec: &mut Vec<Air>,
-        value_vec: &mut Vec<Air>,
+        pattern_stack: &mut AirStack,
+        value_stack: AirStack,
         tipo: &Type,
         assignment_properties: AssignmentProperties,
-        scope: Vec<u64>,
     ) {
-        if assignment_properties.value_type.is_data() && !tipo.is_data() && !pattern.is_discard() {
-            let mut scope = scope.clone();
-            scope.push(self.id_gen.next());
+        let value_stack = if assignment_properties.value_type.is_data()
+            && !tipo.is_data()
+            && !pattern.is_discard()
+        {
+            let mut wrap_stack = pattern_stack.in_new_scope();
+            wrap_stack.un_wrap_data(tipo.clone().into());
+            wrap_stack.merge(value_stack);
+            wrap_stack
+        } else if !assignment_properties.value_type.is_data()
+            && tipo.is_data()
+            && !pattern.is_discard()
+        {
+            let mut wrap_stack = pattern_stack.in_new_scope();
+            wrap_stack.wrap_data(assignment_properties.value_type.clone());
+            wrap_stack.merge(value_stack);
+            wrap_stack
+        } else {
+            value_stack
+        };
 
-            value_vec.insert(
-                0,
-                Air::UnWrapData {
-                    scope: scope.clone(),
-                    tipo: tipo.clone().into(),
-                },
-            );
-        }
-        if !assignment_properties.value_type.is_data() && tipo.is_data() && !pattern.is_discard() {
-            let mut scope = scope.clone();
-            scope.push(self.id_gen.next());
-
-            value_vec.insert(
-                0,
-                Air::WrapData {
-                    scope: scope.clone(),
-                    tipo: assignment_properties.value_type.clone(),
-                },
-            )
-        }
         match pattern {
-            Pattern::Int { .. } => unreachable!(),
+            Pattern::Int { .. } => todo!(),
             Pattern::Var { name, .. } => {
-                pattern_vec.push(Air::Let {
-                    name: name.clone(),
-                    scope: scope.clone(),
-                });
-
-                pattern_vec.append(value_vec);
+                let assert_value_stack = value_stack.in_new_scope();
+                pattern_stack.let_assignment(name, value_stack);
 
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
-                    let mut assert_vec = vec![];
-                    let mut scope = scope;
-
-                    scope.push(self.id_gen.next());
+                    let mut assert_stack = pattern_stack.in_new_scope();
 
                     self.recursive_assert_pattern(
                         pattern,
-                        &mut assert_vec,
-                        value_vec,
+                        &mut assert_stack,
+                        assert_value_stack,
                         tipo,
                         assignment_properties,
-                        scope,
                     );
-                    pattern_vec.append(&mut assert_vec);
+
+                    pattern_stack.merge(assert_stack);
                 }
             }
-            Pattern::Assign { .. } => todo!("Assign not yet implemented yet"),
+            Pattern::Assign { .. } => todo!("Assign not yet implemented"),
             Pattern::Discard { .. } => {
-                pattern_vec.push(Air::Let {
-                    name: "_".to_string(),
-                    scope,
-                });
-
-                pattern_vec.append(value_vec);
+                pattern_stack.let_assignment("_", value_stack);
             }
             list @ Pattern::List { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
@@ -2261,18 +2168,17 @@ impl<'a> CodeGenerator<'a> {
     pub fn recursive_assert_pattern(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
-        pattern_vec: &mut Vec<Air>,
-        value_vec: &mut Vec<Air>,
+        assert_stack: &mut AirStack,
+        value_stack: AirStack,
         tipo: &Type,
         assignment_properties: AssignmentProperties,
-        scope: Vec<u64>,
     ) {
         match pattern {
             Pattern::Int { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
-                pattern_vec.append(value_vec);
+                assert_stack.merge(value_stack);
 
-                self.recursive_assert_tipo(tipo, pattern_vec, name, scope);
+                self.recursive_assert_tipo(tipo, assert_stack, name);
             }
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => unreachable!(),
@@ -2530,13 +2436,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn recursive_assert_tipo(
-        &mut self,
-        tipo: &Type,
-        assert_vec: &mut Vec<Air>,
-        name: &str,
-        scope: Vec<u64>,
-    ) {
+    fn recursive_assert_tipo(&mut self, tipo: &Type, assert_vec: &mut AirStack, name: &str) {
         let mut tipo = tipo.clone().into();
         builder::replace_opaque_type(&mut tipo, self.data_types.clone());
 
@@ -3675,19 +3575,13 @@ impl<'a> CodeGenerator<'a> {
                         tipo: replaced_type,
                     };
                 }
-                Air::BinOp {
-                    tipo,
-                    scope,
-                    name,
-                    count,
-                } => {
+                Air::BinOp { tipo, scope, name } => {
                     let mut replaced_type = tipo.clone();
                     builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
                     ir_stack[index] = Air::BinOp {
                         scope,
                         name,
-                        count,
                         tipo: replaced_type,
                     };
                 }
@@ -3872,7 +3766,7 @@ impl<'a> CodeGenerator<'a> {
                     };
                 }
                 Air::Record {
-                    constr_index,
+                    tag: constr_index,
                     tipo,
                     count,
                     scope,
@@ -3885,7 +3779,7 @@ impl<'a> CodeGenerator<'a> {
 
                         ir_stack[index] = Air::Record {
                             scope,
-                            constr_index,
+                            tag: constr_index,
                             tipo: replaced_type,
                             count,
                         };
@@ -4884,7 +4778,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::Record {
-                constr_index,
+                tag: constr_index,
                 tipo,
                 count,
                 ..
