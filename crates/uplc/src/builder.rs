@@ -6,7 +6,7 @@ use crate::{
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
-pub const ASSERT_ON_LIST: &str = "__assert_on_list";
+pub const EXPECT_ON_LIST: &str = "__expect_on_list";
 
 impl Term<Name> {
     pub fn apply(self, arg: Self) -> Self {
@@ -213,11 +213,11 @@ impl Term<Name> {
     }
 
     pub fn assert_on_list(self) -> Term<Name> {
-        self.lambda(ASSERT_ON_LIST.to_string())
+        self.lambda(EXPECT_ON_LIST.to_string())
             .apply(
-                Term::var(ASSERT_ON_LIST.to_string()).apply(Term::var(ASSERT_ON_LIST.to_string())),
+                Term::var(EXPECT_ON_LIST.to_string()).apply(Term::var(EXPECT_ON_LIST.to_string())),
             )
-            .lambda(ASSERT_ON_LIST.to_string())
+            .lambda(EXPECT_ON_LIST.to_string())
             .apply(
                 Term::var("__list_to_check".to_string())
                     .delayed_choose_list(
@@ -227,8 +227,8 @@ impl Term<Name> {
                                 Term::head_list().apply(Term::var("__list_to_check".to_string())),
                             )
                             .choose_unit(
-                                Term::var(ASSERT_ON_LIST.to_string())
-                                    .apply(Term::var(ASSERT_ON_LIST.to_string()))
+                                Term::var(EXPECT_ON_LIST.to_string())
+                                    .apply(Term::var(EXPECT_ON_LIST.to_string()))
                                     .apply(
                                         Term::tail_list()
                                             .apply(Term::var("__list_to_check".to_string())),
@@ -238,7 +238,7 @@ impl Term<Name> {
                     )
                     .lambda("__check_with".to_string())
                     .lambda("__list_to_check".to_string())
-                    .lambda(ASSERT_ON_LIST),
+                    .lambda(EXPECT_ON_LIST),
             )
     }
 
