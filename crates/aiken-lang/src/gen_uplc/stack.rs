@@ -219,6 +219,17 @@ impl<'a> AirStack<'a> {
         self.merge_child(right);
     }
 
+    pub fn unop(&mut self, op: crate::ast::UnOp, value: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::UnOp {
+            scope: self.scope.clone(),
+            op,
+        });
+
+        self.merge_child(value);
+    }
+
     pub fn let_assignment(&mut self, name: impl ToString, value: AirStack) {
         self.new_scope();
 
@@ -415,5 +426,92 @@ impl<'a> AirStack<'a> {
         });
 
         self.merge_child(value);
+    }
+
+    pub fn expect_constr(&mut self, tag: usize, value: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::AssertConstr {
+            scope: self.scope.clone(),
+            constr_index: tag,
+        });
+    }
+
+    pub fn expect_bool(&mut self, is_true: bool, value: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::AssertBool {
+            scope: self.scope.clone(),
+            is_true,
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn if_branch(&mut self, tipo: Arc<Type>, condition: AirStack, branch_body: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::If {
+            scope: self.scope.clone(),
+            tipo,
+        });
+
+        self.merge_child(condition);
+        self.merge_child(branch_body);
+    }
+
+    pub fn record_access(&mut self, tipo: Arc<Type>, record_index: u64, record: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::RecordAccess {
+            scope: self.scope.clone(),
+            record_index,
+            tipo,
+        });
+
+        self.merge_child(record);
+    }
+
+    pub fn record_update(
+        &mut self,
+        tipo: Arc<Type>,
+        highest_index: usize,
+        indices: Vec<(usize, Arc<Type>)>,
+        update: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::RecordUpdate {
+            scope: self.scope.clone(),
+            highest_index,
+            indices,
+            tipo,
+        });
+
+        self.merge_child(update);
+    }
+
+    pub fn tuple(&mut self, tipo: Arc<Type>, elems: Vec<AirStack>) {
+        self.new_scope();
+
+        self.air.push(Air::Tuple {
+            scope: self.scope.clone(),
+            count: elems.len(),
+            tipo,
+        });
+
+        self.merge_children(elems);
+    }
+
+    pub fn tuple_index(&mut self, tipo: Arc<Type>, tuple_index: usize, tuple: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::TupleIndex {
+            scope: self.scope.clone(),
+            tuple_index,
+            tipo,
+        });
+
+        self.merge_child(tuple);
     }
 }
