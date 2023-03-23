@@ -7,53 +7,55 @@ use crate::{
     tipo::{Type, ValueConstructor},
 };
 
+use super::scope::Scope;
+
 #[derive(Debug, Clone)]
 pub enum Air {
     // Primitives
     Int {
-        scope: Vec<u64>,
+        scope: Scope,
         value: String,
     },
     String {
-        scope: Vec<u64>,
+        scope: Scope,
         value: String,
     },
     ByteArray {
-        scope: Vec<u64>,
+        scope: Scope,
         bytes: Vec<u8>,
     },
     Bool {
-        scope: Vec<u64>,
+        scope: Scope,
         value: bool,
     },
     List {
-        scope: Vec<u64>,
+        scope: Scope,
         count: usize,
         tipo: Arc<Type>,
         tail: bool,
     },
     Tuple {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         count: usize,
     },
     Void {
-        scope: Vec<u64>,
+        scope: Scope,
     },
     Var {
-        scope: Vec<u64>,
+        scope: Scope,
         constructor: ValueConstructor,
         name: String,
         variant_name: String,
     },
     // Functions
     Call {
-        scope: Vec<u64>,
+        scope: Scope,
         count: usize,
         tipo: Arc<Type>,
     },
     DefineFunc {
-        scope: Vec<u64>,
+        scope: Scope,
         func_name: String,
         module_name: String,
         params: Vec<String>,
@@ -61,70 +63,70 @@ pub enum Air {
         variant_name: String,
     },
     Fn {
-        scope: Vec<u64>,
+        scope: Scope,
         params: Vec<String>,
     },
     Builtin {
-        scope: Vec<u64>,
+        scope: Scope,
         count: usize,
         func: DefaultFunction,
         tipo: Arc<Type>,
     },
     // Operators
     BinOp {
-        scope: Vec<u64>,
+        scope: Scope,
         name: BinOp,
         tipo: Arc<Type>,
     },
     UnOp {
-        scope: Vec<u64>,
+        scope: Scope,
         op: UnOp,
     },
     // Assignment
     Let {
-        scope: Vec<u64>,
+        scope: Scope,
         name: String,
     },
     UnWrapData {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
     },
     WrapData {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
     },
     AssertConstr {
-        scope: Vec<u64>,
+        scope: Scope,
         constr_index: usize,
     },
     AssertBool {
-        scope: Vec<u64>,
+        scope: Scope,
         is_true: bool,
     },
     // When
     When {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         subject_name: String,
     },
     Clause {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         subject_name: String,
         complex_clause: bool,
     },
     ListClause {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         complex_clause: bool,
     },
     WrapClause {
-        scope: Vec<u64>,
+        scope: Scope,
     },
     TupleClause {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
@@ -133,88 +135,88 @@ pub enum Air {
         complex_clause: bool,
     },
     ClauseGuard {
-        scope: Vec<u64>,
+        scope: Scope,
         subject_name: String,
         tipo: Arc<Type>,
     },
     ListClauseGuard {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
     },
     Finally {
-        scope: Vec<u64>,
+        scope: Scope,
     },
     // If
     If {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
     },
     // Record Creation
     Record {
-        scope: Vec<u64>,
+        scope: Scope,
         tag: usize,
         tipo: Arc<Type>,
         count: usize,
     },
     RecordUpdate {
-        scope: Vec<u64>,
+        scope: Scope,
         highest_index: usize,
         indices: Vec<(usize, Arc<Type>)>,
         tipo: Arc<Type>,
     },
     // Field Access
     RecordAccess {
-        scope: Vec<u64>,
+        scope: Scope,
         record_index: u64,
         tipo: Arc<Type>,
     },
     FieldsExpose {
-        scope: Vec<u64>,
+        scope: Scope,
         indices: Vec<(usize, String, Arc<Type>)>,
         check_last_item: bool,
     },
     // ListAccess
     ListAccessor {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         names: Vec<String>,
         tail: bool,
         check_last_item: bool,
     },
     ListExpose {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
     },
     // Tuple Access
     TupleAccessor {
-        scope: Vec<u64>,
+        scope: Scope,
         names: Vec<String>,
         tipo: Arc<Type>,
         check_last_item: bool,
     },
     TupleIndex {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
         tuple_index: usize,
     },
     // Misc.
     ErrorTerm {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
     },
     Trace {
-        scope: Vec<u64>,
+        scope: Scope,
         tipo: Arc<Type>,
     },
 }
 
 impl Air {
-    pub fn scope(&self) -> Vec<u64> {
+    pub fn scope(&self) -> Scope {
         match self {
             Air::Int { scope, .. }
             | Air::String { scope, .. }
@@ -256,7 +258,7 @@ impl Air {
             | Air::Trace { scope, .. } => scope.clone(),
         }
     }
-    pub fn scope_mut(&mut self) -> &mut Vec<u64> {
+    pub fn scope_mut(&mut self) -> &mut Scope {
         match self {
             Air::Int { scope, .. }
             | Air::String { scope, .. }

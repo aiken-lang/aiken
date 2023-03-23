@@ -636,29 +636,6 @@ pub fn list_access_to_uplc(
     }
 }
 
-pub fn get_common_ancestor(scope: &[u64], scope_prev: &[u64]) -> Vec<u64> {
-    let longest_length = if scope.len() >= scope_prev.len() {
-        scope.len()
-    } else {
-        scope_prev.len()
-    };
-
-    if *scope == *scope_prev {
-        return scope.to_vec();
-    }
-
-    for index in 0..longest_length {
-        if scope.get(index).is_none() {
-            return scope.to_vec();
-        } else if scope_prev.get(index).is_none() {
-            return scope_prev.to_vec();
-        } else if scope[index] != scope_prev[index] {
-            return scope[0..index].to_vec();
-        }
-    }
-    vec![]
-}
-
 pub fn check_when_pattern_needs(
     pattern: &Pattern<PatternConstructor, Arc<Type>>,
     clause_properties: &mut ClauseProperties,

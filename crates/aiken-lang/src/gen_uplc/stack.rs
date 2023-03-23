@@ -1,30 +1,34 @@
 use std::sync::Arc;
 
-use uplc::builtins::DefaultFunction;
+use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
-    tipo::{Type, ValueConstructor},
+    ast::Span,
+    tipo::{Type, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
 };
 
-use super::air::Air;
+use super::{air::Air, scope::Scope};
 
+/// A builder for [`Air`].
 pub struct AirStack<'a> {
     pub id_gen: &'a mut IdGenerator,
-    pub scope: Vec<u64>,
+    pub scope: Scope,
     pub air: Vec<Air>,
 }
 
 impl<'a> AirStack<'a> {
+    /// Create a new [`AirStack`] with an [`IdGenerator`]
     pub fn new(id_gen: &'a mut IdGenerator) -> Self {
         AirStack {
             id_gen,
-            scope: vec![id_gen.next()],
+            scope: Scope::default(),
             air: vec![],
         }
     }
 
-    pub fn with_scope(id_gen: &'a mut IdGenerator, scope: Vec<u64>) -> Self {
+    /// Create a new [`AirStack`] with an [`IdGenerator`] and [`Scope`].
+    pub fn with_scope(id_gen: &'a mut IdGenerator, scope: Scope) -> Self {
         AirStack {
             id_gen,
             scope,
@@ -32,20 +36,35 @@ impl<'a> AirStack<'a> {
         }
     }
 
-    pub fn in_new_scope(&mut self) -> Self {
-        let mut new_stack = AirStack::with_scope(&mut self.id_gen, self.scope.clone());
-
-        new_stack.new_scope();
-
-        new_stack
+    /// Create a new empty [`AirStack`] with the current stack's scope.
+    pub fn empty_with_scope(&mut self) -> Self {
+        AirStack::with_scope(&mut self.id_gen, self.scope.clone())
     }
 
-    pub fn new_scope(&mut self) {
+    /// Increment the [`Scope`]
+    fn new_scope(&mut self) {
         self.scope.push(self.id_gen.next());
     }
 
+    /// Merge two [`AirStack`]'s together while maintaining the current stack's [`Scope`]
     pub fn merge(&mut self, mut other: AirStack) {
         self.air.append(&mut other.air);
+    }
+
+    pub fn merge_child(&mut self, mut other: AirStack) {
+        let pattern = self.scope.common_ancestor(&other.scope);
+
+        for ir in other.air.iter_mut() {
+            ir.scope_mut().replace(&pattern, self.scope.clone());
+        }
+
+        self.merge(other);
+    }
+
+    pub fn merge_children(&mut self, stacks: Vec<AirStack>) {
+        for stack in stacks {
+            self.merge_child(stack)
+        }
     }
 
     pub fn sequence(&mut self, stacks: Vec<AirStack>) {
@@ -55,20 +74,26 @@ impl<'a> AirStack<'a> {
     }
 
     pub fn integer(&mut self, value: String) {
+        self.new_scope();
+
         self.air.push(Air::Int {
             scope: self.scope.clone(),
             value,
         });
     }
 
-    pub fn string(&mut self, value: String) {
+    pub fn string(&mut self, value: impl ToString) {
+        self.new_scope();
+
         self.air.push(Air::String {
             scope: self.scope.clone(),
-            value,
+            value: value.to_string(),
         });
     }
 
     pub fn byte_array(&mut self, bytes: Vec<u8>) {
+        self.new_scope();
+
         self.air.push(Air::ByteArray {
             scope: self.scope.clone(),
             bytes,
@@ -76,6 +101,8 @@ impl<'a> AirStack<'a> {
     }
 
     pub fn builtin(&mut self, func: DefaultFunction, tipo: Arc<Type>, args: Vec<AirStack>) {
+        self.new_scope();
+
         self.air.push(Air::Builtin {
             scope: self.scope.clone(),
             count: args.len(),
@@ -83,7 +110,7 @@ impl<'a> AirStack<'a> {
             tipo,
         });
 
-        self.sequence(args);
+        self.merge_children(args);
     }
 
     pub fn var(
@@ -92,6 +119,8 @@ impl<'a> AirStack<'a> {
         name: impl ToString,
         variant_name: impl ToString,
     ) {
+        self.new_scope();
+
         self.air.push(Air::Var {
             scope: self.scope.clone(),
             constructor,
@@ -100,16 +129,36 @@ impl<'a> AirStack<'a> {
         });
     }
 
+    pub fn local_var(&mut self, tipo: Arc<Type>, name: impl ToString) {
+        self.new_scope();
+
+        self.air.push(Air::Var {
+            scope: self.scope.clone(),
+            constructor: ValueConstructor::public(
+                tipo,
+                ValueConstructorVariant::LocalVariable {
+                    location: Span::empty(),
+                },
+            ),
+            name: name.to_string(),
+            variant_name: String::new(),
+        });
+    }
+
     pub fn anonymous_function(&mut self, params: Vec<String>, body: AirStack) {
+        self.new_scope();
+
         self.air.push(Air::Fn {
             scope: self.scope.clone(),
             params,
         });
 
-        self.merge(body);
+        self.merge_child(body);
     }
 
     pub fn list(&mut self, tipo: Arc<Type>, elements: Vec<AirStack>, tail: Option<AirStack>) {
+        self.new_scope();
+
         self.air.push(Air::List {
             scope: self.scope.clone(),
             count: elements.len(),
@@ -117,14 +166,16 @@ impl<'a> AirStack<'a> {
             tail: tail.is_some(),
         });
 
-        self.sequence(elements);
+        self.merge_children(elements);
 
         if let Some(tail) = tail {
-            self.merge(tail);
+            self.merge_child(tail);
         }
     }
 
     pub fn record(&mut self, tipo: Arc<Type>, tag: usize, fields: Vec<AirStack>) {
+        self.new_scope();
+
         self.air.push(Air::Record {
             scope: self.scope.clone(),
             tag,
@@ -132,19 +183,21 @@ impl<'a> AirStack<'a> {
             count: fields.len(),
         });
 
-        self.sequence(fields);
+        self.merge_children(fields);
     }
 
     pub fn call(&mut self, tipo: Arc<Type>, fun: AirStack, args: Vec<AirStack>) {
+        self.new_scope();
+
         self.air.push(Air::Call {
             scope: self.scope.clone(),
             count: args.len(),
             tipo,
         });
 
-        self.merge(fun);
+        self.merge_child(fun);
 
-        self.sequence(args);
+        self.merge_children(args);
     }
 
     pub fn binop(
@@ -154,26 +207,62 @@ impl<'a> AirStack<'a> {
         left: AirStack,
         right: AirStack,
     ) {
+        self.new_scope();
+
         self.air.push(Air::BinOp {
             scope: self.scope.clone(),
             name,
             tipo,
         });
 
-        self.merge(left);
-        self.merge(right);
+        self.merge_child(left);
+        self.merge_child(right);
     }
 
     pub fn let_assignment(&mut self, name: impl ToString, value: AirStack) {
+        self.new_scope();
+
         self.air.push(Air::Let {
             scope: self.scope.clone(),
             name: name.to_string(),
         });
 
-        self.merge(value);
+        self.merge_child(value);
+    }
+
+    pub fn expect_list_from_data(
+        &mut self,
+        tipo: Arc<Type>,
+        name: impl ToString,
+        unwrap_function: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::Builtin {
+            scope: self.scope.clone(),
+            func: DefaultFunction::ChooseUnit,
+            tipo: tipo.clone(),
+            count: DefaultFunction::ChooseUnit.arity(),
+        });
+
+        self.new_scope();
+
+        self.air.push(Air::Call {
+            scope: self.scope.clone(),
+            count: 2,
+            tipo,
+        });
+
+        self.local_var(tipo.clone(), EXPECT_ON_LIST);
+
+        self.local_var(tipo, name);
+
+        self.merge_child(unwrap_function);
     }
 
     pub fn wrap_data(&mut self, tipo: Arc<Type>) {
+        self.new_scope();
+
         self.air.push(Air::WrapData {
             scope: self.scope.clone(),
             tipo,
@@ -181,9 +270,150 @@ impl<'a> AirStack<'a> {
     }
 
     pub fn un_wrap_data(&mut self, tipo: Arc<Type>) {
+        self.new_scope();
+
         self.air.push(Air::UnWrapData {
             scope: self.scope.clone(),
             tipo,
         })
+    }
+
+    pub fn void(&mut self) {
+        self.new_scope();
+
+        self.air.push(Air::Void {
+            scope: self.scope.clone(),
+        })
+    }
+
+    pub fn tuple_accessor(
+        &mut self,
+        tipo: Arc<Type>,
+        names: Vec<String>,
+        check_last_item: bool,
+        value: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::TupleAccessor {
+            scope: self.scope.clone(),
+            names,
+            tipo,
+            check_last_item,
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn fields_expose(
+        &mut self,
+        indices: Vec<(usize, String, Arc<Type>)>,
+        check_last_item: bool,
+        value: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::FieldsExpose {
+            scope: self.scope.clone(),
+            indices,
+            check_last_item,
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn clause(
+        &mut self,
+        tipo: Arc<Type>,
+        subject_name: impl ToString,
+        tag: usize,
+        complex_clause: bool,
+        body: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::Clause {
+            scope: self.scope.clone(),
+            subject_name: subject_name.to_string(),
+            complex_clause,
+            tipo,
+        });
+
+        self.integer(tag.to_string());
+
+        self.merge_child(body);
+    }
+
+    pub fn trace(&mut self, tipo: Arc<Type>) {
+        self.new_scope();
+
+        self.air.push(Air::Trace {
+            scope: self.scope.clone(),
+            tipo,
+        })
+    }
+
+    pub fn error(&mut self, tipo: Arc<Type>) {
+        self.new_scope();
+
+        self.air.push(Air::ErrorTerm {
+            scope: self.scope.clone(),
+            tipo,
+        })
+    }
+
+    pub fn expect_constr_from_data(&mut self, tipo: Arc<Type>, when_stack: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::Builtin {
+            scope: self.scope.clone(),
+            func: DefaultFunction::ChooseUnit,
+            tipo: tipo.clone(),
+            count: DefaultFunction::ChooseUnit.arity(),
+        });
+
+        self.merge_child(when_stack);
+    }
+
+    pub fn when(
+        &mut self,
+        tipo: Arc<Type>,
+        subject_name: impl ToString,
+        subject_stack: AirStack,
+        clauses_stack: AirStack,
+        else_stack: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::When {
+            scope: self.scope.clone(),
+            subject_name: subject_name.to_string(),
+            tipo,
+        });
+
+        self.merge_child(subject_stack);
+        self.merge_child(clauses_stack);
+        self.merge_child(else_stack);
+    }
+
+    pub fn list_accessor(
+        &mut self,
+        tipo: Arc<Type>,
+        names: Vec<String>,
+        tail: bool,
+        check_last_item: bool,
+        value: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::ListAccessor {
+            scope: self.scope.clone(),
+            names,
+            tail,
+            check_last_item,
+            tipo,
+        });
+
+        self.merge_child(value);
     }
 }

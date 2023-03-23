@@ -4,7 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
-    builder::{ASSERT_ON_LIST, CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
     optimize::aiken_optimize_and_intern,
@@ -27,6 +27,7 @@ use crate::{
 
 pub mod air;
 pub mod builder;
+pub mod scope;
 pub mod stack;
 
 use air::Air;
@@ -185,14 +186,15 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::String { value, .. } => ir_stack.string(value.to_string()),
             TypedExpr::ByteArray { bytes, .. } => ir_stack.byte_array(bytes.to_vec()),
             TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
-                let stacks = Vec::new();
+                let mut stacks = Vec::new();
 
                 for (index, expr) in expressions.iter().enumerate() {
                     if index == 0 {
                         self.build_ir(expr, ir_stack);
                     } else {
-                        let mut stack = ir_stack.in_new_scope();
+                        let mut stack = ir_stack.empty_with_scope();
                         self.build_ir(expr, &mut stack);
+                        stacks.push(stack);
                     }
                 }
 
@@ -215,7 +217,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             },
             TypedExpr::Fn { args, body, .. } => {
-                let mut body_stack = ir_stack.in_new_scope();
+                let mut body_stack = ir_stack.empty_with_scope();
 
                 self.build_ir(body, &mut body_stack);
 
@@ -234,7 +236,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let stacks = Vec::new();
                 for element in elements {
-                    let mut stack = ir_stack.in_new_scope();
+                    let mut stack = ir_stack.empty_with_scope();
 
                     self.build_ir(element, &mut stack);
 
@@ -242,7 +244,7 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 let tail = tail.as_ref().map(|tail| {
-                    let mut tail_stack = ir_stack.in_new_scope();
+                    let mut tail_stack = ir_stack.empty_with_scope();
 
                     self.build_ir(tail, &mut tail_stack);
 
@@ -276,7 +278,7 @@ impl<'a> CodeGenerator<'a> {
                                 let stacks = Vec::new();
 
                                 for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                    let mut stack = ir_stack.in_new_scope();
+                                    let mut stack = ir_stack.empty_with_scope();
 
                                     if func_type.is_data() && !arg.value.tipo().is_data() {
                                         stack.wrap_data(arg.value.tipo());
@@ -301,7 +303,7 @@ impl<'a> CodeGenerator<'a> {
                             let stacks = Vec::new();
 
                             for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                let mut stack = ir_stack.in_new_scope();
+                                let mut stack = ir_stack.empty_with_scope();
 
                                 if func_type.is_data() && !arg.value.tipo().is_data() {
                                     stack.wrap_data(arg.value.tipo());
@@ -341,7 +343,7 @@ impl<'a> CodeGenerator<'a> {
                                 let mut stacks = Vec::new();
 
                                 for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                    let mut stack = ir_stack.in_new_scope();
+                                    let mut stack = ir_stack.empty_with_scope();
 
                                     if func_type.is_data() && !arg.value.tipo().is_data() {
                                         stack.wrap_data(arg.value.tipo());
@@ -366,7 +368,7 @@ impl<'a> CodeGenerator<'a> {
 
                                 let mut stacks = Vec::new();
                                 for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                                    let mut stack = ir_stack.in_new_scope();
+                                    let mut stack = ir_stack.empty_with_scope();
 
                                     if func_type.is_data() && !arg.value.tipo().is_data() {
                                         stack.wrap_data(arg.value.tipo());
@@ -385,7 +387,7 @@ impl<'a> CodeGenerator<'a> {
                     _ => {}
                 }
 
-                let mut fun_stack = ir_stack.in_new_scope();
+                let mut fun_stack = ir_stack.empty_with_scope();
 
                 self.build_ir(fun, &mut fun_stack);
 
@@ -393,7 +395,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut stacks = Vec::new();
                 for (arg, func_type) in args.iter().zip(fun_arg_types) {
-                    let mut stack = ir_stack.in_new_scope();
+                    let mut stack = ir_stack.empty_with_scope();
 
                     if func_type.is_data() && !arg.value.tipo().is_data() {
                         stack.wrap_data(arg.value.tipo());
@@ -407,8 +409,8 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::BinOp {
                 name, left, right, ..
             } => {
-                let mut left_stack = ir_stack.in_new_scope();
-                let mut right_stack = ir_stack.in_new_scope();
+                let mut left_stack = ir_stack.empty_with_scope();
+                let mut right_stack = ir_stack.empty_with_scope();
 
                 self.build_ir(left, &mut left_stack);
                 self.build_ir(right, &mut right_stack);
@@ -422,8 +424,8 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let mut value_stack = ir_stack.in_new_scope();
-                let mut pattern_stack = ir_stack.in_new_scope();
+                let mut value_stack = ir_stack.empty_with_scope();
+                let mut pattern_stack = ir_stack.empty_with_scope();
 
                 let mut replaced_type = tipo.clone();
                 builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
@@ -1756,17 +1758,17 @@ impl<'a> CodeGenerator<'a> {
             && !tipo.is_data()
             && !pattern.is_discard()
         {
-            let mut wrap_stack = pattern_stack.in_new_scope();
+            let mut wrap_stack = pattern_stack.empty_with_scope();
             wrap_stack.un_wrap_data(tipo.clone().into());
-            wrap_stack.merge(value_stack);
+            wrap_stack.merge_child(value_stack);
             wrap_stack
         } else if !assignment_properties.value_type.is_data()
             && tipo.is_data()
             && !pattern.is_discard()
         {
-            let mut wrap_stack = pattern_stack.in_new_scope();
+            let mut wrap_stack = pattern_stack.empty_with_scope();
             wrap_stack.wrap_data(assignment_properties.value_type.clone());
-            wrap_stack.merge(value_stack);
+            wrap_stack.merge_child(value_stack);
             wrap_stack
         } else {
             value_stack
@@ -1775,24 +1777,24 @@ impl<'a> CodeGenerator<'a> {
         match pattern {
             Pattern::Int { .. } => todo!(),
             Pattern::Var { name, .. } => {
-                let assert_value_stack = value_stack.in_new_scope();
+                let expect_value_stack = value_stack.empty_with_scope();
                 pattern_stack.let_assignment(name, value_stack);
 
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
-                    let mut assert_stack = pattern_stack.in_new_scope();
+                    let mut expect_stack = pattern_stack.empty_with_scope();
 
-                    self.recursive_assert_pattern(
+                    self.expect_pattern(
                         pattern,
-                        &mut assert_stack,
-                        assert_value_stack,
+                        &mut expect_stack,
+                        expect_value_stack,
                         tipo,
                         assignment_properties,
                     );
 
-                    pattern_stack.merge(assert_stack);
+                    pattern_stack.merge(expect_stack);
                 }
             }
             Pattern::Assign { .. } => todo!("Assign not yet implemented"),
@@ -1804,7 +1806,7 @@ impl<'a> CodeGenerator<'a> {
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
-                    self.recursive_assert_pattern(
+                    self.expect_pattern(
                         list,
                         pattern_vec,
                         value_vec,
@@ -1828,7 +1830,7 @@ impl<'a> CodeGenerator<'a> {
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
-                    self.recursive_assert_pattern(
+                    self.expect_pattern(
                         constr,
                         pattern_vec,
                         value_vec,
@@ -1852,7 +1854,7 @@ impl<'a> CodeGenerator<'a> {
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
-                    self.recursive_assert_pattern(
+                    self.expect_pattern(
                         tuple,
                         pattern_vec,
                         value_vec,
@@ -2165,10 +2167,10 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn recursive_assert_pattern(
+    pub fn expect_pattern(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
-        assert_stack: &mut AirStack,
+        expect_stack: &mut AirStack,
         value_stack: AirStack,
         tipo: &Type,
         assignment_properties: AssignmentProperties,
@@ -2176,50 +2178,51 @@ impl<'a> CodeGenerator<'a> {
         match pattern {
             Pattern::Int { .. } => unreachable!(),
             Pattern::Var { name, .. } => {
-                assert_stack.merge(value_stack);
+                expect_stack.merge(value_stack);
 
-                self.recursive_assert_tipo(tipo, assert_stack, name);
+                self.expect_type(tipo, expect_stack, name);
             }
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => unreachable!(),
             Pattern::List { elements, tail, .. } => {
-                let mut assert_list_vec = vec![];
                 let inner_list_type = &tipo.get_inner_types()[0];
                 let mut names = vec![];
+
+                let mut expect_list_stacks = vec![];
+
                 for element in elements {
                     match element {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
                         Pattern::Assign { .. } => todo!(),
-                        l @ (Pattern::List { .. }
+                        element_pattern @ (Pattern::List { .. }
                         | Pattern::Constructor { .. }
                         | Pattern::Tuple { .. }) => {
                             let name = format!("list_item_id_{}", self.id_gen.next());
+
                             names.push(name.clone());
 
-                            self.recursive_assert_pattern(
-                                l,
-                                &mut assert_list_vec,
-                                &mut vec![Air::Var {
-                                    scope: scope.clone(),
-                                    constructor: ValueConstructor::public(
-                                        tipo.clone().into(),
-                                        ValueConstructorVariant::LocalVariable {
-                                            location: Span::empty(),
-                                        },
-                                    ),
-                                    name,
-                                    variant_name: String::new(),
-                                }],
+                            let mut element_stack = expect_stack.empty_with_scope();
+                            let mut value_stack = element_stack.empty_with_scope();
+
+                            value_stack.local_var(tipo.clone().into(), name);
+
+                            self.expect_pattern(
+                                element_pattern,
+                                &mut element_stack,
+                                value_stack,
                                 inner_list_type,
                                 assignment_properties.clone(),
-                                scope.clone(),
                             );
+
+                            expect_list_stacks.push(element_stack);
                         }
                         _ => {}
                     }
                 }
+
+                let mut tail_stack = expect_stack.empty_with_scope();
 
                 let name = if let Some(tail) = tail {
                     match &**tail {
@@ -2230,21 +2233,13 @@ impl<'a> CodeGenerator<'a> {
                     format!("__tail_{}", self.id_gen.next())
                 };
 
-                self.recursive_assert_tipo(tipo, &mut assert_list_vec, &name, scope.clone());
+                self.expect_type(tipo, &mut tail_stack, &name);
 
                 names.push(name);
 
-                pattern_vec.push(Air::ListAccessor {
-                    scope,
-                    tipo: tipo.clone().into(),
-                    names,
-                    tail: true,
-                    check_last_item: false,
-                });
+                expect_stack.list_accessor(tipo.clone().into(), names, true, false, value_stack);
 
-                pattern_vec.append(value_vec);
-
-                pattern_vec.append(&mut assert_list_vec);
+                expect_stack.merge_children(expect_list_stacks);
             }
             Pattern::Constructor {
                 arguments,
@@ -2306,17 +2301,19 @@ impl<'a> CodeGenerator<'a> {
                         current_index += 1;
                     } else {
                         let id_next = self.id_gen.next();
+
                         final_args.push((format!("__field_{index}_{id_next}"), index));
-                        self.recursive_assert_tipo(
+
+                        self.expect_type(
                             type_map.get(&index).unwrap(),
                             &mut nested_pattern,
                             &format!("__field_{index}_{id_next}"),
-                            scope.clone(),
                         )
                     }
                 }
 
                 let constr_var = format!("__constr_{}", self.id_gen.next());
+
                 pattern_vec.push(Air::Let {
                     scope: scope.clone(),
                     name: constr_var.clone(),
@@ -2411,11 +2408,10 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         let id_next = self.id_gen.next();
                         final_args.push((format!("__tuple_{index}_{id_next}"), index));
-                        self.recursive_assert_tipo(
+                        self.expect_type(
                             type_map.get(&index).unwrap(),
                             &mut nested_pattern,
                             &format!("__tuple_{index}_{id_next}"),
-                            scope.clone(),
                         )
                     }
                 }
@@ -2436,7 +2432,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn recursive_assert_tipo(&mut self, tipo: &Type, assert_vec: &mut AirStack, name: &str) {
+    fn expect_type(&mut self, tipo: &Type, expect_stack: &mut AirStack, name: &str) {
         let mut tipo = tipo.clone().into();
         builder::replace_opaque_type(&mut tipo, self.data_types.clone());
 
@@ -2455,231 +2451,103 @@ impl<'a> CodeGenerator<'a> {
             let inner_list_type = &tipo.get_inner_types()[0];
             let inner_pair_types = inner_list_type.get_inner_types();
 
-            assert_vec.push(Air::Builtin {
-                scope: scope.clone(),
-                func: DefaultFunction::ChooseUnit,
-                tipo: tipo.clone(),
-                count: DefaultFunction::ChooseUnit.arity(),
-            });
+            let mut unwrap_function_stack = expect_stack.empty_with_scope();
+            let mut pair_access_stack = unwrap_function_stack.empty_with_scope();
+            let mut local_var_stack = pair_access_stack.empty_with_scope();
 
-            assert_vec.push(Air::Call {
-                scope: scope.clone(),
-                count: 2,
-                tipo: tipo.clone(),
-            });
+            local_var_stack.local_var(inner_list_type.clone(), format!("__pair_{new_id}"));
 
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: ASSERT_ON_LIST.to_string(),
-                variant_name: String::new(),
-            });
-
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: name.to_owned(),
-                variant_name: String::new(),
-            });
-
-            assert_vec.push(Air::Fn {
-                scope: scope.clone(),
-                params: vec![format!("__pair_{new_id}")],
-            });
-
-            assert_vec.push(Air::TupleAccessor {
-                scope: scope.clone(),
-                names: vec![
+            pair_access_stack.tuple_accessor(
+                inner_list_type.clone(),
+                vec![
                     format!("__pair_fst_{}", id_pair.0),
                     format!("__pair_snd_{}", id_pair.1),
                 ],
-                tipo: inner_list_type.clone(),
-                check_last_item: false,
-            });
+                false,
+                local_var_stack,
+            );
 
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: format!("__pair_{new_id}"),
-                variant_name: String::new(),
-            });
-
-            self.recursive_assert_tipo(
+            self.expect_type(
                 &inner_pair_types[0],
-                assert_vec,
+                &mut pair_access_stack,
                 &format!("__pair_fst_{}", id_pair.0),
-                scope.clone(),
             );
 
-            self.recursive_assert_tipo(
+            self.expect_type(
                 &inner_pair_types[1],
-                assert_vec,
+                &mut pair_access_stack,
                 &format!("__pair_snd_{}", id_pair.1),
-                scope.clone(),
             );
 
-            assert_vec.push(Air::Void { scope });
+            unwrap_function_stack
+                .anonymous_function(vec![format!("__pair_{new_id}")], pair_access_stack);
+
+            expect_stack.expect_list_from_data(tipo.clone(), name, unwrap_function_stack);
+
+            expect_stack.void();
         } else if tipo.is_list() {
             self.used_data_assert_on_list = true;
             let new_id = self.id_gen.next();
             let inner_list_type = &tipo.get_inner_types()[0];
 
-            assert_vec.push(Air::Builtin {
-                scope: scope.clone(),
-                func: DefaultFunction::ChooseUnit,
-                tipo: tipo.clone(),
-                count: DefaultFunction::ChooseUnit.arity(),
-            });
+            let mut unwrap_function_stack = expect_stack.empty_with_scope();
+            let mut list_access_stack = unwrap_function_stack.empty_with_scope();
+            let mut local_var_stack = list_access_stack.empty_with_scope();
 
-            assert_vec.push(Air::Call {
-                scope: scope.clone(),
-                count: 2,
-                tipo: tipo.clone(),
-            });
+            local_var_stack.un_wrap_data(inner_list_type.clone());
+            local_var_stack.local_var(inner_list_type.clone(), format!("__list_item_{new_id}"));
 
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: ASSERT_ON_LIST.to_string(),
-                variant_name: String::new(),
-            });
+            list_access_stack.let_assignment(format!("__list_item_{new_id}"), local_var_stack);
 
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: name.to_owned(),
-                variant_name: String::new(),
-            });
-
-            assert_vec.push(Air::Fn {
-                scope: scope.clone(),
-                params: vec![format!("__list_item_{new_id}")],
-            });
-
-            assert_vec.push(Air::Let {
-                scope: scope.clone(),
-                name: format!("__list_item_{new_id}"),
-            });
-
-            assert_vec.push(Air::UnWrapData {
-                scope: scope.clone(),
-                tipo: inner_list_type.clone(),
-            });
-
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: format!("__list_item_{new_id}"),
-                variant_name: String::new(),
-            });
-
-            self.recursive_assert_tipo(
+            self.expect_type(
                 inner_list_type,
-                assert_vec,
+                &mut list_access_stack,
                 &format!("__list_item_{new_id}"),
-                scope.clone(),
             );
 
-            assert_vec.push(Air::Void { scope });
+            unwrap_function_stack
+                .anonymous_function(vec![format!("__list_item_{new_id}")], list_access_stack);
+
+            expect_stack.expect_list_from_data(tipo.clone(), name, unwrap_function_stack);
+
+            expect_stack.void();
         } else if tipo.is_tuple() {
             let tuple_inner_types = tipo.get_inner_types();
             let mut new_id_list = vec![];
+
             for (index, _) in tuple_inner_types.iter().enumerate() {
                 new_id_list.push((index, self.id_gen.next()));
             }
 
-            assert_vec.push(Air::TupleAccessor {
-                scope: scope.clone(),
-                names: new_id_list
-                    .iter()
-                    .map(|(index, id)| format!("__tuple_index_{index}_{id}"))
-                    .collect_vec(),
-                tipo: tipo.clone(),
-                check_last_item: true,
-            });
+            let mut local_var_stack = expect_stack.empty_with_scope();
 
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: name.to_owned(),
-                variant_name: String::new(),
-            });
+            local_var_stack.local_var(tipo, name);
+
+            let names = new_id_list
+                .iter()
+                .map(|(index, id)| format!("__tuple_index_{index}_{id}"))
+                .collect();
+
+            expect_stack.tuple_accessor(tipo, names, true, local_var_stack);
 
             for (index, name) in new_id_list
                 .into_iter()
                 .map(|(index, id)| (index, format!("__tuple_index_{index}_{id}")))
             {
-                self.recursive_assert_tipo(
-                    &tuple_inner_types[index],
-                    assert_vec,
-                    &name,
-                    scope.clone(),
-                );
+                self.expect_type(&tuple_inner_types[index], expect_stack, &name);
             }
         } else {
             let data_type =
                 builder::lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
+
             let new_id = self.id_gen.next();
 
-            assert_vec.push(Air::Builtin {
-                scope: scope.clone(),
-                func: DefaultFunction::ChooseUnit,
-                tipo: tipo.clone(),
-                count: DefaultFunction::ChooseUnit.arity(),
-            });
-
-            assert_vec.push(Air::When {
-                scope: scope.clone(),
-                tipo: tipo.clone(),
-                subject_name: format!("__subject_{new_id}"),
-            });
-
-            assert_vec.push(Air::Var {
-                scope: scope.clone(),
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: name.to_owned(),
-                variant_name: String::new(),
-            });
+            // START HERE
+            let mut arg_stack = expect_stack.empty_with_scope();
+            let mut clause_stack = expect_stack.empty_with_scope();
+            let mut when_stack = expect_stack.empty_with_scope();
+            let mut trace_stack = expect_stack.empty_with_scope();
+            let mut subject_stack = expect_stack.empty_with_scope();
 
             for (index, constr) in data_type.constructors.iter().enumerate() {
                 let arg_indices = constr
@@ -2691,65 +2559,50 @@ impl<'a> CodeGenerator<'a> {
                             .label
                             .clone()
                             .unwrap_or(format!("__field_{index}_{new_id}"));
+
                         (index, arg_name, arg.tipo.clone())
                     })
                     .collect_vec();
 
-                assert_vec.push(Air::Clause {
-                    scope: scope.clone(),
-                    tipo: tipo.clone(),
-                    subject_name: format!("__subject_{new_id}"),
-                    complex_clause: false,
-                });
-
-                assert_vec.push(Air::Int {
-                    scope: scope.clone(),
-                    value: index.to_string(),
-                });
-
-                if !arg_indices.is_empty() {
-                    assert_vec.push(Air::FieldsExpose {
-                        scope: scope.clone(),
-                        indices: arg_indices.clone(),
-                        check_last_item: true,
-                    });
-
-                    assert_vec.push(Air::Var {
-                        scope: scope.clone(),
-                        constructor: ValueConstructor::public(
-                            tipo.clone(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: Span::empty(),
-                            },
-                        ),
-                        name: name.to_owned(),
-                        variant_name: String::new(),
-                    });
+                for (index, name, tipo) in arg_indices {
+                    self.expect_type(&tipo, &mut arg_stack, &name);
                 }
 
-                for (_, name, tipo) in arg_indices {
-                    self.recursive_assert_tipo(&tipo, assert_vec, &name, scope.clone());
-                }
+                arg_stack = if !arg_indices.is_empty() {
+                    arg_stack.local_var(tipo, name);
 
-                assert_vec.push(Air::Void {
-                    scope: scope.clone(),
-                });
+                    let field_expose_stack = expect_stack.empty_with_scope();
+
+                    field_expose_stack.fields_expose(arg_indices.clone(), true, arg_stack);
+
+                    field_expose_stack
+                } else {
+                    arg_stack
+                };
+
+                arg_stack.void();
+
+                clause_stack.clause(tipo, format!("__subject_{new_id}"), index, false, arg_stack);
             }
 
-            assert_vec.push(Air::Trace {
-                scope: scope.clone(),
-                tipo: tipo.clone(),
-            });
+            trace_stack.trace(tipo.clone());
 
-            assert_vec.push(Air::String {
-                scope: scope.clone(),
-                value: "Constr index did not match any type variant".to_string(),
-            });
+            trace_stack.string("Constr index did not match any type variant");
 
-            assert_vec.push(Air::ErrorTerm {
-                scope,
-                tipo: tipo.clone(),
-            });
+            trace_stack.error(tipo.clone());
+
+            subject_stack.local_var(tipo, name);
+
+            when_stack.when(
+                tipo,
+                format!("__subject_{new_id}"),
+                subject_stack,
+                clause_stack,
+                trace_stack,
+            );
+
+            // Only used here
+            expect_stack.expect_constr_from_data(tipo.clone(), when_stack);
         }
     }
 
@@ -2774,7 +2627,7 @@ impl<'a> CodeGenerator<'a> {
                         && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
-                        self.recursive_assert_pattern(
+                        self.expect_pattern(
                             a,
                             nested_pattern,
                             &mut vec![Air::Var {
@@ -2827,7 +2680,7 @@ impl<'a> CodeGenerator<'a> {
                         && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
-                        self.recursive_assert_pattern(
+                        self.expect_pattern(
                             a,
                             nested_pattern,
                             &mut vec![Air::Var {
@@ -2876,7 +2729,7 @@ impl<'a> CodeGenerator<'a> {
                         && assignment_properties.value_type.is_data()
                         && !tipo.is_data()
                     {
-                        self.recursive_assert_pattern(
+                        self.expect_pattern(
                             a,
                             nested_pattern,
                             &mut vec![Air::Var {
