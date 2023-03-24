@@ -4,7 +4,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
     optimize::aiken_optimize_and_intern,
@@ -86,7 +86,9 @@ impl<'a> CodeGenerator<'a> {
     ) -> Program<Name> {
         let mut ir_stack = AirStack::new(&mut self.id_gen);
 
-        self.build_ir(&fun.body, &mut ir_stack);
+        self.build(&fun.body, &mut ir_stack);
+
+        let mut ir_stack = ir_stack.complete();
 
         self.define_ir(&mut ir_stack);
 
@@ -102,11 +104,11 @@ impl<'a> CodeGenerator<'a> {
         if let Some(other) = other_fun {
             self.reset();
 
-            let mut other_ir_stack = vec![];
+            let mut other_ir_stack = AirStack::new(&mut self.id_gen);
 
-            let scope = vec![self.id_gen.next()];
+            self.build(&other.body, &mut other_ir_stack);
 
-            self.build_ir(&other.body, &mut other_ir_stack, scope);
+            let mut other_ir_stack = other_ir_stack.complete();
 
             self.define_ir(&mut other_ir_stack);
 
@@ -136,7 +138,9 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
         let mut ir_stack = AirStack::new(&mut self.id_gen);
 
-        self.build_ir(test_body, &mut ir_stack);
+        self.build(test_body, &mut ir_stack);
+
+        let mut ir_stack = ir_stack.complete();
 
         self.define_ir(&mut ir_stack);
 
@@ -180,7 +184,7 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
-    pub(crate) fn build_ir(&mut self, body: &TypedExpr, ir_stack: &mut AirStack) {
+    pub(crate) fn build(&mut self, body: &TypedExpr, ir_stack: &mut AirStack) {
         match body {
             TypedExpr::Int { value, .. } => ir_stack.integer(value.to_string()),
             TypedExpr::String { value, .. } => ir_stack.string(value.to_string()),
@@ -190,10 +194,10 @@ impl<'a> CodeGenerator<'a> {
 
                 for (index, expr) in expressions.iter().enumerate() {
                     if index == 0 {
-                        self.build_ir(expr, ir_stack);
+                        self.build(expr, ir_stack);
                     } else {
                         let mut stack = ir_stack.empty_with_scope();
-                        self.build_ir(expr, &mut stack);
+                        self.build(expr, &mut stack);
                         stacks.push(stack);
                     }
                 }
@@ -219,7 +223,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Fn { args, body, .. } => {
                 let mut body_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(body, &mut body_stack);
+                self.build(body, &mut body_stack);
 
                 let mut params = args
                     .iter()
@@ -238,7 +242,7 @@ impl<'a> CodeGenerator<'a> {
                 for element in elements {
                     let mut stack = ir_stack.empty_with_scope();
 
-                    self.build_ir(element, &mut stack);
+                    self.build(element, &mut stack);
 
                     stacks.push(stack);
                 }
@@ -246,7 +250,7 @@ impl<'a> CodeGenerator<'a> {
                 let tail = tail.as_ref().map(|tail| {
                     let mut tail_stack = ir_stack.empty_with_scope();
 
-                    self.build_ir(tail, &mut tail_stack);
+                    self.build(tail, &mut tail_stack);
 
                     tail_stack
                 });
@@ -284,7 +288,7 @@ impl<'a> CodeGenerator<'a> {
                                         stack.wrap_data(arg.value.tipo());
                                     }
 
-                                    self.build_ir(&arg.value, &mut stack);
+                                    self.build(&arg.value, &mut stack);
 
                                     stacks.push(stack);
                                 }
@@ -309,7 +313,7 @@ impl<'a> CodeGenerator<'a> {
                                     stack.wrap_data(arg.value.tipo());
                                 }
 
-                                self.build_ir(&arg.value, &mut stack);
+                                self.build(&arg.value, &mut stack);
                             }
 
                             ir_stack.builtin(*func, tipo.clone(), stacks);
@@ -349,7 +353,7 @@ impl<'a> CodeGenerator<'a> {
                                         stack.wrap_data(arg.value.tipo());
                                     }
 
-                                    self.build_ir(&arg.value, &mut stack);
+                                    self.build(&arg.value, &mut stack);
                                 }
 
                                 ir_stack.record(tipo.clone(), constr_index, stacks);
@@ -374,7 +378,7 @@ impl<'a> CodeGenerator<'a> {
                                         stack.wrap_data(arg.value.tipo());
                                     }
 
-                                    self.build_ir(&arg.value, &mut stack);
+                                    self.build(&arg.value, &mut stack);
                                 }
 
                                 ir_stack.builtin(*func, tipo.clone(), stacks);
@@ -389,7 +393,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut fun_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(fun, &mut fun_stack);
+                self.build(fun, &mut fun_stack);
 
                 let fun_arg_types = fun.tipo().arg_types().unwrap_or_default();
 
@@ -401,7 +405,7 @@ impl<'a> CodeGenerator<'a> {
                         stack.wrap_data(arg.value.tipo());
                     }
 
-                    self.build_ir(&arg.value, &mut stack);
+                    self.build(&arg.value, &mut stack);
                 }
 
                 ir_stack.call(tipo.clone(), fun_stack, stacks);
@@ -412,8 +416,8 @@ impl<'a> CodeGenerator<'a> {
                 let mut left_stack = ir_stack.empty_with_scope();
                 let mut right_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(left, &mut left_stack);
-                self.build_ir(right, &mut right_stack);
+                self.build(left, &mut left_stack);
+                self.build(right, &mut right_stack);
 
                 ir_stack.binop(*name, left.tipo(), left_stack, right_stack);
             }
@@ -430,7 +434,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut replaced_type = tipo.clone();
                 builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
 
-                self.build_ir(value, &mut value_stack);
+                self.build(value, &mut value_stack);
 
                 self.assignment(
                     pattern,
@@ -457,9 +461,9 @@ impl<'a> CodeGenerator<'a> {
                     let mut pattern_vec: Vec<Air> = vec![];
                     let mut subject_vec: Vec<Air> = vec![];
 
-                    self.build_ir(&clauses[0].then, &mut value_vec);
+                    self.build(&clauses[0].then, &mut value_vec);
 
-                    self.build_ir(subject, &mut subject_vec);
+                    self.build(subject, &mut subject_vec);
 
                     self.assignment(
                         &clauses[0].pattern,
@@ -512,7 +516,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let mut final_clause_vec = vec![];
 
-                        self.build_ir(&last_clause.then, &mut final_clause_vec);
+                        self.build(&last_clause.then, &mut final_clause_vec);
 
                         *clause_properties.is_final_clause() = true;
 
@@ -533,7 +537,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut subject_scope = scope.clone();
                             subject_scope.push(self.id_gen.next());
 
-                            self.build_ir(subject, ir_stack, subject_scope.clone());
+                            self.build(subject, ir_stack);
 
                             let mut scope = scope;
                             scope.push(self.id_gen.next());
@@ -565,7 +569,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut scope = scope;
                             scope.push(self.id_gen.next());
 
-                            self.build_ir(subject, ir_stack, scope);
+                            self.build(subject, ir_stack);
                         }
 
                         ir_stack.append(&mut pattern_vec);
@@ -582,16 +586,16 @@ impl<'a> CodeGenerator<'a> {
                     let mut condition_stack = ir_stack.empty_with_scope();
                     let mut branch_body_stack = ir_stack.empty_with_scope();
 
-                    self.build_ir(&branch.condition, &mut condition_stack);
+                    self.build(&branch.condition, &mut condition_stack);
 
-                    self.build_ir(&branch.body, &mut branch_body_stack);
+                    self.build(&branch.body, &mut branch_body_stack);
 
                     ir_stack.if_branch(tipo.clone(), condition_stack, branch_body_stack);
                 }
 
                 let mut else_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(final_else, &mut else_stack);
+                self.build(final_else, &mut else_stack);
 
                 ir_stack.merge_child(else_stack);
             }
@@ -603,7 +607,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let mut record_access_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(record, &mut record_access_stack);
+                self.build(record, &mut record_access_stack);
 
                 ir_stack.record_access(tipo.clone(), *index, record_access_stack);
             }
@@ -651,12 +655,12 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut update_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(spread, &mut update_stack);
+                self.build(spread, &mut update_stack);
 
                 for arg in args {
                     let mut arg_stack = update_stack.empty_with_scope();
 
-                    self.build_ir(&arg.value, &mut arg_stack);
+                    self.build(&arg.value, &mut arg_stack);
 
                     update_stack.merge(arg_stack);
 
@@ -672,7 +676,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::UnOp { value, op, .. } => {
                 let mut value_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(value, &mut value_stack);
+                self.build(value, &mut value_stack);
 
                 ir_stack.unop(*op, value_stack);
             }
@@ -681,7 +685,7 @@ impl<'a> CodeGenerator<'a> {
 
                 for elem in elems {
                     let mut elem_stack = ir_stack.empty_with_scope();
-                    self.build_ir(elem, &mut elem_stack);
+                    self.build(elem, &mut elem_stack);
                     stacks.push(elem_stack);
                 }
 
@@ -694,8 +698,8 @@ impl<'a> CodeGenerator<'a> {
                 let mut text_stack = ir_stack.empty_with_scope();
                 let mut then_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(text, &mut text_stack);
-                self.build_ir(then, &mut then_stack);
+                self.build(text, &mut text_stack);
+                self.build(then, &mut then_stack);
 
                 ir_stack.trace(tipo.clone());
                 ir_stack.merge_child(text_stack);
@@ -705,7 +709,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::TupleIndex { index, tuple, .. } => {
                 let mut tuple_stack = ir_stack.empty_with_scope();
 
-                self.build_ir(tuple, &mut tuple_stack);
+                self.build(tuple, &mut tuple_stack);
 
                 ir_stack.tuple_index(tuple.tipo(), *index, tuple_stack);
             }
@@ -722,7 +726,6 @@ impl<'a> CodeGenerator<'a> {
         clause_properties: &mut ClauseProperties,
         clauses: &[TypedClause],
         subject_type: &Arc<Type>,
-        scope: Vec<u64>,
     ) {
         for (index, clause) in clauses.iter().enumerate() {
             // scope per clause is different
@@ -739,7 +742,7 @@ impl<'a> CodeGenerator<'a> {
             let mut clause_scope = scope.clone();
             clause_scope.push(self.id_gen.next());
 
-            self.build_ir(&clause.then, &mut clause_then_vec, clause_scope);
+            self.build(&clause.then, &mut clause_then_vec);
 
             if let Some(clause_guard) = &clause.guard {
                 let mut clause_guard_vec = vec![];
@@ -2514,52 +2517,40 @@ impl<'a> CodeGenerator<'a> {
                 let id = self.id_gen.next();
                 let constr_name = format!("{constr_name}_{id}");
 
+                let mut local_var_stack = nested_pattern_stack.empty_with_scope();
+
+                local_var_stack.local_var(tipo.clone(), constr_name);
+
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
                     && !tipo.is_data()
                 {
                     self.expect_pattern(
                         a,
-                        nested_pattern,
-                        &mut vec![Air::Var {
-                            scope: scope.to_owned(),
-                            constructor: ValueConstructor::public(
-                                tipo.clone(),
-                                ValueConstructorVariant::LocalVariable {
-                                    location: Span::empty(),
-                                },
-                            ),
-                            name: constr_name.clone(),
-                            variant_name: String::new(),
-                        }],
+                        nested_pattern_stack,
+                        local_var_stack,
                         tipo,
                         assignment_properties.clone(),
                     );
                 } else {
                     self.pattern_ir(
                         a,
-                        nested_pattern,
-                        &mut vec![Air::Var {
-                            scope: scope.to_owned(),
-                            constructor: ValueConstructor::public(
-                                tipo.clone(),
-                                ValueConstructorVariant::LocalVariable {
-                                    location: Span::empty(),
-                                },
-                            ),
-                            name: constr_name.clone(),
-                            variant_name: String::new(),
-                        }],
+                        nested_pattern_stack,
+                        local_var_stack,
                         tipo,
                         assignment_properties.clone(),
                     );
                 }
 
-                (false, constr_name)
+                Some(constr_name)
             }
             a @ Pattern::Tuple { .. } => {
                 let id = self.id_gen.next();
                 let tuple_name = format!("__tuple_name_{id}");
+
+                let mut local_var_stack = nested_pattern_stack.empty_with_scope();
+
+                local_var_stack.local_var(tipo.clone().into(), tuple_name);
 
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
@@ -2567,36 +2558,16 @@ impl<'a> CodeGenerator<'a> {
                 {
                     self.expect_pattern(
                         a,
-                        nested_pattern,
-                        &mut vec![Air::Var {
-                            scope: scope.to_owned(),
-                            constructor: ValueConstructor::public(
-                                tipo.clone().into(),
-                                ValueConstructorVariant::LocalVariable {
-                                    location: Span::empty(),
-                                },
-                            ),
-                            name: tuple_name.clone(),
-                            variant_name: String::new(),
-                        }],
+                        nested_pattern_stack,
+                        local_var_stack,
                         tipo,
                         assignment_properties.clone(),
                     );
                 } else {
                     self.pattern_ir(
                         a,
-                        nested_pattern,
-                        &mut vec![Air::Var {
-                            scope: scope.to_owned(),
-                            constructor: ValueConstructor::public(
-                                tipo.clone().into(),
-                                ValueConstructorVariant::LocalVariable {
-                                    location: Span::empty(),
-                                },
-                            ),
-                            name: tuple_name.clone(),
-                            variant_name: String::new(),
-                        }],
+                        nested_pattern_stack,
+                        local_var_stack,
                         tipo,
                         assignment_properties.clone(),
                     );
@@ -2676,7 +2647,7 @@ impl<'a> CodeGenerator<'a> {
 
             if !function_component.args.is_empty() {
                 // deal with function dependencies
-                builder::handle_func_dependencies_ir(
+                builder::handle_func_dependencies(
                     &mut dep_ir,
                     function_component,
                     &function_definitions,
@@ -2692,7 +2663,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut defined_functions = IndexMap::new();
 
                 // deal with function dependencies in zero arg functions
-                builder::handle_func_dependencies_ir(
+                builder::handle_func_dependencies(
                     &mut dep_ir,
                     function_component,
                     &function_definitions,
@@ -2721,7 +2692,7 @@ impl<'a> CodeGenerator<'a> {
             let funt_comp = function_definitions.get(&func.0).unwrap();
             let func_scope = func_index_map.get(&func.0).unwrap();
 
-            builder::handle_func_dependencies_ir(
+            builder::handle_func_dependencies(
                 &mut dep_ir,
                 funt_comp,
                 &function_definitions,
@@ -2939,7 +2910,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let mut func_ir = vec![];
 
-                        self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+                        self.build(&function.body, &mut func_ir);
 
                         let param_types = constructor.tipo.arg_types().unwrap();
 
@@ -3055,7 +3026,7 @@ impl<'a> CodeGenerator<'a> {
                                         mono_types = map.into_iter().collect();
                                         let mut func_ir = vec![];
 
-                                        self.build_ir(&function.body, &mut func_ir, scope.to_vec());
+                                        self.build(&function.body, &mut func_ir);
 
                                         let (variant_name, _) =
                                             builder::monomorphize(func_ir, mono_types, &tipo);
