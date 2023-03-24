@@ -518,4 +518,23 @@ impl<'a> AirStack<'a> {
 
         self.merge_child(tuple);
     }
+
+    pub fn finally(&mut self, value: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::Finally {
+            scope: self.scope.clone(),
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn bool(&mut self, value: bool) {
+        self.new_scope();
+
+        self.air.push(Air::Bool {
+            scope: self.scope.clone(),
+            value,
+        });
+    }
 }

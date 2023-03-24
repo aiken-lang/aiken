@@ -19,7 +19,7 @@ use crate::{
         TypedClause, TypedDataType, UnOp,
     },
     expr::TypedExpr,
-    tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
+    tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
 };
 
 use super::{air::Air, scope::Scope, stack::AirStack};
@@ -1477,7 +1477,7 @@ pub fn handle_func_dependencies(
             handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
 
             let mut temp_ir = vec![Air::DefineFunc {
-                scope: func_scope.to_vec(),
+                scope: func_scope.clone(),
                 func_name: dependency.function_name.clone(),
                 module_name: dependency.module_name.clone(),
                 params: depend_comp.args.clone(),
@@ -1667,105 +1667,93 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
 
 pub fn handle_clause_guard(
     clause_guard: &ClauseGuard<Arc<Type>>,
-    clause_guard_vec: &mut Vec<Air>,
-    scope: Vec<u64>,
+    clause_guard_stack: &mut AirStack,
 ) {
     match clause_guard {
         ClauseGuard::Not { value, .. } => {
-            clause_guard_vec.push(Air::UnOp {
-                scope: scope.clone(),
-                op: UnOp::Not,
-            });
+            let value_stack = clause_guard_stack.empty_with_scope();
 
-            handle_clause_guard(value, clause_guard_vec, scope);
+            handle_clause_guard(value, &mut value_stack);
+
+            clause_guard_stack.unop(UnOp::Not, value_stack);
         }
         ClauseGuard::Equals { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::Eq,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::Eq, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::NotEquals { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::NotEq,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::NotEq, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::GtInt { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::GtInt,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::GtInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::GtEqInt { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::GtEqInt,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::GtEqInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::LtInt { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::LtInt,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::LtInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::LtEqInt { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::LtEqInt,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::LtEqInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::Or { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::Or,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::Or, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::And { left, right, .. } => {
-            clause_guard_vec.push(Air::BinOp {
-                scope: scope.clone(),
-                name: BinOp::And,
-                tipo: left.tipo(),
-            });
-            handle_clause_guard(left, clause_guard_vec, scope.clone());
-            handle_clause_guard(right, clause_guard_vec, scope);
+            let left_stack = clause_guard_stack.empty_with_scope();
+            let right_stack = clause_guard_stack.empty_with_scope();
+
+            handle_clause_guard(left, &mut left_stack);
+            handle_clause_guard(right, &mut right_stack);
+
+            clause_guard_stack.binop(BinOp::And, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::Var { tipo, name, .. } => {
-            clause_guard_vec.push(Air::Var {
-                scope,
-                constructor: ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::LocalVariable {
-                        location: Span::empty(),
-                    },
-                ),
-                name: name.clone(),
-                variant_name: String::new(),
-            });
+            clause_guard_stack.local_var(tipo.clone(), name);
         }
         ClauseGuard::Constant(constant) => {
-            constants_ir(constant, clause_guard_vec);
+            constants_ir(constant, clause_guard_stack);
         }
     }
 }
