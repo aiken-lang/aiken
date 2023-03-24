@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use indexmap::IndexSet;
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
@@ -341,7 +342,6 @@ impl<'a> AirStack<'a> {
         &mut self,
         tipo: Arc<Type>,
         subject_name: impl ToString,
-        tag: usize,
         complex_clause: bool,
         body: AirStack,
     ) {
@@ -354,9 +354,60 @@ impl<'a> AirStack<'a> {
             tipo,
         });
 
-        self.integer(tag.to_string());
+        self.merge_child(body);
+    }
+
+    pub fn list_clause(
+        &mut self,
+        tipo: Arc<Type>,
+        tail_name: impl ToString,
+        next_tail_name: Option<String>,
+        complex_clause: bool,
+        body: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::ListClause {
+            scope: self.scope.clone(),
+            tail_name: tail_name.to_string(),
+            next_tail_name,
+            complex_clause,
+            tipo,
+        });
 
         self.merge_child(body);
+    }
+
+    pub fn tuple_clause(
+        &mut self,
+        tipo: Arc<Type>,
+        subject_name: impl ToString,
+        indices: IndexSet<(usize, String)>,
+        predefined_indices: IndexSet<(usize, String)>,
+        complex_clause: bool,
+        body: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::TupleClause {
+            scope: self.scope.clone(),
+            subject_name: subject_name.to_string(),
+            indices,
+            predefined_indices,
+            complex_clause,
+            tipo,
+            count: tipo.get_inner_types().len(),
+        });
+
+        self.merge_child(body);
+    }
+
+    pub fn wrap_clause(&mut self) {
+        self.new_scope();
+
+        self.air.push(Air::WrapClause {
+            scope: self.scope.clone(),
+        });
     }
 
     pub fn trace(&mut self, tipo: Arc<Type>) {
@@ -536,5 +587,25 @@ impl<'a> AirStack<'a> {
             scope: self.scope.clone(),
             value,
         });
+    }
+
+    pub(crate) fn clause_guard(
+        &self,
+        subject_name: impl ToString,
+        tipo: Arc<Type>,
+        condition_stack: AirStack,
+        clause_then_stack: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::ClauseGuard {
+            scope: self.scope.clone(),
+            subject_name: subject_name.to_string(),
+            tipo,
+        });
+
+        self.merge_child(condition_stack);
+
+        self.merge_child(clause_then_stack);
     }
 }
