@@ -589,7 +589,7 @@ impl<'a> AirStack<'a> {
         });
     }
 
-    pub(crate) fn clause_guard(
+    pub fn clause_guard(
         &self,
         subject_name: impl ToString,
         tipo: Arc<Type>,
@@ -607,5 +607,45 @@ impl<'a> AirStack<'a> {
         self.merge_child(condition_stack);
 
         self.merge_child(clause_then_stack);
+    }
+
+    pub fn list_expose(
+        &mut self,
+        tipo: Arc<Type>,
+        tail_head_names: Vec<(String, String)>,
+        tail: Option<(String, String)>,
+        value: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::ListExpose {
+            scope: self.scope.clone(),
+            tipo,
+            tail_head_names,
+            tail,
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn list_clause_guard(
+        &self,
+        tipo: Arc<Type>,
+        tail_name: impl ToString,
+        next_tail_name: Option<String>,
+        inverse: bool,
+        void_stack: AirStack,
+    ) {
+        self.new_scope();
+
+        self.air.push(Air::ListClauseGuard {
+            scope: self.scope.clone(),
+            tipo,
+            tail_name: tail_name.to_string(),
+            next_tail_name,
+            inverse,
+        });
+
+        self.merge_child(void_stack);
     }
 }
