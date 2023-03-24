@@ -712,56 +712,39 @@ impl<'a> CodeGenerator<'a> {
         subject_type: &Arc<Type>,
     ) {
         for (index, clause) in clauses.iter().enumerate() {
-            // scope per clause is different
-            let mut scope = scope.clone();
-            scope.push(self.id_gen.next());
-
             // holds when clause pattern Air
-            let mut clause_subject_vec = vec![];
-            let mut clause_then_vec = vec![];
+            let mut clause_pattern_stack = ir_stack.empty_with_scope();
+            let mut clause_then_stack = ir_stack.empty_with_scope();
 
             // reset complex clause setting per clause back to default
             *clause_properties.is_complex_clause() = false;
 
-            let mut clause_scope = scope.clone();
-            clause_scope.push(self.id_gen.next());
-
-            self.build(&clause.then, &mut clause_then_vec);
+            self.build(&clause.then, &mut clause_then_stack);
 
             if let Some(clause_guard) = &clause.guard {
-                let mut clause_guard_vec = vec![];
+                let mut clause_guard_stack = ir_stack.empty_with_scope();
+                let mut clause_guard_condition = ir_stack.empty_with_scope();
 
                 *clause_properties.is_complex_clause() = true;
 
                 let clause_guard_name = format!("__clause_guard_{}", self.id_gen.next());
 
-                let mut clause_guard_scope = scope.clone();
-                clause_guard_scope.push(self.id_gen.next());
+                builder::handle_clause_guard(clause_guard, &mut clause_guard_condition);
 
-                clause_guard_vec.push(Air::Let {
-                    scope: clause_guard_scope.clone(),
-                    name: clause_guard_name.clone(),
-                });
+                clause_guard_stack.let_assignment(clause_guard_name, clause_guard_condition);
 
-                builder::handle_clause_guard(
-                    clause_guard,
-                    &mut clause_guard_vec,
-                    clause_guard_scope.clone(),
+                let condition_stack = ir_stack.empty_with_scope();
+
+                condition_stack.bool(true);
+
+                clause_guard_stack.clause_guard(
+                    clause_guard_name,
+                    bool(),
+                    condition_stack,
+                    clause_then_stack,
                 );
 
-                clause_guard_vec.push(Air::ClauseGuard {
-                    scope: clause_guard_scope.clone(),
-                    subject_name: clause_guard_name,
-                    tipo: bool(),
-                });
-
-                clause_guard_vec.push(Air::Bool {
-                    scope: clause_guard_scope.clone(),
-                    value: true,
-                });
-
-                clause_guard_vec.append(&mut clause_then_vec);
-                clause_then_vec = clause_guard_vec;
+                clause_then_stack = clause_guard_stack;
             }
 
             match clause_properties {
@@ -771,13 +754,10 @@ impl<'a> CodeGenerator<'a> {
                 } => {
                     let subject_name = original_subject_name.clone();
 
-                    let mut clause_scope = scope.clone();
-                    clause_scope.push(self.id_gen.next());
-
                     self.when_pattern(
                         &clause.pattern,
-                        &mut clause_subject_vec,
-                        &mut clause_then_vec,
+                        &mut clause_pattern_stack,
+                        clause_then_stack,
                         subject_type,
                         clause_properties,
                     );
@@ -787,35 +767,33 @@ impl<'a> CodeGenerator<'a> {
 
                     if let Some(data_type) = data_type {
                         if data_type.constructors.len() > 1 {
-                            ir_stack.push(Air::Clause {
-                                scope,
-                                tipo: subject_type.clone(),
-                                complex_clause: *clause_properties.is_complex_clause(),
+                            ir_stack.clause(
+                                subject_type.clone(),
                                 subject_name,
-                            });
+                                *clause_properties.is_complex_clause(),
+                                clause_pattern_stack,
+                            );
                         } else {
-                            ir_stack.push(Air::Clause {
-                                scope: scope.clone(),
-                                tipo: subject_type.clone(),
-                                complex_clause: *clause_properties.is_complex_clause(),
+                            let condition_stack = ir_stack.empty_with_scope();
+
+                            condition_stack.integer(0.to_string());
+
+                            condition_stack.merge_child(clause_pattern_stack);
+
+                            ir_stack.clause(
+                                subject_type.clone(),
                                 subject_name,
-                            });
-
-                            let mut scope = scope;
-                            scope.push(self.id_gen.next());
-
-                            ir_stack.push(Air::Int {
-                                scope,
-                                value: "0".to_string(),
-                            });
+                                *clause_properties.is_complex_clause(),
+                                condition_stack,
+                            );
                         }
                     } else {
-                        ir_stack.push(Air::Clause {
-                            scope: scope.clone(),
-                            tipo: subject_type.clone(),
-                            complex_clause: *clause_properties.is_complex_clause(),
+                        ir_stack.clause(
+                            subject_type.clone(),
                             subject_name,
-                        });
+                            *clause_properties.is_complex_clause(),
+                            clause_pattern_stack,
+                        );
                     }
                 }
                 ClauseProperties::ListClause {
@@ -846,8 +824,8 @@ impl<'a> CodeGenerator<'a> {
 
                     self.when_pattern(
                         &clause.pattern,
-                        &mut clause_subject_vec,
-                        &mut clause_then_vec,
+                        &mut clause_pattern_stack,
+                        clause_then_stack,
                         subject_type,
                         clause_properties,
                     );
@@ -861,11 +839,10 @@ impl<'a> CodeGenerator<'a> {
                             elements.len()
                         } else if let Pattern::Assign { pattern, .. } = &clauses[index + 1].pattern
                         {
-                            if let Pattern::List { elements, .. } = pattern.as_ref() {
-                                elements.len()
-                            } else {
+                            let Pattern::List { elements, .. } = pattern.as_ref() else {
                                 unreachable!("{:#?}", pattern)
-                            }
+                            };
+                            elements.len()
                         } else {
                             unreachable!()
                         };
@@ -880,15 +857,15 @@ impl<'a> CodeGenerator<'a> {
                     let minus_tail = has_tail as i64;
 
                     if current_clause_index as i64 - minus_tail == prev_index {
-                        ir_stack.push(Air::WrapClause { scope });
+                        ir_stack.wrap_clause();
                     } else {
-                        ir_stack.push(Air::ListClause {
-                            scope,
-                            tipo: subject_type.clone(),
-                            tail_name: subject_name,
-                            next_tail_name: next_tail,
-                            complex_clause: *clause_properties.is_complex_clause(),
-                        });
+                        ir_stack.list_clause(
+                            subject_type.clone(),
+                            subject_name,
+                            next_tail,
+                            *clause_properties.is_complex_clause(),
+                            clause_pattern_stack,
+                        );
                     }
 
                     let ClauseProperties::ListClause { current_index, .. } = clause_properties else {
@@ -907,8 +884,8 @@ impl<'a> CodeGenerator<'a> {
 
                     self.when_pattern(
                         &clause.pattern,
-                        &mut clause_subject_vec,
-                        &mut clause_then_vec,
+                        &mut clause_pattern_stack,
+                        clause_then_stack,
                         subject_type,
                         clause_properties,
                     );
@@ -926,19 +903,16 @@ impl<'a> CodeGenerator<'a> {
                         .cloned()
                         .collect();
 
-                    ir_stack.push(Air::TupleClause {
-                        scope,
-                        tipo: subject_type.clone(),
-                        indices: indices_to_define,
-                        predefined_indices: prev_defined_tuple_indices,
+                    ir_stack.tuple_clause(
+                        subject_type.clone(),
                         subject_name,
-                        count: subject_type.get_inner_types().len(),
-                        complex_clause: *clause_properties.is_complex_clause(),
-                    });
+                        indices_to_define,
+                        prev_defined_tuple_indices,
+                        *clause_properties.is_complex_clause(),
+                        clause_pattern_stack,
+                    );
                 }
             }
-
-            ir_stack.append(&mut clause_subject_vec);
         }
     }
 
@@ -2358,25 +2332,27 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .collect_vec();
 
-                for (index, name, tipo) in arg_indices {
-                    self.expect_type(&tipo, &mut arg_stack, &name);
-                }
-
                 arg_stack = if !arg_indices.is_empty() {
                     arg_stack.local_var(tipo, name);
 
                     let field_expose_stack = expect_stack.empty_with_scope();
+                    field_expose_stack.integer(index.to_string());
 
                     field_expose_stack.fields_expose(arg_indices.clone(), true, arg_stack);
 
                     field_expose_stack
                 } else {
+                    arg_stack.integer(index.to_string());
                     arg_stack
                 };
 
+                for (index, name, tipo) in arg_indices {
+                    self.expect_type(&tipo, &mut arg_stack, &name);
+                }
+
                 arg_stack.void();
 
-                clause_stack.clause(tipo, format!("__subject_{new_id}"), index, false, arg_stack);
+                clause_stack.clause(tipo, format!("__subject_{new_id}"), false, arg_stack);
             }
 
             trace_stack.trace(tipo.clone());
