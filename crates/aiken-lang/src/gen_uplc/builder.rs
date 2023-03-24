@@ -22,7 +22,7 @@ use crate::{
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
 
-use super::{air::Air, stack::AirStack};
+use super::{air::Air, scope::Scope, stack::AirStack};
 
 #[derive(Clone, Debug)]
 pub struct FuncComponents {
@@ -1427,13 +1427,13 @@ pub fn monomorphize(
     (new_name, new_air)
 }
 
-pub fn handle_func_dependencies_ir(
+pub fn handle_func_dependencies(
     dependencies_ir: &mut Vec<Air>,
     function_component: &FuncComponents,
     func_components: &IndexMap<FunctionAccessKey, FuncComponents>,
     defined_functions: &mut IndexMap<FunctionAccessKey, ()>,
-    func_index_map: &IndexMap<FunctionAccessKey, Vec<u64>>,
-    func_scope: &[u64],
+    func_index_map: &IndexMap<FunctionAccessKey, Scope>,
+    func_scope: &Scope,
     to_be_defined: &mut IndexMap<FunctionAccessKey, ()>,
 ) {
     let mut function_component = function_component.clone();
@@ -1444,10 +1444,13 @@ pub fn handle_func_dependencies_ir(
     // deal with function dependencies by sorting order in which we pop them.
     while let Some(dependency) = function_component.dependencies.pop() {
         let depend_comp = func_components.get(&dependency).unwrap();
+
         if dependency_map.contains_key(&dependency) {
             dependency_map.shift_remove(&dependency);
         }
+
         dependency_map.insert(dependency, ());
+
         function_component
             .dependencies
             .extend(depend_comp.dependencies.clone().into_iter());
@@ -1457,15 +1460,17 @@ pub fn handle_func_dependencies_ir(
     dependency_vec.reverse();
 
     while let Some(dependency) = dependency_vec.pop() {
-        if defined_functions.contains_key(&dependency) || func_components.get(&dependency).is_none()
-        {
+        let func_component_dep = func_components.get(&dependency);
+
+        if defined_functions.contains_key(&dependency) {
             continue;
         }
 
-        let depend_comp = func_components.get(&dependency).unwrap();
+        let Some(depend_comp) = func_component_dep else {continue};
+
         let dep_scope = func_index_map.get(&dependency).unwrap();
 
-        if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec()
+        if dep_scope.common_ancestor(func_scope) == *func_scope
             || function_component.args.is_empty()
         {
             let mut recursion_ir = vec![];
@@ -1485,7 +1490,8 @@ pub fn handle_func_dependencies_ir(
             temp_ir.append(dependencies_ir);
 
             *dependencies_ir = temp_ir;
-            if get_common_ancestor(dep_scope, func_scope) == func_scope.to_vec() {
+
+            if dep_scope.common_ancestor(func_scope) == *func_scope {
                 defined_functions.insert(dependency, ());
             }
         } else if depend_comp.args.is_empty() {
@@ -1759,7 +1765,7 @@ pub fn handle_clause_guard(
             });
         }
         ClauseGuard::Constant(constant) => {
-            constants_ir(constant, clause_guard_vec, scope);
+            constants_ir(constant, clause_guard_vec);
         }
     }
 }

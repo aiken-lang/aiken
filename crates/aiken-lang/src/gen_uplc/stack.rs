@@ -67,6 +67,10 @@ impl<'a> AirStack<'a> {
         }
     }
 
+    pub fn complete(self) -> Vec<Air> {
+        self.air
+    }
+
     pub fn sequence(&mut self, stacks: Vec<AirStack>) {
         for stack in stacks {
             self.merge(stack)
