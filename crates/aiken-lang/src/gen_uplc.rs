@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -13,7 +13,7 @@ use uplc::{
 
 use crate::{
     ast::{
-        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedClause, TypedDataType, TypedFunction,
+        ArgName, AssignmentKind, BinOp, Pattern, TypedClause, TypedDataType, TypedFunction,
         TypedValidator, UnOp,
     },
     builtins::bool,
@@ -43,7 +43,7 @@ pub struct CodeGenerator<'a> {
     functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
     data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
     module_types: IndexMap<&'a String, &'a TypeInfo>,
-    id_gen: IdGenerator,
+    id_gen: Rc<IdGenerator>,
     needs_field_access: bool,
     used_data_assert_on_list: bool,
     zero_arg_functions: IndexMap<FunctionAccessKey, Vec<Air>>,
@@ -60,7 +60,7 @@ impl<'a> CodeGenerator<'a> {
             functions,
             data_types,
             module_types,
-            id_gen: IdGenerator::new(),
+            id_gen: IdGenerator::new().into(),
             needs_field_access: false,
             used_data_assert_on_list: false,
             zero_arg_functions: IndexMap::new(),
@@ -71,7 +71,7 @@ impl<'a> CodeGenerator<'a> {
         self.needs_field_access = false;
         self.used_data_assert_on_list = false;
         self.zero_arg_functions = IndexMap::new();
-        self.id_gen = IdGenerator::new();
+        self.id_gen = IdGenerator::new().into();
         self.defined_functions = IndexMap::new();
     }
 
@@ -84,7 +84,7 @@ impl<'a> CodeGenerator<'a> {
             ..
         }: &TypedValidator,
     ) -> Program<Name> {
-        let mut ir_stack = AirStack::new(&mut self.id_gen);
+        let mut ir_stack = AirStack::new(self.id_gen.clone());
 
         self.build(&fun.body, &mut ir_stack);
 
@@ -104,7 +104,7 @@ impl<'a> CodeGenerator<'a> {
         if let Some(other) = other_fun {
             self.reset();
 
-            let mut other_ir_stack = AirStack::new(&mut self.id_gen);
+            let mut other_ir_stack = AirStack::new(self.id_gen.clone());
 
             self.build(&other.body, &mut other_ir_stack);
 
@@ -136,7 +136,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
-        let mut ir_stack = AirStack::new(&mut self.id_gen);
+        let mut ir_stack = AirStack::new(self.id_gen.clone());
 
         self.build(test_body, &mut ir_stack);
 
@@ -225,7 +225,7 @@ impl<'a> CodeGenerator<'a> {
 
                 self.build(body, &mut body_stack);
 
-                let mut params = args
+                let params = args
                     .iter()
                     .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
                     .collect();
@@ -238,7 +238,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let stacks = Vec::new();
+                let mut stacks = Vec::new();
                 for element in elements {
                     let mut stack = ir_stack.empty_with_scope();
 
@@ -279,7 +279,7 @@ impl<'a> CodeGenerator<'a> {
                                     unreachable!()
                                 };
 
-                                let stacks = Vec::new();
+                                let mut stacks = Vec::new();
 
                                 for (arg, func_type) in args.iter().zip(fun_arg_types) {
                                     let mut stack = ir_stack.empty_with_scope();
@@ -354,6 +354,8 @@ impl<'a> CodeGenerator<'a> {
                                     }
 
                                     self.build(&arg.value, &mut stack);
+
+                                    stacks.push(stack);
                                 }
 
                                 ir_stack.record(tipo.clone(), constr_index, stacks);
@@ -379,6 +381,8 @@ impl<'a> CodeGenerator<'a> {
                                     }
 
                                     self.build(&arg.value, &mut stack);
+
+                                    stacks.push(stack);
                                 }
 
                                 ir_stack.builtin(*func, tipo.clone(), stacks);
@@ -406,6 +410,8 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     self.build(&arg.value, &mut stack);
+
+                    stacks.push(stack);
                 }
 
                 ir_stack.call(tipo.clone(), fun_stack, stacks);
@@ -567,7 +573,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                for (index, branch) in branches.iter().enumerate() {
+                for branch in branches.iter() {
                     let mut condition_stack = ir_stack.empty_with_scope();
                     let mut branch_body_stack = ir_stack.empty_with_scope();
 
@@ -612,7 +618,7 @@ impl<'a> CodeGenerator<'a> {
                         variant_name: String::new(),
                     });
 
-                    if let Some(func) = func {
+                    if let Some(_func) = func {
                         ir_stack.local_var(tipo.clone(), format!("{module}_{name}"));
                     } else {
                         let type_info = self.module_types.get(module_name).unwrap();
@@ -731,9 +737,10 @@ impl<'a> CodeGenerator<'a> {
 
                 builder::handle_clause_guard(clause_guard, &mut clause_guard_condition);
 
-                clause_guard_stack.let_assignment(clause_guard_name, clause_guard_condition);
+                clause_guard_stack
+                    .let_assignment(clause_guard_name.clone(), clause_guard_condition);
 
-                let condition_stack = ir_stack.empty_with_scope();
+                let mut condition_stack = ir_stack.empty_with_scope();
 
                 condition_stack.bool(true);
 
@@ -774,7 +781,7 @@ impl<'a> CodeGenerator<'a> {
                                 clause_pattern_stack,
                             );
                         } else {
-                            let condition_stack = ir_stack.empty_with_scope();
+                            let mut condition_stack = ir_stack.empty_with_scope();
 
                             condition_stack.integer(0.to_string());
 
@@ -1027,10 +1034,12 @@ impl<'a> CodeGenerator<'a> {
                             tipo,
                         );
                     } else {
+                        let value_stack = pattern_stack.empty_with_scope();
+
                         self.expose_elements(
                             pattern,
                             pattern_stack,
-                            AirStack::new(&mut self.id_gen),
+                            value_stack,
                             clause_properties,
                             tipo,
                         );
@@ -1053,13 +1062,9 @@ impl<'a> CodeGenerator<'a> {
 
                 *clause_properties.needs_constr_var() = false;
 
-                self.expose_elements(
-                    pattern,
-                    pattern_stack,
-                    AirStack::new(&mut self.id_gen),
-                    clause_properties,
-                    tipo,
-                );
+                let temp = pattern_stack.empty_with_scope();
+
+                self.expose_elements(pattern, pattern_stack, temp, clause_properties, tipo);
 
                 pattern_stack.merge_child(value_stack);
             }
@@ -1313,7 +1318,7 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 for (index, name) in previous_defined_names {
-                    let var_stack = pattern_stack.empty_with_scope();
+                    let mut var_stack = pattern_stack.empty_with_scope();
 
                     let new_name = names
                         .iter()
@@ -1359,13 +1364,13 @@ impl<'a> CodeGenerator<'a> {
                 let new_tail_name = "__tail".to_string();
 
                 if elements.is_empty() {
-                    let void_stack = pattern_stack.empty_with_scope();
+                    let mut void_stack = pattern_stack.empty_with_scope();
 
                     void_stack.void();
 
                     pattern_stack.list_clause_guard(
                         pattern_type.clone().into(),
-                        item_name,
+                        item_name.clone(),
                         None,
                         false,
                         void_stack,
@@ -1391,7 +1396,7 @@ impl<'a> CodeGenerator<'a> {
 
                         if elements.len() - 1 == index {
                             if tail.is_some() {
-                                let elements_stack = pattern_stack.empty_with_scope();
+                                let mut elements_stack = pattern_stack.empty_with_scope();
 
                                 self.when_pattern(
                                     pattern,
@@ -1409,9 +1414,9 @@ impl<'a> CodeGenerator<'a> {
                                     elements_stack,
                                 );
                             } else {
-                                let elements_stack = pattern_stack.empty_with_scope();
+                                let mut elements_stack = pattern_stack.empty_with_scope();
 
-                                let void_stack = pattern_stack.empty_with_scope();
+                                let mut void_stack = pattern_stack.empty_with_scope();
 
                                 void_stack.void();
 
@@ -1440,7 +1445,7 @@ impl<'a> CodeGenerator<'a> {
                                 );
                             }
                         } else {
-                            let void_stack = pattern_stack.empty_with_scope();
+                            let mut void_stack = pattern_stack.empty_with_scope();
 
                             void_stack.void();
 
@@ -1457,7 +1462,7 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(item_name)
             }
-            a @ Pattern::Constructor {
+            pattern @ Pattern::Constructor {
                 tipo,
                 name: constr_name,
                 ..
@@ -1467,19 +1472,7 @@ impl<'a> CodeGenerator<'a> {
                 let data_type =
                     builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                if data_type.constructors.len() > 1 {
-                    if final_clause {
-                        pattern_stack.push(Air::Finally {
-                            scope: scope.clone(),
-                        });
-                    } else {
-                        pattern_stack.push(Air::ClauseGuard {
-                            scope: scope.clone(),
-                            tipo: tipo.clone(),
-                            subject_name: constr_var_name.clone(),
-                        });
-                    }
-                }
+                let mut when_stack = pattern_stack.empty_with_scope();
 
                 let mut clause_properties = ClauseProperties::ConstrClause {
                     clause_var_name: constr_var_name.clone(),
@@ -1489,11 +1482,31 @@ impl<'a> CodeGenerator<'a> {
                     final_clause,
                 };
 
-                self.when_pattern(a, pattern_stack, &mut vec![], tipo, &mut clause_properties);
+                self.when_pattern(
+                    pattern,
+                    &mut when_stack,
+                    pattern_stack.empty_with_scope(),
+                    tipo,
+                    &mut clause_properties,
+                );
+
+                if data_type.constructors.len() > 1 {
+                    if final_clause {
+                        pattern_stack.finally(when_stack);
+                    } else {
+                        let empty_stack = pattern_stack.empty_with_scope();
+                        pattern_stack.clause_guard(
+                            constr_var_name.clone(),
+                            tipo.clone(),
+                            when_stack,
+                            empty_stack,
+                        );
+                    }
+                }
 
                 Some(constr_var_name)
             }
-            a @ Pattern::Tuple { elems, .. } => {
+            a @ Pattern::Tuple { .. } => {
                 let item_name = format!("__tuple_item_id_{}", self.id_gen.next());
 
                 let mut clause_properties = ClauseProperties::TupleClause {
@@ -1505,12 +1518,12 @@ impl<'a> CodeGenerator<'a> {
                     final_clause,
                 };
 
-                let mut inner_pattern_vec = vec![];
+                let mut inner_pattern_stack = pattern_stack.empty_with_scope();
 
                 self.when_pattern(
                     a,
-                    &mut inner_pattern_vec,
-                    &mut vec![],
+                    &mut inner_pattern_stack,
+                    pattern_stack.empty_with_scope(),
                     pattern_type,
                     &mut clause_properties,
                 );
@@ -1523,17 +1536,14 @@ impl<'a> CodeGenerator<'a> {
                     _ => unreachable!(),
                 };
 
-                pattern_stack.push(Air::TupleClause {
-                    scope,
-                    tipo: pattern_type.clone(),
-                    indices: defined_indices,
-                    predefined_indices: IndexSet::new(),
-                    subject_name: clause_properties.original_subject_name().to_string(),
-                    count: elems.len(),
-                    complex_clause: false,
-                });
-
-                pattern_stack.append(&mut inner_pattern_vec);
+                pattern_stack.tuple_clause(
+                    pattern_type.clone().into(),
+                    clause_properties.original_subject_name(),
+                    defined_indices,
+                    IndexSet::new(),
+                    false,
+                    inner_pattern_stack,
+                );
 
                 Some(item_name)
             }
@@ -1545,22 +1555,10 @@ impl<'a> CodeGenerator<'a> {
                     final_clause,
                 );
 
-                pattern_stack.push(Air::Let {
-                    scope: scope.clone(),
-                    name: name.clone(),
-                });
+                let mut var_stack = pattern_stack.empty_with_scope();
+                var_stack.local_var(pattern_type.clone().into(), inner_name.clone().unwrap());
 
-                pattern_stack.push(Air::Var {
-                    scope,
-                    constructor: ValueConstructor::public(
-                        pattern_type.clone(),
-                        ValueConstructorVariant::LocalVariable {
-                            location: Span::empty(),
-                        },
-                    ),
-                    name: inner_name.clone().unwrap(),
-                    variant_name: String::new(),
-                });
+                pattern_stack.let_assignment(name, var_stack);
 
                 inner_name
             }
@@ -1579,7 +1577,7 @@ impl<'a> CodeGenerator<'a> {
         tipo: &Type,
         assignment_properties: AssignmentProperties,
     ) {
-        let value_stack = if assignment_properties.value_type.is_data()
+        let mut value_stack = if assignment_properties.value_type.is_data()
             && !tipo.is_data()
             && !pattern.is_discard()
         {
@@ -1893,13 +1891,18 @@ impl<'a> CodeGenerator<'a> {
                     .filter_map(|(tuple_index, item)| {
                         let mut nested_stack = pattern_stack.empty_with_scope();
 
-                        self.extract_arg_name(
-                            item,
-                            &mut nested_stack,
-                            type_map.get(&tuple_index).unwrap(),
-                            &assignment_properties,
-                        )
-                        .map(|name| (name, tuple_index))
+                        let name = self
+                            .extract_arg_name(
+                                item,
+                                &mut nested_stack,
+                                type_map.get(&tuple_index).unwrap(),
+                                &assignment_properties,
+                            )
+                            .map(|name| (name, tuple_index));
+
+                        stacks.merge(nested_stack);
+
+                        name
                     })
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
                     .collect::<Vec<(String, usize)>>();
@@ -1929,7 +1932,7 @@ impl<'a> CodeGenerator<'a> {
                     pattern_stack.let_assignment("_", value_stack);
                 }
 
-                pattern_stack.merge_child(value_stack);
+                pattern_stack.merge_child(stacks);
             }
         }
     }
@@ -2000,7 +2003,7 @@ impl<'a> CodeGenerator<'a> {
                     format!("__tail_{}", self.id_gen.next())
                 };
 
-                self.expect_type(&inner_list_type, &mut tail_stack, &name);
+                self.expect_type(inner_list_type, &mut tail_stack, &name);
 
                 names.push(name);
 
@@ -2268,14 +2271,14 @@ impl<'a> CodeGenerator<'a> {
 
             let mut local_var_stack = expect_stack.empty_with_scope();
 
-            local_var_stack.local_var(tipo, name);
+            local_var_stack.local_var(tipo.clone(), name);
 
             let names = new_id_list
                 .iter()
                 .map(|(index, id)| format!("__tuple_index_{index}_{id}"))
                 .collect();
 
-            expect_stack.tuple_accessor(tipo, names, true, local_var_stack);
+            expect_stack.tuple_accessor(tipo.clone(), names, true, local_var_stack);
 
             for (index, name) in new_id_list
                 .into_iter()
@@ -2290,7 +2293,7 @@ impl<'a> CodeGenerator<'a> {
             let new_id = self.id_gen.next();
 
             // START HERE
-            let mut arg_stack = expect_stack.empty_with_scope();
+
             let mut clause_stack = expect_stack.empty_with_scope();
             let mut when_stack = expect_stack.empty_with_scope();
             let mut trace_stack = expect_stack.empty_with_scope();
@@ -2311,10 +2314,12 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .collect_vec();
 
-                arg_stack = if !arg_indices.is_empty() {
-                    arg_stack.local_var(tipo, name);
+                let mut arg_stack = expect_stack.empty_with_scope();
 
-                    let field_expose_stack = expect_stack.empty_with_scope();
+                let mut arg_stack = if !arg_indices.is_empty() {
+                    arg_stack.local_var(tipo.clone(), name);
+
+                    let mut field_expose_stack = expect_stack.empty_with_scope();
                     field_expose_stack.integer(index.to_string());
 
                     field_expose_stack.fields_expose(arg_indices.clone(), true, arg_stack);
@@ -2325,13 +2330,18 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack
                 };
 
-                for (index, name, tipo) in arg_indices {
+                for (_index, name, tipo) in arg_indices {
                     self.expect_type(&tipo, &mut arg_stack, &name);
                 }
 
                 arg_stack.void();
 
-                clause_stack.clause(tipo, format!("__subject_{new_id}"), false, arg_stack);
+                clause_stack.clause(
+                    tipo.clone(),
+                    format!("__subject_{new_id}"),
+                    false,
+                    arg_stack,
+                );
             }
 
             trace_stack.trace(tipo.clone());
@@ -2340,10 +2350,10 @@ impl<'a> CodeGenerator<'a> {
 
             trace_stack.error(tipo.clone());
 
-            subject_stack.local_var(tipo, name);
+            subject_stack.local_var(tipo.clone(), name);
 
             when_stack.when(
-                tipo,
+                tipo.clone(),
                 format!("__subject_{new_id}"),
                 subject_stack,
                 clause_stack,
@@ -2371,7 +2381,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut value_stack = nested_pattern_stack.empty_with_scope();
 
-                value_stack.local_var(tipo.clone().into(), list_name);
+                value_stack.local_var(tipo.clone().into(), list_name.clone());
 
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
@@ -2406,7 +2416,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut local_var_stack = nested_pattern_stack.empty_with_scope();
 
-                local_var_stack.local_var(tipo.clone(), constr_name);
+                local_var_stack.local_var(tipo.clone(), constr_name.clone());
 
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
@@ -2437,7 +2447,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut local_var_stack = nested_pattern_stack.empty_with_scope();
 
-                local_var_stack.local_var(tipo.clone().into(), tuple_name);
+                local_var_stack.local_var(tipo.clone().into(), tuple_name.clone());
 
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
                     && assignment_properties.value_type.is_data()
@@ -2795,7 +2805,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let function = *self.functions.get(&non_variant_function_key).unwrap();
 
-                        let mut func_ir = AirStack::new(&mut self.id_gen);
+                        let mut func_ir = AirStack::new(self.id_gen.clone());
 
                         self.build(&function.body, &mut func_ir);
 
@@ -2913,7 +2923,7 @@ impl<'a> CodeGenerator<'a> {
                                         }
 
                                         mono_types = map.into_iter().collect();
-                                        let mut func_ir = AirStack::new(&mut self.id_gen);
+                                        let mut func_ir = AirStack::new(self.id_gen.clone());
 
                                         self.build(&function.body, &mut func_ir);
 

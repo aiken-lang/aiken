@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use indexmap::IndexSet;
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
@@ -12,15 +12,15 @@ use crate::{
 use super::{air::Air, scope::Scope};
 
 /// A builder for [`Air`].
-pub struct AirStack<'a> {
-    pub id_gen: &'a mut IdGenerator,
+pub struct AirStack {
+    pub id_gen: Rc<IdGenerator>,
     pub scope: Scope,
     pub air: Vec<Air>,
 }
 
-impl<'a> AirStack<'a> {
+impl AirStack {
     /// Create a new [`AirStack`] with an [`IdGenerator`]
-    pub fn new(id_gen: &'a mut IdGenerator) -> Self {
+    pub fn new(id_gen: Rc<IdGenerator>) -> Self {
         AirStack {
             id_gen,
             scope: Scope::default(),
@@ -29,7 +29,7 @@ impl<'a> AirStack<'a> {
     }
 
     /// Create a new [`AirStack`] with an [`IdGenerator`] and [`Scope`].
-    pub fn with_scope(id_gen: &'a mut IdGenerator, scope: Scope) -> Self {
+    pub fn with_scope(id_gen: Rc<IdGenerator>, scope: Scope) -> Self {
         AirStack {
             id_gen,
             scope,
@@ -39,7 +39,7 @@ impl<'a> AirStack<'a> {
 
     /// Create a new empty [`AirStack`] with the current stack's scope.
     pub fn empty_with_scope(&mut self) -> Self {
-        AirStack::with_scope(&mut self.id_gen, self.scope.clone())
+        AirStack::with_scope(self.id_gen.clone(), self.scope.clone())
     }
 
     /// Increment the [`Scope`]
@@ -266,7 +266,7 @@ impl<'a> AirStack<'a> {
         self.air.push(Air::Call {
             scope: self.scope.clone(),
             count: 2,
-            tipo,
+            tipo: tipo.clone(),
         });
 
         self.local_var(tipo.clone(), EXPECT_ON_LIST);
@@ -389,6 +389,8 @@ impl<'a> AirStack<'a> {
     ) {
         self.new_scope();
 
+        let count = tipo.get_inner_types().len();
+
         self.air.push(Air::TupleClause {
             scope: self.scope.clone(),
             subject_name: subject_name.to_string(),
@@ -396,7 +398,7 @@ impl<'a> AirStack<'a> {
             predefined_indices,
             complex_clause,
             tipo,
-            count: tipo.get_inner_types().len(),
+            count,
         });
 
         self.merge_child(body);
@@ -434,7 +436,7 @@ impl<'a> AirStack<'a> {
         self.air.push(Air::Builtin {
             scope: self.scope.clone(),
             func: DefaultFunction::ChooseUnit,
-            tipo: tipo.clone(),
+            tipo,
             count: DefaultFunction::ChooseUnit.arity(),
         });
 
@@ -490,6 +492,8 @@ impl<'a> AirStack<'a> {
             scope: self.scope.clone(),
             constr_index: tag,
         });
+
+        self.merge_child(value);
     }
 
     pub fn expect_bool(&mut self, is_true: bool, value: AirStack) {
@@ -590,7 +594,7 @@ impl<'a> AirStack<'a> {
     }
 
     pub fn clause_guard(
-        &self,
+        &mut self,
         subject_name: impl ToString,
         tipo: Arc<Type>,
         condition_stack: AirStack,
@@ -629,7 +633,7 @@ impl<'a> AirStack<'a> {
     }
 
     pub fn list_clause_guard(
-        &self,
+        &mut self,
         tipo: Arc<Type>,
         tail_name: impl ToString,
         next_tail_name: Option<String>,
