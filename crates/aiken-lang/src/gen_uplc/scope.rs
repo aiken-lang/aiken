@@ -10,7 +10,14 @@ impl Scope {
         self.0.is_empty()
     }
 
-    pub fn replace(&mut self, pattern: &Scope, replacement: Scope) {
+    pub fn replace(&mut self, pattern: &Scope, mut replacement: Scope) {
+        if pattern.is_empty() {
+            replacement.0.extend(self.0.iter());
+            self.0 = replacement.0;
+
+            return;
+        }
+
         let mut result = Vec::new();
 
         let mut index = 0;
@@ -36,7 +43,7 @@ impl Scope {
         }
 
         if no_matches {
-            replacement.0.extend(self.0);
+            replacement.0.extend(self.0.iter());
             self.0 = replacement.0;
         } else {
             self.0 = result;

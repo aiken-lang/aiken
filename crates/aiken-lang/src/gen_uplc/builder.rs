@@ -1671,15 +1671,15 @@ pub fn handle_clause_guard(
 ) {
     match clause_guard {
         ClauseGuard::Not { value, .. } => {
-            let value_stack = clause_guard_stack.empty_with_scope();
+            let mut value_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(value, &mut value_stack);
 
             clause_guard_stack.unop(UnOp::Not, value_stack);
         }
         ClauseGuard::Equals { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1687,8 +1687,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::Eq, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::NotEquals { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1696,8 +1696,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::NotEq, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::GtInt { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1705,8 +1705,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::GtInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::GtEqInt { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1714,8 +1714,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::GtEqInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::LtInt { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1723,8 +1723,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::LtInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::LtEqInt { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1732,8 +1732,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::LtEqInt, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::Or { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
@@ -1741,8 +1741,8 @@ pub fn handle_clause_guard(
             clause_guard_stack.binop(BinOp::Or, left.tipo(), left_stack, right_stack);
         }
         ClauseGuard::And { left, right, .. } => {
-            let left_stack = clause_guard_stack.empty_with_scope();
-            let right_stack = clause_guard_stack.empty_with_scope();
+            let mut left_stack = clause_guard_stack.empty_with_scope();
+            let mut right_stack = clause_guard_stack.empty_with_scope();
 
             handle_clause_guard(left, &mut left_stack);
             handle_clause_guard(right, &mut right_stack);
