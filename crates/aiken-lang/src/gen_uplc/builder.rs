@@ -1473,7 +1473,7 @@ pub fn handle_func_dependencies(
 
         let dep_scope = func_index_map.get(&dependency).unwrap();
 
-        if dep_scope.common_ancestor(func_scope) == *func_scope
+        if (dep_scope.common_ancestor(func_scope) == *func_scope && !depend_comp.args.is_empty())
             || function_component.args.is_empty()
         {
             let mut recursion_ir = vec![];

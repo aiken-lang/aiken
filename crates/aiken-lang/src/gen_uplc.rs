@@ -2522,7 +2522,7 @@ impl<'a> CodeGenerator<'a> {
             if dependency_map.contains_key(&function.0) {
                 dependency_map.shift_remove(&function.0);
             }
-            dependency_map.insert(function.0, function.1);
+
             func_keys.extend(
                 funct_comp
                     .dependencies
@@ -2535,6 +2535,15 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .collect_vec(),
             );
+
+            let func_scope = func_index_map.get(&function.0).unwrap().clone();
+
+            for dep in funct_comp.dependencies.iter() {
+                let Some(dep_scope) = func_index_map.get_mut(dep) else { unreachable!("Missing dependency scope.")};
+
+                *dep_scope = dep_scope.common_ancestor(&func_scope);
+            }
+            dependency_map.insert(function.0, function.1);
         }
 
         dependency_vec.extend(
@@ -2816,9 +2825,7 @@ impl<'a> CodeGenerator<'a> {
         for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
             match ir {
                 Air::Var {
-                    scope,
-                    constructor,
-                    ..
+                    scope, constructor, ..
                 } => {
                     if let ValueConstructorVariant::ModuleFn {
                         name,
