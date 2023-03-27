@@ -110,12 +110,32 @@ mod test {
     fn replace_same_value() {
         let mut value = Scope(vec![1, 2, 3, 4, 5, 6]);
 
-        let pattern = Scope(vec![1, 2, 3, 4, 5, 6]);
-
         let replacement = Scope(vec![1, 2, 3, 4, 5, 6]);
 
-        value.replace(&pattern, replacement);
+        value.replace(replacement);
 
         assert_eq!(value, Scope(vec![1, 2, 3, 4, 5, 6]));
+    }
+
+    #[test]
+    fn replace_with_pattern() {
+        let mut value = Scope(vec![1, 2, 3, 4, 5]);
+
+        let replacement = Scope(vec![1, 2, 8, 9]);
+
+        value.replace(replacement);
+
+        assert_eq!(value, Scope(vec![1, 2, 8, 9, 3, 4, 5]));
+    }
+
+    #[test]
+    fn replace_with_no_pattern() {
+        let mut value = Scope(vec![1, 2, 3, 4, 5]);
+
+        let replacement = Scope(vec![8, 9]);
+
+        value.replace(replacement);
+
+        assert_eq!(value, Scope(vec![8, 9, 1, 2, 3, 4, 5]));
     }
 }
