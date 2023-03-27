@@ -2818,7 +2818,6 @@ impl<'a> CodeGenerator<'a> {
                 Air::Var {
                     scope,
                     constructor,
-                    name: dummy,
                     ..
                 } => {
                     if let ValueConstructorVariant::ModuleFn {
