@@ -1428,6 +1428,7 @@ pub fn monomorphize(
     (new_name, new_air)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_func_dependencies(
     dependencies_ir: &mut Vec<Air>,
     function_component: &FuncComponents,
