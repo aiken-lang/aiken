@@ -12,6 +12,7 @@ use crate::{
 use super::{air::Air, scope::Scope};
 
 /// A builder for [`Air`].
+#[derive(Debug)]
 pub struct AirStack {
     pub id_gen: Rc<IdGenerator>,
     pub scope: Scope,
@@ -404,12 +405,14 @@ impl AirStack {
         self.merge_child(body);
     }
 
-    pub fn wrap_clause(&mut self) {
+    pub fn wrap_clause(&mut self, body: AirStack) {
         self.new_scope();
 
         self.air.push(Air::WrapClause {
             scope: self.scope.clone(),
         });
+
+        self.merge_child(body);
     }
 
     pub fn trace(&mut self, tipo: Arc<Type>) {
@@ -651,5 +654,34 @@ impl AirStack {
         });
 
         self.merge_child(void_stack);
+    }
+
+    pub fn define_func(
+        &mut self,
+        func_name: String,
+        module_name: String,
+        variant_name: String,
+        params: Vec<String>,
+        recursive: bool,
+        body_stack: AirStack,
+    ) {
+        self.air.push(Air::DefineFunc {
+            scope: self.scope.clone(),
+            func_name,
+            module_name,
+            params,
+            recursive,
+            variant_name,
+        });
+
+        self.merge_child(body_stack);
+    }
+
+    pub fn noop(&mut self) {
+        self.new_scope();
+
+        self.air.push(Air::Noop {
+            scope: self.scope.clone(),
+        });
     }
 }

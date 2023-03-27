@@ -20,6 +20,7 @@ use crate::{
     },
     expr::TypedExpr,
     tipo::{PatternConstructor, Type, TypeVar, ValueConstructorVariant},
+    IdGenerator,
 };
 
 use super::{air::Air, scope::Scope, stack::AirStack};
@@ -1435,6 +1436,7 @@ pub fn handle_func_dependencies(
     func_index_map: &IndexMap<FunctionAccessKey, Scope>,
     func_scope: &Scope,
     to_be_defined: &mut IndexMap<FunctionAccessKey, ()>,
+    id_gen: Rc<IdGenerator>,
 ) {
     let mut function_component = function_component.clone();
 
@@ -1476,16 +1478,28 @@ pub fn handle_func_dependencies(
             let mut recursion_ir = vec![];
             handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
 
-            let mut temp_ir = vec![Air::DefineFunc {
+            let mut temp_stack = AirStack {
+                id_gen: id_gen.clone(),
                 scope: func_scope.clone(),
-                func_name: dependency.function_name.clone(),
-                module_name: dependency.module_name.clone(),
-                params: depend_comp.args.clone(),
-                recursive: depend_comp.recursive,
-                variant_name: dependency.variant_name.clone(),
-            }];
+                air: vec![],
+            };
 
-            temp_ir.append(&mut recursion_ir);
+            let recursion_stack = AirStack {
+                id_gen: id_gen.clone(),
+                scope: func_scope.clone(),
+                air: recursion_ir,
+            };
+
+            temp_stack.define_func(
+                dependency.function_name.clone(),
+                dependency.module_name.clone(),
+                dependency.variant_name.clone(),
+                depend_comp.args.clone(),
+                depend_comp.recursive,
+                recursion_stack,
+            );
+
+            let mut temp_ir = temp_stack.complete();
 
             temp_ir.append(dependencies_ir);
 
