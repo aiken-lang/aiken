@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-pub struct Scope(Vec<u64>);
+pub struct Scope(pub(self) Vec<u64>);
 
 impl Scope {
     pub fn push(&mut self, value: u64) {
@@ -68,5 +68,67 @@ impl Scope {
         }
 
         Scope::default()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use pretty_assertions::assert_eq;
+
+    use super::Scope;
+
+    #[test]
+    fn common_ancestor_equal_vecs() {
+        let ancestor = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        let decendant = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        let result = ancestor.common_ancestor(&decendant);
+
+        assert_eq!(result, Scope(vec![1, 2, 3, 4, 5, 6]))
+    }
+
+    #[test]
+    fn common_ancestor_equal_ancestor() {
+        let ancestor = Scope(vec![1, 2, 3, 4]);
+
+        let decendant = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        let result = ancestor.common_ancestor(&decendant);
+
+        assert_eq!(result, Scope(vec![1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn common_ancestor_not_subset() {
+        let ancestor = Scope(vec![1, 2, 3, 4, 5]);
+
+        let descendant = Scope(vec![1, 2, 3, 7, 8]);
+
+        let result = ancestor.common_ancestor(&descendant);
+
+        assert_eq!(result, Scope(vec![1, 2, 3]));
+    }
+
+    #[test]
+    fn common_ancestor_not_found() {
+        let ancestor = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        let descendant = Scope(vec![4, 5, 6]);
+
+        let result = ancestor.common_ancestor(&descendant);
+
+        assert_eq!(result, Scope::default());
+    }
+
+    #[test]
+    fn common_ancestor_no_shared_values() {
+        let ancestor = Scope(vec![1, 2, 3]);
+
+        let descendant = Scope(vec![4, 5, 6]);
+
+        let result = ancestor.common_ancestor(&descendant);
+
+        assert_eq!(result, Scope::default());
     }
 }
