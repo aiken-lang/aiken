@@ -213,6 +213,9 @@ pub enum Air {
         scope: Scope,
         tipo: Arc<Type>,
     },
+    Noop {
+        scope: Scope,
+    },
 }
 
 impl Air {
@@ -255,7 +258,8 @@ impl Air {
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
             | Air::ErrorTerm { scope, .. }
-            | Air::Trace { scope, .. } => scope.clone(),
+            | Air::Trace { scope, .. }
+            | Air::Noop { scope } => scope.clone(),
         }
     }
     pub fn scope_mut(&mut self) -> &mut Scope {
@@ -297,7 +301,8 @@ impl Air {
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
             | Air::ErrorTerm { scope, .. }
-            | Air::Trace { scope, .. } => scope,
+            | Air::Trace { scope, .. }
+            | Air::Noop { scope } => scope,
         }
     }
     pub fn tipo(&self) -> Option<Arc<Type>> {
@@ -386,7 +391,8 @@ impl Air {
             | Air::AssertConstr { .. }
             | Air::AssertBool { .. }
             | Air::Finally { .. }
-            | Air::FieldsExpose { .. } => None,
+            | Air::FieldsExpose { .. }
+            | Air::Noop { .. } => None,
             Air::UnOp { op, .. } => match op {
                 UnOp::Not => Some(
                     Type::App {

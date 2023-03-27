@@ -86,6 +86,8 @@ impl<'a> CodeGenerator<'a> {
     ) -> Program<Name> {
         let mut ir_stack = AirStack::new(self.id_gen.clone());
 
+        ir_stack.noop();
+
         self.build(&fun.body, &mut ir_stack);
 
         let mut ir_stack = ir_stack.complete();
@@ -105,6 +107,7 @@ impl<'a> CodeGenerator<'a> {
             self.reset();
 
             let mut other_ir_stack = AirStack::new(self.id_gen.clone());
+            other_ir_stack.noop();
 
             self.build(&other.body, &mut other_ir_stack);
 
@@ -137,6 +140,8 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
         let mut ir_stack = AirStack::new(self.id_gen.clone());
+
+        ir_stack.noop();
 
         self.build(test_body, &mut ir_stack);
 
@@ -304,7 +309,7 @@ impl<'a> CodeGenerator<'a> {
                         } => {
                             let Some(fun_arg_types) = fun.tipo().arg_types() else {unreachable!()};
 
-                            let stacks = Vec::new();
+                            let mut stacks = Vec::new();
 
                             for (arg, func_type) in args.iter().zip(fun_arg_types) {
                                 let mut stack = ir_stack.empty_with_scope();
@@ -314,6 +319,8 @@ impl<'a> CodeGenerator<'a> {
                                 }
 
                                 self.build(&arg.value, &mut stack);
+
+                                stacks.push(stack);
                             }
 
                             ir_stack.builtin(*func, tipo.clone(), stacks);
@@ -618,12 +625,16 @@ impl<'a> CodeGenerator<'a> {
                         variant_name: String::new(),
                     });
 
-                    if let Some(_func) = func {
-                        ir_stack.local_var(tipo.clone(), format!("{module}_{name}"));
-                    } else {
-                        let type_info = self.module_types.get(module_name).unwrap();
-                        let value = type_info.values.get(name).unwrap();
+                    let type_info = self.module_types.get(module_name).unwrap();
+                    let value = type_info.values.get(name).unwrap();
 
+                    if let Some(_func) = func {
+                        ir_stack.var(
+                            ValueConstructor::public(tipo.clone(), value.variant.clone()),
+                            format!("{module}_{name}"),
+                            "",
+                        );
+                    } else {
                         let ValueConstructorVariant::ModuleFn {
                             builtin: Some(builtin), ..
                         } = &value.variant else {
@@ -864,7 +875,7 @@ impl<'a> CodeGenerator<'a> {
                     let minus_tail = has_tail as i64;
 
                     if current_clause_index as i64 - minus_tail == prev_index {
-                        ir_stack.wrap_clause();
+                        ir_stack.wrap_clause(clause_pattern_stack);
                     } else {
                         ir_stack.list_clause(
                             subject_type.clone(),
@@ -1034,12 +1045,12 @@ impl<'a> CodeGenerator<'a> {
                             tipo,
                         );
                     } else {
-                        let value_stack = pattern_stack.empty_with_scope();
+                        let empty_stack = pattern_stack.empty_with_scope();
 
                         self.expose_elements(
                             pattern,
                             pattern_stack,
-                            value_stack,
+                            empty_stack,
                             clause_properties,
                             tipo,
                         );
@@ -1237,9 +1248,11 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .collect_vec();
 
-                    assert!(!arguments_index.is_empty());
-
-                    pattern_stack.fields_expose(indices, false, value_stack);
+                    if indices.is_empty() {
+                        pattern_stack.merge_child(value_stack);
+                    } else {
+                        pattern_stack.fields_expose(indices, false, value_stack);
+                    }
                 } else {
                     let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
@@ -1275,9 +1288,11 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .collect_vec();
 
-                    assert!(!arguments_index.is_empty());
-
-                    pattern_stack.fields_expose(indices, false, value_stack);
+                    if indices.is_empty() {
+                        pattern_stack.merge_child(value_stack);
+                    } else {
+                        pattern_stack.fields_expose(indices, false, value_stack);
+                    }
                 }
 
                 pattern_stack.merge_child(nested_pattern);
@@ -1773,7 +1788,7 @@ impl<'a> CodeGenerator<'a> {
                 arguments,
                 constructor,
                 tipo: constr_tipo,
-                name: constr_name,
+                name: constructor_name,
                 ..
             } => {
                 let mut stacks = pattern_stack.empty_with_scope();
@@ -1821,7 +1836,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut expect_stack = pattern_stack.empty_with_scope();
 
-                let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
+                let constr_name = format!("__{}_{}", constructor_name, self.id_gen.next());
 
                 match assignment_properties.kind {
                     AssignmentKind::Let => {
@@ -1843,7 +1858,7 @@ impl<'a> CodeGenerator<'a> {
                                 .constructors
                                 .iter()
                                 .enumerate()
-                                .find(|(_, constr)| constr.name == constr_name)
+                                .find(|(_, constr)| constr.name == *constructor_name)
                                 .unwrap();
 
                             let constr_name = format!("__{}_{}", constr_name, self.id_gen.next());
@@ -2552,6 +2567,7 @@ impl<'a> CodeGenerator<'a> {
                     &func_index_map,
                     func_scope,
                     &mut to_be_defined,
+                    self.id_gen.clone(),
                 );
                 final_func_dep_ir.insert(func, dep_ir);
             } else {
@@ -2568,6 +2584,7 @@ impl<'a> CodeGenerator<'a> {
                     &func_index_map,
                     func_scope,
                     &mut to_be_defined,
+                    self.id_gen.clone(),
                 );
 
                 let mut final_zero_arg_ir = dep_ir;
@@ -2597,6 +2614,7 @@ impl<'a> CodeGenerator<'a> {
                 &func_index_map,
                 func_scope,
                 &mut to_be_defined,
+                self.id_gen.clone(),
             );
 
             let mut final_zero_arg_ir = dep_ir;
@@ -2618,7 +2636,8 @@ impl<'a> CodeGenerator<'a> {
                             .map(|scope| (func_key.clone(), scope.clone()))
                     })
                     .filter(|func| {
-                        func.1.common_ancestor(&ir.scope()) == ir.scope()
+                        (func.1.common_ancestor(&ir.scope()) == ir.scope()
+                            || (index == 0 && func.1.is_empty()))
                             && !self.defined_functions.contains_key(&func.0)
                             && !self.zero_arg_functions.contains_key(&func.0)
                             && !(*dependency_map.get(&func.0).unwrap())
@@ -2648,16 +2667,28 @@ impl<'a> CodeGenerator<'a> {
                             &mut recursion_ir,
                         );
 
-                        full_func_ir.push(Air::DefineFunc {
+                        let recursion_stack = AirStack {
+                            id_gen: self.id_gen.clone(),
                             scope: scopes.clone(),
-                            func_name: function_access_key.function_name.clone(),
-                            module_name: function_access_key.module_name.clone(),
-                            params: func_comp.args.clone(),
-                            recursive: func_comp.recursive,
-                            variant_name: function_access_key.variant_name.clone(),
-                        });
+                            air: recursion_ir,
+                        };
 
-                        full_func_ir.extend(recursion_ir);
+                        let mut func_stack = AirStack {
+                            id_gen: self.id_gen.clone(),
+                            scope: scopes.clone(),
+                            air: vec![],
+                        };
+
+                        func_stack.define_func(
+                            function_access_key.function_name.clone(),
+                            function_access_key.module_name.clone(),
+                            function_access_key.variant_name.clone(),
+                            func_comp.args.clone(),
+                            func_comp.recursive,
+                            recursion_stack,
+                        );
+
+                        full_func_ir.extend(func_stack.complete());
 
                         for ir in full_func_ir.into_iter().rev() {
                             ir_stack.insert(index, ir);
@@ -2788,7 +2819,10 @@ impl<'a> CodeGenerator<'a> {
         for (index, ir) in ir_stack.to_vec().iter().enumerate().rev() {
             match ir {
                 Air::Var {
-                    scope, constructor, ..
+                    scope,
+                    constructor,
+                    name: dummy,
+                    ..
                 } => {
                     if let ValueConstructorVariant::ModuleFn {
                         name,
@@ -2805,11 +2839,12 @@ impl<'a> CodeGenerator<'a> {
 
                         let function = *self.functions.get(&non_variant_function_key).unwrap();
 
-                        let mut func_ir = AirStack::new(self.id_gen.clone());
+                        let mut func_stack =
+                            AirStack::with_scope(self.id_gen.clone(), scope.clone());
 
-                        self.build(&function.body, &mut func_ir);
+                        self.build(&function.body, &mut func_stack);
 
-                        let func_ir = func_ir.air;
+                        let func_ir = func_stack.complete();
 
                         let param_types = constructor.tipo.arg_types().unwrap();
 
@@ -2923,14 +2958,17 @@ impl<'a> CodeGenerator<'a> {
                                         }
 
                                         mono_types = map.into_iter().collect();
-                                        let mut func_ir = AirStack::new(self.id_gen.clone());
+                                        let mut func_stack = AirStack::with_scope(
+                                            self.id_gen.clone(),
+                                            scope.clone(),
+                                        );
 
-                                        self.build(&function.body, &mut func_ir);
+                                        self.build(&function.body, &mut func_stack);
 
-                                        let func_ir = func_ir.air;
+                                        let temp_ir = func_stack.complete();
 
                                         let (variant_name, _) =
-                                            builder::monomorphize(func_ir, mono_types, &tipo);
+                                            builder::monomorphize(temp_ir, mono_types, &tipo);
 
                                         func_calls.insert(
                                             FunctionAccessKey {
@@ -4710,6 +4748,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 arg_stack.push(term);
             }
+            Air::Noop { .. } => {}
         }
     }
 }
