@@ -54,10 +54,8 @@ impl AirStack {
     }
 
     pub fn merge_child(&mut self, mut other: AirStack) {
-        let pattern = self.scope.common_ancestor(&other.scope);
-
         for ir in other.air.iter_mut() {
-            ir.scope_mut().replace(&pattern, self.scope.clone());
+            ir.scope_mut().replace(self.scope.clone());
         }
 
         self.merge(other);
