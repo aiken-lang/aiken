@@ -1834,15 +1834,13 @@ impl<'a> CodeGenerator<'a> {
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
                     .collect::<Vec<(String, usize)>>();
 
-                let mut expect_stack = pattern_stack.empty_with_scope();
-
                 let constr_name = format!("__{}_{}", constructor_name, self.id_gen.next());
+
+                let mut expect_stack = pattern_stack.empty_with_scope();
 
                 match assignment_properties.kind {
                     AssignmentKind::Let => {
-                        expect_stack.let_assignment(constr_name.clone(), value_stack);
-
-                        expect_stack.local_var(tipo.clone().into(), constr_name);
+                        expect_stack.merge_child(value_stack);
                     }
                     AssignmentKind::Expect => {
                         if tipo.is_bool() {
@@ -1872,21 +1870,20 @@ impl<'a> CodeGenerator<'a> {
 
                             expect_stack.local_var(tipo.clone().into(), constr_name);
                         }
-
-                        if !arguments_index.is_empty() {
-                            let indices = arguments_index
-                                .iter()
-                                .map(|(var_name, index)| {
-                                    let field_type = type_map.get(index).unwrap();
-                                    (*index, var_name.clone(), field_type.clone())
-                                })
-                                .collect_vec();
-
-                            pattern_stack.fields_expose(indices, false, expect_stack);
-                        } else if !tipo.is_bool() {
-                            pattern_stack.let_assignment("_", expect_stack);
-                        }
                     }
+                }
+                if !arguments_index.is_empty() {
+                    let indices = arguments_index
+                        .iter()
+                        .map(|(var_name, index)| {
+                            let field_type = type_map.get(index).unwrap();
+                            (*index, var_name.clone(), field_type.clone())
+                        })
+                        .collect_vec();
+
+                    pattern_stack.fields_expose(indices, false, expect_stack);
+                } else if !tipo.is_bool() {
+                    pattern_stack.let_assignment("_", expect_stack);
                 }
 
                 pattern_stack.merge_child(stacks);
