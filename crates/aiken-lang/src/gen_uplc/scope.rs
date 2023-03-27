@@ -10,44 +10,18 @@ impl Scope {
         self.0.is_empty()
     }
 
-    pub fn replace(&mut self, pattern: &Scope, mut replacement: Scope) {
-        if pattern.is_empty() {
-            replacement.0.extend(self.0.iter());
-            self.0 = replacement.0;
+    /// Find the common ancestor with the replacement,
+    /// remove it from `self`, and then prepend the
+    /// `replacement` to `self`.
+    pub fn replace(&mut self, mut replacement: Scope) {
+        let common = self.common_ancestor(&replacement);
 
-            return;
-        }
+        // we know that common will always be in the front of the
+        // scope Vec so we can always drain `0..common.len()`.
+        self.0.drain(0..common.0.len());
 
-        let mut result = Vec::new();
-
-        let mut index = 0;
-        let mut pattern_index = 0;
-
-        let mut no_matches = true;
-
-        while index < self.0.len() {
-            if self.0[index] == pattern.0[pattern_index] {
-                if pattern_index == pattern.0.len() - 1 {
-                    no_matches = false;
-                    result.extend(replacement.0.clone());
-                    pattern_index = 0;
-                } else {
-                    pattern_index += 1;
-                }
-            } else {
-                result.push(self.0[index]);
-                pattern_index = 0;
-            }
-
-            index += 1;
-        }
-
-        if no_matches {
-            replacement.0.extend(self.0.iter());
-            self.0 = replacement.0;
-        } else {
-            self.0 = result;
-        }
+        replacement.0.extend(self.0.iter());
+        self.0 = replacement.0;
     }
 
     pub fn common_ancestor(&self, other: &Self) -> Scope {
