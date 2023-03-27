@@ -131,4 +131,17 @@ mod test {
 
         assert_eq!(result, Scope::default());
     }
+
+    #[test]
+    fn replace_same_value() {
+        let mut value = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        let pattern = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        let replacement = Scope(vec![1, 2, 3, 4, 5, 6]);
+
+        value.replace(&pattern, replacement);
+
+        assert_eq!(value, Scope(vec![1, 2, 3, 4, 5, 6]));
+    }
 }
