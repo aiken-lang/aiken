@@ -491,7 +491,7 @@ impl<'a> CodeGenerator<'a> {
                     );
 
                     pattern_stack.merge_child(value_stack);
-                    ir_stack.merge_child(pattern_stack);
+                    ir_stack.merge(pattern_stack);
                 } else {
                     // TODO: go over rearrange clauses
                     let clauses = if subject_tipo.is_list() {
@@ -545,31 +545,39 @@ impl<'a> CodeGenerator<'a> {
 
                             self.build(subject, &mut subject_stack);
 
-                            ir_stack.let_assignment(constr_var.clone(), subject_stack);
+                            let mut let_stack = ir_stack.empty_with_scope();
+
+                            let_stack.let_assignment(constr_var.clone(), subject_stack);
+
+                            ir_stack.merge(let_stack);
 
                             let mut var_stack = ir_stack.empty_with_scope();
+                            let mut when_stack = ir_stack.empty_with_scope();
 
                             var_stack.local_var(subject_tipo.clone(), constr_var);
 
-                            ir_stack.when(
+                            when_stack.when(
                                 subject_tipo,
                                 subject_name,
                                 var_stack,
                                 pattern_stack,
                                 finally_stack,
                             );
+                            ir_stack.merge(when_stack);
                         } else {
                             let mut subject_stack = ir_stack.empty_with_scope();
+                            let mut when_stack = ir_stack.empty_with_scope();
 
                             self.build(subject, &mut subject_stack);
 
-                            ir_stack.when(
+                            when_stack.when(
                                 subject_tipo,
                                 subject_name,
                                 subject_stack,
                                 pattern_stack,
                                 finally_stack,
                             );
+                            ir_stack.merge(when_stack);
                         }
                     }
                 }
@@ -993,7 +1001,11 @@ impl<'a> CodeGenerator<'a> {
 
                 *clause_properties.needs_constr_var() = false;
 
-                pattern_stack.void();
+                let mut void_stack = pattern_stack.empty_with_scope();
+
+                void_stack.void();
+
+                pattern_stack.merge(void_stack);
 
                 self.expose_elements(pattern, pattern_stack, value_stack, clause_properties, tipo);
             }
@@ -1033,7 +1045,9 @@ impl<'a> CodeGenerator<'a> {
                     // if only one constructor, no need to check
                     if data_type.constructors.len() > 1 {
                         // push constructor Index
-                        pattern_stack.integer(index.to_string());
+                        let mut tag_stack = pattern_stack.empty_with_scope();
+                        tag_stack.integer(index.to_string());
+                        pattern_stack.merge_child(tag_stack);
                     }
 
                     if *temp_clause_properties.needs_constr_var() {

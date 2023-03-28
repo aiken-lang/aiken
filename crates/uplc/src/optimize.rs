@@ -17,5 +17,9 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
 
     let program: Program<Name> = program_named.try_into().unwrap();
 
-    program.lambda_reduce().inline_reduce()
+    program
+        .lambda_reduce()
+        .inline_reduce()
+        .lambda_reduce()
+        .inline_reduce()
 }
