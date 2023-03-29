@@ -16,6 +16,9 @@ use crate::server::Server;
 pub fn start() -> Result<(), Error> {
     tracing::info!("Aiken language server starting");
 
+    // Forcibly disable colors on outputs for LSP
+    owo_colors::set_override(false);
+
     let root = env::current_dir()?;
 
     let config = if paths::project_config().exists() {

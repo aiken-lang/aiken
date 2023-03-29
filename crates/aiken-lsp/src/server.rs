@@ -589,7 +589,7 @@ impl Server {
             ),
         };
 
-        let mut text = match error.source() {
+        let message = match error.source() {
             Some(err) => err.to_string(),
             None => error.to_string(),
         };
@@ -598,15 +598,6 @@ impl Server {
             (error.labels(), error.path(), error.src())
         {
             if let Some(labeled_span) = labels.next() {
-                if let Some(label) = labeled_span.label() {
-                    text.push_str("\n\n");
-                    text.push_str(label);
-
-                    if !label.ends_with(['.', '?']) {
-                        text.push('.');
-                    }
-                }
-
                 let line_numbers = LineNumbers::new(&src);
 
                 let lsp_diagnostic = lsp_types::Diagnostic {
@@ -623,7 +614,7 @@ impl Server {
                         .map(|c| lsp_types::NumberOrString::String(c.to_string())),
                     code_description: None,
                     source: None,
-                    message: text.clone(),
+                    message,
                     related_information: None,
                     tags: None,
                     data: None,
@@ -645,7 +636,7 @@ impl Server {
             }
         } else {
             self.stored_messages
-                .push(lsp_types::ShowMessageParams { typ, message: text })
+                .push(lsp_types::ShowMessageParams { typ, message })
         }
 
         Ok(())
