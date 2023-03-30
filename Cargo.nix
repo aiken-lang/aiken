@@ -29,7 +29,7 @@ args@{
   ignoreLockHash,
 }:
 let
-  nixifiedLockHash = "0e147940483d43403388f7711cf62d2f61fe277014f255025842bbd274dfc881";
+  nixifiedLockHash = "ad1a70808b7c755813ee46e143d6be5569fbe24c3fc7a5c6b65ac65e94b6a459";
   workspaceSrc = if args.workspaceSrc == null then ./. else args.workspaceSrc;
   currentLockHash = builtins.hashFile "sha256" (workspaceSrc + /Cargo.lock);
   lockHashIgnored = if ignoreLockHash
@@ -184,6 +184,7 @@ in
       lsp_server = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".lsp-server."0.7.0" { inherit profileName; }).out;
       lsp_types = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".lsp-types."0.94.0" { inherit profileName; }).out;
       miette = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.5.0" { inherit profileName; }).out;
+      owo_colors = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; }).out;
       serde = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde."1.0.153" { inherit profileName; }).out;
       serde_json = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde_json."1.0.94" { inherit profileName; }).out;
       thiserror = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".thiserror."1.0.39" { inherit profileName; }).out;
