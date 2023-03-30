@@ -1,6 +1,7 @@
 use aiken_lang::tipo::{Type, TypeVar};
 use serde::{
     self,
+    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{
@@ -179,5 +180,50 @@ impl Serialize for Reference {
         let mut s = serializer.serialize_struct("$ref", 1)?;
         s.serialize_field("$ref", &self.as_json_pointer())?;
         s.end()
+    }
+}
+
+impl<'a> Deserialize<'a> for Reference {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        enum Field {
+            #[serde(rename = "$ref")]
+            Ref,
+        }
+        const FIELDS: &[&str] = &["$ref"];
+
+        struct ReferenceVisitor;
+
+        impl<'a> Visitor<'a> for ReferenceVisitor {
+            type Value = Reference;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Reference")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Reference, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                let mut inner = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Ref => {
+                            if inner.is_some() {
+                                return Err(de::Error::duplicate_field(FIELDS[0]));
+                            }
+                            inner = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                Ok(Reference {
+                    inner: inner.ok_or_else(|| de::Error::missing_field(FIELDS[0]))?,
+                })
+            }
+        }
+
+        deserializer.deserialize_struct("Reference", FIELDS, ReferenceVisitor)
     }
 }

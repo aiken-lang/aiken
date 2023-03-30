@@ -37,3 +37,6 @@ toml = "0.7.2"
 uplc = { path = '../uplc', version = "0.0.29" }
 walkdir = "2.3.2"
 zip = "0.6.4"
+
+[dev-dependencies]
+proptest = "1.1.0"
