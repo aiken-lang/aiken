@@ -1480,15 +1480,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
         self.assert_no_assignment(&body)?;
 
-        for (arg, t) in args.iter().zip(args.iter().map(|arg| arg.tipo.clone())) {
+        for arg in &args {
             match &arg.arg_name {
-                ArgName::Named { name, .. } => {
+                ArgName::Named {
+                    name,
+                    is_validator_param,
+                    ..
+                } if !is_validator_param => {
                     self.environment.insert_variable(
                         name.to_string(),
                         ValueConstructorVariant::LocalVariable {
                             location: arg.location,
                         },
-                        t,
+                        arg.tipo.clone(),
                     );
 
                     self.environment.init_usage(
@@ -1497,7 +1501,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         arg.location,
                     );
                 }
-                ArgName::Discarded { .. } => (),
+                ArgName::Named { .. } | ArgName::Discarded { .. } => (),
             };
         }
 
