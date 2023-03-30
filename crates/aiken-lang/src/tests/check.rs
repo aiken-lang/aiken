@@ -114,6 +114,47 @@ fn validator_in_lib_warning() {
 }
 
 #[test]
+fn multi_validator() {
+    let source_code = r#"
+      validator(foo: ByteArray, bar: Int) {
+        fn spend(_d, _r, _c) {
+          foo == #"aabb"
+        }
+
+        fn mint(_r, _c) {
+          bar == 0
+        }
+      }
+    "#;
+
+    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+
+    assert_eq!(warnings.len(), 0)
+}
+
+#[test]
+fn multi_validator_warning() {
+    let source_code = r#"
+      validator(foo: ByteArray, bar: Int) {
+        fn spend(_d, _r, _c) {
+          foo == #"aabb"
+        }
+
+        fn mint(_r, _c) {
+          True
+        }
+      }
+    "#;
+
+    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::UnusedVariable { ref name, .. } if name == "bar"
+    ))
+}
+
+#[test]
 fn if_scoping() {
     let source_code = r#"
         pub fn foo(c) {

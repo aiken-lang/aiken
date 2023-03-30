@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        DataType, Definition, Function, Layer, ModuleConstant, ModuleKind, RecordConstructor,
-        RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition, TypedFunction,
-        TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
+        ArgName, DataType, Definition, Function, Layer, ModuleConstant, ModuleKind,
+        RecordConstructor, RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition,
+        TypedFunction, TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
     builtins::function,
@@ -262,87 +262,127 @@ fn infer_definition(
             let temp_params = params.iter().cloned().chain(fun.arguments);
             fun.arguments = temp_params.collect();
 
-            let Definition::Fn(mut typed_fun) = infer_definition(
-                Definition::Fn(fun),
-                module_name,
-                hydrators,
-                environment,
-                tracing,
-                kind,
-            )? else {
-                unreachable!("validator definition inferred as something other than a function?")
-            };
+            environment.in_new_scope(|environment| {
+                let preregistered_fn = environment
+                    .get_variable(&fun.name)
+                    .expect("Could not find preregistered type for function");
 
-            if !typed_fun.return_type.is_bool() {
-                return Err(Error::ValidatorMustReturnBool {
-                    return_type: typed_fun.return_type.clone(),
-                    location: typed_fun.location,
-                });
-            }
 
-            let typed_params = typed_fun.arguments.drain(0..params_length).collect();
+                let preregistered_type = preregistered_fn.tipo.clone();
 
-            if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
-                return Err(Error::IncorrectValidatorArity {
-                    count: typed_fun.arguments.len() as u32,
-                    location: typed_fun.location,
-                });
-            }
+                let (args_types, _return_type) = preregistered_type
+                    .function_types()
+                    .expect("Preregistered type for fn was not a fn");
 
-            let typed_other_fun = other_fun
-                .map(|mut other| -> Result<TypedFunction, Error> {
-                    let params = params.into_iter().chain(other.arguments);
-                    other.arguments = params.collect();
+                for (arg, t) in params.iter().zip(args_types[0..params.len()].iter()) {
+                    match &arg.arg_name {
+                        ArgName::Named {
+                            name,
+                            is_validator_param,
+                            ..
+                        } if *is_validator_param => {
+                            environment.insert_variable(
+                                name.to_string(),
+                                ValueConstructorVariant::LocalVariable {
+                                    location: arg.location,
+                                },
+                                t.clone(),
+                            );
 
-                    let Definition::Fn(mut other_typed_fun) = infer_definition(
-                        Definition::Fn(other),
-                        module_name,
-                        hydrators,
-                        environment,
-                        tracing,
-                        kind,
-                    )? else {
-                        unreachable!(
-                            "validator definition inferred as something other than a function?"
-                        )
+                            environment.init_usage(
+                                name.to_string(),
+                                EntityKind::Variable,
+                                arg.location,
+                            );
+                        }
+                        ArgName::Named { .. } | ArgName::Discarded { .. } => (),
                     };
+                }
 
-                    if !other_typed_fun.return_type.is_bool() {
-                        return Err(Error::ValidatorMustReturnBool {
-                            return_type: other_typed_fun.return_type.clone(),
-                            location: other_typed_fun.location,
-                        });
-                    }
+                let Definition::Fn(mut typed_fun) = infer_definition(
+                    Definition::Fn(fun),
+                    module_name,
+                    hydrators,
+                    environment,
+                    tracing,
+                    kind,
+                )? else {
+                    unreachable!("validator definition inferred as something other than a function?")
+                };
 
-                    other_typed_fun.arguments.drain(0..params_length);
+                if !typed_fun.return_type.is_bool() {
+                    return Err(Error::ValidatorMustReturnBool {
+                        return_type: typed_fun.return_type.clone(),
+                        location: typed_fun.location,
+                    });
+                }
 
-                    if other_typed_fun.arguments.len() < 2 || other_typed_fun.arguments.len() > 3 {
-                        return Err(Error::IncorrectValidatorArity {
-                            count: other_typed_fun.arguments.len() as u32,
-                            location: other_typed_fun.location,
-                        });
-                    }
+                let typed_params = typed_fun.arguments.drain(0..params_length).collect();
 
-                    if typed_fun.arguments.len() == other_typed_fun.arguments.len() {
-                        return Err(Error::MultiValidatorEqualArgs {
-                            location: typed_fun.location,
-                            other_location: other_typed_fun.location,
-                            count: other_typed_fun.arguments.len(),
-                        });
-                    }
+                if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
+                    return Err(Error::IncorrectValidatorArity {
+                        count: typed_fun.arguments.len() as u32,
+                        location: typed_fun.location,
+                    });
+                }
 
-                    Ok(other_typed_fun)
-                })
-                .transpose();
+                let typed_other_fun = other_fun
+                    .map(|mut other| -> Result<TypedFunction, Error> {
+                        let params = params.into_iter().chain(other.arguments);
+                        other.arguments = params.collect();
 
-            Ok(Definition::Validator(Validator {
-                doc,
-                end_position,
-                fun: typed_fun,
-                other_fun: typed_other_fun?,
-                location,
-                params: typed_params,
-            }))
+                        let Definition::Fn(mut other_typed_fun) = infer_definition(
+                            Definition::Fn(other),
+                            module_name,
+                            hydrators,
+                            environment,
+                            tracing,
+                            kind,
+                        )? else {
+                            unreachable!(
+                                "validator definition inferred as something other than a function?"
+                            )
+                        };
+
+                        if !other_typed_fun.return_type.is_bool() {
+                            return Err(Error::ValidatorMustReturnBool {
+                                return_type: other_typed_fun.return_type.clone(),
+                                location: other_typed_fun.location,
+                            });
+                        }
+
+                        other_typed_fun.arguments.drain(0..params_length);
+
+                        if other_typed_fun.arguments.len() < 2
+                            || other_typed_fun.arguments.len() > 3
+                        {
+                            return Err(Error::IncorrectValidatorArity {
+                                count: other_typed_fun.arguments.len() as u32,
+                                location: other_typed_fun.location,
+                            });
+                        }
+
+                        if typed_fun.arguments.len() == other_typed_fun.arguments.len() {
+                            return Err(Error::MultiValidatorEqualArgs {
+                                location: typed_fun.location,
+                                other_location: other_typed_fun.location,
+                                count: other_typed_fun.arguments.len(),
+                            });
+                        }
+
+                        Ok(other_typed_fun)
+                    })
+                    .transpose();
+
+                Ok(Definition::Validator(Validator {
+                    doc,
+                    end_position,
+                    fun: typed_fun,
+                    other_fun: typed_other_fun?,
+                    location,
+                    params: typed_params,
+                }))
+            })
         }
 
         Definition::Test(f) => {

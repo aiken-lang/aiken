@@ -564,6 +564,7 @@ pub enum ArgName {
         name: String,
         label: String,
         location: Span,
+        is_validator_param: bool,
     },
 }
 

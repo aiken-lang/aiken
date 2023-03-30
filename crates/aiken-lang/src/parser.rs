@@ -242,44 +242,9 @@ pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error =
 }
 
 pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    let func_parser = just(Token::Fn)
-        .ignore_then(select! {Token::Name {name} => name})
-        .then(
-            fn_param_parser()
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                .map_with_span(|arguments, span| (arguments, span)),
-        )
-        .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
-        .then(
-            expr_seq_parser()
-                .or_not()
-                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-        )
-        .map_with_span(
-            |(((name, (arguments, args_span)), return_annotation), body), span| ast::Function {
-                arguments,
-                body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
-                doc: None,
-                location: Span {
-                    start: span.start,
-                    end: return_annotation
-                        .as_ref()
-                        .map(|l| l.location().end)
-                        .unwrap_or_else(|| args_span.end),
-                },
-                end_position: span.end - 1,
-                name,
-                public: false,
-                return_annotation,
-                return_type: (),
-            },
-        );
-
     just(Token::Validator)
         .ignore_then(
-            fn_param_parser()
+            fn_param_parser(true)
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
@@ -287,12 +252,20 @@ pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = 
                 .or_not(),
         )
         .then(
-            func_parser
+            fn_parser()
                 .repeated()
                 .at_least(1)
                 .at_most(2)
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
-                .map(IntoIterator::into_iter),
+                .map(|defs| {
+                    defs.into_iter().map(|def| {
+                        let ast::UntypedDefinition::Fn(fun) = def else {
+                            unreachable!("It should be a fn definition");
+                        };
+
+                        fun
+                    })
+                }),
         )
         .map_with_span(|(opt_extra_params, mut functions), span| {
             let (params, params_span) = opt_extra_params.unwrap_or((
@@ -326,7 +299,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
         .then_ignore(just(Token::Fn))
         .then(select! {Token::Name {name} => name})
         .then(
-            fn_param_parser()
+            fn_param_parser(false)
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
@@ -489,7 +462,9 @@ pub fn bytearray_parser(
     ))
 }
 
-pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
+pub fn fn_param_parser(
+    is_validator_param: bool,
+) -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
     choice((
         select! {Token::Name {name} => name}
             .then(select! {Token::DiscardName {name} => name})
@@ -507,15 +482,17 @@ pub fn fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = ParseErr
         }),
         select! {Token::Name {name} => name}
             .then(select! {Token::Name {name} => name})
-            .map_with_span(|(label, name), span| ast::ArgName::Named {
+            .map_with_span(move |(label, name), span| ast::ArgName::Named {
                 label,
                 name,
                 location: span,
+                is_validator_param,
             }),
-        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
+        select! {Token::Name {name} => name}.map_with_span(move |name, span| ast::ArgName::Named {
             label: name.clone(),
             name,
             location: span,
+            is_validator_param,
         }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
@@ -541,6 +518,7 @@ pub fn anon_fn_param_parser() -> impl Parser<Token, ast::UntypedArg, Error = Par
             label: name.clone(),
             name,
             location: span,
+            is_validator_param: false,
         }),
     ))
     .then(just(Token::Colon).ignore_then(type_parser()).or_not())
@@ -1169,6 +1147,7 @@ pub fn expr_parser(
                                         label: name.clone(),
                                         name,
                                         location: Span::empty(),
+                                        is_validator_param: false,
                                     },
                                     tipo: (),
                                 });
