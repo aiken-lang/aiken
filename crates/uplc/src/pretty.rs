@@ -1,10 +1,10 @@
-use pretty::RcDoc;
-
 use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
     plutus_data_to_bytes,
 };
+use pretty::RcDoc;
+use std::ascii::escape_default;
 
 impl<'a, T> Program<T>
 where
@@ -185,7 +185,15 @@ impl Constant {
             Constant::String(s) => RcDoc::text("string")
                 .append(RcDoc::line())
                 .append(RcDoc::text("\""))
-                .append(RcDoc::text(s))
+                .append(RcDoc::text(
+                    String::from_utf8(
+                        s.as_bytes()
+                            .iter()
+                            .flat_map(|c| escape_default(*c).collect::<Vec<u8>>())
+                            .collect(),
+                    )
+                    .unwrap(),
+                ))
                 .append(RcDoc::text("\"")),
             Constant::Unit => RcDoc::text("unit")
                 .append(RcDoc::line())

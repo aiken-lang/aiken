@@ -2720,6 +2720,7 @@ dependencies = [
  "flat-rs",
  "hex",
  "indexmap",
+ "indoc",
  "itertools",
  "k256",
  "miette",

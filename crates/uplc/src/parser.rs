@@ -168,7 +168,17 @@ peg::parser! {
           = "#" i:ident()* { hex::decode(String::from_iter(i)).unwrap() }
 
         rule string() -> String
-          = "\"" s:[^ '"']* "\"" { String::from_iter(s) }
+          = "\"" s:character()* "\"" { String::from_iter(s) }
+
+        rule character() -> char
+          = "\\n"  { '\n' } // newline (line feed)
+          / "\\r"  { '\r' } // carriage return
+          / "\\t"  { '\t' } // horizontal tab
+          / "\\\"" { '\"' } // double quote
+          / "\\'"  { '\'' } // single quote
+          / "\\\\" { '\\' } // backslash
+          / [ ^ '"' ]
+          / expected!("or any valid ascii character")
 
         rule data() -> PlutusData
           = "#" i:ident()* {

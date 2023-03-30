@@ -1,5 +1,9 @@
-use std::{collections::VecDeque, fmt::Debug, rc::Rc};
-
+use crate::{
+    ast::{
+        Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type, Unique,
+    },
+    builtins::DefaultFunction,
+};
 use anyhow::anyhow;
 use flat_rs::{
     de::{self, Decode, Decoder},
@@ -7,13 +11,7 @@ use flat_rs::{
     Flat,
 };
 use pallas_primitives::{babbage::PlutusData, Fragment};
-
-use crate::{
-    ast::{
-        Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type, Unique,
-    },
-    builtins::DefaultFunction,
-};
+use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 const BUILTIN_TAG_WIDTH: u32 = 7;
 const CONST_TAG_WIDTH: u32 = 4;
@@ -810,11 +808,13 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 
 #[cfg(test)]
 mod test {
-    use flat_rs::Flat;
-
-    use crate::ast::{Name, Type};
-
     use super::{Constant, Program, Term};
+    use crate::{
+        ast::{DeBruijn, Name, Type},
+        parser,
+    };
+    use flat_rs::Flat;
+    use indoc::indoc;
 
     #[test]
     fn flat_encode_integer() {
@@ -960,5 +960,35 @@ mod test {
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
 
         assert_eq!(actual_program, expected_program)
+    }
+
+    #[test]
+    fn unflat_string_escape() {
+        let cbor = "490000004901015c0001";
+
+        let program =
+            Program::<DeBruijn>::from_hex(cbor, &mut Vec::new(), &mut Vec::new()).unwrap();
+
+        assert_eq!(
+            program.to_pretty().as_str(),
+            indoc! { r#"
+              (program
+                0.0.0
+                (con string "\\")
+              )"#}
+        );
+    }
+
+    #[test]
+    fn uplc_parser_string_escape() {
+        let source = indoc! { r#"
+            (program
+              0.0.0
+              (con string "\n\t\\\"\'\r")
+            )"#};
+
+        let program = parser::program(source).unwrap();
+
+        assert_eq!(program.to_pretty(), source);
     }
 }
