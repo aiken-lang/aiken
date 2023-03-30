@@ -14,6 +14,7 @@ exclude = ["test_data/*"]
 
 [dependencies]
 anyhow = "1.0.69"
+bumpalo = { version = "3.12.0", features = ["collections"] }
 cryptoxide = "0.4.4"
 flat-rs = { path = "../flat-rs", version = "0.0.27" }
 hex = "0.4.3"

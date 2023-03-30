@@ -649,7 +649,10 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 
 impl Program<NamedDeBruijn> {
     pub fn eval(&self, initial_budget: ExBudget) -> EvalResult {
+        let arena = bumpalo::Bump::new();
+
         let mut machine = Machine::new(
+            &arena,
             Language::PlutusV2,
             CostModel::default(),
             initial_budget,
@@ -658,16 +661,34 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(&self.term);
 
-        EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            initial_budget,
+            machine.logs.to_vec(),
+        )
     }
 
     /// Evaluate a Program as PlutusV1
     pub fn eval_v1(&self) -> EvalResult {
-        let mut machine = Machine::new(Language::PlutusV1, CostModel::v1(), ExBudget::v1(), 200);
+        let arena = bumpalo::Bump::new();
+
+        let mut machine = Machine::new(
+            &arena,
+            Language::PlutusV1,
+            CostModel::v1(),
+            ExBudget::v1(),
+            200,
+        );
 
         let term = machine.run(&self.term);
 
-        EvalResult::new(term, machine.ex_budget, ExBudget::v1(), machine.logs)
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            ExBudget::v1(),
+            machine.logs.to_vec(),
+        )
     }
 
     pub fn eval_as(
@@ -681,7 +702,10 @@ impl Program<NamedDeBruijn> {
             None => ExBudget::default(),
         };
 
+        let arena = bumpalo::Bump::new();
+
         let mut machine = Machine::new(
+            &arena,
             version.clone(),
             initialize_cost_model(version, costs),
             budget,
@@ -690,7 +714,7 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(&self.term);
 
-        EvalResult::new(term, machine.ex_budget, budget, machine.logs)
+        EvalResult::new(term, machine.ex_budget, budget, machine.logs.to_vec())
     }
 }
 

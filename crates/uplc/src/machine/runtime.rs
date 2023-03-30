@@ -1,3 +1,4 @@
+use bumpalo::{collections::Vec as BumpVec, Bump};
 use std::{ops::Deref, rc::Rc};
 
 use num_integer::Integer;
@@ -21,14 +22,14 @@ use super::{
 //}
 
 #[derive(Clone, Debug)]
-pub struct BuiltinRuntime {
-    args: Vec<Rc<Value>>,
+pub struct BuiltinRuntime<'a> {
+    args: Vec<&'a Value<'a>>,
     fun: DefaultFunction,
     forces: u32,
 }
 
-impl BuiltinRuntime {
-    pub fn new(fun: DefaultFunction) -> BuiltinRuntime {
+impl<'a> BuiltinRuntime<'a> {
+    pub fn new(fun: DefaultFunction) -> BuiltinRuntime<'a> {
         Self {
             args: vec![],
             fun,
@@ -52,8 +53,12 @@ impl BuiltinRuntime {
         self.forces += 1;
     }
 
-    pub fn call(&self, logs: &mut Vec<String>) -> Result<Rc<Value>, Error> {
-        self.fun.call(&self.args, logs)
+    pub fn call(
+        &self,
+        arena: &'a Bump,
+        logs: &'a mut BumpVec<'a, String>,
+    ) -> Result<&'a Value, Error> {
+        self.fun.call(arena, &self.args, logs)
     }
 
     pub fn push(&mut self, arg: Rc<Value>) -> Result<(), Error> {
@@ -325,18 +330,22 @@ impl DefaultFunction {
     // This should be safe because we've already checked
     // the types of the args as they were pushed. Although
     // the unreachables look ugly, it's the reality of the situation.
-    pub fn call(&self, args: &[Rc<Value>], logs: &mut Vec<String>) -> Result<Rc<Value>, Error> {
+    pub fn call<'a>(
+        &self,
+        arena: &'a Bump,
+        args: &[&'a Value],
+        logs: &'a mut BumpVec<'a, String>,
+    ) -> Result<&'a Value, Error> {
         match self {
-            DefaultFunction::AddInteger => match (args[0].as_ref(), args[1].as_ref()) {
-                (Value::Con(integer1), Value::Con(integer2)) => {
-                    match (integer1.as_ref(), integer2.as_ref()) {
-                        (Constant::Integer(arg1), Constant::Integer(arg2)) => {
-                            let result = arg1 + arg2;
+            DefaultFunction::AddInteger => match (args[0], args[1]) {
+                (Value::Con(Constant::Integer(arg1)), Value::Con(Constant::Integer(arg2))) => {
+                    let result = arg1 + arg2;
 
-                            Ok(Value::Con(Constant::Integer(result).into()).into())
-                        }
-                        _ => unreachable!(),
-                    }
+                    let constant = arena.alloc(Constant::Integer(result));
+
+                    let value = arena.alloc(Value::Con(constant));
+
+                    Ok(value)
                 }
                 _ => unreachable!(),
             },
