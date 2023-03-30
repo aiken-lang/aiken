@@ -698,3 +698,28 @@ fn weird_comments() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn format_trace_callback() {
+    let src = indoc! { r#"
+      fn foo() {
+        list.any([], fn (e) { trace @"foo"
+          e
+        })
+      }
+    "#};
+
+    let expected = indoc! { r#"
+      fn foo() {
+        list.any(
+          [],
+          fn(e) {
+            trace @"foo"
+            e
+          },
+        )
+      }
+    "#};
+
+    assert_fmt(src, expected);
+}

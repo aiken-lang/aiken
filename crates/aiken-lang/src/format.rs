@@ -569,7 +569,7 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
-            UntypedExpr::When { .. } => self.expr(body).force_break(),
+            UntypedExpr::Trace { .. } | UntypedExpr::When { .. } => self.expr(body).force_break(),
             _ => self.expr(body),
         };
 
