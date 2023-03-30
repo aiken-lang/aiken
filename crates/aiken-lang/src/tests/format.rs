@@ -59,17 +59,41 @@ fn test_format_if() {
 fn test_format_validator() {
     let src = indoc! {r#"
       validator ( ) {
+      // What is the purpose of life
+
       fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
       True
       }
+      }
+
+      // What?
+      validator {
+        /// Some documentation for foo
+        fn foo() {
+          Void
+        }
+
+        // I am lost
       }
     "#};
 
     let expected = indoc! {r#"
       validator {
+        // What is the purpose of life
+
         fn foo(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
           True
         }
+      }
+
+      // What?
+      validator {
+        /// Some documentation for foo
+        fn foo() {
+          Void
+        }
+
+        // I am lost
       }
     "#};
 
@@ -83,6 +107,7 @@ fn test_format_double_validator() {
         fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
         True
         }
+        /// This is bar
     fn bar(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
         }
     "#};
@@ -93,6 +118,7 @@ fn test_format_double_validator() {
           True
         }
 
+        /// This is bar
         fn bar(r: Redeemer, ctx: ScriptContext) -> Bool {
           True
         }

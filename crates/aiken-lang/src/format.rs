@@ -508,9 +508,10 @@ impl<'comments> Formatter<'comments> {
         other_fun: &'a Option<UntypedFunction>,
         end_position: usize,
     ) -> Document<'a> {
-        // Stick it all together
-        let inner_fn = line()
-            .append(self.definition_fn(
+        let fun_comments = self.pop_comments(fun.location.start);
+        let fun_doc_comments = self.doc_comments(fun.location.start);
+        let first_fn = self
+            .definition_fn(
                 &false,
                 "fn",
                 &fun.name,
@@ -518,33 +519,40 @@ impl<'comments> Formatter<'comments> {
                 &fun.return_annotation,
                 &fun.body,
                 fun.end_position,
-            ))
-            .nest(INDENT)
-            .group()
-            .append(if other_fun.is_some() { line() } else { nil() })
-            .append(
-                other_fun
-                    .as_ref()
-                    .map(|other| {
-                        line()
-                            .append(self.definition_fn(
-                                &false,
-                                "fn",
-                                &other.name,
-                                &other.arguments,
-                                &other.return_annotation,
-                                &other.body,
-                                other.end_position,
-                            ))
-                            .nest(INDENT)
-                            .group()
-                    })
-                    .unwrap_or_else(nil),
-            );
+            )
+            .group();
+        let first_fn = commented(fun_doc_comments.append(first_fn).group(), fun_comments);
 
-        let inner_fn = match printed_comments(self.pop_comments(end_position), false) {
-            Some(comments) => inner_fn.append(line()).append(comments),
-            None => inner_fn,
+        let other_fn = match other_fun {
+            None => nil(),
+            Some(other) => {
+                let other_comments = self.pop_comments(other.location.start);
+                let other_doc_comments = self.doc_comments(other.location.start);
+
+                let other_fn = self
+                    .definition_fn(
+                        &false,
+                        "fn",
+                        &other.name,
+                        &other.arguments,
+                        &other.return_annotation,
+                        &other.body,
+                        other.end_position,
+                    )
+                    .group();
+
+                commented(other_doc_comments.append(other_fn).group(), other_comments)
+            }
+        };
+
+        let v_body = line()
+            .append(first_fn)
+            .append(if other_fun.is_some() { lines(2) } else { nil() })
+            .append(other_fn);
+
+        let v_body = match printed_comments(self.pop_comments(end_position), false) {
+            Some(comments) => v_body.append(lines(2)).append(comments).nest(INDENT),
+            None => v_body.nest(INDENT),
         };
 
         // validator(params)
@@ -556,7 +564,7 @@ impl<'comments> Formatter<'comments> {
 
         v_head
             .append(" {")
-            .append(inner_fn)
+            .append(v_body)
             .append(line())
             .append("}")
     }
