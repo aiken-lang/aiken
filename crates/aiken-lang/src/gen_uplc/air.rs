@@ -9,7 +9,7 @@ use crate::{
 
 use super::scope::Scope;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Air {
     // Primitives
     Int {

@@ -1,6 +1,12 @@
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct Scope(pub(self) Vec<u64>);
 
+impl From<Vec<u64>> for Scope {
+    fn from(value: Vec<u64>) -> Self {
+        Self(value)
+    }
+}
+
 impl Scope {
     pub fn push(&mut self, value: u64) {
         self.0.push(value);

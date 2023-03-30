@@ -683,3 +683,109 @@ impl AirStack {
         });
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::rc::Rc;
+
+    use crate::{gen_uplc::air::Air, IdGenerator};
+
+    use super::AirStack;
+
+    #[test]
+    fn merge_different_scopes() {
+        let id_gen: Rc<IdGenerator> = IdGenerator::new().into();
+
+        let scope = vec![id_gen.next(), id_gen.next()];
+        let scope2 = vec![id_gen.next(), id_gen.next()];
+
+        let air = vec![Air::Int {
+            scope: scope.clone().into(),
+            value: "1".to_string(),
+        }];
+
+        let air2 = vec![Air::Int {
+            scope: scope2.clone().into(),
+            value: "2".to_string(),
+        }];
+
+        let mut stack1 = AirStack {
+            id_gen: id_gen.clone(),
+            scope: scope.into(),
+            air,
+        };
+
+        let stack2 = AirStack {
+            id_gen,
+            scope: scope2.into(),
+            air: air2,
+        };
+
+        stack1.merge(stack2);
+
+        assert_eq!(stack1.scope, vec![0, 1].into());
+
+        assert_eq!(
+            stack1.air,
+            vec![
+                Air::Int {
+                    scope: vec![0, 1].into(),
+                    value: "1".to_string(),
+                },
+                Air::Int {
+                    scope: vec![2, 3].into(),
+                    value: "2".to_string(),
+                },
+            ],
+        )
+    }
+
+    #[test]
+    fn merge_child_common_ancestor() {
+        let id_gen: Rc<IdGenerator> = IdGenerator::new().into();
+
+        let scope = vec![id_gen.next(), id_gen.next()];
+        let mut scope2 = scope.clone();
+        scope2.push(id_gen.next());
+
+        let air = vec![Air::Int {
+            scope: scope.clone().into(),
+            value: "1".to_string(),
+        }];
+
+        let air2 = vec![Air::Int {
+            scope: scope2.clone().into(),
+            value: "2".to_string(),
+        }];
+
+        let mut stack1 = AirStack {
+            id_gen: id_gen.clone(),
+            scope: scope.into(),
+            air,
+        };
+
+        let stack2 = AirStack {
+            id_gen,
+            scope: scope2.into(),
+            air: air2,
+        };
+
+        stack1.merge_child(stack2);
+
+        assert_eq!(stack1.scope, vec![0, 1].into());
+
+        assert_eq!(
+            stack1.air,
+            vec![
+                Air::Int {
+                    scope: vec![0, 1].into(),
+                    value: "1".to_string(),
+                },
+                Air::Int {
+                    scope: vec![0, 1, 2].into(),
+                    value: "2".to_string(),
+                },
+            ],
+        )
+    }
+}
