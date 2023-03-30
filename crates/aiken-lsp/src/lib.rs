@@ -2,7 +2,6 @@ use crate::server::Server;
 use aiken_project::{config::Config, paths};
 use error::Error;
 use lsp_server::Connection;
-use owo_colors;
 use std::env;
 
 mod cast;
