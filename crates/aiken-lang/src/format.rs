@@ -1030,18 +1030,20 @@ impl<'comments> Formatter<'comments> {
                 _ => self.wrap_expr(expr),
             };
 
-            let expr = self.operator_side(doc, 4, expr.binop_precedence());
+            let expr = self
+                .operator_side(doc, 4, expr.binop_precedence())
+                .nest(2 * INDENT + 1);
 
             match printed_comments(comments, true) {
                 None => {
-                    let pipe = prebreak("|> ", " |> ").nest(2);
+                    let pipe = prebreak("|> ", " |> ").nest(INDENT);
                     docs.push(pipe.append(expr));
                 }
                 Some(comments) => {
                     let pipe = prebreak("|> ", "|> ");
                     docs.push(
                         " ".to_doc()
-                            .append(comments.nest(2).append(pipe.append(expr).group())),
+                            .append(comments.nest(INDENT).append(pipe.append(expr).group())),
                     );
                 }
             }

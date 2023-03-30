@@ -20,7 +20,7 @@ validator {
   }
 }
 
-validator (output_reference: OutputReference) {
+validator(output_reference: OutputReference) {
   fn mint(_redeemer: Void, ctx: ScriptContext) -> Bool {
     when
       list.find(

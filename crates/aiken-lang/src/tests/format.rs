@@ -723,3 +723,28 @@ fn format_trace_callback() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn format_pipe_fn() {
+    let src = indoc! { r#"
+      fn foo() {
+        outputs
+          |> list.any(
+          fn(output) { value.quantity_of(output.value, policy_id, asset_name) == 1 },
+        )
+      }
+    "#};
+
+    let expected = indoc! { r#"
+      fn foo() {
+        outputs
+          |> list.any(
+               fn(output) {
+                 value.quantity_of(output.value, policy_id, asset_name) == 1
+               },
+             )
+      }
+    "#};
+
+    assert_fmt(src, expected);
+}
