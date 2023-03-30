@@ -139,7 +139,7 @@ pub fn size(self: MerkleTree<a>) -> Int {
   when self is {
     Empty ->
       0
-    Leaf{..} ->
+    Leaf { .. } ->
       1
     Node { left, right, .. } ->
       size(left) + size(right)

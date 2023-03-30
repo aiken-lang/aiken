@@ -748,3 +748,25 @@ fn format_pipe_fn() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn match_record() {
+    let src = indoc! { r#"
+      fn foo() {
+        when bar is {
+          Bar { a, b, c } ->
+            Void
+          Bar { a, .. } ->
+            Void
+          Bar { .. } ->
+            Void
+          Bar(a, b, c) ->
+            Void
+          Bar(..) ->
+            Void
+        }
+      }
+    "#};
+
+    assert_fmt(src, src);
+}

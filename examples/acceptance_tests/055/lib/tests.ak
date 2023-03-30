@@ -32,7 +32,7 @@ pub fn size(t: MerkleTree) -> Int {
   when t is {
     Empty ->
       0
-    Leaf{..} ->
+    Leaf { .. } ->
       1
     Node { left, right, .. } ->
       size(left) + size(right)

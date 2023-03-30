@@ -839,7 +839,7 @@ impl<'comments> Formatter<'comments> {
 
         if args.is_empty() && with_spread {
             if is_record {
-                name.append("{..}")
+                name.append(" { .. }")
             } else {
                 name.append("(..)")
             }
