@@ -133,17 +133,28 @@ fn test_format_when() {
     let src = indoc! {r#"
         pub fn foo( a) {
           when  a   is{
-            True  -> 14
+            True  -> {
+
+              bar()
+
+              14
+            }
             False ->
-             42}
+
+             42
+
+             }
          }
     "#};
 
     let expected = indoc! {r#"
         pub fn foo(a) {
           when a is {
-            True ->
+            True -> {
+              bar()
+
               14
+            }
             False ->
               42
           }
