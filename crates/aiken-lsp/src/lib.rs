@@ -1,17 +1,15 @@
-use std::env;
-
+use crate::server::Server;
 use aiken_project::{config::Config, paths};
+use error::Error;
 use lsp_server::Connection;
+use owo_colors;
+use std::env;
 
 mod cast;
 pub mod error;
 mod line_numbers;
 pub mod server;
 mod utils;
-
-use error::Error;
-
-use crate::server::Server;
 
 pub fn start() -> Result<(), Error> {
     tracing::info!("Aiken language server starting");
