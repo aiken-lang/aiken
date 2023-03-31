@@ -29,7 +29,7 @@ args@{
   ignoreLockHash,
 }:
 let
-  nixifiedLockHash = "ad1a70808b7c755813ee46e143d6be5569fbe24c3fc7a5c6b65ac65e94b6a459";
+  nixifiedLockHash = "40ee9c621f893ad8748c1954f209d898c9389c18736f2902e67b64f34c6719ea";
   workspaceSrc = if args.workspaceSrc == null then ./. else args.workspaceSrc;
   currentLockHash = builtins.hashFile "sha256" (workspaceSrc + /Cargo.lock);
   lockHashIgnored = if ignoreLockHash
@@ -3897,7 +3897,7 @@ in
     };
     devDependencies = {
       hex = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".hex."0.4.3" { inherit profileName; }).out;
-      proptest = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".proptest."1.1.0" { inherit profileName; }).out;
+      indoc = (buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".indoc."2.0.1" { profileName = "__noProfile"; }).out;
     };
   });
   
