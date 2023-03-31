@@ -7,7 +7,6 @@ pub mod machine;
 pub mod optimize;
 pub mod parser;
 mod pretty;
-pub mod program_builder;
 pub mod tx;
 
 pub use pallas_codec::utils::KeyValuePairs;
