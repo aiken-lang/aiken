@@ -13,10 +13,10 @@ use uplc::{
 
 use crate::{
     ast::{
-        ArgName, AssignmentKind, BinOp, Pattern, TypedClause, TypedDataType, TypedFunction,
-        TypedValidator, UnOp,
+        ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
+        TypedFunction, TypedValidator, UnOp,
     },
-    builtins::bool,
+    builtins::{bool, data},
     expr::TypedExpr,
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -35,7 +35,7 @@ use builder::{
     AssignmentProperties, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
 };
 
-use self::{scope::Scope, stack::AirStack};
+use self::{builder::replace_opaque_type, scope::Scope, stack::AirStack};
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
@@ -101,7 +101,7 @@ impl<'a> CodeGenerator<'a> {
         // Wrap the validator body if ifThenElse term unit error
         term = term.final_wrapper();
 
-        term = builder::wrap_validator_args(term, &fun.arguments);
+        term = self.wrap_validator_args(term, &fun.arguments, true);
 
         if let Some(other) = other_fun {
             self.reset();
@@ -121,7 +121,7 @@ impl<'a> CodeGenerator<'a> {
 
             let other_term = other_term.final_wrapper();
 
-            let other_term = builder::wrap_validator_args(other_term, &other.arguments);
+            let other_term = self.wrap_validator_args(other_term, &other.arguments, true);
 
             let (spend, mint) = if other.arguments.len() > fun.arguments.len() {
                 (other_term, term)
@@ -133,7 +133,7 @@ impl<'a> CodeGenerator<'a> {
             self.needs_field_access = true;
         }
 
-        term = builder::wrap_validator_args(term, params);
+        term = self.wrap_validator_args(term, params, false);
 
         self.finalize(term, true)
     }
@@ -1859,8 +1859,10 @@ impl<'a> CodeGenerator<'a> {
                     AssignmentKind::Expect => {
                         if tipo.is_bool() {
                             expect_stack.expect_bool(constr_name == "True", value_stack);
-
-                            expect_stack.local_var(tipo.clone().into(), constr_name);
+                        } else if tipo.is_void() {
+                            expect_stack.choose_unit(value_stack);
+                        } else if tipo.is_data() {
+                            unimplemented!("What are you doing with Data type?")
                         } else {
                             let data_type =
                                 builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo)
@@ -1896,7 +1898,9 @@ impl<'a> CodeGenerator<'a> {
                         .collect_vec();
 
                     pattern_stack.fields_expose(indices, false, expect_stack);
-                } else if !tipo.is_bool() {
+                } else if tipo.is_bool() || tipo.is_void() {
+                    pattern_stack.merge_child(expect_stack);
+                } else {
                     pattern_stack.let_assignment("_", expect_stack);
                 }
 
@@ -2343,16 +2347,24 @@ impl<'a> CodeGenerator<'a> {
                 let mut arg_stack = expect_stack.empty_with_scope();
 
                 let mut arg_stack = if !arg_indices.is_empty() {
-                    arg_stack.local_var(tipo.clone(), name);
-
                     let mut field_expose_stack = expect_stack.empty_with_scope();
+
                     field_expose_stack.integer(index.to_string());
+
+                    arg_stack.local_var(tipo.clone(), name);
 
                     field_expose_stack.fields_expose(arg_indices.clone(), true, arg_stack);
 
                     field_expose_stack
                 } else {
+                    let mut var_stack = expect_stack.empty_with_scope();
+
+                    var_stack.local_var(tipo.clone(), name);
+
                     arg_stack.integer(index.to_string());
+
+                    arg_stack.fields_empty(var_stack);
+
                     arg_stack
                 };
 
@@ -4476,6 +4488,21 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
+            Air::FieldsEmpty { .. } => {
+                self.needs_field_access = true;
+
+                let value = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                term = Term::var(CONSTR_FIELDS_EXPOSER)
+                    .apply(value)
+                    .delayed_choose_list(
+                        term,
+                        Term::Error.trace(Term::string("Expected no fields for Constr")),
+                    );
+
+                arg_stack.push(term);
+            }
             Air::Tuple { tipo, count, .. } => {
                 let mut args = vec![];
 
@@ -4767,5 +4794,54 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::Noop { .. } => {}
         }
+    }
+
+    pub fn wrap_validator_args(
+        &mut self,
+        term: Term<Name>,
+        arguments: &[TypedArg],
+        has_context: bool,
+    ) -> Term<Name> {
+        let mut term = term;
+
+        for (index, arg) in arguments.iter().enumerate().rev() {
+            if !(has_context && index == arguments.len() - 1) {
+                let mut air_stack = AirStack::new(self.id_gen.clone());
+
+                let mut param_stack = air_stack.empty_with_scope();
+
+                param_stack.local_var(data(), arg.arg_name.get_variable_name().unwrap_or("_"));
+
+                let mut actual_type = arg.tipo.clone();
+
+                replace_opaque_type(&mut actual_type, self.data_types.clone());
+
+                self.assignment(
+                    &Pattern::Var {
+                        location: Span::empty(),
+                        name: arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                    },
+                    &mut air_stack,
+                    param_stack,
+                    &actual_type,
+                    AssignmentProperties {
+                        value_type: data(),
+                        kind: AssignmentKind::Expect,
+                    },
+                );
+                air_stack.local_var(
+                    actual_type,
+                    arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
+                );
+
+                let mut air_vec = air_stack.complete();
+
+                term = term
+                    .lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
+                    .apply(self.uplc_code_gen(&mut air_vec));
+            }
+            term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
+        }
+        term
     }
 }
