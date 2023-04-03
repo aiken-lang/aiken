@@ -4803,7 +4803,9 @@ impl<'a> CodeGenerator<'a> {
         let mut term = term;
 
         for (index, arg) in arguments.iter().enumerate().rev() {
-            if !(has_context && index == arguments.len() - 1) {
+            if !(has_context && index == arguments.len() - 1)
+                || arg.arg_name.get_variable_name().unwrap_or("_") != "_"
+            {
                 let mut air_stack = AirStack::new(self.id_gen.clone());
 
                 let mut param_stack = air_stack.empty_with_scope();
