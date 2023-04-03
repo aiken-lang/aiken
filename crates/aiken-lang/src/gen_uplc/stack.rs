@@ -5,6 +5,7 @@ use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
     ast::Span,
+    builtins::void,
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
 };
@@ -332,6 +333,16 @@ impl AirStack {
             scope: self.scope.clone(),
             indices,
             check_last_item,
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn fields_empty(&mut self, value: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::FieldsEmpty {
+            scope: self.scope.clone(),
         });
 
         self.merge_child(value);
@@ -681,6 +692,19 @@ impl AirStack {
         self.air.push(Air::Noop {
             scope: self.scope.clone(),
         });
+    }
+
+    pub fn choose_unit(&mut self, value_stack: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::Builtin {
+            scope: self.scope.clone(),
+            func: DefaultFunction::ChooseUnit,
+            tipo: void(),
+            count: DefaultFunction::ChooseUnit.arity(),
+        });
+
+        self.merge_child(value_stack);
     }
 }
 
