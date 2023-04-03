@@ -1858,7 +1858,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                     AssignmentKind::Expect => {
                         if tipo.is_bool() {
-                            expect_stack.expect_bool(constr_name == "True", value_stack);
+                            expect_stack.expect_bool(constructor_name == "True", value_stack);
                         } else if tipo.is_void() {
                             expect_stack.choose_unit(value_stack);
                         } else if tipo.is_data() {
@@ -2321,8 +2321,6 @@ impl<'a> CodeGenerator<'a> {
                 builder::lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
 
             let new_id = self.id_gen.next();
-
-            // START HERE
 
             let mut clause_stack = expect_stack.empty_with_scope();
             let mut when_stack = expect_stack.empty_with_scope();
