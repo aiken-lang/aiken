@@ -3,7 +3,9 @@ use std::{rc::Rc, sync::Arc};
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
-    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
+    ast::{
+        Constant as UplcConstant, DeBruijn, Name, NamedDeBruijn, Program, Term, Type as UplcType,
+    },
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
@@ -37,6 +39,13 @@ use builder::{
 
 use self::{builder::replace_opaque_type, scope::Scope, stack::AirStack};
 
+#[derive(Clone, Debug)]
+pub struct CodeGenFunction {
+    air: Vec<Air>,
+    dependencies: Vec<String>,
+    recursive: bool,
+}
+
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     defined_functions: IndexMap<FunctionAccessKey, ()>,
@@ -45,8 +54,9 @@ pub struct CodeGenerator<'a> {
     module_types: IndexMap<&'a String, &'a TypeInfo>,
     id_gen: Rc<IdGenerator>,
     needs_field_access: bool,
-    used_data_assert_on_list: bool,
+    code_gen_functions: IndexMap<String, CodeGenFunction>,
     zero_arg_functions: IndexMap<FunctionAccessKey, Vec<Air>>,
+    uplc_to_function: IndexMap<Program<DeBruijn>, FunctionAccessKey>,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -60,19 +70,21 @@ impl<'a> CodeGenerator<'a> {
             functions,
             data_types,
             module_types,
-            id_gen: IdGenerator::new().into(),
             needs_field_access: false,
-            used_data_assert_on_list: false,
+            id_gen: IdGenerator::new().into(),
+            code_gen_functions: IndexMap::new(),
             zero_arg_functions: IndexMap::new(),
+            uplc_to_function: IndexMap::new(),
         }
     }
 
     pub fn reset(&mut self) {
-        self.needs_field_access = false;
-        self.used_data_assert_on_list = false;
+        self.code_gen_functions = IndexMap::new();
         self.zero_arg_functions = IndexMap::new();
         self.id_gen = IdGenerator::new().into();
+        self.needs_field_access = false;
         self.defined_functions = IndexMap::new();
+        self.uplc_to_function = IndexMap::new();
     }
 
     pub fn generate(
@@ -157,11 +169,13 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn finalize(&mut self, term: Term<Name>, wrap_as_validator: bool) -> Program<Name> {
-        let mut term = if wrap_as_validator || self.used_data_assert_on_list {
-            term.assert_on_list()
-        } else {
-            term
-        };
+        // let mut term = if self.used_data_assert_on_list {
+        //     term.assert_on_list()
+        // } else {
+        //     term
+        // };
+
+        let mut term = term;
 
         if self.needs_field_access {
             term = term
@@ -197,14 +211,10 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
                 let mut stacks = Vec::new();
 
-                for (index, expr) in expressions.iter().enumerate() {
-                    if index == 0 {
-                        self.build(expr, ir_stack);
-                    } else {
-                        let mut stack = ir_stack.empty_with_scope();
-                        self.build(expr, &mut stack);
-                        stacks.push(stack);
-                    }
+                for expr in expressions.iter() {
+                    let mut stack = ir_stack.empty_with_scope();
+                    self.build(expr, &mut stack);
+                    stacks.push(stack);
                 }
 
                 ir_stack.sequence(stacks);
@@ -1638,6 +1648,8 @@ impl<'a> CodeGenerator<'a> {
                 {
                     let mut expect_stack = pattern_stack.empty_with_scope();
 
+                    println!("GETTING 2 HERE");
+
                     self.expect_pattern(
                         pattern,
                         &mut expect_stack,
@@ -2225,7 +2237,7 @@ impl<'a> CodeGenerator<'a> {
             || tipo.is_data()
         {
         } else if tipo.is_map() {
-            self.used_data_assert_on_list = true;
+            // self.used_data_assert_on_list = true;
             let new_id = self.id_gen.next();
             let id_pair = (self.id_gen.next(), self.id_gen.next());
             let inner_list_type = &tipo.get_inner_types()[0];
@@ -2266,7 +2278,7 @@ impl<'a> CodeGenerator<'a> {
 
             expect_stack.void();
         } else if tipo.is_list() {
-            self.used_data_assert_on_list = true;
+            // self.used_data_assert_on_list = true;
             let new_id = self.id_gen.next();
             let inner_list_type = &tipo.get_inner_types()[0];
 
@@ -4813,8 +4825,9 @@ impl<'a> CodeGenerator<'a> {
                 param_stack.local_var(data(), arg.arg_name.get_variable_name().unwrap_or("_"));
 
                 let mut actual_type = arg.tipo.clone();
-
+                println!("GETTING HERE");
                 replace_opaque_type(&mut actual_type, self.data_types.clone());
+                println!("ALSO HERE. TYPE IS {:#?}", actual_type);
 
                 self.assignment(
                     &Pattern::Var {
@@ -4833,6 +4846,8 @@ impl<'a> CodeGenerator<'a> {
                     actual_type,
                     arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
                 );
+
+                println!("CONTINUING HERE");
 
                 let mut air_vec = air_stack.complete();
 
