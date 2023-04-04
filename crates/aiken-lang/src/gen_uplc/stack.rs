@@ -5,7 +5,7 @@ use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
     ast::Span,
-    builtins::void,
+    builtins::{data, list, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
 };
@@ -706,13 +706,73 @@ impl AirStack {
 
         self.merge_child(value_stack);
     }
+
+    pub fn assert_on_list(&mut self) {
+        let mut head_stack = self.empty_with_scope();
+        let mut tail_stack = self.empty_with_scope();
+        let mut check_with_stack = self.empty_with_scope();
+        let mut expect_stack = self.empty_with_scope();
+        let mut var_stack = self.empty_with_scope();
+        let mut void_stack = self.empty_with_scope();
+        let mut fun_stack = self.empty_with_scope();
+        let mut arg_stack1 = self.empty_with_scope();
+        let mut arg_stack2 = self.empty_with_scope();
+
+        self.air.push(Air::DefineFunc {
+            scope: self.scope.clone(),
+            func_name: EXPECT_ON_LIST.to_string(),
+            module_name: "".to_string(),
+            params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
+            recursive: true,
+            variant_name: "".to_string(),
+        });
+
+        var_stack.local_var(list(data()), "__list_to_check");
+
+        head_stack.builtin(DefaultFunction::HeadList, data(), vec![var_stack]);
+
+        fun_stack.local_var(void(), "__check_with".to_string());
+
+        check_with_stack.call(void(), fun_stack, vec![head_stack]);
+
+        void_stack.void();
+        void_stack.void();
+
+        self.list_clause(
+            void(),
+            "__list_to_check".to_string(),
+            None,
+            false,
+            void_stack,
+        );
+
+        self.choose_unit(check_with_stack);
+
+        expect_stack.local_var(void(), EXPECT_ON_LIST.to_string());
+
+        arg_stack1.local_var(list(data()), "__list_to_check".to_string());
+
+        arg_stack2.local_var(void(), "__check_with".to_string());
+
+        tail_stack.builtin(DefaultFunction::TailList, list(data()), vec![arg_stack1]);
+
+        self.call(void(), expect_stack, vec![tail_stack, arg_stack2])
+    }
 }
 
 #[cfg(test)]
 mod test {
     use std::rc::Rc;
 
-    use crate::{gen_uplc::air::Air, IdGenerator};
+    use uplc::builtins::DefaultFunction;
+
+    use crate::{
+        ast::Span,
+        builtins::{data, list, void},
+        gen_uplc::air::Air,
+        tipo::{ValueConstructor, ValueConstructorVariant},
+        IdGenerator,
+    };
 
     use super::AirStack;
 
@@ -811,5 +871,136 @@ mod test {
                 },
             ],
         )
+    }
+
+    #[test]
+    fn assert_on_list_matches_air() {
+        let id_gen: Rc<IdGenerator> = IdGenerator::new().into();
+
+        let scope = vec![id_gen.next()];
+
+        let mut stack1 = AirStack {
+            id_gen,
+            scope: scope.into(),
+            air: vec![],
+        };
+
+        stack1.assert_on_list();
+
+        println!("{:#?}", stack1);
+
+        let air_vec = vec![
+            Air::DefineFunc {
+                scope: vec![0].into(),
+                func_name: "__expect_on_list".to_string(),
+                module_name: "".to_string(),
+                params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
+                recursive: true,
+                variant_name: "".to_string(),
+            },
+            Air::ListClause {
+                scope: vec![0, 7].into(),
+                tipo: void(),
+                tail_name: "__list_to_check".to_string(),
+                next_tail_name: None,
+                complex_clause: false,
+            },
+            Air::Void {
+                scope: vec![0, 7, 5].into(),
+            },
+            Air::Void {
+                scope: vec![0, 7, 5, 6].into(),
+            },
+            Air::Builtin {
+                scope: vec![0, 7, 8].into(),
+                count: 2,
+                func: DefaultFunction::ChooseUnit,
+                tipo: void(),
+            },
+            Air::Call {
+                scope: vec![0, 7, 8, 4].into(),
+                count: 1,
+                tipo: void(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 4, 3].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: void(),
+                },
+                name: "__check_with".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Builtin {
+                scope: vec![0, 7, 8, 4, 2].into(),
+                count: 1,
+                func: DefaultFunction::HeadList,
+                tipo: data(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 4, 2, 1].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: list(data()),
+                },
+                name: "__list_to_check".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Call {
+                scope: vec![0, 7, 8, 13].into(),
+                count: 2,
+                tipo: void(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 13, 9].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: void(),
+                },
+                name: "__expect_on_list".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Builtin {
+                scope: vec![0, 7, 8, 13, 12].into(),
+                count: 1,
+                func: DefaultFunction::TailList,
+                tipo: list(data()),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 13, 12, 10].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: list(data()),
+                },
+                name: "__list_to_check".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 13, 11].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: void(),
+                },
+                name: "__check_with".to_string(),
+                variant_name: "".to_string(),
+            },
+        ];
+
+        assert_eq!(stack1.air, air_vec)
     }
 }
