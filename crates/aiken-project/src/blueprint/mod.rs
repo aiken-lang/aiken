@@ -5,18 +5,18 @@ pub mod validator;
 
 use crate::{config::Config, module::CheckedModules};
 use aiken_lang::gen_uplc::CodeGenerator;
-use definitions::{Definitions, Reference};
+use definitions::Definitions;
 use error::Error;
 use schema::{Annotated, Schema};
 use std::fmt::Debug;
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Blueprint<R: Default, S: Default> {
+pub struct Blueprint {
     pub preamble: Preamble,
-    pub validators: Vec<Validator<R, S>>,
+    pub validators: Vec<Validator>,
     #[serde(skip_serializing_if = "Definitions::is_empty", default)]
-    pub definitions: Definitions<S>,
+    pub definitions: Definitions<Annotated<Schema>>,
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -48,7 +48,7 @@ pub enum LookupResult<'a, T> {
     Many,
 }
 
-impl Blueprint<Reference, Annotated<Schema>> {
+impl Blueprint {
     pub fn new(
         config: &Config,
         modules: &CheckedModules,
@@ -82,12 +82,8 @@ impl Blueprint<Reference, Annotated<Schema>> {
     }
 }
 
-impl<R, S> Blueprint<R, S>
-where
-    R: Clone + Default,
-    S: Clone + Default,
-{
-    pub fn lookup(&self, title: Option<&String>) -> Option<LookupResult<Validator<R, S>>> {
+impl Blueprint {
+    pub fn lookup(&self, title: Option<&String>) -> Option<LookupResult<Validator>> {
         let mut validator = None;
 
         for v in self.validators.iter() {
@@ -112,7 +108,7 @@ where
         action: F,
     ) -> Result<A, E>
     where
-        F: Fn(Validator<R, S>) -> Result<A, E>,
+        F: Fn(Validator) -> Result<A, E>,
     {
         match self.lookup(title) {
             Some(LookupResult::One(validator)) => action(validator.to_owned()),
@@ -152,7 +148,7 @@ mod test {
 
     #[test]
     fn serialize_no_description() {
-        let blueprint: Blueprint<Reference, Annotated<Schema>> = Blueprint {
+        let blueprint = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: None,
@@ -179,7 +175,7 @@ mod test {
 
     #[test]
     fn serialize_with_description() {
-        let blueprint: Blueprint<Reference, Annotated<Schema>> = Blueprint {
+        let blueprint = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: Some("Lorem ipsum".to_string()),
@@ -227,7 +223,7 @@ mod test {
             )
             .unwrap();
 
-        let blueprint: Blueprint<Reference, Annotated<Schema>> = Blueprint {
+        let blueprint = Blueprint {
             preamble: Preamble {
                 title: "Foo".to_string(),
                 description: None,

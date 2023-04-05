@@ -13,44 +13,44 @@ use serde;
 use uplc::ast::{DeBruijn, Program, Term};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Validator<R, S> {
+pub struct Validator {
     pub title: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub datum: Option<Argument<R>>,
+    pub datum: Option<Argument>,
 
-    pub redeemer: Argument<R>,
+    pub redeemer: Argument,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub parameters: Vec<Argument<R>>,
+    pub parameters: Vec<Argument>,
 
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
 
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
-    pub definitions: Definitions<S>,
+    pub definitions: Definitions<Annotated<Schema>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Argument<T> {
+pub struct Argument {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
-    pub schema: T,
+    pub schema: Reference,
 }
 
-impl Validator<Reference, Annotated<Schema>> {
+impl Validator {
     pub fn from_checked_module(
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
         module: &CheckedModule,
         def: &TypedValidator,
-    ) -> Vec<Result<Validator<Reference, Annotated<Schema>>, Error>> {
+    ) -> Vec<Result<Validator, Error>> {
         let program = generator.generate(def).try_into().unwrap();
 
         let is_multi_validator = def.other_fun.is_some();
@@ -85,7 +85,7 @@ impl Validator<Reference, Annotated<Schema>> {
         params: &[TypedArg],
         func: &TypedFunction,
         is_multi_validator: bool,
-    ) -> Result<Validator<Reference, Annotated<Schema>>, Error> {
+    ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
@@ -160,11 +160,7 @@ impl Validator<Reference, Annotated<Schema>> {
     }
 }
 
-impl<R, S> Validator<R, S>
-where
-    S: Clone,
-    R: Clone,
-{
+impl Validator {
     pub fn apply(self, arg: &Term<DeBruijn>) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
