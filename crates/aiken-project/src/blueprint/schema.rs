@@ -34,8 +34,10 @@ pub enum Schema {
     Integer,
     Bytes,
     String,
-    Pair(Data, Data),
-    List(Vec<Data>),
+    // TODO: Generalize to work with either Reference or Data
+    Pair(Reference, Reference),
+    // TODO: Generalize to work with either Reference or Data
+    List(Items<Reference>),
     Data(Data),
 }
 
@@ -53,7 +55,7 @@ pub enum Data {
 }
 
 /// A structure that represents either one or many elements.
-#[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Items<T> {
     One(Box<T>),
@@ -514,6 +516,231 @@ impl Serialize for Schema {
     }
 }
 
+fn visit_schema<'a, V>(mut map: V) -> Result<Schema, V::Error>
+where
+    V: MapAccess<'a>,
+{
+    #[derive(serde::Deserialize)]
+    #[serde(field_identifier, rename_all = "camelCase")]
+    enum Field {
+        DataType,
+        Items,
+        Keys,
+        Values,
+        Left,
+        Right,
+        AnyOf,
+        OneOf,
+    }
+
+    let mut data_type: Option<String> = None;
+    let mut items: Option<Items<Reference>> = None;
+    let mut keys = None;
+    let mut left = None;
+    let mut right = None;
+    let mut values = None;
+    let mut any_of = None;
+
+    while let Some(key) = map.next_key()? {
+        match key {
+            Field::DataType => {
+                if data_type.is_some() {
+                    return Err(de::Error::duplicate_field("dataType"));
+                }
+                data_type = Some(map.next_value()?);
+            }
+            Field::Items => {
+                if items.is_some() {
+                    return Err(de::Error::duplicate_field("items"));
+                }
+                items = Some(map.next_value()?);
+            }
+            Field::Keys => {
+                if keys.is_some() {
+                    return Err(de::Error::duplicate_field("keys"));
+                }
+                keys = Some(map.next_value()?);
+            }
+            Field::Values => {
+                if values.is_some() {
+                    return Err(de::Error::duplicate_field("values"));
+                }
+                values = Some(map.next_value()?);
+            }
+            Field::Left => {
+                if left.is_some() {
+                    return Err(de::Error::duplicate_field("left"));
+                }
+                left = Some(map.next_value()?);
+            }
+            Field::Right => {
+                if right.is_some() {
+                    return Err(de::Error::duplicate_field("right"));
+                }
+                right = Some(map.next_value()?);
+            }
+            Field::AnyOf => {
+                if any_of.is_some() {
+                    return Err(de::Error::duplicate_field("anyOf/oneOf"));
+                }
+                any_of = Some(map.next_value()?);
+            }
+            Field::OneOf => {
+                if any_of.is_some() {
+                    return Err(de::Error::duplicate_field("anyOf/oneOf"));
+                }
+                any_of = Some(map.next_value()?);
+            }
+        }
+    }
+
+    let expect_no_items = || {
+        if items.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'items' for non-list data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_keys = || {
+        if keys.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'keys' for non-map data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_values = || {
+        if values.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'values' for non-map data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_any_of = || {
+        if any_of.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'anyOf' or 'oneOf'; applicators must singletons",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_left_or_right = || {
+        if left.is_some() || right.is_some() {
+            return Err(de::Error::custom(
+                "unexpected field(s) 'left' and/or 'right' for a non-pair data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    match data_type {
+        None => {
+            expect_no_items()?;
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_left_or_right()?;
+            match any_of {
+                None => Ok(Schema::Data(Data::Opaque)),
+                Some(constructors) => Ok(Schema::Data(Data::AnyOf(constructors))),
+            }
+        }
+        Some(data_type) if data_type == "list" || data_type == "#list" => {
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            match items {
+                Some(items) if data_type == "list" => Ok(Schema::Data(Data::List(items))),
+                Some(items) if data_type == "#list" => Ok(Schema::List(items)),
+                Some(_) => unreachable!("condition checked in pattern guard"),
+                None => Err(de::Error::missing_field("items")),
+            }
+        }
+        Some(data_type) if data_type == "map" => {
+            expect_no_items()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            match (keys, values) {
+                (Some(keys), Some(values)) => {
+                    Ok(Schema::Data(Data::Map(Box::new(keys), Box::new(values))))
+                }
+                (None, _) => Err(de::Error::missing_field("keys")),
+                (Some(..), None) => Err(de::Error::missing_field("values")),
+            }
+        }
+        Some(data_type) if data_type == "#pair" => {
+            expect_no_items()?;
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            match (left, right) {
+                (Some(left), Some(right)) => Ok(Schema::Pair(left, right)),
+                (None, _) => Err(de::Error::missing_field("left")),
+                (Some(..), None) => Err(de::Error::missing_field("right")),
+            }
+        }
+        Some(data_type) => {
+            expect_no_items()?;
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            if data_type == "bytes" {
+                Ok(Schema::Data(Data::Bytes))
+            } else if data_type == "integer" {
+                Ok(Schema::Data(Data::Integer))
+            } else if data_type == "#unit" {
+                Ok(Schema::Unit)
+            } else if data_type == "#integer" {
+                Ok(Schema::Integer)
+            } else if data_type == "#bytes" {
+                Ok(Schema::Bytes)
+            } else if data_type == "#boolean" {
+                Ok(Schema::Boolean)
+            } else if data_type == "#string" {
+                Ok(Schema::String)
+            } else {
+                Err(de::Error::custom("unknown data-type"))
+            }
+        }
+    }
+}
+
+impl<'a> Deserialize<'a> for Schema {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SchemaVisitor;
+
+        impl<'a> Visitor<'a> for SchemaVisitor {
+            type Value = Schema;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Schema")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Schema, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                visit_schema(&mut map)
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "Schema",
+            &[
+                "dataType", "items", "keys", "values", "anyOf", "oneOf", "left", "right",
+            ],
+            SchemaVisitor,
+        )
+    }
+}
+
 impl Serialize for Data {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -531,13 +758,7 @@ impl Serialize for Data {
                 s.serialize_field("dataType", "bytes")?;
                 s.end()
             }
-            Data::List(Items::One(item)) => {
-                let mut s = serializer.serialize_struct("List", 2)?;
-                s.serialize_field("dataType", "list")?;
-                s.serialize_field("items", &item)?;
-                s.end()
-            }
-            Data::List(Items::Many(items)) => {
+            Data::List(items) => {
                 let mut s = serializer.serialize_struct("List", 2)?;
                 s.serialize_field("dataType", "list")?;
                 s.serialize_field("items", &items)?;
@@ -561,18 +782,6 @@ impl Serialize for Data {
 
 impl<'a> Deserialize<'a> for Data {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(serde::Deserialize)]
-        #[serde(field_identifier, rename_all = "camelCase")]
-        enum Field {
-            DataType,
-            Items,
-            Keys,
-            Values,
-            AnyOf,
-            OneOf,
-        }
-        const FIELDS: &[&str] = &["dataType", "items", "keys", "values", "anyOf", "oneOf"];
-
         struct DataVisitor;
 
         impl<'a> Visitor<'a> for DataVisitor {
@@ -586,139 +795,19 @@ impl<'a> Deserialize<'a> for Data {
             where
                 V: MapAccess<'a>,
             {
-                let mut data_type: Option<String> = None;
-                let mut items: Option<Items<Reference>> = None;
-                let mut keys = None;
-                let mut values = None;
-                let mut any_of = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::DataType => {
-                            if data_type.is_some() {
-                                return Err(de::Error::duplicate_field(FIELDS[0]));
-                            }
-                            data_type = Some(map.next_value()?);
-                        }
-                        Field::Items => {
-                            if items.is_some() {
-                                return Err(de::Error::duplicate_field(FIELDS[1]));
-                            }
-                            items = Some(map.next_value()?);
-                        }
-                        Field::Keys => {
-                            if keys.is_some() {
-                                return Err(de::Error::duplicate_field(FIELDS[2]));
-                            }
-                            keys = Some(map.next_value()?);
-                        }
-                        Field::Values => {
-                            if values.is_some() {
-                                return Err(de::Error::duplicate_field(FIELDS[3]));
-                            }
-                            values = Some(map.next_value()?);
-                        }
-                        Field::AnyOf => {
-                            if any_of.is_some() {
-                                return Err(de::Error::duplicate_field(FIELDS[4]));
-                            }
-                            any_of = Some(map.next_value()?);
-                        }
-                        Field::OneOf => {
-                            if any_of.is_some() {
-                                return Err(de::Error::duplicate_field(FIELDS[5]));
-                            }
-                            any_of = Some(map.next_value()?);
-                        }
-                    }
-                }
-
-                let expect_no_items = || {
-                    if items.is_some() {
-                        return Err(de::Error::custom(
-                            "unexpected fields 'items' for non-list data-type",
-                        ));
-                    }
-                    Ok(())
-                };
-
-                let expect_no_keys = || {
-                    if keys.is_some() {
-                        return Err(de::Error::custom(
-                            "unexpected fields 'keys' for non-map data-type",
-                        ));
-                    }
-                    Ok(())
-                };
-
-                let expect_no_values = || {
-                    if values.is_some() {
-                        return Err(de::Error::custom(
-                            "unexpected fields 'values' for non-map data-type",
-                        ));
-                    }
-                    Ok(())
-                };
-
-                let expect_no_any_of = || {
-                    if any_of.is_some() {
-                        return Err(de::Error::custom(
-                            "unexpected fields 'anyOf' or 'oneOf'; applicators must singletons",
-                        ));
-                    }
-                    Ok(())
-                };
-
-                match data_type {
-                    None => {
-                        expect_no_items()?;
-                        expect_no_keys()?;
-                        expect_no_values()?;
-                        match any_of {
-                            None => Ok(Data::Opaque),
-                            Some(constructors) => Ok(Data::AnyOf(constructors)),
-                        }
-                    }
-                    Some(data_type) if data_type == "integer" => {
-                        expect_no_items()?;
-                        expect_no_keys()?;
-                        expect_no_values()?;
-                        expect_no_any_of()?;
-                        Ok(Data::Integer)
-                    }
-                    Some(data_type) if data_type == "bytes" => {
-                        expect_no_items()?;
-                        expect_no_keys()?;
-                        expect_no_values()?;
-                        expect_no_any_of()?;
-                        Ok(Data::Bytes)
-                    }
-                    Some(data_type) if data_type == "list" => {
-                        expect_no_keys()?;
-                        expect_no_values()?;
-                        expect_no_any_of()?;
-                        match items {
-                            None => Err(de::Error::missing_field(FIELDS[1])),
-                            Some(items) => Ok(Data::List(items)),
-                        }
-                    }
-                    Some(data_type) if data_type == "map" => {
-                        expect_no_items()?;
-                        expect_no_any_of()?;
-                        match (keys, values) {
-                            (Some(keys), Some(values)) => {
-                                Ok(Data::Map(Box::new(keys), Box::new(values)))
-                            }
-                            (None, _) => Err(de::Error::missing_field(FIELDS[2])),
-                            (Some(..), None) => Err(de::Error::missing_field(FIELDS[3])),
-                        }
-                    }
-                    Some(..) => Err(de::Error::custom("unknown data-type")),
+                let schema = visit_schema(&mut map)?;
+                match schema {
+                    Schema::Data(data) => Ok(data),
+                    _ => Err(de::Error::custom("not a valid 'data'")),
                 }
             }
         }
 
-        deserializer.deserialize_struct("Data", FIELDS, DataVisitor)
+        deserializer.deserialize_struct(
+            "Data",
+            &["dataType", "items", "keys", "values", "anyOf", "oneOf"],
+            DataVisitor,
+        )
     }
 }
 
@@ -1216,6 +1305,27 @@ pub mod test {
         ]
     }
 
+    fn arbitrary_schema() -> impl Strategy<Value = Schema> {
+        let r = prop_oneof![".*".prop_map(|s| Reference::new(&s))];
+        prop_compose! {
+            fn data_strategy()(data in arbitrary_data()) -> Schema {
+                Schema::Data(data)
+            }
+        }
+        prop_oneof![
+            Just(Schema::Unit),
+            Just(Schema::Boolean),
+            Just(Schema::Bytes),
+            Just(Schema::Integer),
+            Just(Schema::String),
+            (r.clone(), r.clone()).prop_map(|(l, r)| Schema::Pair(l, r)),
+            r.clone()
+                .prop_map(|x| Schema::List(Items::One(Box::new(x)))),
+            prop::collection::vec(r, 1..3).prop_map(|xs| Schema::List(Items::Many(xs))),
+            data_strategy(),
+        ]
+    }
+
     proptest! {
         #[test]
         fn data_serialization_roundtrip(data in arbitrary_data()) {
@@ -1227,6 +1337,24 @@ pub mod test {
             assert!(
                 matches!(
                     json.and_then(serde_json::from_value::<Data>),
+                    Ok{..}
+                ),
+                "\ncounterexample: {pretty}\n",
+            )
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn schema_serialization_roundtrip(schema in arbitrary_schema()) {
+            let json = serde_json::to_value(schema);
+            let pretty = json
+                    .as_ref()
+                    .map(|v| serde_json::to_string_pretty(v).unwrap())
+                    .unwrap_or_else(|_| "invalid".to_string());
+            assert!(
+                matches!(
+                    json.and_then(serde_json::from_value::<Schema>),
                     Ok{..}
                 ),
                 "\ncounterexample: {pretty}\n",
