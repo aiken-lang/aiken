@@ -55,6 +55,21 @@ fn pair_sub_type(type_info: Option<&Type>) -> Option<(&Type, &Type)> {
     }
 }
 
+pub fn escape(string: &str) -> String {
+    string
+        .chars()
+        .flat_map(|c| match c {
+            '\n' => vec!['\\', c],
+            '\r' => vec!['\\', c],
+            '\t' => vec!['\\', c],
+            '\'' => vec!['\\', c],
+            '\\' => vec!['\\', c],
+            '"' => vec!['\\', c],
+            _ => vec![c],
+        })
+        .collect::<String>()
+}
+
 peg::parser! {
     grammar uplc() for str {
         pub rule program() -> Program<Name>
