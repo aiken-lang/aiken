@@ -222,7 +222,7 @@ fn lambda_reduce(term: &mut Term<Name>) {
                 body,
             } = func
             {
-                if let replace_term @ (Term::Var(_) | Term::Constant(_)) = argument.as_ref() {
+                if let replace_term @ (Term::Var(_) | Term::Constant(_)) = arg{
                     let body = Rc::make_mut(body);
                     *term = substitute_term(body, parameter_name.clone(), replace_term);
                 }
