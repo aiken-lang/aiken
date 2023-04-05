@@ -269,7 +269,21 @@ impl AirStack {
             tipo: tipo.clone(),
         });
 
-        self.local_var(tipo.clone(), EXPECT_ON_LIST);
+        self.var(
+            ValueConstructor::public(
+                void(),
+                ValueConstructorVariant::ModuleFn {
+                    name: EXPECT_ON_LIST.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 2,
+                    location: Span::empty(),
+                    builtin: None,
+                },
+            ),
+            EXPECT_ON_LIST,
+            "",
+        );
 
         self.local_var(tipo, name);
 
@@ -707,7 +721,7 @@ impl AirStack {
         self.merge_child(value_stack);
     }
 
-    pub fn assert_on_list(&mut self) {
+    pub fn expect_on_list(&mut self) {
         let mut head_stack = self.empty_with_scope();
         let mut tail_stack = self.empty_with_scope();
         let mut check_with_stack = self.empty_with_scope();
@@ -740,7 +754,7 @@ impl AirStack {
 
         self.list_clause(
             void(),
-            "__list_to_check".to_string(),
+            "__list_to_check",
             None,
             false,
             void_stack,
@@ -748,11 +762,25 @@ impl AirStack {
 
         self.choose_unit(check_with_stack);
 
-        expect_stack.local_var(void(), EXPECT_ON_LIST.to_string());
+        expect_stack.var(
+            ValueConstructor::public(
+                void(),
+                ValueConstructorVariant::ModuleFn {
+                    name: EXPECT_ON_LIST.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 2,
+                    location: Span::empty(),
+                    builtin: None,
+                },
+            ),
+            EXPECT_ON_LIST,
+            "",
+        );
 
-        arg_stack1.local_var(list(data()), "__list_to_check".to_string());
+        arg_stack1.local_var(list(data()), "__list_to_check");
 
-        arg_stack2.local_var(void(), "__check_with".to_string());
+        arg_stack2.local_var(void(), "__check_with");
 
         tail_stack.builtin(DefaultFunction::TailList, list(data()), vec![arg_stack1]);
 
@@ -885,7 +913,7 @@ mod test {
             air: vec![],
         };
 
-        stack1.assert_on_list();
+        stack1.expect_on_list();
 
         println!("{:#?}", stack1);
 
@@ -959,13 +987,17 @@ mod test {
             },
             Air::Var {
                 scope: vec![0, 7, 8, 13, 9].into(),
-                constructor: ValueConstructor {
-                    public: true,
-                    variant: ValueConstructorVariant::LocalVariable {
+                constructor: ValueConstructor::public(
+                    void(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: "__expect_on_list".to_string(),
+                        field_map: None,
+                        module: "".to_string(),
+                        arity: 2,
                         location: Span::empty(),
+                        builtin: None,
                     },
-                    tipo: void(),
-                },
+                ),
                 name: "__expect_on_list".to_string(),
                 variant_name: "".to_string(),
             },

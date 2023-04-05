@@ -6,7 +6,7 @@ use uplc::{
     ast::{
         Constant as UplcConstant, DeBruijn, Name, NamedDeBruijn, Program, Term, Type as UplcType,
     },
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
     optimize::aiken_optimize_and_intern,
@@ -18,7 +18,7 @@ use crate::{
         ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
         TypedFunction, TypedValidator, UnOp,
     },
-    builtins::{bool, data},
+    builtins::{bool, data, void},
     expr::TypedExpr,
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -40,10 +40,9 @@ use builder::{
 use self::{builder::replace_opaque_type, scope::Scope, stack::AirStack};
 
 #[derive(Clone, Debug)]
-pub struct CodeGenFunction {
-    air: Vec<Air>,
-    dependencies: Vec<String>,
-    recursive: bool,
+pub enum CodeGenFunction {
+    Function(Vec<Air>, Vec<String>),
+    Link(String),
 }
 
 #[derive(Clone)]
@@ -147,7 +146,7 @@ impl<'a> CodeGenerator<'a> {
 
         term = self.wrap_validator_args(term, params, false);
 
-        self.finalize(term, true)
+        self.finalize(term)
     }
 
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
@@ -165,10 +164,10 @@ impl<'a> CodeGenerator<'a> {
 
         let term = self.uplc_code_gen(&mut ir_stack);
 
-        self.finalize(term, false)
+        self.finalize(term)
     }
 
-    fn finalize(&mut self, term: Term<Name>, wrap_as_validator: bool) -> Program<Name> {
+    fn finalize(&mut self, term: Term<Name>) -> Program<Name> {
         // let mut term = if self.used_data_assert_on_list {
         //     term.assert_on_list()
         // } else {
@@ -2274,6 +2273,21 @@ impl<'a> CodeGenerator<'a> {
             unwrap_function_stack
                 .anonymous_function(vec![format!("__pair_{new_id}")], pair_access_stack);
 
+            let function = self.code_gen_functions.get(EXPECT_ON_LIST);
+
+            if function.is_none() {
+                let mut expect_list_stack = expect_stack.empty_with_scope();
+
+                expect_list_stack.expect_on_list();
+                self.code_gen_functions.insert(
+                    EXPECT_ON_LIST.to_string(),
+                    CodeGenFunction::Function(
+                        expect_list_stack.complete(),
+                        vec!["__list_to_check".to_string(), "__check_with".to_string()],
+                    ),
+                );
+            }
+
             expect_stack.expect_list_from_data(tipo.clone(), name, unwrap_function_stack);
 
             expect_stack.void();
@@ -2299,6 +2313,21 @@ impl<'a> CodeGenerator<'a> {
 
             unwrap_function_stack
                 .anonymous_function(vec![format!("__list_item_{new_id}")], list_access_stack);
+
+            let function = self.code_gen_functions.get(EXPECT_ON_LIST);
+
+            if function.is_none() {
+                let mut expect_list_stack = expect_stack.empty_with_scope();
+
+                expect_list_stack.expect_on_list();
+                self.code_gen_functions.insert(
+                    EXPECT_ON_LIST.to_string(),
+                    CodeGenFunction::Function(
+                        expect_list_stack.complete(),
+                        vec!["__list_to_check".to_string(), "__check_with".to_string()],
+                    ),
+                );
+            }
 
             expect_stack.expect_list_from_data(tipo.clone(), name, unwrap_function_stack);
 
