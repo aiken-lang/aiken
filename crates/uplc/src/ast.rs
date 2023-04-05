@@ -1,23 +1,3 @@
-use std::{
-    fmt::{self, Display},
-    hash::{self, Hash},
-    rc::Rc,
-};
-
-use num_bigint::BigInt;
-use serde::{
-    self,
-    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
-    ser::{Serialize, SerializeStruct, Serializer},
-};
-
-use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
-use pallas_primitives::{
-    alonzo::PlutusData,
-    babbage::{self as cardano, Language},
-};
-use pallas_traverse::ComputeHash;
-
 use crate::{
     builtins::DefaultFunction,
     debruijn::{self, Converter},
@@ -27,6 +7,24 @@ use crate::{
         eval_result::EvalResult,
         Machine,
     },
+};
+use num_bigint::BigInt;
+use num_traits::ToPrimitive;
+use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
+use pallas_primitives::{
+    alonzo::{self as pallas, Constr, PlutusData},
+    babbage::{self as cardano, Language},
+};
+use pallas_traverse::ComputeHash;
+use serde::{
+    self,
+    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
+    ser::{Serialize, SerializeStruct, Serializer},
+};
+use std::{
+    fmt::{self, Display},
+    hash::{self, Hash},
+    rc::Rc,
 };
 
 /// This represents a program in Untyped Plutus Core.
@@ -237,6 +235,61 @@ pub enum Constant {
     // Apply(Box<Constant>, Type),
     // tag: 8
     Data(PlutusData),
+}
+
+pub struct Data {}
+
+// TODO: See about moving these builders upstream to Pallas?
+impl Data {
+    pub fn integer(i: BigInt) -> PlutusData {
+        match i.to_i64() {
+            Some(i) => PlutusData::BigInt(pallas::BigInt::Int(i.into())),
+            None => {
+                let (sign, bytes) = i.to_bytes_be();
+                match sign {
+                    num_bigint::Sign::Minus => {
+                        PlutusData::BigInt(pallas::BigInt::BigNInt(bytes.into()))
+                    }
+                    _ => PlutusData::BigInt(pallas::BigInt::BigUInt(bytes.into())),
+                }
+            }
+        }
+    }
+
+    pub fn bytestring(bytes: Vec<u8>) -> PlutusData {
+        PlutusData::BoundedBytes(bytes.into())
+    }
+
+    pub fn map(kvs: Vec<(PlutusData, PlutusData)>) -> PlutusData {
+        PlutusData::Map(kvs.into())
+    }
+
+    pub fn list(xs: Vec<PlutusData>) -> PlutusData {
+        PlutusData::Array(xs)
+    }
+
+    pub fn constr(ix: u64, fields: Vec<PlutusData>) -> PlutusData {
+        // NOTE: see https://github.com/input-output-hk/plutus/blob/9538fc9829426b2ecb0628d352e2d7af96ec8204/plutus-core/plutus-core/src/PlutusCore/Data.hs#L139-L155
+        if ix < 7 {
+            PlutusData::Constr(Constr {
+                tag: 121 + ix,
+                any_constructor: None,
+                fields,
+            })
+        } else if ix < 128 {
+            PlutusData::Constr(Constr {
+                tag: 1280 + ix - 7,
+                any_constructor: None,
+                fields,
+            })
+        } else {
+            PlutusData::Constr(Constr {
+                tag: 102,
+                any_constructor: Some(ix),
+                fields,
+            })
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
