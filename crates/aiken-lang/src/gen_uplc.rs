@@ -2876,49 +2876,31 @@ impl<'a> CodeGenerator<'a> {
             let mut skip = false;
 
             for ir in function_ir.clone() {
-                if let Air::Var {
-                    constructor:
-                        ValueConstructor {
-                            variant:
-                                ValueConstructorVariant::ModuleFn {
-                                    name: func_name,
-                                    module,
-                                    ..
-                                },
-                            ..
-                        },
-                    variant_name,
-                    ..
-                } = ir
+                let Air::Var {  constructor,  variant_name, .. } = ir
+                else {
+                    continue;
+                };
+
+                let ValueConstructorVariant::ModuleFn { name: func_name,  module, builtin: None, .. } = constructor.variant
+                else {
+                    continue;
+                };
+
+                let ir_function_key = FunctionAccessKey {
+                    module_name: module.clone(),
+                    function_name: func_name.clone(),
+                    variant_name: variant_name.clone(),
+                };
+
+                if recursion_func_map.contains_key(&FunctionAccessKey {
+                    module_name: module.clone(),
+                    function_name: func_name.clone(),
+                    variant_name: variant_name.clone(),
+                }) && func == &ir_function_key
                 {
-                    if recursion_func_map.contains_key(&FunctionAccessKey {
-                        module_name: module.clone(),
-                        function_name: func_name.clone(),
-                        variant_name: variant_name.clone(),
-                    }) && func.clone()
-                        == (FunctionAccessKey {
-                            module_name: module.clone(),
-                            function_name: func_name.clone(),
-                            variant_name: variant_name.clone(),
-                        })
-                    {
-                        skip = true;
-                    } else if func.clone()
-                        == (FunctionAccessKey {
-                            module_name: module.clone(),
-                            function_name: func_name.clone(),
-                            variant_name: variant_name.clone(),
-                        })
-                    {
-                        recursion_func_map_to_add.insert(
-                            FunctionAccessKey {
-                                module_name: module.clone(),
-                                function_name: func_name.clone(),
-                                variant_name: variant_name.clone(),
-                            },
-                            (),
-                        );
-                    }
+                    skip = true;
+                } else if func == &ir_function_key {
+                    recursion_func_map_to_add.insert(ir_function_key, ());
                 }
             }
 
