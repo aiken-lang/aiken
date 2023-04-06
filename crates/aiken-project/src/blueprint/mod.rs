@@ -142,7 +142,7 @@ impl From<&Config> for Preamble {
 mod test {
     use super::*;
     use aiken_lang::builtins;
-    use schema::{Data, Items, Schema};
+    use schema::{Data, Declaration, Items, Schema};
     use serde_json::{self, json};
     use std::collections::HashMap;
 
@@ -218,7 +218,10 @@ mod test {
                         &HashMap::new(),
                         |_| Ok(Schema::Data(Data::Bytes).into()),
                     )?;
-                    Ok(Schema::Data(Data::List(Items::One(Box::new(ref_bytes)))).into())
+                    Ok(
+                        Schema::Data(Data::List(Items::One(Declaration::Referenced(ref_bytes))))
+                            .into(),
+                    )
                 },
             )
             .unwrap();

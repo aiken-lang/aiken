@@ -11,6 +11,7 @@ use serde::{
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
     ser::{Serialize, SerializeStruct, Serializer},
 };
+use serde_json as json;
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use uplc::ast::Term;
 
@@ -27,6 +28,13 @@ pub struct Annotated<T> {
     pub annotated: T,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum Declaration<T> {
+    Referenced(Reference),
+    Inline(Box<T>),
+}
+
 /// A schema for low-level UPLC primitives.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Schema {
@@ -35,10 +43,8 @@ pub enum Schema {
     Integer,
     Bytes,
     String,
-    // TODO: Generalize to work with either Reference or Data
-    Pair(Reference, Reference),
-    // TODO: Generalize to work with either Reference or Data
-    List(Items<Reference>),
+    Pair(Declaration<Schema>, Declaration<Schema>),
+    List(Items<Schema>),
     Data(Data),
 }
 
@@ -47,10 +53,8 @@ pub enum Schema {
 pub enum Data {
     Integer,
     Bytes,
-    // TODO: Generalize to work with either Reference or Data
-    List(Items<Reference>),
-    // TODO: Generalize to work with either Reference or Data
-    Map(Box<Reference>, Box<Reference>),
+    List(Items<Data>),
+    Map(Declaration<Data>, Declaration<Data>),
     AnyOf(Vec<Annotated<Constructor>>),
     Opaque,
 }
@@ -59,8 +63,8 @@ pub enum Data {
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Items<T> {
-    One(Box<T>),
-    Many(Vec<T>),
+    One(Declaration<T>),
+    Many(Vec<Declaration<T>>),
 }
 
 /// Captures a single UPLC constructor with its
@@ -68,7 +72,7 @@ pub enum Items<T> {
 pub struct Constructor {
     pub index: usize,
     // TODO: Generalize to work with either Reference or Data
-    pub fields: Vec<Annotated<Reference>>,
+    pub fields: Vec<Annotated<Declaration<Data>>>,
 }
 
 impl<T> From<T> for Annotated<T> {
@@ -103,10 +107,10 @@ impl<'a, T> TryFrom<&'a Term<T>> for Schema {
                     PlutusData::BoundedBytes(..) => {
                         Data::Bytes
                     }
-                    PlutusData::Map(keyValuePair) => {
+                    PlutusData::Array(elems) => {
                         todo!()
                     }
-                    PlutusData::Array(elems) => {
+                    PlutusData::Map(keyValuePair) => {
                         todo!()
                     }
                     PlutusData::Constr(Constr{ tag, fields, any_constructor }) => {
@@ -141,7 +145,7 @@ impl Annotated<Schema> {
                         description: Some("A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.".to_string()),
                         annotated: Schema::Data(Data::AnyOf(vec![Constructor {
                             index: REDEEMER_DISCRIMINANT,
-                            fields: vec![schema.into()],
+                            fields: vec![Declaration::Referenced(schema).into()],
                         }
                         .into()])),
                     })
@@ -270,7 +274,7 @@ impl Annotated<Schema> {
                                         description: Some("An optional value.".to_string()),
                                         annotated: Constructor {
                                             index: 0,
-                                            fields: vec![generic.into()],
+                                            fields: vec![Declaration::Referenced(generic).into()],
                                         },
                                     },
                                     Annotated {
@@ -311,22 +315,15 @@ impl Annotated<Schema> {
                                 } if xs.len() == 2 => {
                                     definitions.remove(&generic);
                                     Data::Map(
-                                        Box::new(
-                                            xs.first()
-                                                .expect("length (== 2) checked in pattern clause")
-                                                .to_owned(),
-                                        ),
-                                        Box::new(
-                                            xs.last()
-                                                .expect("length (== 2) checked in pattern clause")
-                                                .to_owned(),
-                                        ),
+                                        xs.first()
+                                            .expect("length (== 2) checked in pattern clause")
+                                            .to_owned(),
+                                        xs.last()
+                                            .expect("length (== 2) checked in pattern clause")
+                                            .to_owned(),
                                     )
                                 }
-                                _ => {
-                                    // let inner = schema.clone().into_data(type_info)?.annotated;
-                                    Data::List(Items::One(Box::new(generic)))
-                                }
+                                _ => Data::List(Items::One(Declaration::Referenced(generic))),
                             };
 
                             Ok(Schema::Data(data).into())
@@ -371,6 +368,7 @@ impl Annotated<Schema> {
                         .iter()
                         .map(|elem| {
                             Annotated::do_from_type(elem, modules, type_parameters, definitions)
+                                .map(Declaration::Referenced)
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map_err(|e| e.backtrack(type_info))?;
@@ -449,7 +447,7 @@ impl Data {
                 fields.push(Annotated {
                     title: field.label.clone(),
                     description: field.doc.clone().map(|s| s.trim().to_string()),
-                    annotated: reference,
+                    annotated: Declaration::Referenced(reference),
                 });
             }
 
@@ -579,7 +577,7 @@ where
     }
 
     let mut data_type: Option<String> = None;
-    let mut items: Option<Items<Reference>> = None;
+    let mut items: Option<json::Value> = None; // defer items deserialization to later
     let mut keys = None;
     let mut left = None;
     let mut right = None;
@@ -639,6 +637,18 @@ where
         }
     }
 
+    let expect_data_items = || match &items {
+        Some(items) => serde_json::from_value::<Items<Data>>(items.clone())
+            .map_err(|e| de::Error::custom(e.to_string())),
+        None => Err(de::Error::missing_field("items")),
+    };
+
+    let expect_schema_items = || match &items {
+        Some(items) => serde_json::from_value::<Items<Schema>>(items.clone())
+            .map_err(|e| de::Error::custom(e.to_string())),
+        None => Err(de::Error::missing_field("items")),
+    };
+
     let expect_no_items = || {
         if items.is_some() {
             return Err(de::Error::custom(
@@ -695,26 +705,28 @@ where
                 Some(constructors) => Ok(Schema::Data(Data::AnyOf(constructors))),
             }
         }
-        Some(data_type) if data_type == "list" || data_type == "#list" => {
+        Some(data_type) if data_type == "list" => {
             expect_no_keys()?;
             expect_no_values()?;
             expect_no_any_of()?;
             expect_no_left_or_right()?;
-            match items {
-                Some(items) if data_type == "list" => Ok(Schema::Data(Data::List(items))),
-                Some(items) if data_type == "#list" => Ok(Schema::List(items)),
-                Some(_) => unreachable!("condition checked in pattern guard"),
-                None => Err(de::Error::missing_field("items")),
-            }
+            let items = expect_data_items()?;
+            Ok(Schema::Data(Data::List(items)))
+        }
+        Some(data_type) if data_type == "#list" => {
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            let items = expect_schema_items()?;
+            Ok(Schema::List(items))
         }
         Some(data_type) if data_type == "map" => {
             expect_no_items()?;
             expect_no_any_of()?;
             expect_no_left_or_right()?;
             match (keys, values) {
-                (Some(keys), Some(values)) => {
-                    Ok(Schema::Data(Data::Map(Box::new(keys), Box::new(values))))
-                }
+                (Some(keys), Some(values)) => Ok(Schema::Data(Data::Map(keys, values))),
                 (None, _) => Err(de::Error::missing_field("keys")),
                 (Some(..), None) => Err(de::Error::missing_field("values")),
             }
@@ -1069,7 +1081,7 @@ pub mod test {
     #[test]
     fn serialize_data_list_1() {
         let ref_integer = Reference::new("Int");
-        let schema = Schema::Data(Data::List(Items::One(Box::new(ref_integer))));
+        let schema = Schema::Data(Data::List(Items::One(Declaration::Referenced(ref_integer))));
         assert_json(
             &schema,
             json!({
@@ -1084,7 +1096,9 @@ pub mod test {
     #[test]
     fn serialize_data_list_2() {
         let ref_list_integer = Reference::new("List$Int");
-        let schema = Schema::Data(Data::List(Items::One(Box::new(ref_list_integer))));
+        let schema = Schema::Data(Data::List(Items::One(Declaration::Referenced(
+            ref_list_integer,
+        ))));
         assert_json(
             &schema,
             json!({
@@ -1098,9 +1112,9 @@ pub mod test {
 
     #[test]
     fn serialize_data_map_1() {
-        let ref_integer = Reference::new("Int");
-        let ref_bytes = Reference::new("ByteArray");
-        let schema = Schema::Data(Data::Map(Box::new(ref_integer), Box::new(ref_bytes)));
+        let ref_integer = Declaration::Referenced(Reference::new("Int"));
+        let ref_bytes = Declaration::Referenced(Reference::new("ByteArray"));
+        let schema = Schema::Data(Data::Map(ref_integer, ref_bytes));
         assert_json(
             &schema,
             json!({
@@ -1139,12 +1153,12 @@ pub mod test {
         let schema = Schema::Data(Data::AnyOf(vec![
             Constructor {
                 index: 0,
-                fields: vec![Reference::new("Int").into()],
+                fields: vec![Declaration::Referenced(Reference::new("Int")).into()],
             }
             .into(),
             Constructor {
                 index: 1,
-                fields: vec![Reference::new("Bytes").into()],
+                fields: vec![Declaration::Referenced(Reference::new("Bytes")).into()],
             }
             .into(),
         ]));
@@ -1236,7 +1250,7 @@ pub mod test {
     #[test]
     fn deserialize_data_list_one() {
         assert_eq!(
-            Data::List(Items::One(Box::new(Reference::new("foo")))),
+            Data::List(Items::One(Declaration::Referenced(Reference::new("foo")))),
             serde_json::from_value(json!({
                 "dataType": "list",
                 "items": { "$ref": "foo" }
@@ -1249,8 +1263,8 @@ pub mod test {
     fn deserialize_data_list_many() {
         assert_eq!(
             Data::List(Items::Many(vec![
-                Reference::new("foo"),
-                Reference::new("bar")
+                Declaration::Referenced(Reference::new("foo")),
+                Declaration::Referenced(Reference::new("bar"))
             ])),
             serde_json::from_value(json!({
                 "dataType": "list",
@@ -1267,8 +1281,8 @@ pub mod test {
     fn deserialize_data_map() {
         assert_eq!(
             Data::Map(
-                Box::new(Reference::new("foo")),
-                Box::new(Reference::new("bar"))
+                Declaration::Referenced(Reference::new("foo")),
+                Declaration::Referenced(Reference::new("bar"))
             ),
             serde_json::from_value(json!({
                 "dataType": "map",
@@ -1284,7 +1298,10 @@ pub mod test {
         assert_eq!(
             Data::AnyOf(vec![Constructor {
                 index: 0,
-                fields: vec![Reference::new("foo").into(), Reference::new("bar").into()],
+                fields: vec![
+                    Declaration::Referenced(Reference::new("foo")).into(),
+                    Declaration::Referenced(Reference::new("bar")).into()
+                ],
             }
             .into()]),
             serde_json::from_value(json!({
@@ -1309,7 +1326,10 @@ pub mod test {
         assert_eq!(
             Data::AnyOf(vec![Constructor {
                 index: 0,
-                fields: vec![Reference::new("foo").into(), Reference::new("bar").into()],
+                fields: vec![
+                    Declaration::Referenced(Reference::new("foo")).into(),
+                    Declaration::Referenced(Reference::new("bar")).into()
+                ],
             }
             .into()]),
             serde_json::from_value(json!({
@@ -1330,45 +1350,58 @@ pub mod test {
     }
 
     fn arbitrary_data() -> impl Strategy<Value = Data> {
-        let r = prop_oneof![".*".prop_map(|s| Reference::new(&s))];
-        let constructor =
-            (0..3usize, prop::collection::vec(r.clone(), 0..3)).prop_map(|(index, fields)| {
-                Constructor {
-                    index,
-                    fields: fields.into_iter().map(|f| f.into()).collect(),
-                }
-                .into()
-            });
-        prop_oneof![
-            Just(Data::Opaque),
-            Just(Data::Bytes),
-            Just(Data::Integer),
-            (r.clone(), r.clone()).prop_map(|(k, v)| Data::Map(Box::new(k), Box::new(v))),
-            r.clone().prop_map(|x| Data::List(Items::One(Box::new(x)))),
-            prop::collection::vec(r, 1..3).prop_map(|xs| Data::List(Items::Many(xs))),
-            prop::collection::vec(constructor, 1..3).prop_map(Data::AnyOf)
-        ]
+        let leaf = prop_oneof![Just(Data::Opaque), Just(Data::Bytes), Just(Data::Integer)];
+
+        leaf.prop_recursive(3, 8, 3, |inner| {
+            let r = prop_oneof![
+                ".*".prop_map(|s| Declaration::Referenced(Reference::new(&s))),
+                inner.prop_map(|s| Declaration::Inline(Box::new(s)))
+            ];
+            let constructor =
+                (0..3usize, prop::collection::vec(r.clone(), 0..3)).prop_map(|(index, fields)| {
+                    Constructor {
+                        index,
+                        fields: fields.into_iter().map(|f| f.into()).collect(),
+                    }
+                    .into()
+                });
+
+            prop_oneof![
+                (r.clone(), r.clone()).prop_map(|(k, v)| Data::Map(k, v)),
+                r.clone().prop_map(|x| Data::List(Items::One(x))),
+                prop::collection::vec(r, 1..3).prop_map(|xs| Data::List(Items::Many(xs))),
+                prop::collection::vec(constructor, 1..3).prop_map(Data::AnyOf)
+            ]
+        })
     }
 
     fn arbitrary_schema() -> impl Strategy<Value = Schema> {
-        let r = prop_oneof![".*".prop_map(|s| Reference::new(&s))];
         prop_compose! {
             fn data_strategy()(data in arbitrary_data()) -> Schema {
                 Schema::Data(data)
             }
         }
-        prop_oneof![
+
+        let leaf = prop_oneof![
             Just(Schema::Unit),
             Just(Schema::Boolean),
             Just(Schema::Bytes),
             Just(Schema::Integer),
             Just(Schema::String),
-            (r.clone(), r.clone()).prop_map(|(l, r)| Schema::Pair(l, r)),
-            r.clone()
-                .prop_map(|x| Schema::List(Items::One(Box::new(x)))),
-            prop::collection::vec(r, 1..3).prop_map(|xs| Schema::List(Items::Many(xs))),
             data_strategy(),
-        ]
+        ];
+
+        leaf.prop_recursive(3, 8, 3, |inner| {
+            let r = prop_oneof![
+                ".*".prop_map(|s| Declaration::Referenced(Reference::new(&s))),
+                inner.prop_map(|s| Declaration::Inline(Box::new(s)))
+            ];
+            prop_oneof![
+                (r.clone(), r.clone()).prop_map(|(l, r)| Schema::Pair(l, r)),
+                r.clone().prop_map(|x| Schema::List(Items::One(x))),
+                prop::collection::vec(r, 1..3).prop_map(|xs| Schema::List(Items::Many(xs))),
+            ]
+        })
     }
 
     proptest! {

@@ -226,7 +226,7 @@ mod test {
         super::{
             definitions::Definitions,
             error::Error,
-            schema::{Annotated, Data, Schema},
+            schema::{Annotated, Data, Declaration, Items, Schema},
         },
         *,
     };
