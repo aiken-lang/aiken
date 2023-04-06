@@ -1,10 +1,11 @@
 use std::{rc::Rc, sync::Arc};
 
 use indexmap::IndexSet;
+
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
-    ast::Span,
+    ast::{Arg, Span},
     builtins::{data, list, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
@@ -681,30 +682,31 @@ impl AirStack {
 
     pub fn define_func(
         &mut self,
-        func_name: String,
-        module_name: String,
-        variant_name: String,
+        func_name: impl ToString,
+        module_name: impl ToString,
+        variant_name: impl ToString,
         params: Vec<String>,
         recursive: bool,
         body_stack: AirStack,
     ) {
         self.air.push(Air::DefineFunc {
             scope: self.scope.clone(),
-            func_name,
-            module_name,
+            func_name: func_name.to_string(),
+            module_name: module_name.to_string(),
             params,
             recursive,
-            variant_name,
+            variant_name: variant_name.to_string(),
         });
 
         self.merge_child(body_stack);
     }
 
-    pub fn noop(&mut self) {
+    pub fn validator(&mut self, params: Vec<Arg<Arc<Type>>>) {
         self.new_scope();
 
-        self.air.push(Air::Noop {
+        self.air.push(Air::Validator {
             scope: self.scope.clone(),
+            params,
         });
     }
 
@@ -752,13 +754,7 @@ impl AirStack {
         void_stack.void();
         void_stack.void();
 
-        self.list_clause(
-            void(),
-            "__list_to_check",
-            None,
-            false,
-            void_stack,
-        );
+        self.list_clause(void(), "__list_to_check", None, false, void_stack);
 
         self.choose_unit(check_with_stack);
 

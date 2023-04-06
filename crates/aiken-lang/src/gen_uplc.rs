@@ -18,7 +18,7 @@ use crate::{
         ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
         TypedFunction, TypedValidator, UnOp,
     },
-    builtins::{bool, data, void},
+    builtins::{bool, data},
     expr::TypedExpr,
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -97,7 +97,7 @@ impl<'a> CodeGenerator<'a> {
     ) -> Program<Name> {
         let mut ir_stack = AirStack::new(self.id_gen.clone());
 
-        ir_stack.noop();
+        ir_stack.validator(fun.arguments.clone());
 
         self.build(&fun.body, &mut ir_stack);
 
@@ -109,16 +109,11 @@ impl<'a> CodeGenerator<'a> {
 
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
-        // Wrap the validator body if ifThenElse term unit error
-        term = term.final_wrapper();
-
-        term = self.wrap_validator_args(term, &fun.arguments, true);
-
         if let Some(other) = other_fun {
             self.reset();
 
             let mut other_ir_stack = AirStack::new(self.id_gen.clone());
-            other_ir_stack.noop();
+            other_ir_stack.validator(other.arguments.clone());
 
             self.build(&other.body, &mut other_ir_stack);
 
@@ -144,7 +139,7 @@ impl<'a> CodeGenerator<'a> {
             self.needs_field_access = true;
         }
 
-        term = self.wrap_validator_args(term, params, false);
+        term = builder::wrap_validator_args(term, params);
 
         self.finalize(term)
     }
@@ -152,7 +147,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
         let mut ir_stack = AirStack::new(self.id_gen.clone());
 
-        ir_stack.noop();
+        ir_stack.validator(vec![]);
 
         self.build(test_body, &mut ir_stack);
 
@@ -1647,8 +1642,6 @@ impl<'a> CodeGenerator<'a> {
                 {
                     let mut expect_stack = pattern_stack.empty_with_scope();
 
-                    println!("GETTING 2 HERE");
-
                     self.expect_pattern(
                         pattern,
                         &mut expect_stack,
@@ -1991,7 +1984,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Var { name, .. } => {
                 expect_stack.merge(value_stack);
 
-                self.expect_type(tipo, expect_stack, name);
+                self.expect_type(tipo, expect_stack, name, &mut IndexMap::new());
             }
             Pattern::Assign { .. } => todo!(),
             Pattern::Discard { .. } => unreachable!(),
@@ -2044,7 +2037,14 @@ impl<'a> CodeGenerator<'a> {
                     format!("__tail_{}", self.id_gen.next())
                 };
 
-                self.expect_type(inner_list_type, &mut tail_stack, &name);
+                self.expect_type(
+                    inner_list_type,
+                    &mut tail_stack,
+                    &name,
+                    &mut IndexMap::new(),
+                );
+
+                expect_list_stacks.push(tail_stack);
 
                 names.push(name);
 
@@ -2126,6 +2126,7 @@ impl<'a> CodeGenerator<'a> {
                             type_map.get(&index).unwrap(),
                             &mut stacks,
                             &format!("__field_{index}_{id_next}"),
+                            &mut IndexMap::new(),
                         )
                     }
                 }
@@ -2207,6 +2208,7 @@ impl<'a> CodeGenerator<'a> {
                             type_map.get(&index).unwrap(),
                             &mut stacks,
                             &format!("__tuple_{index}_{id_next}"),
+                            &mut IndexMap::new(),
                         )
                     }
                 }
@@ -2223,7 +2225,13 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    fn expect_type(&mut self, tipo: &Type, expect_stack: &mut AirStack, name: &str) {
+    fn expect_type(
+        &mut self,
+        tipo: &Type,
+        expect_stack: &mut AirStack,
+        name: &str,
+        defined_data_types: &mut IndexMap<String, u64>,
+    ) {
         let mut tipo = tipo.clone().into();
         builder::replace_opaque_type(&mut tipo, self.data_types.clone());
 
@@ -2262,12 +2270,14 @@ impl<'a> CodeGenerator<'a> {
                 &inner_pair_types[0],
                 &mut pair_access_stack,
                 &format!("__pair_fst_{}", id_pair.0),
+                defined_data_types,
             );
 
             self.expect_type(
                 &inner_pair_types[1],
                 &mut pair_access_stack,
                 &format!("__pair_snd_{}", id_pair.1),
+                defined_data_types,
             );
 
             unwrap_function_stack
@@ -2309,6 +2319,7 @@ impl<'a> CodeGenerator<'a> {
                 inner_list_type,
                 &mut list_access_stack,
                 &format!("__list_item_{new_id}"),
+                defined_data_types,
             );
 
             unwrap_function_stack
@@ -2355,7 +2366,12 @@ impl<'a> CodeGenerator<'a> {
                 .into_iter()
                 .map(|(index, id)| (index, format!("__tuple_index_{index}_{id}")))
             {
-                self.expect_type(&tuple_inner_types[index], expect_stack, &name);
+                self.expect_type(
+                    &tuple_inner_types[index],
+                    expect_stack,
+                    &name,
+                    defined_data_types,
+                );
             }
         } else {
             let data_type =
@@ -2363,82 +2379,150 @@ impl<'a> CodeGenerator<'a> {
 
             let new_id = self.id_gen.next();
 
-            let mut clause_stack = expect_stack.empty_with_scope();
-            let mut when_stack = expect_stack.empty_with_scope();
-            let mut trace_stack = expect_stack.empty_with_scope();
-            let mut subject_stack = expect_stack.empty_with_scope();
+            let mut var_stack = expect_stack.empty_with_scope();
+            let mut func_stack = expect_stack.empty_with_scope();
+            let mut call_stack = expect_stack.empty_with_scope();
 
-            for (index, constr) in data_type.constructors.iter().enumerate() {
-                let arg_indices = constr
-                    .arguments
-                    .iter()
-                    .enumerate()
-                    .map(|(index, arg)| {
-                        let arg_name = arg
-                            .label
-                            .clone()
-                            .unwrap_or(format!("__field_{index}_{new_id}"));
+            let data_type_name = format!("__expect_{}", data_type.name);
 
-                        (index, arg_name, arg.tipo.clone())
-                    })
-                    .collect_vec();
+            let function = self.code_gen_functions.get(&data_type_name);
 
-                let mut arg_stack = expect_stack.empty_with_scope();
+            if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
+                defined_data_types.insert(data_type_name.clone(), 1);
 
-                let mut arg_stack = if !arg_indices.is_empty() {
-                    let mut field_expose_stack = expect_stack.empty_with_scope();
+                let mut clause_stack = expect_stack.empty_with_scope();
+                let mut when_stack = expect_stack.empty_with_scope();
+                let mut trace_stack = expect_stack.empty_with_scope();
+                let mut subject_stack = expect_stack.empty_with_scope();
+                let mut data_type_stack = expect_stack.empty_with_scope();
 
-                    field_expose_stack.integer(index.to_string());
+                for (index, constr) in data_type.constructors.iter().enumerate() {
+                    let arg_indices = constr
+                        .arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, arg)| {
+                            let arg_name = arg
+                                .label
+                                .clone()
+                                .unwrap_or(format!("__field_{index}_{new_id}"));
 
-                    arg_stack.local_var(tipo.clone(), name);
+                            (index, arg_name, arg.tipo.clone())
+                        })
+                        .collect_vec();
 
-                    field_expose_stack.fields_expose(arg_indices.clone(), true, arg_stack);
+                    let mut arg_stack = expect_stack.empty_with_scope();
 
-                    field_expose_stack
-                } else {
-                    let mut var_stack = expect_stack.empty_with_scope();
+                    let mut arg_stack = if !arg_indices.is_empty() {
+                        let mut field_expose_stack = expect_stack.empty_with_scope();
 
-                    var_stack.local_var(tipo.clone(), name);
+                        field_expose_stack.integer(index.to_string());
 
-                    arg_stack.integer(index.to_string());
+                        arg_stack.local_var(tipo.clone(), name);
 
-                    arg_stack.fields_empty(var_stack);
+                        field_expose_stack.fields_expose(arg_indices.clone(), true, arg_stack);
 
-                    arg_stack
-                };
+                        field_expose_stack
+                    } else {
+                        let mut var_stack = expect_stack.empty_with_scope();
 
-                for (_index, name, tipo) in arg_indices {
-                    self.expect_type(&tipo, &mut arg_stack, &name);
+                        var_stack.local_var(tipo.clone(), name);
+
+                        arg_stack.integer(index.to_string());
+
+                        arg_stack.fields_empty(var_stack);
+
+                        arg_stack
+                    };
+
+                    for (_index, name, tipo) in arg_indices.clone() {
+                        let mut call_stack = expect_stack.empty_with_scope();
+                        let mut inner_defined_types = IndexMap::new();
+
+                        self.expect_type(&tipo, &mut call_stack, &name, &mut inner_defined_types);
+
+                        arg_stack.merge_child(call_stack);
+
+                        for (inner_data_type, inner_count) in inner_defined_types {
+                            if let Some(count) = defined_data_types.get_mut(&inner_data_type) {
+                                *count += inner_count
+                            } else {
+                                defined_data_types.insert(inner_data_type, inner_count);
+                            }
+                        }
+                    }
+
+                    arg_stack.void();
+
+                    clause_stack.clause(
+                        tipo.clone(),
+                        format!("__subject_{new_id}"),
+                        false,
+                        arg_stack,
+                    );
                 }
 
-                arg_stack.void();
+                trace_stack.trace(tipo.clone());
 
-                clause_stack.clause(
+                trace_stack.string("Constr index did not match any type variant");
+
+                trace_stack.error(tipo.clone());
+
+                subject_stack.local_var(tipo.clone(), name);
+
+                when_stack.when(
                     tipo.clone(),
                     format!("__subject_{new_id}"),
-                    false,
-                    arg_stack,
+                    subject_stack,
+                    clause_stack,
+                    trace_stack,
+                );
+
+                let recursive = *defined_data_types.get(&data_type_name).unwrap() >= 1;
+
+                data_type_stack.define_func(
+                    &data_type_name,
+                    "",
+                    "",
+                    vec![name.to_string()],
+                    recursive,
+                    when_stack,
+                );
+
+                self.code_gen_functions.insert(
+                    data_type_name.clone(),
+                    CodeGenFunction::Function(
+                        data_type_stack.complete(),
+                        defined_data_types
+                            .keys()
+                            .cloned()
+                            .filter(|x| x != &data_type_name)
+                            .collect_vec(),
+                    ),
                 );
             }
 
-            trace_stack.trace(tipo.clone());
-
-            trace_stack.string("Constr index did not match any type variant");
-
-            trace_stack.error(tipo.clone());
-
-            subject_stack.local_var(tipo.clone(), name);
-
-            when_stack.when(
-                tipo.clone(),
-                format!("__subject_{new_id}"),
-                subject_stack,
-                clause_stack,
-                trace_stack,
+            func_stack.var(
+                ValueConstructor::public(
+                    tipo.clone(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: data_type_name.to_string(),
+                        field_map: None,
+                        module: "".to_string(),
+                        arity: 1,
+                        location: Span::empty(),
+                        builtin: None,
+                    },
+                ),
+                data_type_name,
+                "",
             );
 
-            // Only used here
-            expect_stack.expect_constr_from_data(tipo.clone(), when_stack);
+            var_stack.local_var(tipo.clone(), name);
+
+            call_stack.call(tipo.clone(), func_stack, vec![var_stack]);
+
+            expect_stack.expect_constr_from_data(tipo, call_stack);
         }
     }
 
@@ -4831,7 +4915,15 @@ impl<'a> CodeGenerator<'a> {
                 }
                 arg_stack.push(term);
             }
-            Air::Noop { .. } => {}
+            Air::Validator { params, .. } => {
+                // Wrap the validator body if ifThenElse term unit error
+                let mut term = arg_stack.pop().unwrap();
+                term = term.final_wrapper();
+
+                term = self.wrap_validator_args(term, &params, true);
+
+                arg_stack.push(term);
+            }
         }
     }
 
@@ -4854,9 +4946,8 @@ impl<'a> CodeGenerator<'a> {
                 param_stack.local_var(data(), arg.arg_name.get_variable_name().unwrap_or("_"));
 
                 let mut actual_type = arg.tipo.clone();
-                println!("GETTING HERE");
+
                 replace_opaque_type(&mut actual_type, self.data_types.clone());
-                println!("ALSO HERE. TYPE IS {:#?}", actual_type);
 
                 self.assignment(
                     &Pattern::Var {
@@ -4875,8 +4966,6 @@ impl<'a> CodeGenerator<'a> {
                     actual_type,
                     arg.arg_name.get_variable_name().unwrap_or("_").to_string(),
                 );
-
-                println!("CONTINUING HERE");
 
                 let mut air_vec = air_stack.complete();
 
