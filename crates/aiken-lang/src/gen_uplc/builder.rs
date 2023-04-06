@@ -32,6 +32,7 @@ pub struct FuncComponents {
     pub args: Vec<String>,
     pub recursive: bool,
     pub defined_by_zero_arg: bool,
+    pub is_code_gen_func: bool,
 }
 
 #[derive(Clone, Eq, Debug, PartialEq, Hash)]
