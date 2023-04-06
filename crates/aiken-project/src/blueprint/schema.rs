@@ -12,6 +12,7 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
+use uplc::ast::Term;
 
 // NOTE: Can be anything BUT 0
 pub const REDEEMER_DISCRIMINANT: usize = 1;
@@ -76,6 +77,50 @@ impl<T> From<T> for Annotated<T> {
             title: None,
             description: None,
             annotated,
+        }
+    }
+}
+
+impl<'a, T> TryFrom<&'a Term<T>> for Schema {
+    type Error = &'a str;
+
+    fn try_from(term: &'a Term<T>) -> Result<Schema, Self::Error> {
+        use uplc::{ast::Constant, Constr, PlutusData};
+
+        match term {
+            Term::Constant(constant) => match constant.deref() {
+                Constant::Integer(..) => Ok(Schema::Integer),
+                Constant::Bool(..) => Ok(Schema::Boolean),
+                Constant::ByteString(..) => Ok(Schema::Bytes),
+                Constant::String(..) => Ok(Schema::String),
+                Constant::Unit => Ok(Schema::Unit),
+                Constant::ProtoList{..} => todo!("can't convert from ProtoList to Schema; note that you probably want to use a Data's list instead anyway."),
+                Constant::ProtoPair{..} => todo!("can't convert from ProtoPair to Schema; note that you probably want to use a Data's list instead anyway."),
+                Constant::Data(data) => Ok(Schema::Data(match data {
+                    PlutusData::BigInt(..) => {
+                        Data::Integer
+                    }
+                    PlutusData::BoundedBytes(..) => {
+                        Data::Bytes
+                    }
+                    PlutusData::Map(keyValuePair) => {
+                        todo!()
+                    }
+                    PlutusData::Array(elems) => {
+                        todo!()
+                    }
+                    PlutusData::Constr(Constr{ tag, fields, any_constructor }) => {
+                        todo!()
+                    }
+                }))
+            },
+            Term::Delay(..)
+            | Term::Lambda { .. }
+            | Term::Var(..)
+            | Term::Apply { .. }
+            | Term::Force(..)
+            | Term::Error
+            | Term::Builtin(..) => Err("not a UPLC constant"),
         }
     }
 }

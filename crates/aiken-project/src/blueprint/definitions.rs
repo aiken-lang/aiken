@@ -95,14 +95,14 @@ impl Reference {
     }
 
     /// Turn a reference into a key suitable for lookup.
-    fn as_key(&self) -> &str {
+    pub(crate) fn as_key(&self) -> &str {
         self.inner.as_str()
     }
 
     /// Turn a reference into a valid JSON pointer. Note that the JSON pointer specification
     /// indicates that '/' must be escaped as '~1' in pointer addresses (as they are otherwise
     /// treated as path delimiter in pointers paths).
-    fn as_json_pointer(&self) -> String {
+    pub(crate) fn as_json_pointer(&self) -> String {
         format!("#/definitions/{}", self.as_key().replace('/', "~1"))
     }
 }

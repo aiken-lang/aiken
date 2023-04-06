@@ -6,11 +6,13 @@ use super::{
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{
     ast::{TypedArg, TypedFunction, TypedValidator},
+    builtins,
     gen_uplc::CodeGenerator,
 };
 use miette::NamedSource;
 use serde;
-use uplc::ast::{DeBruijn, Program, Term};
+use std::{borrow::Borrow, collections::HashMap};
+use uplc::ast::{Constant, DeBruijn, Program, Term};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator {
@@ -42,6 +44,48 @@ pub struct Argument {
     pub title: Option<String>,
 
     pub schema: Reference,
+}
+
+impl From<Reference> for Argument {
+    fn from(schema: Reference) -> Argument {
+        Argument {
+            title: None,
+            schema,
+        }
+    }
+}
+
+impl Argument {
+    pub fn validate(
+        &self,
+        definitions: &Definitions<Annotated<Schema>>,
+        term: &Term<DeBruijn>,
+    ) -> Result<(), Error> {
+        let expected_schema = &definitions
+            .lookup(&self.schema)
+            .map(Ok)
+            .unwrap_or_else(|| {
+                Err(Error::UnresolvedSchemaReference {
+                    reference: self.schema.clone(),
+                })
+            })?
+            .annotated;
+
+        let inferred_schema: Schema =
+            term.try_into()
+                .map_err(|hint: &str| Error::UnableToInferArgumentSchema {
+                    hint: hint.to_owned(),
+                })?;
+
+        if expected_schema != &inferred_schema {
+            Err(Error::SchemaMismatch {
+                expected: expected_schema.to_owned(),
+                inferred: inferred_schema,
+            })
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl Validator {
@@ -164,8 +208,8 @@ impl Validator {
     pub fn apply(self, arg: &Term<DeBruijn>) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
-            Some((_, tail)) => {
-                // TODO: Ideally, we should control that the applied term matches its schema.
+            Some((head, tail)) => {
+                head.validate(&self.definitions, arg)?;
                 Ok(Self {
                     program: self.program.apply_term(arg),
                     parameters: tail.to_vec(),
@@ -178,7 +222,14 @@ impl Validator {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::{
+        super::{
+            definitions::Definitions,
+            error::Error,
+            schema::{Annotated, Data, Schema},
+        },
+        *,
+    };
     use crate::{module::ParsedModule, PackageName};
     use aiken_lang::{
         self,
@@ -193,6 +244,7 @@ mod test {
     use indexmap::IndexMap;
     use serde_json::{self, json};
     use std::{collections::HashMap, path::PathBuf};
+    use uplc::ast as uplc;
 
     // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
     // be to make this struct below the actual project, and wrap it in another metadata struct
@@ -312,6 +364,24 @@ mod test {
         println!("{}", serde_json::to_string_pretty(validator).unwrap());
 
         assert_json_eq!(serde_json::to_value(validator).unwrap(), expected);
+    }
+
+    fn fixture_definitions() -> Definitions<Annotated<Schema>> {
+        let mut definitions = Definitions::new();
+
+        definitions
+            .register::<_, Error>(&builtins::int(), &HashMap::new(), |_| {
+                Ok(Schema::Data(Data::Integer).into())
+            })
+            .unwrap();
+
+        definitions
+            .register::<_, Error>(&builtins::byte_array(), &HashMap::new(), |_| {
+                Ok(Schema::Data(Data::Bytes).into())
+            })
+            .unwrap();
+
+        definitions
     }
 
     #[test]
@@ -1091,5 +1161,28 @@ mod test {
               }
             }),
         )
+    }
+
+    #[test]
+    fn validate_arguments_integer() {
+        let term = Term::data(uplc::Data::integer(42.into()));
+        let definitions = fixture_definitions();
+        let arg = Argument {
+            title: None,
+            schema: Reference::new("Int"),
+        };
+
+        assert!(matches!(arg.validate(&definitions, &term), Ok { .. }))
+    }
+    #[test]
+    fn validate_arguments_bytestring() {
+        let term = Term::data(uplc::Data::bytestring(vec![102, 111, 111]));
+        let definitions = fixture_definitions();
+        let arg = Argument {
+            title: None,
+            schema: Reference::new("ByteArray"),
+        };
+
+        assert!(matches!(arg.validate(&definitions, &term), Ok { .. }))
     }
 }
