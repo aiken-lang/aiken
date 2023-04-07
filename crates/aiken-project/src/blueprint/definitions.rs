@@ -53,6 +53,12 @@ impl<T> Definitions<T> {
         self.inner.remove(reference.as_key());
     }
 
+    /// Insert a new definition
+    pub fn insert(&mut self, reference: &Reference, schema: T) {
+        self.inner
+            .insert(reference.as_key().to_string(), Some(schema));
+    }
+
     /// Register a new definition only if it doesn't exist. This uses a strategy of
     /// mark-and-insert such that recursive definitions are only built once.
     pub fn register<F, E>(

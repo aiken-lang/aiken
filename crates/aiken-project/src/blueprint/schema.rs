@@ -13,7 +13,6 @@ use serde::{
 };
 use serde_json as json;
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
-use uplc::ast::Term;
 
 // NOTE: Can be anything BUT 0
 pub const REDEEMER_DISCRIMINANT: usize = 1;
@@ -33,6 +32,43 @@ pub struct Annotated<T> {
 pub enum Declaration<T> {
     Referenced(Reference),
     Inline(Box<T>),
+}
+
+impl<'a, T> Declaration<T> {
+    pub fn reference(&'a self) -> Option<&'a Reference> {
+        match self {
+            Declaration::Referenced(reference) => Some(reference),
+            Declaration::Inline(..) => None,
+        }
+    }
+
+    fn try_schema(
+        &'a self,
+        definitions: &'a Definitions<Annotated<Schema>>,
+        cast: fn(&'a Schema) -> Option<&'a T>,
+    ) -> Option<&'a T> {
+        match self {
+            Declaration::Inline(inner) => Some(inner.deref()),
+            Declaration::Referenced(reference) => definitions
+                .lookup(reference)
+                .and_then(|s| cast(&s.annotated)),
+        }
+    }
+}
+
+impl<'a> Declaration<Data> {
+    pub fn schema(&'a self, definitions: &'a Definitions<Annotated<Schema>>) -> Option<&'a Data> {
+        self.try_schema(definitions, |s| match s {
+            Schema::Data(data) => Some(data),
+            _ => None,
+        })
+    }
+}
+
+impl<'a> Declaration<Schema> {
+    pub fn schema(&'a self, definitions: &'a Definitions<Annotated<Schema>>) -> Option<&'a Schema> {
+        self.try_schema(definitions, Some)
+    }
 }
 
 /// A schema for low-level UPLC primitives.
@@ -71,7 +107,6 @@ pub enum Items<T> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Constructor {
     pub index: usize,
-    // TODO: Generalize to work with either Reference or Data
     pub fields: Vec<Annotated<Declaration<Data>>>,
 }
 
@@ -81,50 +116,6 @@ impl<T> From<T> for Annotated<T> {
             title: None,
             description: None,
             annotated,
-        }
-    }
-}
-
-impl<'a, T> TryFrom<&'a Term<T>> for Schema {
-    type Error = &'a str;
-
-    fn try_from(term: &'a Term<T>) -> Result<Schema, Self::Error> {
-        use uplc::{ast::Constant, Constr, PlutusData};
-
-        match term {
-            Term::Constant(constant) => match constant.deref() {
-                Constant::Integer(..) => Ok(Schema::Integer),
-                Constant::Bool(..) => Ok(Schema::Boolean),
-                Constant::ByteString(..) => Ok(Schema::Bytes),
-                Constant::String(..) => Ok(Schema::String),
-                Constant::Unit => Ok(Schema::Unit),
-                Constant::ProtoList{..} => todo!("can't convert from ProtoList to Schema; note that you probably want to use a Data's list instead anyway."),
-                Constant::ProtoPair{..} => todo!("can't convert from ProtoPair to Schema; note that you probably want to use a Data's list instead anyway."),
-                Constant::Data(data) => Ok(Schema::Data(match data {
-                    PlutusData::BigInt(..) => {
-                        Data::Integer
-                    }
-                    PlutusData::BoundedBytes(..) => {
-                        Data::Bytes
-                    }
-                    PlutusData::Array(elems) => {
-                        todo!()
-                    }
-                    PlutusData::Map(keyValuePair) => {
-                        todo!()
-                    }
-                    PlutusData::Constr(Constr{ tag, fields, any_constructor }) => {
-                        todo!()
-                    }
-                }))
-            },
-            Term::Delay(..)
-            | Term::Lambda { .. }
-            | Term::Var(..)
-            | Term::Apply { .. }
-            | Term::Force(..)
-            | Term::Error
-            | Term::Builtin(..) => Err("not a UPLC constant"),
         }
     }
 }

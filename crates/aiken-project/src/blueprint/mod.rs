@@ -1,5 +1,6 @@
 pub mod definitions;
 pub mod error;
+pub mod parameter;
 pub mod schema;
 pub mod validator;
 

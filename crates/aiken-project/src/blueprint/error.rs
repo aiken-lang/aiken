@@ -6,6 +6,7 @@ use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::fmt::Debug;
+use uplc::ast::{DeBruijn, Term};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
@@ -65,11 +66,25 @@ pub enum Error {
     #[error("I caught a parameter application that seems off.")]
     #[diagnostic(code("aiken::blueprint::apply::mismatch"))]
     #[diagnostic(help(
-        "When applying parameters to a validator, I control that the shape of the parameter you give me matches what is specified in the blueprint. Unfortunately, schemas didn't match in this case.\n\nI am expecting the following:\n\n{}But I've inferred the following schema from your input:\n\n{}",
-        serde_json::to_string_pretty(&expected).unwrap().if_supports_color(Stdout, |s| s.green()),
-        serde_json::to_string_pretty(&inferred).unwrap().if_supports_color(Stdout, |s| s.red()),
+        "When applying parameters to a validator, I control that the shape of the parameter you give me matches what is specified in the blueprint. Unfortunately, schemas didn't match in this case.\n\nI am expecting something of the shape:\n\n{}Which I couldn't match against the following term:\n\n{}\n\nNote that this may only represent part of a bigger whole.",
+        serde_json::to_string_pretty(&schema).unwrap().if_supports_color(Stdout, |s| s.green()),
+        term.to_pretty().if_supports_color(Stdout, |s| s.red()),
     ))]
-    SchemaMismatch { expected: Schema, inferred: Schema },
+    SchemaMismatch {
+        schema: Schema,
+        term: Term<DeBruijn>,
+    },
+
+    #[error(
+        "I discovered a discrepancy of elements between a given tuple and its declared schema."
+    )]
+    #[diagnostic(code("aiken::blueprint::apply::tuple::mismatch"))]
+    #[diagnostic(help(
+        "When validating a list-like schema with multiple 'items' schemas, I try to match each element of the instance with each item schema (by their position). Hence, I expect to be as many items in the declared schema ({expected}) than there are items in the instance ({found}).",
+        expected = expected.if_supports_color(Stdout, |s| s.green()),
+        found = found.if_supports_color(Stdout, |s| s.red()),
+    ))]
+    TupleItemsMismatch { expected: usize, found: usize },
 }
 
 unsafe impl Send for Error {}
