@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { Blockfrost, Constr, Data, fromText, Lucid } from "lucid/mod.ts";
+import { Constr, Data, fromText, Kupmios, Lucid } from "lucid/mod.ts";
 
 import { Input } from "~/components/Input.tsx";
 import { Button } from "~/components/Button.tsx";
@@ -17,6 +17,8 @@ export interface AppProps {
 
 export default function App({ validators }: AppProps) {
   const [lucid, setLucid] = useState<Lucid | null>(null);
+  const [kupoUrl, setKupoUrl] = useState<string>("");
+  const [ogmiosUrl, setOgmiosUrl] = useState<string>("");
   const [tokenName, setTokenName] = useState<string>("");
   const [giftADA, setGiftADA] = useState<string | undefined>();
   const [lockTxHash, setLockTxHash] = useState<string | undefined>(undefined);
@@ -29,11 +31,13 @@ export default function App({ validators }: AppProps) {
     AppliedValidators | null
   >(null);
 
-  const setupLucid = async (blockfrostApiKey: string) => {
+  const setupLucid = async (e: Event) => {
+    e.preventDefault();
+
     const lucid = await Lucid.new(
-      new Blockfrost(
-        "https://cardano-preprod.blockfrost.io/api/v0",
-        blockfrostApiKey,
+      new Kupmios(
+        kupoUrl,
+        ogmiosUrl,
       ),
       "Preprod",
     );
@@ -200,17 +204,27 @@ export default function App({ validators }: AppProps) {
     <div>
       {!lucid
         ? (
-          <Input
-            type="password"
-            id="blockfrostApiKey"
-            onKeyDown={async (e) => {
-              if (e.key === "Enter") {
-                await setupLucid(e.currentTarget.value);
-              }
-            }}
+          <form
+            class="mt-10 grid grid-cols-1 gap-y-8"
+            onSubmit={setupLucid}
           >
-            Blockfrost API KEY (PRESS ENTER)
-          </Input>
+            <Input
+              type="text"
+              id="kupoUrl"
+              onInput={(e) => setKupoUrl(e.currentTarget.value)}
+            >
+              Kupo URL
+            </Input>
+            <Input
+              type="text"
+              id="ogmiosUrl"
+              onInput={(e) => setOgmiosUrl(e.currentTarget.value)}
+            >
+              Ogmios URL
+            </Input>
+
+            <Button type="submit">Setup Lucid</Button>
+          </form>
         )
         : (
           <form
