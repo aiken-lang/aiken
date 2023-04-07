@@ -173,12 +173,6 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn finalize(&mut self, term: Term<Name>) -> Program<Name> {
-        // let mut term = if self.used_data_assert_on_list {
-        //     term.assert_on_list()
-        // } else {
-        //     term
-        // };
-
         let mut term = term;
 
         if self.needs_field_access {
@@ -1131,7 +1125,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut names = vec![];
                 let mut nested_pattern = pattern_stack.empty_with_scope();
                 let items_type = &tipo.get_inner_types()[0];
-                // let mut nested_pattern = vec![];
+
                 for element in elements {
                     let name = self.nested_pattern_ir_and_label(
                         element,
@@ -2254,7 +2248,6 @@ impl<'a> CodeGenerator<'a> {
             || tipo.is_data()
         {
         } else if tipo.is_map() {
-            // self.used_data_assert_on_list = true;
             let new_id = self.id_gen.next();
             let id_pair = (self.id_gen.next(), self.id_gen.next());
             let inner_list_type = &tipo.get_inner_types()[0];
@@ -2309,7 +2302,6 @@ impl<'a> CodeGenerator<'a> {
 
             expect_stack.void();
         } else if tipo.is_list() {
-            // self.used_data_assert_on_list = true;
             let new_id = self.id_gen.next();
             let inner_list_type = &tipo.get_inner_types()[0];
 
