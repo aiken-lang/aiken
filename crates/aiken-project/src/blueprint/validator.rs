@@ -154,11 +154,15 @@ impl Validator {
 }
 
 impl Validator {
-    pub fn apply(self, arg: &Term<DeBruijn>) -> Result<Self, Error> {
+    pub fn apply(
+        self,
+        definitions: &Definitions<Annotated<Schema>>,
+        arg: &Term<DeBruijn>,
+    ) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
             Some((head, tail)) => {
-                head.validate(&self.definitions, arg)?;
+                head.validate(definitions, arg)?;
                 Ok(Self {
                     program: self.program.apply_term(arg),
                     parameters: tail.to_vec(),

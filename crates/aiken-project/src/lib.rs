@@ -391,7 +391,9 @@ where
 
         let applied_validator =
             blueprint.with_validator(title, when_too_many, when_missing, |validator| {
-                validator.apply(param).map_err(|e| e.into())
+                validator
+                    .apply(&blueprint.definitions, param)
+                    .map_err(|e| e.into())
             })?;
 
         // Overwrite validator

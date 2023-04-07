@@ -59,15 +59,15 @@ pub enum Error {
     #[error("I couldn't find a definition corresponding to a reference.")]
     #[diagnostic(code("aiken::blueprint::apply::unknown::reference"))]
     #[diagnostic(help(
-        "While resolving a schema definition, I stumble upon an unknown reference:\n\n  {reference}\n\nThis is unfortunate, but signals that either the reference is invalid or that the correspond schema definition is missing.",
-        reference = reference.as_json_pointer()
+        "While resolving a schema definition, I stumbled upon an unknown reference:\n\n→ {reference}\n\nThis is unfortunate, but signals that either the reference is invalid or that the corresponding schema definition is missing. Double-check the blueprint for that reference or definition.",
+        reference = reference.as_json_pointer().if_supports_color(Stdout, |s| s.red())
     ))]
     UnresolvedSchemaReference { reference: Reference },
 
     #[error("I caught a parameter application that seems off.")]
     #[diagnostic(code("aiken::blueprint::apply::mismatch"))]
     #[diagnostic(help(
-        "When applying parameters to a validator, I control that the shape of the parameter you give me matches what is specified in the blueprint. Unfortunately, schemas didn't match in this case.\n\nI am expecting something of the shape:\n\n{expected}Which I couldn't match against the following term:\n\n{term}\n\nNote that this may only represent part of a bigger whole.",
+        "When applying parameters to a validator, I control that the shape of the parameter you give me matches what is specified in the blueprint. Unfortunately, it didn't match in this case.\n\nI am looking at the following value:\n\n{term}\n\nbut failed to match it against the specified schema:\n\n{expected}\n\n\nNOTE: this may only represent part of a bigger whole as I am validating the parameter incrementally.",
         expected = serde_json::to_string_pretty(&schema).unwrap().if_supports_color(Stdout, |s| s.green()),
         term = {
             let mut buf = vec![];
@@ -92,6 +92,11 @@ pub enum Error {
         found = found.if_supports_color(Stdout, |s| s.red()),
     ))]
     TupleItemsMismatch { expected: usize, found: usize },
+
+    #[error("I failed to convert some input into a valid parameter")]
+    #[diagnostic(code("aiken::blueprint::parse::parameter"))]
+    #[diagnostic(help("{hint}"))]
+    MalformedParameter { hint: String },
 }
 
 unsafe impl Send for Error {}
