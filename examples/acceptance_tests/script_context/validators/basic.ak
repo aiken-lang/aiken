@@ -12,7 +12,7 @@ validator {
       assert_outputs(ctx.transaction),
       assert_fee(ctx.transaction),
     ]
-    |> list.and
+      |> list.and
   }
 }
 
@@ -28,7 +28,8 @@ fn assert_purpose(purpose) {
       ref.transaction_id == TransactionId(
         #"0000000000000000000000000000000000000000000000000000000000000000",
       ) && ref.output_index == 0
-    _ -> error @"script purpose isn't 'Spend'"
+    _ ->
+      error @"script purpose isn't 'Spend'"
   }
 }
 
@@ -48,7 +49,8 @@ fn assert_outputs(transaction) {
         output.datum == NoDatum,
         output.reference_script == None,
       ]
-      |> list.and
-    _ -> error @"unexpected number of outputs"
+        |> list.and
+    _ ->
+      error @"unexpected number of outputs"
   }
 }
