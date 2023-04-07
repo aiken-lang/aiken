@@ -50,6 +50,13 @@ impl Parameter {
     }
 }
 
+fn mismatch(term: &Constant, schema: Schema) -> Error {
+    Error::SchemaMismatch {
+        schema,
+        term: term.clone(),
+    }
+}
+
 fn validate_schema(
     schema: &Schema,
     definitions: &Definitions<Annotated<Schema>>,
@@ -247,8 +254,9 @@ fn validate_data(
                 }
             }
 
-            Err(Error::SchemaMismatch {
-                schema: Schema::Data(Data::AnyOf(
+            Err(mismatch(
+                term,
+                Schema::Data(Data::AnyOf(
                     constructors
                         .iter()
                         .map(|(index, fields)| {
@@ -263,8 +271,7 @@ fn validate_data(
                         })
                         .collect(),
                 )),
-                term: term.clone(),
-            })
+            ))
         }
     }
 }
@@ -274,10 +281,7 @@ fn expect_data(term: &Constant) -> Result<(), Error> {
         return Ok(());
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Data(Data::Opaque),
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Data(Data::Opaque)))
 }
 
 fn expect_data_integer(term: &Constant) -> Result<(), Error> {
@@ -287,10 +291,7 @@ fn expect_data_integer(term: &Constant) -> Result<(), Error> {
         }
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Data(Data::Integer),
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Data(Data::Integer)))
 }
 
 fn expect_data_bytes(term: &Constant) -> Result<(), Error> {
@@ -300,10 +301,7 @@ fn expect_data_bytes(term: &Constant) -> Result<(), Error> {
         }
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Data(Data::Bytes),
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Data(Data::Bytes)))
 }
 
 fn expect_data_list(term: &Constant) -> Result<Vec<Constant>, Error> {
@@ -314,12 +312,12 @@ fn expect_data_list(term: &Constant) -> Result<Vec<Constant>, Error> {
             .collect());
     }
 
-    let inner_schema = Items::One(Declaration::Inline(Box::new(Data::Opaque)));
-
-    Err(Error::SchemaMismatch {
-        schema: Schema::Data(Data::List(inner_schema)),
-        term: term.clone(),
-    })
+    Err(mismatch(
+        term,
+        Schema::Data(Data::List(Items::One(Declaration::Inline(Box::new(
+            Data::Opaque,
+        ))))),
+    ))
 }
 
 fn expect_data_map(term: &Constant) -> Result<Vec<(Constant, Constant)>, Error> {
@@ -330,13 +328,13 @@ fn expect_data_map(term: &Constant) -> Result<Vec<(Constant, Constant)>, Error> 
             .collect());
     }
 
-    let key_schema = Declaration::Inline(Box::new(Data::Opaque));
-    let value_schema = Declaration::Inline(Box::new(Data::Opaque));
-
-    Err(Error::SchemaMismatch {
-        schema: Schema::Data(Data::Map(key_schema, value_schema)),
-        term: term.clone(),
-    })
+    Err(mismatch(
+        term,
+        Schema::Data(Data::Map(
+            Declaration::Inline(Box::new(Data::Opaque)),
+            Declaration::Inline(Box::new(Data::Opaque)),
+        )),
+    ))
 }
 
 fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Error> {
@@ -352,14 +350,14 @@ fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Er
         }
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Data(Data::AnyOf(vec![Constructor {
+    Err(mismatch(
+        term,
+        Schema::Data(Data::AnyOf(vec![Constructor {
             index,
             fields: vec![],
         }
         .into()])),
-        term: term.clone(),
-    })
+    ))
 }
 
 fn expect_unit(term: &Constant) -> Result<(), Error> {
@@ -367,10 +365,7 @@ fn expect_unit(term: &Constant) -> Result<(), Error> {
         return Ok(());
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Unit,
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Unit))
 }
 
 fn expect_integer(term: &Constant) -> Result<(), Error> {
@@ -378,10 +373,7 @@ fn expect_integer(term: &Constant) -> Result<(), Error> {
         return Ok(());
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Integer,
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Integer))
 }
 
 fn expect_bytes(term: &Constant) -> Result<(), Error> {
@@ -389,10 +381,7 @@ fn expect_bytes(term: &Constant) -> Result<(), Error> {
         return Ok(());
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Bytes,
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Bytes))
 }
 
 fn expect_string(term: &Constant) -> Result<(), Error> {
@@ -400,10 +389,7 @@ fn expect_string(term: &Constant) -> Result<(), Error> {
         return Ok(());
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::String,
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::String))
 }
 
 fn expect_boolean(term: &Constant) -> Result<(), Error> {
@@ -411,10 +397,7 @@ fn expect_boolean(term: &Constant) -> Result<(), Error> {
         return Ok(());
     }
 
-    Err(Error::SchemaMismatch {
-        schema: Schema::Boolean,
-        term: term.clone(),
-    })
+    Err(mismatch(term, Schema::Boolean))
 }
 
 fn expect_pair(term: &Constant) -> Result<(Constant, Constant), Error> {
@@ -422,13 +405,13 @@ fn expect_pair(term: &Constant) -> Result<(Constant, Constant), Error> {
         return Ok((left.deref().clone(), right.deref().clone()));
     }
 
-    let left_schema = Declaration::Inline(Box::new(Schema::Data(Data::Opaque)));
-    let right_schema = Declaration::Inline(Box::new(Schema::Data(Data::Opaque)));
-
-    Err(Error::SchemaMismatch {
-        schema: Schema::Pair(left_schema, right_schema),
-        term: term.clone(),
-    })
+    Err(mismatch(
+        term,
+        Schema::Pair(
+            Declaration::Inline(Box::new(Schema::Data(Data::Opaque))),
+            Declaration::Inline(Box::new(Schema::Data(Data::Opaque))),
+        ),
+    ))
 }
 
 fn expect_list(term: &Constant) -> Result<Vec<Constant>, Error> {
@@ -436,10 +419,10 @@ fn expect_list(term: &Constant) -> Result<Vec<Constant>, Error> {
         return Ok(elems.to_owned());
     }
 
-    let inner_schema = Items::One(Declaration::Inline(Box::new(Schema::Data(Data::Opaque))));
-
-    Err(Error::SchemaMismatch {
-        schema: Schema::List(inner_schema),
-        term: term.clone(),
-    })
+    Err(mismatch(
+        term,
+        Schema::List(Items::One(Declaration::Inline(Box::new(Schema::Data(
+            Data::Opaque,
+        ))))),
+    ))
 }
