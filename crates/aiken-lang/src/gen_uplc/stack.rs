@@ -5,7 +5,7 @@ use indexmap::IndexSet;
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
-    ast::{Arg, Span},
+    ast::Span,
     builtins::{data, list, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
@@ -701,12 +701,11 @@ impl AirStack {
         self.merge_child(body_stack);
     }
 
-    pub fn validator(&mut self, params: Vec<Arg<Arc<Type>>>) {
+    pub fn noop(&mut self) {
         self.new_scope();
 
-        self.air.push(Air::Validator {
+        self.air.push(Air::NoOp {
             scope: self.scope.clone(),
-            params,
         });
     }
 

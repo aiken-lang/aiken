@@ -1492,14 +1492,18 @@ pub fn handle_func_dependencies(
                 air: recursion_ir,
             };
 
-            temp_stack.define_func(
-                dependency.function_name.clone(),
-                dependency.module_name.clone(),
-                dependency.variant_name.clone(),
-                depend_comp.args.clone(),
-                depend_comp.recursive,
-                recursion_stack,
-            );
+            if depend_comp.is_code_gen_func {
+                temp_stack = recursion_stack;
+            } else {
+                temp_stack.define_func(
+                    dependency.function_name.clone(),
+                    dependency.module_name.clone(),
+                    dependency.variant_name.clone(),
+                    depend_comp.args.clone(),
+                    depend_comp.recursive,
+                    recursion_stack,
+                );
+            }
 
             let mut temp_ir = temp_stack.complete();
 
@@ -1550,7 +1554,7 @@ pub fn handle_recursion_ir(
                     tipo,
                 }
             }
-            _ => unreachable!(),
+            _ => unreachable!("Will support not using call right away later."),
         }
     }
 }
