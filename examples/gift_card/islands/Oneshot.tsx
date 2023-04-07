@@ -132,7 +132,7 @@ export default function App({ validators }: AppProps) {
 
       const success = await lucid!.awaitTx(txHash);
 
-      // Wait a little bit longer so ExhuastedUTxOError doesn't happen
+      // Wait a little bit longer so ExhaustedUTxOError doesn't happen
       // in the next Tx
       setTimeout(() => {
         setWaitingLockTx(false);

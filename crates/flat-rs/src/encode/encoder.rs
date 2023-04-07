@@ -291,7 +291,7 @@ impl Encoder {
         }
     }
     /// Write out byte regardless of current buffer alignment.
-    /// Write most signifcant bits in remaining unused bits for the current byte,
+    /// Write most significant bits in remaining unused bits for the current byte,
     /// then write out the remaining bits at the beginning of the next byte.
     fn byte_unaligned(&mut self, x: u8) {
         let x_shift = self.current_byte | (x >> self.used_bits);

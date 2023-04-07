@@ -65,7 +65,7 @@ pub fn eval_phase_two(
                     &remaining_budget,
                 )?;
 
-                // The substraction is safe here as ex units counting is done during evaluation.
+                // The subtraction is safe here as ex units counting is done during evaluation.
                 // Redeemer would fail already if budget was negative.
                 remaining_budget.cpu -= redeemer.ex_units.steps as i64;
                 remaining_budget.mem -= redeemer.ex_units.mem as i64;

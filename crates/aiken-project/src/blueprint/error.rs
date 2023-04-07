@@ -37,7 +37,7 @@ pub enum Error {
     )]
     #[diagnostic(code("aiken::blueprint::address::parameterized"))]
     #[diagnostic(help(
-        "I can only compute addresses of validators that are fully applied. For example, a {keyword_spend} validator must have exactly 3 arguments: a datum, a redeemer and a context. If it has more, they need to be provided beforehand and applied directly in the validator. Applying parameters change the validator's compiled code, and thus the address.\n\nThis is why I need you to apply parmeters first.",
+        "I can only compute addresses of validators that are fully applied. For example, a {keyword_spend} validator must have exactly 3 arguments: a datum, a redeemer and a context. If it has more, they need to be provided beforehand and applied directly in the validator. Applying parameters change the validator's compiled code, and thus the address.\n\nThis is why I need you to apply parameters first.",
         keyword_spend = "spend".if_supports_color(Stdout, |s| s.purple())))]
     ParameterizedValidator { n: usize },
 }

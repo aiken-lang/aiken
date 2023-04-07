@@ -1,7 +1,7 @@
 import { Head } from "$fresh/runtime.ts";
 import { Handlers, PageProps } from "$fresh/server.ts";
 
-import App from "~/islands/App.tsx";
+import Oneshot from "~/islands/Oneshot.tsx";
 
 import { readValidators, Validators } from "~/utils.ts";
 
@@ -43,7 +43,7 @@ export default function Home({ data }: PageProps<Data>) {
           </pre>
         </div>
 
-        <App validators={validators} />
+        <Oneshot validators={validators} />
       </div>
     </>
   );

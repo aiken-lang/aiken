@@ -603,8 +603,8 @@ impl<'comments> Formatter<'comments> {
         let count = expressions.len();
         let mut documents = Vec::with_capacity(count * 2);
         for (i, expression) in expressions.iter().enumerate() {
-            let preceeding_newline = self.pop_empty_lines(expression.start_byte_index());
-            if i != 0 && preceeding_newline {
+            let preceding_newline = self.pop_empty_lines(expression.start_byte_index());
+            if i != 0 && preceding_newline {
                 documents.push(lines(2));
             } else if i != 0 {
                 documents.push(lines(1));

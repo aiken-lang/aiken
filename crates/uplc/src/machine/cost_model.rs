@@ -25,7 +25,7 @@ pub struct ExBudget {
 }
 
 impl ExBudget {
-    pub fn occurences(&mut self, n: i64) {
+    pub fn occurrences(&mut self, n: i64) {
         self.mem *= n;
         self.cpu *= n;
     }

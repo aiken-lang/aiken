@@ -169,7 +169,7 @@ pub enum Pattern {
     #[error("I found an unexpected type name.")]
     #[diagnostic(help("Try removing it!"))]
     TypeIdent,
-    #[error("I found an unexpected indentifier.")]
+    #[error("I found an unexpected identifier.")]
     #[diagnostic(help("Try removing it!"))]
     TermIdent,
     #[error("I found an unexpected end of input.")]

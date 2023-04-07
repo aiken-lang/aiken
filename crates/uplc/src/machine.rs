@@ -362,7 +362,7 @@ impl Machine {
             let mut unspent_step_budget =
                 self.costs.machine_costs.get(StepKind::try_from(i as u8)?);
 
-            unspent_step_budget.occurences(self.unbudgeted_steps[i] as i64);
+            unspent_step_budget.occurrences(self.unbudgeted_steps[i] as i64);
 
             self.spend_budget(unspent_step_budget)?;
 
