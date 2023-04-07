@@ -3,7 +3,7 @@ use super::{
     error::Error,
     schema::{Annotated, Constructor, Data, Declaration, Items, Schema},
 };
-use std::{iter, ops::Deref, rc::Rc};
+use std::{iter, ops::Deref};
 use uplc::{
     ast::{Constant, Data as UplcData, DeBruijn, Term},
     PlutusData,
@@ -16,8 +16,6 @@ pub struct Parameter {
 
     pub schema: Reference,
 }
-
-type Instance = Term<DeBruijn>;
 
 impl From<Reference> for Parameter {
     fn from(schema: Reference) -> Parameter {
@@ -32,7 +30,7 @@ impl Parameter {
     pub fn validate(
         &self,
         definitions: &Definitions<Annotated<Schema>>,
-        term: &Instance,
+        term: &Term<DeBruijn>,
     ) -> Result<(), Error> {
         let schema = &definitions
             .lookup(&self.schema)
@@ -44,14 +42,18 @@ impl Parameter {
             })?
             .annotated;
 
-        validate_schema(schema, definitions, term)
+        if let Term::Constant(constant) = term {
+            validate_schema(schema, definitions, constant)
+        } else {
+            Err(Error::NonConstantParameter)
+        }
     }
 }
 
 fn validate_schema(
     schema: &Schema,
     definitions: &Definitions<Annotated<Schema>>,
-    term: &Instance,
+    term: &Constant,
 ) -> Result<(), Error> {
     match schema {
         Schema::Data(data) => validate_data(data, definitions, term),
@@ -135,7 +137,7 @@ fn validate_schema(
 fn validate_data(
     data: &Data,
     definitions: &Definitions<Annotated<Schema>>,
-    term: &Instance,
+    term: &Constant,
 ) -> Result<(), Error> {
     match data {
         Data::Opaque => expect_data(term),
@@ -267,11 +269,9 @@ fn validate_data(
     }
 }
 
-fn expect_data(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if matches!(constant.deref(), Constant::Data(..)) {
-            return Ok(());
-        }
+fn expect_data(term: &Constant) -> Result<(), Error> {
+    if matches!(term, Constant::Data(..)) {
+        return Ok(());
     }
 
     Err(Error::SchemaMismatch {
@@ -280,12 +280,10 @@ fn expect_data(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_data_integer(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::Data(data) = constant.deref() {
-            if matches!(data, PlutusData::BigInt(..)) {
-                return Ok(());
-            }
+fn expect_data_integer(term: &Constant) -> Result<(), Error> {
+    if let Constant::Data(data) = term {
+        if matches!(data, PlutusData::BigInt(..)) {
+            return Ok(());
         }
     }
 
@@ -295,12 +293,10 @@ fn expect_data_integer(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_data_bytes(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::Data(data) = constant.deref() {
-            if matches!(data, PlutusData::BoundedBytes(..)) {
-                return Ok(());
-            }
+fn expect_data_bytes(term: &Constant) -> Result<(), Error> {
+    if let Constant::Data(data) = term {
+        if matches!(data, PlutusData::BoundedBytes(..)) {
+            return Ok(());
         }
     }
 
@@ -310,14 +306,12 @@ fn expect_data_bytes(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_data_list(term: &Instance) -> Result<Vec<Instance>, Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::Data(PlutusData::Array(elems)) = constant.deref() {
-            return Ok(elems
-                .iter()
-                .map(|elem| Term::Constant(Rc::new(Constant::Data(elem.to_owned()))))
-                .collect());
-        }
+fn expect_data_list(term: &Constant) -> Result<Vec<Constant>, Error> {
+    if let Constant::Data(PlutusData::Array(elems)) = term {
+        return Ok(elems
+            .iter()
+            .map(|elem| Constant::Data(elem.to_owned()))
+            .collect());
     }
 
     let inner_schema = Items::One(Declaration::Inline(Box::new(Data::Opaque)));
@@ -328,19 +322,12 @@ fn expect_data_list(term: &Instance) -> Result<Vec<Instance>, Error> {
     })
 }
 
-fn expect_data_map(term: &Instance) -> Result<Vec<(Instance, Instance)>, Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::Data(PlutusData::Map(pairs)) = constant.deref() {
-            return Ok(pairs
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        Term::Constant(Rc::new(Constant::Data(k.to_owned()))),
-                        Term::Constant(Rc::new(Constant::Data(v.to_owned()))),
-                    )
-                })
-                .collect());
-        }
+fn expect_data_map(term: &Constant) -> Result<Vec<(Constant, Constant)>, Error> {
+    if let Constant::Data(PlutusData::Map(pairs)) = term {
+        return Ok(pairs
+            .iter()
+            .map(|(k, v)| (Constant::Data(k.to_owned()), Constant::Data(v.to_owned())))
+            .collect());
     }
 
     let key_schema = Declaration::Inline(Box::new(Data::Opaque));
@@ -352,18 +339,15 @@ fn expect_data_map(term: &Instance) -> Result<Vec<(Instance, Instance)>, Error> 
     })
 }
 
-fn expect_data_constr(term: &Instance, index: usize) -> Result<Vec<Instance>, Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::Data(PlutusData::Constr(constr)) = constant.deref() {
-            if let PlutusData::Constr(expected) = UplcData::constr(index as u64, vec![]) {
-                if expected.tag == constr.tag && expected.any_constructor == constr.any_constructor
-                {
-                    return Ok(constr
-                        .fields
-                        .iter()
-                        .map(|field| Term::Constant(Rc::new(Constant::Data(field.to_owned()))))
-                        .collect());
-                }
+fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Error> {
+    if let Constant::Data(PlutusData::Constr(constr)) = term {
+        if let PlutusData::Constr(expected) = UplcData::constr(index as u64, vec![]) {
+            if expected.tag == constr.tag && expected.any_constructor == constr.any_constructor {
+                return Ok(constr
+                    .fields
+                    .iter()
+                    .map(|field| Constant::Data(field.to_owned()))
+                    .collect());
             }
         }
     }
@@ -378,11 +362,9 @@ fn expect_data_constr(term: &Instance, index: usize) -> Result<Vec<Instance>, Er
     })
 }
 
-fn expect_unit(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if matches!(constant.deref(), Constant::Unit) {
-            return Ok(());
-        }
+fn expect_unit(term: &Constant) -> Result<(), Error> {
+    if matches!(term, Constant::Unit) {
+        return Ok(());
     }
 
     Err(Error::SchemaMismatch {
@@ -391,11 +373,9 @@ fn expect_unit(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_integer(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if matches!(constant.deref(), Constant::Integer(..)) {
-            return Ok(());
-        }
+fn expect_integer(term: &Constant) -> Result<(), Error> {
+    if matches!(term, Constant::Integer(..)) {
+        return Ok(());
     }
 
     Err(Error::SchemaMismatch {
@@ -404,11 +384,9 @@ fn expect_integer(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_bytes(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if matches!(constant.deref(), Constant::ByteString(..)) {
-            return Ok(());
-        }
+fn expect_bytes(term: &Constant) -> Result<(), Error> {
+    if matches!(term, Constant::ByteString(..)) {
+        return Ok(());
     }
 
     Err(Error::SchemaMismatch {
@@ -417,11 +395,9 @@ fn expect_bytes(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_string(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if matches!(constant.deref(), Constant::String(..)) {
-            return Ok(());
-        }
+fn expect_string(term: &Constant) -> Result<(), Error> {
+    if matches!(term, Constant::String(..)) {
+        return Ok(());
     }
 
     Err(Error::SchemaMismatch {
@@ -430,11 +406,9 @@ fn expect_string(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_boolean(term: &Instance) -> Result<(), Error> {
-    if let Term::Constant(constant) = term {
-        if matches!(constant.deref(), Constant::Bool(..)) {
-            return Ok(());
-        }
+fn expect_boolean(term: &Constant) -> Result<(), Error> {
+    if matches!(term, Constant::Bool(..)) {
+        return Ok(());
     }
 
     Err(Error::SchemaMismatch {
@@ -443,11 +417,9 @@ fn expect_boolean(term: &Instance) -> Result<(), Error> {
     })
 }
 
-fn expect_pair(term: &Instance) -> Result<(Instance, Instance), Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::ProtoPair(_, _, left, right) = constant.deref() {
-            return Ok((Term::Constant(left.clone()), Term::Constant(right.clone())));
-        }
+fn expect_pair(term: &Constant) -> Result<(Constant, Constant), Error> {
+    if let Constant::ProtoPair(_, _, left, right) = term {
+        return Ok((left.deref().clone(), right.deref().clone()));
     }
 
     let left_schema = Declaration::Inline(Box::new(Schema::Data(Data::Opaque)));
@@ -459,14 +431,9 @@ fn expect_pair(term: &Instance) -> Result<(Instance, Instance), Error> {
     })
 }
 
-fn expect_list(term: &Instance) -> Result<Vec<Instance>, Error> {
-    if let Term::Constant(constant) = term {
-        if let Constant::ProtoList(_, elems) = constant.deref() {
-            return Ok(elems
-                .iter()
-                .map(|elem| Term::Constant(Rc::new(elem.to_owned())))
-                .collect());
-        }
+fn expect_list(term: &Constant) -> Result<Vec<Constant>, Error> {
+    if let Constant::ProtoList(_, elems) = term {
+        return Ok(elems.to_owned());
     }
 
     let inner_schema = Items::One(Declaration::Inline(Box::new(Schema::Data(Data::Opaque))));

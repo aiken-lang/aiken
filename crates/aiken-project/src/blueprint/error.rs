@@ -6,7 +6,7 @@ use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::fmt::Debug;
-use uplc::ast::{DeBruijn, Term};
+use uplc::ast::Constant;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
@@ -48,12 +48,12 @@ pub enum Error {
     ))]
     ParameterizedValidator { n: usize },
 
-    #[error("I failed to infer what should be the schema of a given parameter to apply.")]
+    #[error("I stumble upon something else than a constant when I expected one.")]
     #[diagnostic(code("aiken:blueprint::apply::malformed::argument"))]
     #[diagnostic(help(
-        "I couldn't figure out the schema corresponding to a term you've given. Here's a possible hint about why I failed: {hint}"
+        "Parameters applied to blueprints must be constant; they cannot be lambdas or delayed terms."
     ))]
-    UnableToInferArgumentSchema { hint: String },
+    NonConstantParameter,
 
     #[error("I couldn't find a definition corresponding to a reference.")]
     #[diagnostic(code("aiken::blueprint::apply::unknown::reference"))]
@@ -70,10 +70,7 @@ pub enum Error {
         serde_json::to_string_pretty(&schema).unwrap().if_supports_color(Stdout, |s| s.green()),
         term.to_pretty().if_supports_color(Stdout, |s| s.red()),
     ))]
-    SchemaMismatch {
-        schema: Schema,
-        term: Term<DeBruijn>,
-    },
+    SchemaMismatch { schema: Schema, term: Constant },
 
     #[error(
         "I discovered a discrepancy of elements between a given tuple and its declared schema."
