@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{Arg, BinOp, UnOp},
+    ast::{BinOp, UnOp},
     tipo::{Type, ValueConstructor},
 };
 
@@ -213,9 +213,8 @@ pub enum Air {
         scope: Scope,
         tipo: Arc<Type>,
     },
-    Validator {
+    NoOp {
         scope: Scope,
-        params: Vec<Arg<Arc<Type>>>,
     },
     FieldsEmpty {
         scope: Scope,
@@ -264,7 +263,7 @@ impl Air {
             | Air::TupleIndex { scope, .. }
             | Air::ErrorTerm { scope, .. }
             | Air::Trace { scope, .. }
-            | Air::Validator { scope, .. } => scope.clone(),
+            | Air::NoOp { scope, .. } => scope.clone(),
         }
     }
     pub fn scope_mut(&mut self) -> &mut Scope {
@@ -308,7 +307,7 @@ impl Air {
             | Air::TupleIndex { scope, .. }
             | Air::ErrorTerm { scope, .. }
             | Air::Trace { scope, .. }
-            | Air::Validator { scope, .. } => scope,
+            | Air::NoOp { scope, .. } => scope,
         }
     }
     pub fn tipo(&self) -> Option<Arc<Type>> {
@@ -399,7 +398,7 @@ impl Air {
             | Air::Finally { .. }
             | Air::FieldsExpose { .. }
             | Air::FieldsEmpty { .. }
-            | Air::Validator { .. } => None,
+            | Air::NoOp { .. } => None,
             Air::UnOp { op, .. } => match op {
                 UnOp::Not => Some(
                     Type::App {

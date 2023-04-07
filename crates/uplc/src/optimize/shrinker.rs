@@ -56,6 +56,15 @@ impl Program<Name> {
             term,
         }
     }
+
+    pub fn force_delay_reduce(self) -> Program<Name> {
+        let mut term = self.term.clone();
+        force_delay_reduce(&mut term);
+        Program {
+            version: self.version,
+            term,
+        }
+    }
 }
 
 fn builtin_force_reduce(term: &mut Term<Name>, builtin_map: &mut IndexMap<u8, ()>) {
@@ -107,6 +116,36 @@ fn builtin_force_reduce(term: &mut Term<Name>, builtin_map: &mut IndexMap<u8, ()
 
             let arg = Rc::make_mut(argument);
             builtin_force_reduce(arg, builtin_map);
+        }
+        _ => {}
+    }
+}
+
+fn force_delay_reduce(term: &mut Term<Name>) {
+    match term {
+        Term::Force(f) => {
+            let f = Rc::make_mut(f);
+
+            if let Term::Delay(body) = f {
+                *term = body.as_ref().clone();
+            } else {
+                force_delay_reduce(f);
+            }
+        }
+        Term::Delay(d) => {
+            let d = Rc::make_mut(d);
+            force_delay_reduce(d);
+        }
+        Term::Lambda { body, .. } => {
+            let body = Rc::make_mut(body);
+            force_delay_reduce(body);
+        }
+        Term::Apply { function, argument } => {
+            let func = Rc::make_mut(function);
+            force_delay_reduce(func);
+
+            let arg = Rc::make_mut(argument);
+            force_delay_reduce(arg);
         }
         _ => {}
     }
@@ -222,7 +261,7 @@ fn lambda_reduce(term: &mut Term<Name>) {
                 body,
             } = func
             {
-                if let replace_term @ (Term::Var(_) | Term::Constant(_)) = arg{
+                if let replace_term @ (Term::Var(_) | Term::Constant(_)) = arg {
                     let body = Rc::make_mut(body);
                     *term = substitute_term(body, parameter_name.clone(), replace_term);
                 }
