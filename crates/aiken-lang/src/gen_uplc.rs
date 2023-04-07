@@ -2448,17 +2448,14 @@ impl<'a> CodeGenerator<'a> {
                         self.expect_type(&tipo, &mut call_stack, &name, defined_data_types);
 
                         arg_stack.merge_child(call_stack);
+                    }
 
-                        for (inner_data_type, inner_count) in defined_data_types.iter() {
-                            if let Some(prev_count) = current_defined_state.get(inner_data_type) {
-                                diff_defined_types.insert(
-                                    inner_data_type.to_string(),
-                                    *inner_count - *prev_count,
-                                );
-                            } else {
-                                diff_defined_types
-                                    .insert(inner_data_type.to_string(), *inner_count);
-                            }
+                    for (inner_data_type, inner_count) in defined_data_types.iter() {
+                        if let Some(prev_count) = current_defined_state.get(inner_data_type) {
+                            diff_defined_types
+                                .insert(inner_data_type.to_string(), *inner_count - *prev_count);
+                        } else {
+                            diff_defined_types.insert(inner_data_type.to_string(), *inner_count);
                         }
                     }
 
