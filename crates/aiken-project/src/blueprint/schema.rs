@@ -1244,7 +1244,7 @@ pub mod test {
             Data::List(Items::One(Declaration::Referenced(Reference::new("foo")))),
             serde_json::from_value(json!({
                 "dataType": "list",
-                "items": { "$ref": "foo" }
+                "items": { "$ref": "#/definitions/foo" }
             }))
             .unwrap()
         )
@@ -1260,8 +1260,8 @@ pub mod test {
             serde_json::from_value(json!({
                 "dataType": "list",
                 "items": [
-                  { "$ref": "foo" },
-                  { "$ref": "bar" }
+                  { "$ref": "#/definitions/foo" },
+                  { "$ref": "#/definitions/bar" }
                 ],
             }))
             .unwrap()
@@ -1277,8 +1277,8 @@ pub mod test {
             ),
             serde_json::from_value(json!({
                 "dataType": "map",
-                "keys": { "$ref": "foo" },
-                "values": { "$ref": "bar" }
+                "keys": { "$ref": "#/definitions/foo" },
+                "values": { "$ref": "#/definitions/bar" }
             }))
             .unwrap()
         )
@@ -1300,10 +1300,10 @@ pub mod test {
                     "index": 0,
                     "fields": [
                         {
-                            "$ref": "foo",
+                            "$ref": "#/definitions/foo",
                         },
                         {
-                            "$ref": "bar",
+                            "$ref": "#/definitions/bar",
                         }
                     ]
                 }]
@@ -1328,10 +1328,10 @@ pub mod test {
                     "index": 0,
                     "fields": [
                         {
-                            "$ref": "foo",
+                            "$ref": "#/definitions/foo",
                         },
                         {
-                            "$ref": "bar",
+                            "$ref": "#/definitions/bar",
                         }
                     ]
                 }]

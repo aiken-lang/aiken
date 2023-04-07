@@ -224,9 +224,16 @@ impl<'a> Deserialize<'a> for Reference {
                     }
                 }
 
-                Ok(Reference {
-                    inner: inner.ok_or_else(|| de::Error::missing_field(FIELDS[0]))?,
-                })
+                let inner: String = inner.ok_or_else(|| de::Error::missing_field(FIELDS[0]))?;
+
+                match inner.strip_prefix("#/definitions/") {
+                    Some(suffix) => Ok(Reference {
+                        inner: suffix.to_string(),
+                    }),
+                    None => Err(de::Error::custom(
+                        "Invalid reference; only local JSON pointer to #/definitions are allowed.",
+                    )),
+                }
             }
         }
 
