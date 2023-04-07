@@ -129,6 +129,7 @@ dependencies = [
  "indexmap",
  "itertools",
  "miette",
+ "minicbor",
  "owo-colors",
  "pallas",
  "pallas-traverse",

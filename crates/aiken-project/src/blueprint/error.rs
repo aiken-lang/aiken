@@ -4,6 +4,7 @@ use super::{
 };
 use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
+use minicbor as cbor;
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::fmt::Debug;
 use uplc::ast::Constant;
@@ -66,9 +67,18 @@ pub enum Error {
     #[error("I caught a parameter application that seems off.")]
     #[diagnostic(code("aiken::blueprint::apply::mismatch"))]
     #[diagnostic(help(
-        "When applying parameters to a validator, I control that the shape of the parameter you give me matches what is specified in the blueprint. Unfortunately, schemas didn't match in this case.\n\nI am expecting something of the shape:\n\n{}Which I couldn't match against the following term:\n\n{}\n\nNote that this may only represent part of a bigger whole.",
-        serde_json::to_string_pretty(&schema).unwrap().if_supports_color(Stdout, |s| s.green()),
-        term.to_pretty().if_supports_color(Stdout, |s| s.red()),
+        "When applying parameters to a validator, I control that the shape of the parameter you give me matches what is specified in the blueprint. Unfortunately, schemas didn't match in this case.\n\nI am expecting something of the shape:\n\n{expected}Which I couldn't match against the following term:\n\n{term}\n\nNote that this may only represent part of a bigger whole.",
+        expected = serde_json::to_string_pretty(&schema).unwrap().if_supports_color(Stdout, |s| s.green()),
+        term = {
+            let mut buf = vec![];
+            match term {
+                Constant::Data(data) => {
+                    cbor::encode(data, &mut buf).unwrap();
+                    cbor::display(&buf).to_string()
+                },
+                _ => term.to_pretty()
+            }
+        }.if_supports_color(Stdout, |s| s.red()),
     ))]
     SchemaMismatch { schema: Schema, term: Constant },
 
