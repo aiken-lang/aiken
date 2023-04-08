@@ -1463,8 +1463,6 @@ pub fn handle_func_dependencies(
     dependency_vec.extend(dependency_map.keys().cloned());
     dependency_vec.reverse();
 
-    println!("HANDLE FUNC DEP VEC {:#?}", dependency_vec);
-
     while let Some(dependency) = dependency_vec.pop() {
         let func_component_dep = func_components.get(&dependency);
 
@@ -1477,10 +1475,6 @@ pub fn handle_func_dependencies(
         let dep_scope = func_index_map
             .get(&dependency)
             .unwrap_or_else(|| unreachable!());
-
-        println!("THING @ {:#?}", depend_comp.ir);
-
-        println!("FUNC DEFINE IS {:#?}", function_component.ir[0]);
 
         if (dep_scope.common_ancestor(func_scope) == *func_scope && !depend_comp.args.is_empty())
             || function_component.args.is_empty()
@@ -1502,7 +1496,6 @@ pub fn handle_func_dependencies(
 
             if depend_comp.is_code_gen_func {
                 temp_stack = recursion_stack;
-                println!("TEMP STACK IS {:#?}", temp_stack);
             } else {
                 temp_stack.define_func(
                     dependency.function_name.clone(),
