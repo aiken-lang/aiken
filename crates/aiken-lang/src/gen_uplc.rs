@@ -20,7 +20,7 @@ use crate::{
     },
     builtins::{bool, data},
     expr::TypedExpr,
-    gen_uplc::builder::{find_and_replace_generics, get_generic_id_and_type},
+    gen_uplc::builder::{find_and_replace_generics, get_generic_id_and_type, get_variant_name},
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
@@ -114,10 +114,6 @@ impl<'a> CodeGenerator<'a> {
 
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
 
-        println!("{:#?}", self.code_gen_functions);
-
-        println!("{:#?}", ir_stack);
-
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
         if let Some(other) = other_fun {
@@ -172,8 +168,6 @@ impl<'a> CodeGenerator<'a> {
 
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
 
-        println!("{:#?}", ir_stack);
-
         let term = self.uplc_code_gen(&mut ir_stack);
 
         self.finalize(term)
@@ -193,8 +187,6 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
-
-        println!("{}", program.to_pretty());
 
         program = aiken_optimize_and_intern(program);
 
@@ -2394,16 +2386,21 @@ impl<'a> CodeGenerator<'a> {
             let data_type =
                 builder::lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
 
-            println!("NAME IS {} AND TYPE IS {:#?}", name, tipo);
-            println!("DATATYPE IS {:#?}", data_type);
-
             let new_id = self.id_gen.next();
 
             let mut var_stack = expect_stack.empty_with_scope();
             let mut func_stack = expect_stack.empty_with_scope();
             let mut call_stack = expect_stack.empty_with_scope();
 
-            let data_type_name = format!("__expect_{}", data_type.name);
+            let mut data_type_variant = String::new();
+
+            if let Some(types) = tipo.arg_types() {
+                for tipo in types {
+                    get_variant_name(&mut data_type_variant, &tipo);
+                }
+            }
+
+            let data_type_name = format!("__expect_{}{}", data_type.name, data_type_variant);
 
             let function = self.code_gen_functions.get(&data_type_name);
 
@@ -2489,7 +2486,6 @@ impl<'a> CodeGenerator<'a> {
                             diff_defined_types.insert(inner_data_type.to_string(), *inner_count);
                         }
                     }
-                    println!("DIFF DEFINED TYPES {:#?}", diff_defined_types);
 
                     arg_stack.void();
 
@@ -2749,17 +2745,12 @@ impl<'a> CodeGenerator<'a> {
                 .collect_vec(),
         );
 
-        println!("DEPENDENCY VEC IS {:#?}", dependency_vec);
-        println!("FUNC INDEX MAP IS {:#?}", func_index_map);
-
         for func in dependency_vec {
             if self.defined_functions.contains_key(&func) {
                 continue;
             }
 
             let func_scope = func_index_map.get(&func).unwrap();
-            println!("FUNC IS {:#?}", func);
-            println!("FUNC SCOPE IS {:#?}", func_scope);
 
             let mut added_dependencies = vec![];
 
@@ -4992,8 +4983,6 @@ impl<'a> CodeGenerator<'a> {
                 let mut actual_type = arg.tipo.clone();
 
                 replace_opaque_type(&mut actual_type, self.data_types.clone());
-
-                println!("ACTUAL TYPE IS {:#?}", actual_type);
 
                 self.assignment(
                     &Pattern::Var {
