@@ -1,6 +1,7 @@
 use aiken_lang::tipo::{Type, TypeVar};
 use serde::{
     self,
+    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{
@@ -52,6 +53,12 @@ impl<T> Definitions<T> {
         self.inner.remove(reference.as_key());
     }
 
+    /// Insert a new definition
+    pub fn insert(&mut self, reference: &Reference, schema: T) {
+        self.inner
+            .insert(reference.as_key().to_string(), Some(schema));
+    }
+
     /// Register a new definition only if it doesn't exist. This uses a strategy of
     /// mark-and-insert such that recursive definitions are only built once.
     pub fn register<F, E>(
@@ -94,14 +101,14 @@ impl Reference {
     }
 
     /// Turn a reference into a key suitable for lookup.
-    fn as_key(&self) -> &str {
+    pub(crate) fn as_key(&self) -> &str {
         self.inner.as_str()
     }
 
     /// Turn a reference into a valid JSON pointer. Note that the JSON pointer specification
     /// indicates that '/' must be escaped as '~1' in pointer addresses (as they are otherwise
     /// treated as path delimiter in pointers paths).
-    fn as_json_pointer(&self) -> String {
+    pub(crate) fn as_json_pointer(&self) -> String {
         format!("#/definitions/{}", self.as_key().replace('/', "~1"))
     }
 }
@@ -179,5 +186,57 @@ impl Serialize for Reference {
         let mut s = serializer.serialize_struct("$ref", 1)?;
         s.serialize_field("$ref", &self.as_json_pointer())?;
         s.end()
+    }
+}
+
+impl<'a> Deserialize<'a> for Reference {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        enum Field {
+            #[serde(rename = "$ref")]
+            Ref,
+        }
+        const FIELDS: &[&str] = &["$ref"];
+
+        struct ReferenceVisitor;
+
+        impl<'a> Visitor<'a> for ReferenceVisitor {
+            type Value = Reference;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Reference")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Reference, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                let mut inner = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Ref => {
+                            if inner.is_some() {
+                                return Err(de::Error::duplicate_field(FIELDS[0]));
+                            }
+                            inner = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                let inner: String = inner.ok_or_else(|| de::Error::missing_field(FIELDS[0]))?;
+
+                match inner.strip_prefix("#/definitions/") {
+                    Some(suffix) => Ok(Reference {
+                        inner: suffix.to_string(),
+                    }),
+                    None => Err(de::Error::custom(
+                        "Invalid reference; only local JSON pointer to #/definitions are allowed.",
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_struct("Reference", FIELDS, ReferenceVisitor)
     }
 }

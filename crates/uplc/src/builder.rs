@@ -2,24 +2,18 @@ use crate::{
     ast::{Constant, Name, Term, Type},
     builtins::DefaultFunction,
 };
+use pallas_primitives::alonzo::PlutusData;
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
 pub const EXPECT_ON_LIST: &str = "__expect_on_list";
 
-impl Term<Name> {
+impl<T> Term<T> {
     pub fn apply(self, arg: Self) -> Self {
         Term::Apply {
             function: self.into(),
             argument: arg.into(),
-        }
-    }
-
-    pub fn lambda(self, parameter_name: impl ToString) -> Self {
-        Term::Lambda {
-            parameter_name: Name::text(parameter_name).into(),
-            body: self.into(),
         }
     }
 
@@ -29,10 +23,6 @@ impl Term<Name> {
 
     pub fn delay(self) -> Self {
         Term::Delay(self.into())
-    }
-
-    pub fn var(name: impl ToString) -> Self {
-        Term::Var(Name::text(name).into())
     }
 
     pub fn integer(i: num_bigint::BigInt) -> Self {
@@ -53,6 +43,10 @@ impl Term<Name> {
 
     pub fn unit() -> Self {
         Term::Constant(Constant::Unit.into())
+    }
+
+    pub fn data(d: PlutusData) -> Self {
+        Term::Constant(Constant::Data(d).into())
     }
 
     pub fn empty_list() -> Self {
@@ -204,7 +198,7 @@ impl Term<Name> {
             .force()
     }
 
-    pub fn trace(self, msg_term: Term<Name>) -> Self {
+    pub fn trace(self, msg_term: Self) -> Self {
         Term::Builtin(DefaultFunction::Trace)
             .force()
             .apply(msg_term)
@@ -212,41 +206,34 @@ impl Term<Name> {
             .force()
     }
 
-    pub fn assert_on_list(self) -> Term<Name> {
-        self.lambda(EXPECT_ON_LIST.to_string())
-            .apply(
-                Term::var(EXPECT_ON_LIST.to_string()).apply(Term::var(EXPECT_ON_LIST.to_string())),
-            )
-            .lambda(EXPECT_ON_LIST.to_string())
-            .apply(
-                Term::var("__list_to_check".to_string())
-                    .delayed_choose_list(
-                        Term::unit(),
-                        Term::var("__check_with".to_string())
-                            .apply(
-                                Term::head_list().apply(Term::var("__list_to_check".to_string())),
-                            )
-                            .choose_unit(
-                                Term::var(EXPECT_ON_LIST.to_string())
-                                    .apply(Term::var(EXPECT_ON_LIST.to_string()))
-                                    .apply(
-                                        Term::tail_list()
-                                            .apply(Term::var("__list_to_check".to_string())),
-                                    )
-                                    .apply(Term::var("__check_with".to_string())),
-                            ),
-                    )
-                    .lambda("__check_with".to_string())
-                    .lambda("__list_to_check".to_string())
-                    .lambda(EXPECT_ON_LIST),
-            )
-    }
-
-    pub fn final_wrapper(self: Term<Name>) -> Term<Name> {
+    pub fn final_wrapper(self) -> Self {
         self.delayed_if_else(Term::unit(), Term::Error)
     }
 
-    pub fn constr_fields_exposer(self: Term<Name>) -> Term<Name> {
+    pub fn repeat_tail_list(self, repeat: usize) -> Self {
+        let mut term = self;
+
+        for _ in 0..repeat {
+            term = Term::tail_list().apply(term);
+        }
+
+        term
+    }
+}
+
+impl Term<Name> {
+    pub fn lambda(self, parameter_name: impl ToString) -> Self {
+        Term::Lambda {
+            parameter_name: Name::text(parameter_name).into(),
+            body: self.into(),
+        }
+    }
+
+    pub fn var(name: impl ToString) -> Self {
+        Term::Var(Name::text(name).into())
+    }
+
+    pub fn constr_fields_exposer(self) -> Self {
         self.lambda(CONSTR_FIELDS_EXPOSER.to_string()).apply(
             Term::snd_pair()
                 .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
@@ -254,7 +241,7 @@ impl Term<Name> {
         )
     }
 
-    pub fn constr_index_exposer(self: Term<Name>) -> Term<Name> {
+    pub fn constr_index_exposer(self) -> Self {
         self.lambda(CONSTR_INDEX_EXPOSER.to_string()).apply(
             Term::fst_pair()
                 .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
@@ -262,7 +249,7 @@ impl Term<Name> {
         )
     }
 
-    pub fn constr_get_field(self: Term<Name>) -> Term<Name> {
+    pub fn constr_get_field(self) -> Self {
         self.lambda(CONSTR_GET_FIELD.to_string())
             .apply(
                 Term::var(CONSTR_GET_FIELD.to_string())
@@ -298,13 +285,33 @@ impl Term<Name> {
             )
     }
 
-    pub fn repeat_tail_list(self: Term<Name>, repeat: usize) -> Term<Name> {
-        let mut term = self;
-
-        for _ in 0..repeat {
-            term = Term::tail_list().apply(term);
-        }
-
-        term
+    pub fn assert_on_list(self) -> Self {
+        self.lambda(EXPECT_ON_LIST.to_string())
+            .apply(
+                Term::var(EXPECT_ON_LIST.to_string()).apply(Term::var(EXPECT_ON_LIST.to_string())),
+            )
+            .lambda(EXPECT_ON_LIST.to_string())
+            .apply(
+                Term::var("__list_to_check".to_string())
+                    .delayed_choose_list(
+                        Term::unit(),
+                        Term::var("__check_with".to_string())
+                            .apply(
+                                Term::head_list().apply(Term::var("__list_to_check".to_string())),
+                            )
+                            .choose_unit(
+                                Term::var(EXPECT_ON_LIST.to_string())
+                                    .apply(Term::var(EXPECT_ON_LIST.to_string()))
+                                    .apply(
+                                        Term::tail_list()
+                                            .apply(Term::var("__list_to_check".to_string())),
+                                    )
+                                    .apply(Term::var("__check_with".to_string())),
+                            ),
+                    )
+                    .lambda("__check_with".to_string())
+                    .lambda("__list_to_check".to_string())
+                    .lambda(EXPECT_ON_LIST),
+            )
     }
 }

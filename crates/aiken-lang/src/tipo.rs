@@ -1,13 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
-
-use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
-
+use self::{environment::Environment, pretty::Printer};
 use crate::{
     ast::{Constant, DefinitionLocation, ModuleKind, Span},
     tipo::fields::FieldMap,
 };
-
-use self::{environment::Environment, pretty::Printer};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
+use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
 mod environment;
 pub mod error;

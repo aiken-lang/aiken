@@ -12,11 +12,7 @@ pub mod pretty;
 pub mod script;
 pub mod telemetry;
 
-use crate::blueprint::{
-    definitions::Reference,
-    schema::{Annotated, Schema},
-    Blueprint,
-};
+use crate::blueprint::Blueprint;
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
     builtins,
@@ -218,10 +214,7 @@ where
         self.compile(options)
     }
 
-    pub fn dump_uplc(
-        &self,
-        blueprint: &Blueprint<Reference, Annotated<Schema>>,
-    ) -> Result<(), Error> {
+    pub fn dump_uplc(&self, blueprint: &Blueprint) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
 
         self.event_listener
@@ -362,8 +355,7 @@ where
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let blueprint: Blueprint<serde_json::Value, serde_json::Value> =
-            serde_json::from_reader(BufReader::new(blueprint))?;
+        let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Calculate the address
         let when_too_many =
@@ -386,12 +378,11 @@ where
         &self,
         title: Option<&String>,
         param: &Term<DeBruijn>,
-    ) -> Result<Blueprint<serde_json::Value, serde_json::Value>, Error> {
+    ) -> Result<Blueprint, Error> {
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let mut blueprint: Blueprint<serde_json::Value, serde_json::Value> =
-            serde_json::from_reader(BufReader::new(blueprint))?;
+        let mut blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Apply parameters
         let when_too_many =
@@ -400,7 +391,9 @@ where
 
         let applied_validator =
             blueprint.with_validator(title, when_too_many, when_missing, |validator| {
-                validator.apply(param).map_err(|e| e.into())
+                validator
+                    .apply(&blueprint.definitions, param)
+                    .map_err(|e| e.into())
             })?;
 
         // Overwrite validator
