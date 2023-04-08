@@ -1,6 +1,7 @@
 use super::{
-    definitions::{Definitions, Reference},
+    definitions::Definitions,
     error::Error,
+    parameter::Parameter,
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
@@ -13,44 +14,36 @@ use serde;
 use uplc::ast::{DeBruijn, Program, Term};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Validator<R, S> {
+pub struct Validator {
     pub title: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub datum: Option<Argument<R>>,
+    pub datum: Option<Parameter>,
 
-    pub redeemer: Argument<R>,
+    pub redeemer: Parameter,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub parameters: Vec<Argument<R>>,
+    pub parameters: Vec<Parameter>,
 
     #[serde(flatten)]
     pub program: Program<DeBruijn>,
 
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
-    pub definitions: Definitions<S>,
+    pub definitions: Definitions<Annotated<Schema>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Argument<T> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-
-    pub schema: T,
-}
-
-impl Validator<Reference, Annotated<Schema>> {
+impl Validator {
     pub fn from_checked_module(
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
         module: &CheckedModule,
         def: &TypedValidator,
-    ) -> Vec<Result<Validator<Reference, Annotated<Schema>>, Error>> {
+    ) -> Vec<Result<Validator, Error>> {
         let program = generator.generate(def).try_into().unwrap();
 
         let is_multi_validator = def.other_fun.is_some();
@@ -85,7 +78,7 @@ impl Validator<Reference, Annotated<Schema>> {
         params: &[TypedArg],
         func: &TypedFunction,
         is_multi_validator: bool,
-    ) -> Result<Validator<Reference, Annotated<Schema>>, Error> {
+    ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
@@ -102,7 +95,7 @@ impl Validator<Reference, Annotated<Schema>> {
                 .iter()
                 .map(|param| {
                     Annotated::from_type(modules.into(), &param.tipo, &mut definitions)
-                        .map(|schema| Argument {
+                        .map(|schema| Parameter {
                             title: Some(param.arg_name.get_label()),
                             schema,
                         })
@@ -130,7 +123,7 @@ impl Validator<Reference, Annotated<Schema>> {
                     )
                 })
                 .transpose()?
-                .map(|schema| Argument {
+                .map(|schema| Parameter {
                     title: datum.map(|datum| datum.arg_name.get_label()),
                     schema,
                 }),
@@ -143,7 +136,7 @@ impl Validator<Reference, Annotated<Schema>> {
                         module.code.clone(),
                     ),
                 })
-                .map(|schema| Argument {
+                .map(|schema| Parameter {
                     title: Some(redeemer.arg_name.get_label()),
                     schema: match datum {
                         Some(..) if is_multi_validator => Annotated::as_wrapped_redeemer(
@@ -160,16 +153,16 @@ impl Validator<Reference, Annotated<Schema>> {
     }
 }
 
-impl<R, S> Validator<R, S>
-where
-    S: Clone,
-    R: Clone,
-{
-    pub fn apply(self, arg: &Term<DeBruijn>) -> Result<Self, Error> {
+impl Validator {
+    pub fn apply(
+        self,
+        definitions: &Definitions<Annotated<Schema>>,
+        arg: &Term<DeBruijn>,
+    ) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
-            Some((_, tail)) => {
-                // TODO: Ideally, we should control that the applied term matches its schema.
+            Some((head, tail)) => {
+                head.validate(definitions, arg)?;
                 Ok(Self {
                     program: self.program.apply_term(arg),
                     parameters: tail.to_vec(),
@@ -182,7 +175,14 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::{
+        super::{
+            definitions::{Definitions, Reference},
+            error::Error,
+            schema::{Annotated, Constructor, Data, Declaration, Items, Schema},
+        },
+        *,
+    };
     use crate::{module::ParsedModule, PackageName};
     use aiken_lang::{
         self,
@@ -197,6 +197,7 @@ mod test {
     use indexmap::IndexMap;
     use serde_json::{self, json};
     use std::{collections::HashMap, path::PathBuf};
+    use uplc::ast as uplc;
 
     // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
     // be to make this struct below the actual project, and wrap it in another metadata struct
@@ -316,6 +317,69 @@ mod test {
         println!("{}", serde_json::to_string_pretty(validator).unwrap());
 
         assert_json_eq!(serde_json::to_value(validator).unwrap(), expected);
+    }
+
+    fn fixture_definitions() -> Definitions<Annotated<Schema>> {
+        let mut definitions = Definitions::new();
+
+        // #/definitions/Int
+        //
+        // {
+        //   "dataType": "integer"
+        // }
+        definitions
+            .register::<_, Error>(&builtins::int(), &HashMap::new(), |_| {
+                Ok(Schema::Data(Data::Integer).into())
+            })
+            .unwrap();
+
+        // #/definitions/ByteArray
+        //
+        // {
+        //   "dataType": "bytes"
+        // }
+        definitions
+            .register::<_, Error>(&builtins::byte_array(), &HashMap::new(), |_| {
+                Ok(Schema::Data(Data::Bytes).into())
+            })
+            .unwrap();
+
+        // #/definitions/Bool
+        //
+        // {
+        //   "anyOf": [
+        //      {
+        //          "dataType": "constructor",
+        //          "index": 0,
+        //          "fields": []
+        //      },
+        //      {
+        //          "dataType": "constructor",
+        //          "index": 1,
+        //          "fields": []
+        //      },
+        //   ]
+        // }
+        definitions.insert(
+            &Reference::new("Bool"),
+            Schema::Data(Data::AnyOf(vec![
+                // False
+                Constructor {
+                    index: 0,
+                    fields: vec![],
+                }
+                .into(),
+                // True
+                Constructor {
+                    index: 1,
+                    fields: vec![],
+                }
+                .into(),
+            ]))
+            .into(),
+        );
+
+        definitions
     }
 
     #[test]
@@ -1095,5 +1159,267 @@ mod test {
               }
             }),
         )
+    }
+
+    #[test]
+    fn validate_arguments_integer() {
+        let definitions = fixture_definitions();
+
+        let term = Term::data(uplc::Data::integer(42.into()));
+
+        let param = Parameter {
+            title: None,
+            schema: Reference::new("Int"),
+        };
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_bytestring() {
+        let definitions = fixture_definitions();
+
+        let term = Term::data(uplc::Data::bytestring(vec![102, 111, 111]));
+
+        let param = Parameter {
+            title: None,
+            schema: Reference::new("ByteArray"),
+        };
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_list_inline() {
+        let schema = Reference::new("List$Int");
+
+        // #/definitions/List$Int
+        //
+        // {
+        //   "dataType": "list",
+        //   "items": { "dataType": "integer" }
+        // }
+        let mut definitions = fixture_definitions();
+        definitions.insert(
+            &schema,
+            Schema::Data(Data::List(Items::One(Declaration::Inline(Box::new(
+                Data::Integer,
+            )))))
+            .into(),
+        );
+
+        let term = Term::data(uplc::Data::list(vec![
+            uplc::Data::integer(42.into()),
+            uplc::Data::integer(14.into()),
+        ]));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_list_ref() {
+        let schema = Reference::new("List$ByteArray");
+
+        // #/definitions/List$ByteArray
+        //
+        // {
+        //   "dataType": "list",
+        //   "items": { "$ref": "#/definitions/ByteArray" }
+        // }
+        let mut definitions = fixture_definitions();
+        definitions.insert(
+            &schema,
+            Schema::Data(Data::List(Items::One(Declaration::Referenced(
+                Reference::new("ByteArray"),
+            ))))
+            .into(),
+        );
+
+        let term = Term::data(uplc::Data::list(vec![uplc::Data::bytestring(vec![
+            102, 111, 111,
+        ])]));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_tuple() {
+        let schema = Reference::new("Tuple$Int_ByteArray");
+
+        // #/definitions/Tuple$Int_ByteArray
+        //
+        // {
+        //   "dataType": "list",
+        //   "items": [
+        //     { "$ref": "#/definitions/Int" }
+        //     { "$ref": "#/definitions/ByteArray" }
+        //   ]
+        // }
+        let mut definitions = fixture_definitions();
+        definitions.insert(
+            &schema,
+            Schema::Data(Data::List(Items::Many(vec![
+                Declaration::Referenced(Reference::new("Int")),
+                Declaration::Referenced(Reference::new("ByteArray")),
+            ])))
+            .into(),
+        );
+
+        let term = Term::data(uplc::Data::list(vec![
+            uplc::Data::integer(42.into()),
+            uplc::Data::bytestring(vec![102, 111, 111]),
+        ]));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_dict() {
+        let schema = Reference::new("Dict$ByteArray_Int");
+
+        // #/definitions/Dict$Int_ByteArray
+        //
+        // {
+        //   "dataType": "map",
+        //   "keys": { "dataType": "bytes" },
+        //   "values": { "dataType": "integer" }
+        // }
+        let mut definitions = fixture_definitions();
+        definitions.insert(
+            &Reference::new("Dict$ByteArray_Int"),
+            Schema::Data(Data::Map(
+                Declaration::Inline(Box::new(Data::Bytes)),
+                Declaration::Inline(Box::new(Data::Integer)),
+            ))
+            .into(),
+        );
+
+        let term = Term::data(uplc::Data::map(vec![(
+            uplc::Data::bytestring(vec![102, 111, 111]),
+            uplc::Data::integer(42.into()),
+        )]));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_constr_nullary() {
+        let schema = Reference::new("Bool");
+
+        let definitions = fixture_definitions();
+
+        let term = Term::data(uplc::Data::constr(1, vec![]));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_constr_n_ary() {
+        let schema = Reference::new("Foo");
+
+        // #/definitions/Foo
+        //
+        // {
+        //   "anyOf": [
+        //      {
+        //          "dataType": "constructor",
+        //          "index": 0,
+        //          "fields": [{
+        //              "$ref": "#/definitions/Bool
+        //          }]
+        //      },
+        //   ]
+        // }
+        let mut definitions = fixture_definitions();
+        definitions.insert(
+            &schema,
+            Schema::Data(Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
+            }
+            .into()]))
+            .into(),
+        );
+
+        let term = Term::data(uplc::Data::constr(0, vec![uplc::Data::constr(0, vec![])]));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
+    }
+
+    #[test]
+    fn validate_arguments_constr_recursive() {
+        let schema = Reference::new("LinkedList$Int");
+
+        // #/definitions/LinkedList$Int
+        //
+        // {
+        //   "anyOf": [
+        //      {
+        //          "dataType": "constructor",
+        //          "index": 0,
+        //          "fields": []
+        //      },
+        //      {
+        //          "dataType": "constructor",
+        //          "index": 1,
+        //          "fields": [{
+        //              "$ref": "#/definitions/Int
+        //              "$ref": "#/definitions/LinkedList$Int
+        //          }]
+        //      },
+        //   ]
+        // }
+        let mut definitions = fixture_definitions();
+        definitions.insert(
+            &schema,
+            Schema::Data(Data::AnyOf(vec![
+                // Empty
+                Constructor {
+                    index: 0,
+                    fields: vec![],
+                }
+                .into(),
+                // Node
+                Constructor {
+                    index: 1,
+                    fields: vec![
+                        Declaration::Referenced(Reference::new("Int")).into(),
+                        Declaration::Referenced(Reference::new("LinkedList$Int")).into(),
+                    ],
+                }
+                .into(),
+            ]))
+            .into(),
+        );
+
+        let term = Term::data(uplc::Data::constr(
+            1,
+            vec![
+                uplc::Data::integer(14.into()),
+                uplc::Data::constr(
+                    1,
+                    vec![
+                        uplc::Data::integer(42.into()),
+                        uplc::Data::constr(0, vec![]),
+                    ],
+                ),
+            ],
+        ));
+
+        let param: Parameter = schema.into();
+
+        assert!(matches!(param.validate(&definitions, &term), Ok { .. }))
     }
 }

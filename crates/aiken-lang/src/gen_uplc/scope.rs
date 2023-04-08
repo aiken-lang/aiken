@@ -61,9 +61,9 @@ mod test {
     fn common_ancestor_equal_vecs() {
         let ancestor = Scope(vec![1, 2, 3, 4, 5, 6]);
 
-        let decendant = Scope(vec![1, 2, 3, 4, 5, 6]);
+        let descendant = Scope(vec![1, 2, 3, 4, 5, 6]);
 
-        let result = ancestor.common_ancestor(&decendant);
+        let result = ancestor.common_ancestor(&descendant);
 
         assert_eq!(result, Scope(vec![1, 2, 3, 4, 5, 6]))
     }
@@ -72,9 +72,9 @@ mod test {
     fn common_ancestor_equal_ancestor() {
         let ancestor = Scope(vec![1, 2, 3, 4]);
 
-        let decendant = Scope(vec![1, 2, 3, 4, 5, 6]);
+        let descendant = Scope(vec![1, 2, 3, 4, 5, 6]);
 
-        let result = ancestor.common_ancestor(&decendant);
+        let result = ancestor.common_ancestor(&descendant);
 
         assert_eq!(result, Scope(vec![1, 2, 3, 4]));
     }

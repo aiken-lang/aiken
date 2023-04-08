@@ -1560,7 +1560,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Some(tail) => {
                 let tail = self.infer(*tail)?;
 
-                // Ensure the tail has the same type as the preceeding elements
+                // Ensure the tail has the same type as the preceding elements
                 self.unify(tipo.clone(), tail.tipo(), location, false)?;
 
                 Some(Box::new(tail))

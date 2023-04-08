@@ -10,7 +10,7 @@
 
 2. **Documentation**
 
-   Any updates, typo fixes, or expansion of the documention is more than welcome. At the moment,
+   Any updates, typo fixes, or expansion of the documentation is more than welcome. At the moment,
    we are using [nextra](https://nextra.site) to run https://github.com/aiken-lang/site.
    That can be considered user level documentation but that is not strict. There is also doc comments in the Rust code, which can be considered strictly developer level documentation.
 
@@ -42,10 +42,10 @@
 
    **Changelog**
 
-   Please add an entry into [CHANGLOG.md](./CHANGELOG.md) when submitting changes. New entries should go into the `[next] YYYY-MM-DD` section. This let's us keep track of unreleased changes
+   Please add an entry into [CHANGELOG.md](./CHANGELOG.md) when submitting changes. New entries should go into the `[next] YYYY-MM-DD` section. This let's us keep track of unreleased changes
    for use in release notes.
 
-   Once a release is ready `[next] YYYY-MM-DD` gets replaced with a verion number and a the release date `[0.0.0] 2009-01-03`. Usually the maintainers will handle the section renaming along with creating a new _empty_ `[next] YYYY-MM-DD` section at the top of the changelog.
+   Once a release is ready `[next] YYYY-MM-DD` gets replaced with a version number and a the release date `[0.0.0] 2009-01-03`. Usually the maintainers will handle the section renaming along with creating a new _empty_ `[next] YYYY-MM-DD` section at the top of the changelog.
 
    Each release section will be further broken down into three sections named `Added`, `Changed`, and `Removed`. Please put the associated crate's name in **bold** followed by a `:` as a prefix to the new entry.
 

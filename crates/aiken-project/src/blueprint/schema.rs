@@ -8,10 +8,11 @@ use aiken_lang::{
 use owo_colors::{OwoColorize, Stream::Stdout};
 use serde::{
     self,
+    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
     ser::{Serialize, SerializeStruct, Serializer},
 };
-use std::ops::Deref;
-use std::{collections::HashMap, sync::Arc};
+use serde_json as json;
+use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 
 // NOTE: Can be anything BUT 0
 pub const REDEEMER_DISCRIMINANT: usize = 1;
@@ -26,6 +27,50 @@ pub struct Annotated<T> {
     pub annotated: T,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum Declaration<T> {
+    Referenced(Reference),
+    Inline(Box<T>),
+}
+
+impl<'a, T> Declaration<T> {
+    pub fn reference(&'a self) -> Option<&'a Reference> {
+        match self {
+            Declaration::Referenced(reference) => Some(reference),
+            Declaration::Inline(..) => None,
+        }
+    }
+
+    fn try_schema(
+        &'a self,
+        definitions: &'a Definitions<Annotated<Schema>>,
+        cast: fn(&'a Schema) -> Option<&'a T>,
+    ) -> Option<&'a T> {
+        match self {
+            Declaration::Inline(inner) => Some(inner.deref()),
+            Declaration::Referenced(reference) => definitions
+                .lookup(reference)
+                .and_then(|s| cast(&s.annotated)),
+        }
+    }
+}
+
+impl<'a> Declaration<Data> {
+    pub fn schema(&'a self, definitions: &'a Definitions<Annotated<Schema>>) -> Option<&'a Data> {
+        self.try_schema(definitions, |s| match s {
+            Schema::Data(data) => Some(data),
+            _ => None,
+        })
+    }
+}
+
+impl<'a> Declaration<Schema> {
+    pub fn schema(&'a self, definitions: &'a Definitions<Annotated<Schema>>) -> Option<&'a Schema> {
+        self.try_schema(definitions, Some)
+    }
+}
+
 /// A schema for low-level UPLC primitives.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Schema {
@@ -34,8 +79,8 @@ pub enum Schema {
     Integer,
     Bytes,
     String,
-    Pair(Data, Data),
-    List(Vec<Data>),
+    Pair(Declaration<Schema>, Declaration<Schema>),
+    List(Items<Schema>),
     Data(Data),
 }
 
@@ -44,24 +89,25 @@ pub enum Schema {
 pub enum Data {
     Integer,
     Bytes,
-    List(Items<Reference>),
-    Map(Box<Reference>, Box<Reference>),
+    List(Items<Data>),
+    Map(Declaration<Data>, Declaration<Data>),
     AnyOf(Vec<Annotated<Constructor>>),
     Opaque,
 }
 
 /// A structure that represents either one or many elements.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum Items<T> {
-    One(Box<T>),
-    Many(Vec<T>),
+    One(Declaration<T>),
+    Many(Vec<Declaration<T>>),
 }
 
 /// Captures a single UPLC constructor with its
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Constructor {
     pub index: usize,
-    pub fields: Vec<Annotated<Reference>>,
+    pub fields: Vec<Annotated<Declaration<Data>>>,
 }
 
 impl<T> From<T> for Annotated<T> {
@@ -90,7 +136,7 @@ impl Annotated<Schema> {
                         description: Some("A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.".to_string()),
                         annotated: Schema::Data(Data::AnyOf(vec![Constructor {
                             index: REDEEMER_DISCRIMINANT,
-                            fields: vec![schema.into()],
+                            fields: vec![Declaration::Referenced(schema).into()],
                         }
                         .into()])),
                     })
@@ -219,7 +265,7 @@ impl Annotated<Schema> {
                                         description: Some("An optional value.".to_string()),
                                         annotated: Constructor {
                                             index: 0,
-                                            fields: vec![generic.into()],
+                                            fields: vec![Declaration::Referenced(generic).into()],
                                         },
                                     },
                                     Annotated {
@@ -260,22 +306,15 @@ impl Annotated<Schema> {
                                 } if xs.len() == 2 => {
                                     definitions.remove(&generic);
                                     Data::Map(
-                                        Box::new(
-                                            xs.first()
-                                                .expect("length (== 2) checked in pattern clause")
-                                                .to_owned(),
-                                        ),
-                                        Box::new(
-                                            xs.last()
-                                                .expect("length (== 2) checked in pattern clause")
-                                                .to_owned(),
-                                        ),
+                                        xs.first()
+                                            .expect("length (== 2) checked in pattern clause")
+                                            .to_owned(),
+                                        xs.last()
+                                            .expect("length (== 2) checked in pattern clause")
+                                            .to_owned(),
                                     )
                                 }
-                                _ => {
-                                    // let inner = schema.clone().into_data(type_info)?.annotated;
-                                    Data::List(Items::One(Box::new(generic)))
-                                }
+                                _ => Data::List(Items::One(Declaration::Referenced(generic))),
                             };
 
                             Ok(Schema::Data(data).into())
@@ -320,6 +359,7 @@ impl Annotated<Schema> {
                         .iter()
                         .map(|elem| {
                             Annotated::do_from_type(elem, modules, type_parameters, definitions)
+                                .map(Declaration::Referenced)
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map_err(|e| e.backtrack(type_info))?;
@@ -398,7 +438,7 @@ impl Data {
                 fields.push(Annotated {
                     title: field.label.clone(),
                     description: field.doc.clone().map(|s| s.trim().to_string()),
-                    annotated: reference,
+                    annotated: Declaration::Referenced(reference),
                 });
             }
 
@@ -510,6 +550,245 @@ impl Serialize for Schema {
     }
 }
 
+fn visit_schema<'a, V>(mut map: V) -> Result<Schema, V::Error>
+where
+    V: MapAccess<'a>,
+{
+    #[derive(serde::Deserialize)]
+    #[serde(field_identifier, rename_all = "camelCase")]
+    enum Field {
+        DataType,
+        Items,
+        Keys,
+        Values,
+        Left,
+        Right,
+        AnyOf,
+        OneOf,
+    }
+
+    let mut data_type: Option<String> = None;
+    let mut items: Option<json::Value> = None; // defer items deserialization to later
+    let mut keys = None;
+    let mut left = None;
+    let mut right = None;
+    let mut values = None;
+    let mut any_of = None;
+
+    while let Some(key) = map.next_key()? {
+        match key {
+            Field::DataType => {
+                if data_type.is_some() {
+                    return Err(de::Error::duplicate_field("dataType"));
+                }
+                data_type = Some(map.next_value()?);
+            }
+            Field::Items => {
+                if items.is_some() {
+                    return Err(de::Error::duplicate_field("items"));
+                }
+                items = Some(map.next_value()?);
+            }
+            Field::Keys => {
+                if keys.is_some() {
+                    return Err(de::Error::duplicate_field("keys"));
+                }
+                keys = Some(map.next_value()?);
+            }
+            Field::Values => {
+                if values.is_some() {
+                    return Err(de::Error::duplicate_field("values"));
+                }
+                values = Some(map.next_value()?);
+            }
+            Field::Left => {
+                if left.is_some() {
+                    return Err(de::Error::duplicate_field("left"));
+                }
+                left = Some(map.next_value()?);
+            }
+            Field::Right => {
+                if right.is_some() {
+                    return Err(de::Error::duplicate_field("right"));
+                }
+                right = Some(map.next_value()?);
+            }
+            Field::AnyOf => {
+                if any_of.is_some() {
+                    return Err(de::Error::duplicate_field("anyOf/oneOf"));
+                }
+                any_of = Some(map.next_value()?);
+            }
+            Field::OneOf => {
+                if any_of.is_some() {
+                    return Err(de::Error::duplicate_field("anyOf/oneOf"));
+                }
+                any_of = Some(map.next_value()?);
+            }
+        }
+    }
+
+    let expect_data_items = || match &items {
+        Some(items) => serde_json::from_value::<Items<Data>>(items.clone())
+            .map_err(|e| de::Error::custom(e.to_string())),
+        None => Err(de::Error::missing_field("items")),
+    };
+
+    let expect_schema_items = || match &items {
+        Some(items) => serde_json::from_value::<Items<Schema>>(items.clone())
+            .map_err(|e| de::Error::custom(e.to_string())),
+        None => Err(de::Error::missing_field("items")),
+    };
+
+    let expect_no_items = || {
+        if items.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'items' for non-list data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_keys = || {
+        if keys.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'keys' for non-map data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_values = || {
+        if values.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'values' for non-map data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_any_of = || {
+        if any_of.is_some() {
+            return Err(de::Error::custom(
+                "unexpected fields 'anyOf' or 'oneOf'; applicators must singletons",
+            ));
+        }
+        Ok(())
+    };
+
+    let expect_no_left_or_right = || {
+        if left.is_some() || right.is_some() {
+            return Err(de::Error::custom(
+                "unexpected field(s) 'left' and/or 'right' for a non-pair data-type",
+            ));
+        }
+        Ok(())
+    };
+
+    match data_type {
+        None => {
+            expect_no_items()?;
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_left_or_right()?;
+            match any_of {
+                None => Ok(Schema::Data(Data::Opaque)),
+                Some(constructors) => Ok(Schema::Data(Data::AnyOf(constructors))),
+            }
+        }
+        Some(data_type) if data_type == "list" => {
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            let items = expect_data_items()?;
+            Ok(Schema::Data(Data::List(items)))
+        }
+        Some(data_type) if data_type == "#list" => {
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            let items = expect_schema_items()?;
+            Ok(Schema::List(items))
+        }
+        Some(data_type) if data_type == "map" => {
+            expect_no_items()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            match (keys, values) {
+                (Some(keys), Some(values)) => Ok(Schema::Data(Data::Map(keys, values))),
+                (None, _) => Err(de::Error::missing_field("keys")),
+                (Some(..), None) => Err(de::Error::missing_field("values")),
+            }
+        }
+        Some(data_type) if data_type == "#pair" => {
+            expect_no_items()?;
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            match (left, right) {
+                (Some(left), Some(right)) => Ok(Schema::Pair(left, right)),
+                (None, _) => Err(de::Error::missing_field("left")),
+                (Some(..), None) => Err(de::Error::missing_field("right")),
+            }
+        }
+        Some(data_type) => {
+            expect_no_items()?;
+            expect_no_keys()?;
+            expect_no_values()?;
+            expect_no_any_of()?;
+            expect_no_left_or_right()?;
+            if data_type == "bytes" {
+                Ok(Schema::Data(Data::Bytes))
+            } else if data_type == "integer" {
+                Ok(Schema::Data(Data::Integer))
+            } else if data_type == "#unit" {
+                Ok(Schema::Unit)
+            } else if data_type == "#integer" {
+                Ok(Schema::Integer)
+            } else if data_type == "#bytes" {
+                Ok(Schema::Bytes)
+            } else if data_type == "#boolean" {
+                Ok(Schema::Boolean)
+            } else if data_type == "#string" {
+                Ok(Schema::String)
+            } else {
+                Err(de::Error::custom("unknown data-type"))
+            }
+        }
+    }
+}
+
+impl<'a> Deserialize<'a> for Schema {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SchemaVisitor;
+
+        impl<'a> Visitor<'a> for SchemaVisitor {
+            type Value = Schema;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Schema")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Schema, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                visit_schema(&mut map)
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "Schema",
+            &[
+                "dataType", "items", "keys", "values", "anyOf", "oneOf", "left", "right",
+            ],
+            SchemaVisitor,
+        )
+    }
+}
+
 impl Serialize for Data {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -527,13 +806,7 @@ impl Serialize for Data {
                 s.serialize_field("dataType", "bytes")?;
                 s.end()
             }
-            Data::List(Items::One(item)) => {
-                let mut s = serializer.serialize_struct("List", 2)?;
-                s.serialize_field("dataType", "list")?;
-                s.serialize_field("items", &item)?;
-                s.end()
-            }
-            Data::List(Items::Many(items)) => {
+            Data::List(items) => {
                 let mut s = serializer.serialize_struct("List", 2)?;
                 s.serialize_field("dataType", "list")?;
                 s.serialize_field("items", &items)?;
@@ -554,6 +827,38 @@ impl Serialize for Data {
         }
     }
 }
+
+impl<'a> Deserialize<'a> for Data {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        struct DataVisitor;
+
+        impl<'a> Visitor<'a> for DataVisitor {
+            type Value = Data;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Data")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Data, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                let schema = visit_schema(&mut map)?;
+                match schema {
+                    Schema::Data(data) => Ok(data),
+                    _ => Err(de::Error::custom("not a valid 'data'")),
+                }
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "Data",
+            &["dataType", "items", "keys", "values", "anyOf", "oneOf"],
+            DataVisitor,
+        )
+    }
+}
+
 impl Serialize for Constructor {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut s = serializer.serialize_struct("Constructor", 3)?;
@@ -561,6 +866,60 @@ impl Serialize for Constructor {
         s.serialize_field("index", &self.index)?;
         s.serialize_field("fields", &self.fields)?;
         s.end()
+    }
+}
+
+impl<'a> Deserialize<'a> for Constructor {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(field_identifier, rename_all = "camelCase")]
+        enum Field {
+            Index,
+            Fields,
+        }
+        const FIELDS: &[&str] = &["index", "fields"];
+
+        struct ConstructorVisitor;
+
+        impl<'a> Visitor<'a> for ConstructorVisitor {
+            type Value = Constructor;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Constructor")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Constructor, V::Error>
+            where
+                V: MapAccess<'a>,
+            {
+                let mut index = None;
+                let mut fields = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Index => {
+                            if index.is_some() {
+                                return Err(de::Error::duplicate_field(FIELDS[0]));
+                            }
+                            index = Some(map.next_value()?);
+                        }
+                        Field::Fields => {
+                            if fields.is_some() {
+                                return Err(de::Error::duplicate_field(FIELDS[1]));
+                            }
+                            fields = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                Ok(Constructor {
+                    index: index.ok_or_else(|| de::Error::missing_field(FIELDS[0]))?,
+                    fields: fields.ok_or_else(|| de::Error::missing_field(FIELDS[1]))?,
+                })
+            }
+        }
+
+        deserializer.deserialize_struct("Constructor", FIELDS, ConstructorVisitor)
     }
 }
 
@@ -681,6 +1040,7 @@ Here's the types I followed and that led me to this problem:
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use proptest::prelude::*;
     use serde_json::{self, json, Value};
 
     pub fn assert_json(schema: &impl Serialize, expected: Value) {
@@ -712,7 +1072,7 @@ pub mod test {
     #[test]
     fn serialize_data_list_1() {
         let ref_integer = Reference::new("Int");
-        let schema = Schema::Data(Data::List(Items::One(Box::new(ref_integer))));
+        let schema = Schema::Data(Data::List(Items::One(Declaration::Referenced(ref_integer))));
         assert_json(
             &schema,
             json!({
@@ -727,7 +1087,9 @@ pub mod test {
     #[test]
     fn serialize_data_list_2() {
         let ref_list_integer = Reference::new("List$Int");
-        let schema = Schema::Data(Data::List(Items::One(Box::new(ref_list_integer))));
+        let schema = Schema::Data(Data::List(Items::One(Declaration::Referenced(
+            ref_list_integer,
+        ))));
         assert_json(
             &schema,
             json!({
@@ -741,9 +1103,9 @@ pub mod test {
 
     #[test]
     fn serialize_data_map_1() {
-        let ref_integer = Reference::new("Int");
-        let ref_bytes = Reference::new("ByteArray");
-        let schema = Schema::Data(Data::Map(Box::new(ref_integer), Box::new(ref_bytes)));
+        let ref_integer = Declaration::Referenced(Reference::new("Int"));
+        let ref_bytes = Declaration::Referenced(Reference::new("ByteArray"));
+        let schema = Schema::Data(Data::Map(ref_integer, ref_bytes));
         assert_json(
             &schema,
             json!({
@@ -782,12 +1144,12 @@ pub mod test {
         let schema = Schema::Data(Data::AnyOf(vec![
             Constructor {
                 index: 0,
-                fields: vec![Reference::new("Int").into()],
+                fields: vec![Declaration::Referenced(Reference::new("Int")).into()],
             }
             .into(),
             Constructor {
                 index: 1,
-                fields: vec![Reference::new("Bytes").into()],
+                fields: vec![Declaration::Referenced(Reference::new("Bytes")).into()],
             }
             .into(),
         ]));
@@ -847,5 +1209,225 @@ pub mod test {
                 "dataType": "#string"
             }),
         )
+    }
+
+    #[test]
+    fn deserialize_data_opaque() {
+        assert_eq!(Data::Opaque, serde_json::from_value(json!({})).unwrap())
+    }
+
+    #[test]
+    fn deserialize_data_integer() {
+        assert_eq!(
+            Data::Integer,
+            serde_json::from_value(json!({
+                "dataType": "integer",
+            }))
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialize_data_bytes() {
+        assert_eq!(
+            Data::Bytes,
+            serde_json::from_value(json!({
+                "dataType": "bytes",
+            }))
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialize_data_list_one() {
+        assert_eq!(
+            Data::List(Items::One(Declaration::Referenced(Reference::new("foo")))),
+            serde_json::from_value(json!({
+                "dataType": "list",
+                "items": { "$ref": "#/definitions/foo" }
+            }))
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialize_data_list_many() {
+        assert_eq!(
+            Data::List(Items::Many(vec![
+                Declaration::Referenced(Reference::new("foo")),
+                Declaration::Referenced(Reference::new("bar"))
+            ])),
+            serde_json::from_value(json!({
+                "dataType": "list",
+                "items": [
+                  { "$ref": "#/definitions/foo" },
+                  { "$ref": "#/definitions/bar" }
+                ],
+            }))
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialize_data_map() {
+        assert_eq!(
+            Data::Map(
+                Declaration::Referenced(Reference::new("foo")),
+                Declaration::Referenced(Reference::new("bar"))
+            ),
+            serde_json::from_value(json!({
+                "dataType": "map",
+                "keys": { "$ref": "#/definitions/foo" },
+                "values": { "$ref": "#/definitions/bar" }
+            }))
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialize_any_of() {
+        assert_eq!(
+            Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![
+                    Declaration::Referenced(Reference::new("foo")).into(),
+                    Declaration::Referenced(Reference::new("bar")).into()
+                ],
+            }
+            .into()]),
+            serde_json::from_value(json!({
+                "anyOf": [{
+                    "index": 0,
+                    "fields": [
+                        {
+                            "$ref": "#/definitions/foo",
+                        },
+                        {
+                            "$ref": "#/definitions/bar",
+                        }
+                    ]
+                }]
+            }))
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialize_one_of() {
+        assert_eq!(
+            Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![
+                    Declaration::Referenced(Reference::new("foo")).into(),
+                    Declaration::Referenced(Reference::new("bar")).into()
+                ],
+            }
+            .into()]),
+            serde_json::from_value(json!({
+                "oneOf": [{
+                    "index": 0,
+                    "fields": [
+                        {
+                            "$ref": "#/definitions/foo",
+                        },
+                        {
+                            "$ref": "#/definitions/bar",
+                        }
+                    ]
+                }]
+            }))
+            .unwrap()
+        )
+    }
+
+    fn arbitrary_data() -> impl Strategy<Value = Data> {
+        let leaf = prop_oneof![Just(Data::Opaque), Just(Data::Bytes), Just(Data::Integer)];
+
+        leaf.prop_recursive(3, 8, 3, |inner| {
+            let r = prop_oneof![
+                ".*".prop_map(|s| Declaration::Referenced(Reference::new(&s))),
+                inner.prop_map(|s| Declaration::Inline(Box::new(s)))
+            ];
+            let constructor =
+                (0..3usize, prop::collection::vec(r.clone(), 0..3)).prop_map(|(index, fields)| {
+                    Constructor {
+                        index,
+                        fields: fields.into_iter().map(|f| f.into()).collect(),
+                    }
+                    .into()
+                });
+
+            prop_oneof![
+                (r.clone(), r.clone()).prop_map(|(k, v)| Data::Map(k, v)),
+                r.clone().prop_map(|x| Data::List(Items::One(x))),
+                prop::collection::vec(r, 1..3).prop_map(|xs| Data::List(Items::Many(xs))),
+                prop::collection::vec(constructor, 1..3).prop_map(Data::AnyOf)
+            ]
+        })
+    }
+
+    fn arbitrary_schema() -> impl Strategy<Value = Schema> {
+        prop_compose! {
+            fn data_strategy()(data in arbitrary_data()) -> Schema {
+                Schema::Data(data)
+            }
+        }
+
+        let leaf = prop_oneof![
+            Just(Schema::Unit),
+            Just(Schema::Boolean),
+            Just(Schema::Bytes),
+            Just(Schema::Integer),
+            Just(Schema::String),
+            data_strategy(),
+        ];
+
+        leaf.prop_recursive(3, 8, 3, |inner| {
+            let r = prop_oneof![
+                ".*".prop_map(|s| Declaration::Referenced(Reference::new(&s))),
+                inner.prop_map(|s| Declaration::Inline(Box::new(s)))
+            ];
+            prop_oneof![
+                (r.clone(), r.clone()).prop_map(|(l, r)| Schema::Pair(l, r)),
+                r.clone().prop_map(|x| Schema::List(Items::One(x))),
+                prop::collection::vec(r, 1..3).prop_map(|xs| Schema::List(Items::Many(xs))),
+            ]
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn data_serialization_roundtrip(data in arbitrary_data()) {
+            let json = serde_json::to_value(data);
+            let pretty = json
+                    .as_ref()
+                    .map(|v| serde_json::to_string_pretty(v).unwrap())
+                    .unwrap_or_else(|_| "invalid".to_string());
+            assert!(
+                matches!(
+                    json.and_then(serde_json::from_value::<Data>),
+                    Ok{..}
+                ),
+                "\ncounterexample: {pretty}\n",
+            )
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn schema_serialization_roundtrip(schema in arbitrary_schema()) {
+            let json = serde_json::to_value(schema);
+            let pretty = json
+                    .as_ref()
+                    .map(|v| serde_json::to_string_pretty(v).unwrap())
+                    .unwrap_or_else(|_| "invalid".to_string());
+            assert!(
+                matches!(
+                    json.and_then(serde_json::from_value::<Schema>),
+                    Ok{..}
+                ),
+                "\ncounterexample: {pretty}\n",
+            )
+        }
     }
 }

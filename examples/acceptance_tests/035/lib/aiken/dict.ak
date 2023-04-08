@@ -1,5 +1,5 @@
 /// An opaque `Dict`. The type is opaque because the module maintains some
-/// invariant, namely: there's only one occurence of a given key in the dictionnary.
+/// invariant, namely: there's only one occurrence of a given key in the dictionary.
 pub opaque type Dict<key, value> {
   inner: List<(ByteArray, value)>,
 }

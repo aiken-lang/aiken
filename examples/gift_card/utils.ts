@@ -26,7 +26,7 @@ export type LocalCache = {
 
 export function readValidators(): Validators {
   const redeem = (blueprint as Blueprint).validators.find((v) =>
-    v.title === "main.redeem"
+    v.title === "oneshot.redeem"
   );
 
   if (!redeem) {
@@ -34,7 +34,7 @@ export function readValidators(): Validators {
   }
 
   const giftCard = (blueprint as Blueprint).validators.find((v) =>
-    v.title === "main.gift_card"
+    v.title === "oneshot.gift_card"
   );
 
   if (!giftCard) {
