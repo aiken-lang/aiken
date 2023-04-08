@@ -20,6 +20,7 @@ use crate::{
     },
     builtins::{bool, data},
     expr::TypedExpr,
+    gen_uplc::builder::{find_and_replace_generics, get_generic_id_and_type},
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
@@ -113,6 +114,10 @@ impl<'a> CodeGenerator<'a> {
 
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
 
+        println!("{:#?}", self.code_gen_functions);
+
+        println!("{:#?}", ir_stack);
+
         let mut term = self.uplc_code_gen(&mut ir_stack);
 
         if let Some(other) = other_fun {
@@ -167,6 +172,8 @@ impl<'a> CodeGenerator<'a> {
 
         self.convert_opaque_type_to_inner_ir(&mut ir_stack);
 
+        println!("{:#?}", ir_stack);
+
         let term = self.uplc_code_gen(&mut ir_stack);
 
         self.finalize(term)
@@ -186,6 +193,8 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
+
+        println!("{}", program.to_pretty());
 
         program = aiken_optimize_and_intern(program);
 
@@ -2298,6 +2307,12 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
 
+            if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
+                *counter += 1
+            } else {
+                defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
+            }
+
             expect_stack.expect_list_from_data(tipo.clone(), name, unwrap_function_stack);
 
             expect_stack.void();
@@ -2334,6 +2349,12 @@ impl<'a> CodeGenerator<'a> {
                     EXPECT_ON_LIST.to_string(),
                     CodeGenFunction::Function(expect_list_stack.complete(), vec![]),
                 );
+            }
+
+            if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
+                *counter += 1
+            } else {
+                defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
             }
 
             expect_stack.expect_list_from_data(tipo.clone(), name, unwrap_function_stack);
@@ -2373,6 +2394,9 @@ impl<'a> CodeGenerator<'a> {
             let data_type =
                 builder::lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
 
+            println!("NAME IS {} AND TYPE IS {:#?}", name, tipo);
+            println!("DATATYPE IS {:#?}", data_type);
+
             let new_id = self.id_gen.next();
 
             let mut var_stack = expect_stack.empty_with_scope();
@@ -2385,6 +2409,18 @@ impl<'a> CodeGenerator<'a> {
 
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
                 defined_data_types.insert(data_type_name.clone(), 1);
+
+                let mono_types: IndexMap<u64, Arc<Type>> = if !data_type.typed_parameters.is_empty()
+                {
+                    data_type
+                        .typed_parameters
+                        .iter()
+                        .zip(tipo.arg_types().unwrap())
+                        .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
+                        .collect()
+                } else {
+                    vec![].into_iter().collect()
+                };
 
                 let current_defined_state = defined_data_types.clone();
                 let mut diff_defined_types = IndexMap::new();
@@ -2406,7 +2442,10 @@ impl<'a> CodeGenerator<'a> {
                                 .clone()
                                 .unwrap_or(format!("__field_{index}_{new_id}"));
 
-                            (index, arg_name, arg.tipo.clone())
+                            let mut arg_tipo = arg.tipo.clone();
+
+                            find_and_replace_generics(&mut arg_tipo, &mono_types);
+                            (index, arg_name, arg_tipo)
                         })
                         .collect_vec();
 
@@ -2450,6 +2489,7 @@ impl<'a> CodeGenerator<'a> {
                             diff_defined_types.insert(inner_data_type.to_string(), *inner_count);
                         }
                     }
+                    println!("DIFF DEFINED TYPES {:#?}", diff_defined_types);
 
                     arg_stack.void();
 
@@ -2499,7 +2539,7 @@ impl<'a> CodeGenerator<'a> {
                             .collect_vec(),
                     ),
                 );
-            } else if defined_data_types.get(&data_type_name).is_some() && function.is_none() {
+            } else if defined_data_types.get(&data_type_name).is_some() {
                 let Some(counter) = defined_data_types.get_mut(&data_type_name)
                 else {
                     unreachable!();
@@ -2709,12 +2749,43 @@ impl<'a> CodeGenerator<'a> {
                 .collect_vec(),
         );
 
+        println!("DEPENDENCY VEC IS {:#?}", dependency_vec);
+        println!("FUNC INDEX MAP IS {:#?}", func_index_map);
+
         for func in dependency_vec {
             if self.defined_functions.contains_key(&func) {
                 continue;
             }
-            let function_component = function_definitions.get(&func).unwrap();
+
             let func_scope = func_index_map.get(&func).unwrap();
+            println!("FUNC IS {:#?}", func);
+            println!("FUNC SCOPE IS {:#?}", func_scope);
+
+            let mut added_dependencies = vec![];
+
+            for same_scope_func in func_index_map
+                .iter()
+                .filter(|item| item.1 == func_scope && &func != item.0)
+                .map(|item| item.0)
+            {
+                added_dependencies.push(same_scope_func.clone());
+                let same_scope_func_dependencies = function_definitions
+                    .get(same_scope_func)
+                    .unwrap()
+                    .dependencies
+                    .clone();
+                added_dependencies.extend(same_scope_func_dependencies.iter().cloned())
+            }
+
+            let Some(function_component) = function_definitions.get_mut(&func)
+            else {
+                unreachable!("Function Definition should exist");
+            };
+
+            function_component.dependencies.extend(added_dependencies);
+            function_component.dependencies.dedup();
+
+            let function_component = function_definitions.get(&func).unwrap();
 
             let mut dep_ir = vec![];
 
@@ -4921,6 +4992,8 @@ impl<'a> CodeGenerator<'a> {
                 let mut actual_type = arg.tipo.clone();
 
                 replace_opaque_type(&mut actual_type, self.data_types.clone());
+
+                println!("ACTUAL TYPE IS {:#?}", actual_type);
 
                 self.assignment(
                     &Pattern::Var {
