@@ -206,10 +206,6 @@ impl<T> Term<T> {
             .force()
     }
 
-    pub fn final_wrapper(self) -> Self {
-        self.delayed_if_else(Term::unit(), Term::Error)
-    }
-
     pub fn repeat_tail_list(self, repeat: usize) -> Self {
         let mut term = self;
 
