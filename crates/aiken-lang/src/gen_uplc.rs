@@ -2442,6 +2442,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut arg_tipo = arg.tipo.clone();
 
                             find_and_replace_generics(&mut arg_tipo, &mono_types);
+
                             (index, arg_name, arg_tipo)
                         })
                         .collect_vec();
@@ -2745,7 +2746,7 @@ impl<'a> CodeGenerator<'a> {
                 .collect_vec(),
         );
 
-        for func in dependency_vec {
+        for func in dependency_vec.into_iter() {
             if self.defined_functions.contains_key(&func) {
                 continue;
             }
@@ -2754,18 +2755,23 @@ impl<'a> CodeGenerator<'a> {
 
             let mut added_dependencies = vec![];
 
-            for same_scope_func in func_index_map
-                .iter()
-                .filter(|item| item.1 == func_scope && &func != item.0)
-                .map(|item| item.0)
-            {
-                added_dependencies.push(same_scope_func.clone());
-                let same_scope_func_dependencies = function_definitions
-                    .get(same_scope_func)
-                    .unwrap()
-                    .dependencies
-                    .clone();
-                added_dependencies.extend(same_scope_func_dependencies.iter().cloned())
+            let Some(function_component) = function_definitions.get(&func)
+            else {
+                unreachable!("Function Definition should exist");
+            };
+
+            if !function_component.args.is_empty() {
+                for same_scope_func in func_index_map
+                    .iter()
+                    .filter(|item| item.1 == func_scope && &func != item.0)
+                    .map(|item| item.0)
+                {
+                    if !self.defined_functions.contains_key(same_scope_func)
+                        && !final_func_dep_ir.contains_key(same_scope_func)
+                    {
+                        added_dependencies.push(same_scope_func.clone());
+                    }
+                }
             }
 
             let Some(function_component) = function_definitions.get_mut(&func)
@@ -2774,7 +2780,6 @@ impl<'a> CodeGenerator<'a> {
             };
 
             function_component.dependencies.extend(added_dependencies);
-            function_component.dependencies.dedup();
 
             let function_component = function_definitions.get(&func).unwrap();
 
