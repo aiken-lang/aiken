@@ -2753,34 +2753,6 @@ impl<'a> CodeGenerator<'a> {
 
             let func_scope = func_index_map.get(&func).unwrap();
 
-            let mut added_dependencies = vec![];
-
-            let Some(function_component) = function_definitions.get(&func)
-            else {
-                unreachable!("Function Definition should exist");
-            };
-
-            if !function_component.args.is_empty() {
-                for same_scope_func in func_index_map
-                    .iter()
-                    .filter(|item| item.1 == func_scope && &func != item.0)
-                    .map(|item| item.0)
-                {
-                    if !self.defined_functions.contains_key(same_scope_func)
-                        && !final_func_dep_ir.contains_key(same_scope_func)
-                    {
-                        added_dependencies.push(same_scope_func.clone());
-                    }
-                }
-            }
-
-            let Some(function_component) = function_definitions.get_mut(&func)
-            else {
-                unreachable!("Function Definition should exist");
-            };
-
-            function_component.dependencies.extend(added_dependencies);
-
             let function_component = function_definitions.get(&func).unwrap();
 
             let mut dep_ir = vec![];
