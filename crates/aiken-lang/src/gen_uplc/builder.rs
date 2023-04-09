@@ -1442,8 +1442,12 @@ pub fn handle_func_dependencies(
 ) {
     let function_component = function_component.clone();
 
-    let mut function_dependency_order = function_component.dependencies.clone();
-
+    let mut function_dependency_order = function_component
+        .dependencies
+        .iter()
+        .unique()
+        .cloned()
+        .collect_vec();
     let mut dependency_map = IndexMap::new();
     let mut dependency_vec = vec![];
 
@@ -1455,7 +1459,7 @@ pub fn handle_func_dependencies(
             dependency_map.shift_remove(&dependency);
         }
 
-        function_dependency_order.extend(depend_comp.dependencies.iter().cloned().collect_vec());
+        function_dependency_order.extend(depend_comp.dependencies.clone());
 
         dependency_map.insert(dependency, ());
     }
