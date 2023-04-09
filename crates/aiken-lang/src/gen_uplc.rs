@@ -18,7 +18,7 @@ use crate::{
         ArgName, AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType,
         TypedFunction, TypedValidator, UnOp,
     },
-    builtins::{bool, data},
+    builtins::{bool, data, void},
     expr::TypedExpr,
     gen_uplc::builder::{find_and_replace_generics, get_generic_id_and_type, get_variant_name},
     tipo::{
@@ -101,12 +101,20 @@ impl<'a> CodeGenerator<'a> {
         ir_stack.noop();
 
         let mut args_stack = ir_stack.empty_with_scope();
+        let mut body_stack = ir_stack.empty_with_scope();
+        let mut unit_stack = ir_stack.empty_with_scope();
+        let mut error_stack = ir_stack.empty_with_scope();
 
         self.wrap_validator_args(&mut args_stack, &fun.arguments, true);
 
-        ir_stack.merge_child(args_stack);
+        self.build(&fun.body, &mut body_stack);
 
-        self.build(&fun.body, &mut ir_stack);
+        unit_stack.void();
+        error_stack.error(void());
+
+        ir_stack.merge_child(args_stack);
+        ir_stack.if_branch(bool(), body_stack, unit_stack);
+        ir_stack.merge_child(error_stack);
 
         let mut ir_stack = ir_stack.complete();
 
@@ -123,13 +131,21 @@ impl<'a> CodeGenerator<'a> {
 
             other_ir_stack.noop();
 
-            let mut other_args_stack = other_ir_stack.empty_with_scope();
+            let mut args_stack = other_ir_stack.empty_with_scope();
+            let mut body_stack = other_ir_stack.empty_with_scope();
+            let mut unit_stack = other_ir_stack.empty_with_scope();
+            let mut error_stack = other_ir_stack.empty_with_scope();
 
-            self.wrap_validator_args(&mut other_args_stack, &other.arguments, true);
+            self.wrap_validator_args(&mut args_stack, &other.arguments, true);
 
-            other_ir_stack.merge_child(other_args_stack);
+            self.build(&other.body, &mut body_stack);
 
-            self.build(&other.body, &mut other_ir_stack);
+            unit_stack.void();
+            error_stack.error(void());
+
+            other_ir_stack.merge_child(args_stack);
+            other_ir_stack.if_branch(bool(), body_stack, unit_stack);
+            other_ir_stack.merge_child(error_stack);
 
             let mut other_ir_stack = other_ir_stack.complete();
 
@@ -2536,12 +2552,7 @@ impl<'a> CodeGenerator<'a> {
                             .collect_vec(),
                     ),
                 );
-            } else if defined_data_types.get(&data_type_name).is_some() {
-                let Some(counter) = defined_data_types.get_mut(&data_type_name)
-                else {
-                    unreachable!();
-                };
-
+            } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
                 *counter += 1;
             }
 
@@ -2743,10 +2754,11 @@ impl<'a> CodeGenerator<'a> {
                 .iter()
                 .filter(|(_, defined_in_zero_arg)| !**defined_in_zero_arg)
                 .map(|(key, _)| key.clone())
+                .unique()
                 .collect_vec(),
         );
 
-        for func in dependency_vec.into_iter() {
+        for func in dependency_vec {
             if self.defined_functions.contains_key(&func) {
                 continue;
             }
@@ -3112,8 +3124,7 @@ impl<'a> CodeGenerator<'a> {
                         {
                             let param_types = constructor.tipo.arg_types().unwrap();
 
-                            let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
-                            let mut map = mono_types.into_iter().collect_vec();
+                            let mut map = vec![];
 
                             for (index, arg) in function.arguments.iter().enumerate() {
                                 if arg.tipo.is_generic() {
@@ -3134,7 +3145,7 @@ impl<'a> CodeGenerator<'a> {
                                 }
                             }
 
-                            mono_types = map.into_iter().collect();
+                            let mono_types: IndexMap<u64, Arc<Type>> = map.into_iter().collect();
                             let mut func_stack =
                                 AirStack::with_scope(self.id_gen.clone(), scope.clone());
 
@@ -4316,7 +4327,6 @@ impl<'a> CodeGenerator<'a> {
             Air::When {
                 subject_name, tipo, ..
             } => {
-                self.needs_field_access = true;
                 let subject = arg_stack.pop().unwrap();
 
                 let subject = if tipo.is_int()
@@ -4328,6 +4338,7 @@ impl<'a> CodeGenerator<'a> {
                 {
                     subject
                 } else {
+                    self.needs_field_access = true;
                     Term::var(CONSTR_INDEX_EXPOSER).apply(subject)
                 };
 
@@ -4480,6 +4491,7 @@ impl<'a> CodeGenerator<'a> {
                     } else if tipo.is_list() || tipo.is_tuple() {
                         unreachable!()
                     } else {
+                        self.needs_field_access = true;
                         Term::equals_integer()
                             .apply(checker)
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var(subject_name)))
