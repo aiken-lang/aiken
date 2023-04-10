@@ -813,38 +813,44 @@ impl<'a> CodeGenerator<'a> {
                         clause_properties,
                     );
 
-                    let data_type =
-                        builder::lookup_data_type_by_tipo(self.data_types.clone(), subject_type);
+                    if clause.pattern.is_var() || clause.pattern.is_discard() {
+                        ir_stack.wrap_clause(clause_pattern_stack);
+                    } else {
+                        let data_type = builder::lookup_data_type_by_tipo(
+                            self.data_types.clone(),
+                            subject_type,
+                        );
 
-                    if let Some(data_type) = data_type {
-                        if data_type.constructors.len() > 1 {
+                        if let Some(data_type) = data_type {
+                            if data_type.constructors.len() > 1 {
+                                ir_stack.clause(
+                                    subject_type.clone(),
+                                    subject_name,
+                                    *clause_properties.is_complex_clause(),
+                                    clause_pattern_stack,
+                                );
+                            } else {
+                                let mut condition_stack = ir_stack.empty_with_scope();
+
+                                condition_stack.integer(0.to_string());
+
+                                condition_stack.merge_child(clause_pattern_stack);
+
+                                ir_stack.clause(
+                                    subject_type.clone(),
+                                    subject_name,
+                                    *clause_properties.is_complex_clause(),
+                                    condition_stack,
+                                );
+                            }
+                        } else {
                             ir_stack.clause(
                                 subject_type.clone(),
                                 subject_name,
                                 *clause_properties.is_complex_clause(),
                                 clause_pattern_stack,
                             );
-                        } else {
-                            let mut condition_stack = ir_stack.empty_with_scope();
-
-                            condition_stack.integer(0.to_string());
-
-                            condition_stack.merge_child(clause_pattern_stack);
-
-                            ir_stack.clause(
-                                subject_type.clone(),
-                                subject_name,
-                                *clause_properties.is_complex_clause(),
-                                condition_stack,
-                            );
                         }
-                    } else {
-                        ir_stack.clause(
-                            subject_type.clone(),
-                            subject_name,
-                            *clause_properties.is_complex_clause(),
-                            clause_pattern_stack,
-                        );
                     }
                 }
                 ClauseProperties::ListClause {
