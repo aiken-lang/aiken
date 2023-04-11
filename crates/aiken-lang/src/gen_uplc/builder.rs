@@ -8,7 +8,7 @@ use uplc::{
     builtins::DefaultFunction,
     machine::{
         runtime::{convert_constr_to_tag, ANY_TAG},
-        to_pallas_bigint,
+        value::to_pallas_bigint,
     },
     Constr, KeyValuePairs, PlutusData,
 };

@@ -648,7 +648,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 }
 
 impl Program<NamedDeBruijn> {
-    pub fn eval(&self, initial_budget: ExBudget) -> EvalResult {
+    pub fn eval(self, initial_budget: ExBudget) -> EvalResult {
         let mut machine = Machine::new(
             Language::PlutusV2,
             CostModel::default(),
@@ -656,22 +656,22 @@ impl Program<NamedDeBruijn> {
             200,
         );
 
-        let term = machine.run(&self.term);
+        let term = machine.run(self.term);
 
         EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
     }
 
     /// Evaluate a Program as PlutusV1
-    pub fn eval_v1(&self) -> EvalResult {
+    pub fn eval_v1(self) -> EvalResult {
         let mut machine = Machine::new(Language::PlutusV1, CostModel::v1(), ExBudget::v1(), 200);
 
-        let term = machine.run(&self.term);
+        let term = machine.run(self.term);
 
         EvalResult::new(term, machine.ex_budget, ExBudget::v1(), machine.logs)
     }
 
     pub fn eval_as(
-        &self,
+        self,
         version: &Language,
         costs: &[i64],
         initial_budget: Option<&ExBudget>,
@@ -688,7 +688,7 @@ impl Program<NamedDeBruijn> {
             200, //slippage
         );
 
-        let term = machine.run(&self.term);
+        let term = machine.run(self.term);
 
         EvalResult::new(term, machine.ex_budget, budget, machine.logs)
     }
