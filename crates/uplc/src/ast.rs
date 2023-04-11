@@ -659,14 +659,13 @@ impl Program<NamedDeBruijn> {
             200,
         );
 
-        let term = machine.run(&self.term);
+        let term = machine.run(self.term.clone());
 
-        EvalResult::new(
-            term,
-            machine.ex_budget,
-            initial_budget,
-            machine.logs.to_vec(),
-        )
+        let Machine {
+            ex_budget, logs, ..
+        } = machine;
+
+        EvalResult::new(term, ex_budget, initial_budget, logs)
     }
 
     /// Evaluate a Program as PlutusV1
@@ -681,14 +680,9 @@ impl Program<NamedDeBruijn> {
             200,
         );
 
-        let term = machine.run(&self.term);
+        let term = machine.run(self.term.clone());
 
-        EvalResult::new(
-            term,
-            machine.ex_budget,
-            ExBudget::v1(),
-            machine.logs.to_vec(),
-        )
+        EvalResult::new(term, machine.ex_budget, ExBudget::v1(), machine.logs)
     }
 
     pub fn eval_as(
@@ -712,7 +706,7 @@ impl Program<NamedDeBruijn> {
             200, //slippage
         );
 
-        let term = machine.run(&self.term);
+        let term = machine.run(self.term.clone());
 
         EvalResult::new(term, machine.ex_budget, budget, machine.logs.to_vec())
     }

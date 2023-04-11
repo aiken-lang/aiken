@@ -1,5 +1,6 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
+use bumpalo::Bump;
 use pallas_primitives::babbage::Language;
 
 use crate::builtins::DefaultFunction;
@@ -975,633 +976,655 @@ impl Default for BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget_v2(&self, fun: DefaultFunction, args: &[Rc<Value>]) -> ExBudget {
+    pub fn to_ex_budget_v2<'a>(
+        &self,
+        arena: &'a Bump,
+        fun: DefaultFunction,
+        args: &'a [&'a Value<'a>],
+    ) -> ExBudget {
         match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
                     .add_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .add_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::SubtractInteger => ExBudget {
                 mem: self
                     .subtract_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .subtract_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::MultiplyInteger => ExBudget {
                 mem: self
                     .multiply_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .multiply_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::DivideInteger => ExBudget {
                 mem: self
                     .divide_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .divide_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::QuotientInteger => ExBudget {
                 mem: self
                     .quotient_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .quotient_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::RemainderInteger => ExBudget {
                 mem: self
                     .remainder_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .remainder_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::ModInteger => ExBudget {
                 mem: self
                     .mod_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .mod_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsInteger => ExBudget {
                 mem: self
                     .equals_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanInteger => ExBudget {
                 mem: self
                     .less_than_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanEqualsInteger => ExBudget {
                 mem: self
                     .less_than_equals_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_equals_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::AppendByteString => ExBudget {
                 mem: self
                     .append_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .append_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::ConsByteString => ExBudget {
                 mem: self
                     .cons_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .cons_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::SliceByteString => ExBudget {
                 mem: self.slice_byte_string.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.slice_byte_string.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::LengthOfByteString => ExBudget {
-                mem: self.length_of_byte_string.mem.cost(args[0].to_ex_mem()),
-                cpu: self.length_of_byte_string.cpu.cost(args[0].to_ex_mem()),
+                mem: self
+                    .length_of_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(arena)),
+                cpu: self
+                    .length_of_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::IndexByteString => ExBudget {
                 mem: self
                     .index_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .index_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsByteString => ExBudget {
                 mem: self
                     .equals_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanByteString => ExBudget {
                 mem: self
                     .less_than_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanEqualsByteString => ExBudget {
                 mem: self
                     .less_than_equals_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_equals_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::Sha2_256 => ExBudget {
-                mem: self.sha2_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem()),
+                mem: self.sha2_256.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::Sha3_256 => ExBudget {
-                mem: self.sha3_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.sha3_256.cpu.cost(args[0].to_ex_mem()),
+                mem: self.sha3_256.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.sha3_256.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::Blake2b_256 => ExBudget {
-                mem: self.blake2b_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem()),
+                mem: self.blake2b_256.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::VerifyEd25519Signature => ExBudget {
                 mem: self.verify_ed25519_signature.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.verify_ed25519_signature.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => ExBudget {
                 mem: self.verify_ecdsa_secp256k1_signature.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.verify_ecdsa_secp256k1_signature.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::VerifySchnorrSecp256k1Signature => ExBudget {
                 mem: self.verify_schnorr_secp256k1_signature.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.verify_schnorr_secp256k1_signature.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::AppendString => ExBudget {
                 mem: self
                     .append_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .append_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsString => ExBudget {
                 mem: self
                     .equals_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EncodeUtf8 => ExBudget {
-                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem()),
+                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::DecodeUtf8 => ExBudget {
-                mem: self.decode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem()),
+                mem: self.decode_utf8.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::IfThenElse => ExBudget {
                 mem: self.if_then_else.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.if_then_else.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::ChooseUnit => ExBudget {
                 mem: self
                     .choose_unit
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .choose_unit
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::Trace => ExBudget {
                 mem: self
                     .trace
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .trace
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::FstPair => ExBudget {
-                mem: self.fst_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem()),
+                mem: self.fst_pair.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::SndPair => ExBudget {
-                mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
+                mem: self.snd_pair.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::ChooseList => ExBudget {
                 mem: self.choose_list.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.choose_list.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::MkCons => ExBudget {
                 mem: self
                     .mk_cons
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .mk_cons
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::HeadList => ExBudget {
-                mem: self.head_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.head_list.cpu.cost(args[0].to_ex_mem()),
+                mem: self.head_list.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.head_list.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::TailList => ExBudget {
-                mem: self.tail_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem()),
+                mem: self.tail_list.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::NullList => ExBudget {
-                mem: self.null_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
+                mem: self.null_list.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.null_list.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::ChooseData => ExBudget {
                 mem: self.choose_data.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
+                    args[3].to_ex_mem(arena),
+                    args[4].to_ex_mem(arena),
+                    args[5].to_ex_mem(arena),
                 ),
                 cpu: self.choose_data.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
+                    args[3].to_ex_mem(arena),
+                    args[4].to_ex_mem(arena),
+                    args[5].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::ConstrData => ExBudget {
                 mem: self
                     .constr_data
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .constr_data
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::MapData => ExBudget {
-                mem: self.map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.map_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.map_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.map_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::ListData => ExBudget {
-                mem: self.list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.list_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.list_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.list_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::IData => ExBudget {
-                mem: self.i_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.i_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.i_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.i_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::BData => ExBudget {
-                mem: self.b_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.b_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.b_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.b_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnConstrData => ExBudget {
-                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnMapData => ExBudget {
-                mem: self.un_map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_map_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnListData => ExBudget {
-                mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_list_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnIData => ExBudget {
-                mem: self.un_i_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_i_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnBData => ExBudget {
-                mem: self.un_b_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_b_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsData => ExBudget {
                 mem: self
                     .equals_data
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_data
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::SerialiseData => ExBudget {
-                mem: self.serialise_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.serialise_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.serialise_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.serialise_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::MkPairData => ExBudget {
                 mem: self
                     .mk_pair_data
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .mk_pair_data
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::MkNilData => ExBudget {
-                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::MkNilPairData => ExBudget {
-                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
         }
     }
 
-    pub fn to_ex_budget_v1(&self, fun: DefaultFunction, args: &[Rc<Value>]) -> ExBudget {
+    pub fn to_ex_budget_v1<'a>(
+        &self,
+        arena: &'a Bump,
+        fun: DefaultFunction,
+        args: &'a [&'a Value<'a>],
+    ) -> ExBudget {
         match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
                     .add_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .add_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::SubtractInteger => ExBudget {
                 mem: self
                     .subtract_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .subtract_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::MultiplyInteger => ExBudget {
                 mem: self
                     .multiply_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .multiply_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::DivideInteger => ExBudget {
                 mem: self
                     .divide_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .divide_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::QuotientInteger => ExBudget {
                 mem: self
                     .quotient_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .quotient_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::RemainderInteger => ExBudget {
                 mem: self
                     .remainder_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .remainder_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::ModInteger => ExBudget {
                 mem: self
                     .mod_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .mod_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsInteger => ExBudget {
                 mem: self
                     .equals_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanInteger => ExBudget {
                 mem: self
                     .less_than_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanEqualsInteger => ExBudget {
                 mem: self
                     .less_than_equals_integer
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_equals_integer
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::AppendByteString => ExBudget {
                 mem: self
                     .append_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .append_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::ConsByteString => ExBudget {
                 mem: self
                     .cons_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .cons_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::SliceByteString => ExBudget {
                 mem: self.slice_byte_string.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.slice_byte_string.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::LengthOfByteString => ExBudget {
-                mem: self.length_of_byte_string.mem.cost(args[0].to_ex_mem()),
-                cpu: self.length_of_byte_string.cpu.cost(args[0].to_ex_mem()),
+                mem: self
+                    .length_of_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(arena)),
+                cpu: self
+                    .length_of_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::IndexByteString => ExBudget {
                 mem: self
                     .index_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .index_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsByteString => ExBudget {
                 mem: self
                     .equals_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanByteString => ExBudget {
                 mem: self
                     .less_than_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::LessThanEqualsByteString => ExBudget {
                 mem: self
                     .less_than_equals_byte_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .less_than_equals_byte_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::Sha2_256 => ExBudget {
-                mem: self.sha2_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem()),
+                mem: self.sha2_256.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::Sha3_256 => ExBudget {
-                mem: self.sha3_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.sha3_256.cpu.cost(args[0].to_ex_mem()),
+                mem: self.sha3_256.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.sha3_256.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::Blake2b_256 => ExBudget {
-                mem: self.blake2b_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem()),
+                mem: self.blake2b_256.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::VerifyEd25519Signature => ExBudget {
                 mem: self.verify_ed25519_signature.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.verify_ed25519_signature.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::VerifyEcdsaSecp256k1Signature => unreachable!(),
@@ -1610,196 +1633,196 @@ impl BuiltinCosts {
                 mem: self
                     .append_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .append_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsString => ExBudget {
                 mem: self
                     .equals_string
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_string
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::EncodeUtf8 => ExBudget {
-                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem()),
+                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::DecodeUtf8 => ExBudget {
-                mem: self.decode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem()),
+                mem: self.decode_utf8.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::IfThenElse => ExBudget {
                 mem: self.if_then_else.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.if_then_else.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::ChooseUnit => ExBudget {
                 mem: self
                     .choose_unit
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .choose_unit
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::Trace => ExBudget {
                 mem: self
                     .trace
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .trace
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::FstPair => ExBudget {
-                mem: self.fst_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem()),
+                mem: self.fst_pair.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::SndPair => ExBudget {
-                mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
+                mem: self.snd_pair.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::ChooseList => ExBudget {
                 mem: self.choose_list.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
                 cpu: self.choose_list.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::MkCons => ExBudget {
                 mem: self
                     .mk_cons
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .mk_cons
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::HeadList => ExBudget {
-                mem: self.head_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.head_list.cpu.cost(args[0].to_ex_mem()),
+                mem: self.head_list.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.head_list.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::TailList => ExBudget {
-                mem: self.tail_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem()),
+                mem: self.tail_list.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::NullList => ExBudget {
-                mem: self.null_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
+                mem: self.null_list.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.null_list.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::ChooseData => ExBudget {
                 mem: self.choose_data.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
+                    args[3].to_ex_mem(arena),
+                    args[4].to_ex_mem(arena),
+                    args[5].to_ex_mem(arena),
                 ),
                 cpu: self.choose_data.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
+                    args[0].to_ex_mem(arena),
+                    args[1].to_ex_mem(arena),
+                    args[2].to_ex_mem(arena),
+                    args[3].to_ex_mem(arena),
+                    args[4].to_ex_mem(arena),
+                    args[5].to_ex_mem(arena),
                 ),
             },
             DefaultFunction::ConstrData => ExBudget {
                 mem: self
                     .constr_data
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .constr_data
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::MapData => ExBudget {
-                mem: self.map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.map_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.map_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.map_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::ListData => ExBudget {
-                mem: self.list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.list_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.list_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.list_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::IData => ExBudget {
-                mem: self.i_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.i_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.i_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.i_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::BData => ExBudget {
-                mem: self.b_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.b_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.b_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.b_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnConstrData => ExBudget {
-                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnMapData => ExBudget {
-                mem: self.un_map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_map_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnListData => ExBudget {
-                mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_list_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnIData => ExBudget {
-                mem: self.un_i_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_i_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::UnBData => ExBudget {
-                mem: self.un_b_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.un_b_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::EqualsData => ExBudget {
                 mem: self
                     .equals_data
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .equals_data
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::SerialiseData => unreachable!(),
             DefaultFunction::MkPairData => ExBudget {
                 mem: self
                     .mk_pair_data
                     .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
                 cpu: self
                     .mk_pair_data
                     .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                    .cost(args[0].to_ex_mem(arena), args[1].to_ex_mem(arena)),
             },
             DefaultFunction::MkNilData => ExBudget {
-                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
             DefaultFunction::MkNilPairData => ExBudget {
-                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem()),
+                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem(arena)),
+                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem(arena)),
             },
         }
     }
