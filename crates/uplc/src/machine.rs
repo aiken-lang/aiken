@@ -1,5 +1,4 @@
-use num_traits::sign::Signed;
-use std::{collections::VecDeque, ops::Deref, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
@@ -7,59 +6,34 @@ use crate::{
 };
 
 pub mod cost_model;
+mod discharge;
 mod error;
 pub mod eval_result;
 pub mod runtime;
+pub mod value;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
-use num_bigint::BigInt;
-use pallas_primitives::babbage::{self as pallas, Language, PlutusData};
+use pallas_primitives::babbage::Language;
 
-use self::{cost_model::CostModel, runtime::BuiltinRuntime};
+use self::{
+    cost_model::CostModel,
+    runtime::BuiltinRuntime,
+    value::{Env, Value},
+};
 
-enum MachineStep {
-    Return(Rc<Context>, Rc<Value>),
-    Compute(Rc<Context>, Rc<Vec<Rc<Value>>>, Rc<Term<NamedDeBruijn>>),
+enum MachineState {
+    Return(Context, Value),
+    Compute(Context, Env, Term<NamedDeBruijn>),
     Done(Rc<Term<NamedDeBruijn>>),
 }
 
-impl TryFrom<Option<MachineStep>> for Term<NamedDeBruijn> {
-    type Error = Error;
-
-    fn try_from(value: Option<MachineStep>) -> Result<Self, Error> {
-        match value {
-            Some(MachineStep::Done(term)) => Ok(Rc::as_ref(&term).clone()),
-            _ => Err(Error::MachineNeverReachedDone),
-        }
-    }
-}
-
 #[derive(Clone)]
-enum PartialTerm {
-    // tag: 0
-    // Var(NamedDeBruijn),
-    // tag: 1
-    Delay,
-    // tag: 2
-    Lambda(Rc<NamedDeBruijn>),
-    // tag: 3
-    Apply,
-    // tag: 4
-    // Constant(Constant),
-    // tag: 5
-    Force,
-    // tag: 6
-    // Error,
-    // tag: 7
-    // Builtin(DefaultFunction),
-}
-
-#[derive(Clone)]
-enum DischargeStep {
-    DischargeValue(Rc<Value>),
-    DischargeValueEnv(usize, Rc<Vec<Rc<Value>>>, Rc<Term<NamedDeBruijn>>),
-    PopArgStack(PartialTerm),
+enum Context {
+    FrameApplyFun(Value, Box<Context>),
+    FrameApplyArg(Env, Rc<Term<NamedDeBruijn>>, Box<Context>),
+    FrameForce(Box<Context>),
+    NoFrame,
 }
 
 pub struct Machine {
@@ -68,7 +42,6 @@ pub struct Machine {
     slippage: u32,
     unbudgeted_steps: [u32; 8],
     pub logs: Vec<String>,
-    stack: Vec<MachineStep>,
     version: Language,
 }
 
@@ -85,64 +58,48 @@ impl Machine {
             slippage,
             unbudgeted_steps: [0; 8],
             logs: vec![],
-            stack: vec![],
             version,
         }
     }
 
-    pub fn run(&mut self, term: &Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
-        use MachineStep::*;
+    pub fn run(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
+        use MachineState::*;
 
         let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
 
         self.spend_budget(startup_budget)?;
 
-        self.stack.push(Compute(
-            Rc::new(Context::NoFrame),
-            Rc::new(vec![]),
-            Rc::new(term.clone()),
-        ));
+        let mut state = Compute(Context::NoFrame, Rc::new(vec![]), term);
 
-        while let Some(step) = self.stack.pop() {
-            match step {
-                Compute(context, env, t) => {
-                    self.compute(context, env, t)?;
-                }
-                Return(context, value) => {
-                    self.return_compute(context, value)?;
-                }
-                d @ Done(_) => {
-                    self.stack.push(d);
-
-                    break;
+        loop {
+            state = match state {
+                Compute(context, env, t) => self.compute(context, env, t)?,
+                Return(context, value) => self.return_compute(context, value)?,
+                Done(t) => {
+                    return Ok(t.as_ref().clone());
                 }
             };
         }
-
-        self.stack.pop().try_into()
     }
 
     fn compute(
         &mut self,
-        context: Rc<Context>,
-        env: Rc<Vec<Rc<Value>>>,
-        term: Rc<Term<NamedDeBruijn>>,
-    ) -> Result<(), Error> {
-        match term.as_ref() {
+        context: Context,
+        env: Env,
+        term: Term<NamedDeBruijn>,
+    ) -> Result<MachineState, Error> {
+        match term {
             Term::Var(name) => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
-                let val = self.lookup_var(name, &env)?;
+                let val = self.lookup_var(name.as_ref(), &env)?;
 
-                self.stack.push(MachineStep::Return(context, val));
+                Ok(MachineState::Return(context, val))
             }
             Term::Delay(body) => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
-                self.stack.push(MachineStep::Return(
-                    context,
-                    Value::Delay(Rc::clone(body), env).into(),
-                ));
+                Ok(MachineState::Return(context, Value::Delay(body, env)))
             }
             Term::Lambda {
                 parameter_name,
@@ -150,173 +107,142 @@ impl Machine {
             } => {
                 self.step_and_maybe_spend(StepKind::Lambda)?;
 
-                self.stack.push(MachineStep::Return(
+                Ok(MachineState::Return(
                     context,
                     Value::Lambda {
-                        parameter_name: parameter_name.clone(),
-                        body: Rc::clone(body),
+                        parameter_name,
+                        body,
                         env,
-                    }
-                    .into(),
-                ));
+                    },
+                ))
             }
             Term::Apply { function, argument } => {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
-                self.stack.push(MachineStep::Compute(
-                    Rc::new(Context::FrameApplyArg(
-                        Rc::clone(&env),
-                        Rc::clone(argument),
-                        context,
-                    )),
+                Ok(MachineState::Compute(
+                    Context::FrameApplyArg(Rc::clone(&env), argument, context.into()),
                     env,
-                    Rc::clone(function),
-                ));
+                    function.as_ref().clone(),
+                ))
             }
             Term::Constant(x) => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
-                self.stack
-                    .push(MachineStep::Return(context, Value::Con(x.clone()).into()));
+                Ok(MachineState::Return(context, Value::Con(x)))
             }
             Term::Force(body) => {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
-                self.stack.push(MachineStep::Compute(
-                    Rc::new(Context::FrameForce(context)),
+                Ok(MachineState::Compute(
+                    Context::FrameForce(context.into()),
                     env,
-                    Rc::clone(body),
-                ));
+                    body.as_ref().clone(),
+                ))
             }
-            Term::Error => return Err(Error::EvaluationFailure),
+            Term::Error => Err(Error::EvaluationFailure),
             Term::Builtin(fun) => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
 
-                let runtime: BuiltinRuntime = (*fun).into();
+                let runtime: BuiltinRuntime = fun.into();
 
-                self.stack.push(MachineStep::Return(
+                Ok(MachineState::Return(
                     context,
                     Value::Builtin {
-                        fun: *fun,
-                        term,
-                        runtime: runtime.into(),
-                    }
-                    .into(),
-                ));
+                        fun,
+                        term: term.into(),
+                        runtime,
+                    },
+                ))
             }
-        };
-
-        Ok(())
+        }
     }
 
-    fn return_compute(&mut self, context: Rc<Context>, value: Rc<Value>) -> Result<(), Error> {
-        match context.as_ref() {
-            Context::FrameApplyFun(function, ctx) => {
-                self.apply_evaluate(ctx.to_owned(), function.clone(), value)?
-            }
-            Context::FrameApplyArg(arg_var_env, arg, ctx) => {
-                self.stack.push(MachineStep::Compute(
-                    Rc::new(Context::FrameApplyFun(value, ctx.to_owned())),
-                    arg_var_env.to_owned(),
-                    Rc::clone(arg),
-                ));
-            }
-            Context::FrameForce(ctx) => self.force_evaluate(ctx.to_owned(), value)?,
+    fn return_compute(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
+        match context {
+            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value),
+            Context::FrameApplyArg(arg_var_env, arg, ctx) => Ok(MachineState::Compute(
+                Context::FrameApplyFun(value, ctx),
+                arg_var_env,
+                arg.as_ref().clone(),
+            )),
+            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
             Context::NoFrame => {
                 if self.unbudgeted_steps[7] > 0 {
                     self.spend_unbudgeted_steps()?;
                 }
 
-                let term = discharge_value(value);
+                let term = discharge::value_as_term(value);
 
-                self.stack.push(MachineStep::Done(term));
+                Ok(MachineState::Done(term))
             }
-        };
-
-        Ok(())
+        }
     }
 
-    fn force_evaluate(&mut self, context: Rc<Context>, mut value: Rc<Value>) -> Result<(), Error> {
-        let value = Rc::make_mut(&mut value);
-
+    fn force_evaluate(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
         match value {
             Value::Delay(body, env) => {
-                self.stack
-                    .push(MachineStep::Compute(context, env.clone(), body.clone()));
-
-                Ok(())
+                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
             }
-            Value::Builtin { fun, term, runtime } => {
-                let force_term = Rc::new(Term::Force(term.clone()));
+            Value::Builtin {
+                fun,
+                term,
+                mut runtime,
+            } => {
+                let force_term = Term::Force(term);
 
-                let mut_runtime = Rc::make_mut(runtime);
+                if runtime.needs_force() {
+                    runtime.consume_force();
 
-                if mut_runtime.needs_force() {
-                    mut_runtime.consume_force();
+                    let res = self.eval_builtin_app(fun, force_term.into(), runtime)?;
 
-                    let res = self.eval_builtin_app(*fun, force_term, runtime.clone())?;
-
-                    self.stack.push(MachineStep::Return(context, res));
-
-                    Ok(())
+                    Ok(MachineState::Return(context, res))
                 } else {
-                    Err(Error::BuiltinTermArgumentExpected(
-                        force_term.as_ref().clone(),
-                    ))
+                    Err(Error::BuiltinTermArgumentExpected(force_term))
                 }
             }
-            rest => Err(Error::NonPolymorphicInstantiation(rest.clone())),
+            rest => Err(Error::NonPolymorphicInstantiation(rest)),
         }
     }
 
     fn apply_evaluate(
         &mut self,
-        context: Rc<Context>,
-        mut function: Rc<Value>,
-        argument: Rc<Value>,
-    ) -> Result<(), Error> {
-        let function = Rc::make_mut(&mut function);
-
+        context: Context,
+        function: Value,
+        argument: Value,
+    ) -> Result<MachineState, Error> {
         match function {
-            Value::Lambda { body, env, .. } => {
-                let e = Rc::make_mut(env);
+            Value::Lambda { body, mut env, .. } => {
+                let e = Rc::make_mut(&mut env);
 
                 e.push(argument);
 
-                self.stack.push(MachineStep::Compute(
+                Ok(MachineState::Compute(
                     context,
                     Rc::new(e.clone()),
-                    body.clone(),
-                ));
-
-                Ok(())
+                    body.as_ref().clone(),
+                ))
             }
             Value::Builtin { fun, term, runtime } => {
-                let arg_term = discharge_value(argument.clone());
+                let arg_term = discharge::value_as_term(argument.clone());
 
                 let t = Rc::new(Term::<NamedDeBruijn>::Apply {
-                    function: term.clone(),
+                    function: term,
                     argument: arg_term,
                 });
 
-                let mut_runtime = Rc::make_mut(runtime);
+                if runtime.is_arrow() && !runtime.needs_force() {
+                    let mut runtime = runtime;
 
-                if mut_runtime.is_arrow() && !mut_runtime.needs_force() {
-                    mut_runtime.push(argument)?;
+                    runtime.push(argument)?;
 
-                    let res = self.eval_builtin_app(*fun, t, runtime.to_owned())?;
+                    let res = self.eval_builtin_app(fun, t, runtime.to_owned())?;
 
-                    self.stack.push(MachineStep::Return(context, res));
-
-                    Ok(())
+                    Ok(MachineState::Return(context, res))
                 } else {
                     Err(Error::UnexpectedBuiltinTermArgument(t.as_ref().clone()))
                 }
             }
-            rest => Err(Error::NonFunctionalApplication(
-                rest.clone(),
-                argument.as_ref().clone(),
-            )),
+            rest => Err(Error::NonFunctionalApplication(rest, argument)),
         }
     }
 
@@ -324,8 +250,8 @@ impl Machine {
         &mut self,
         fun: DefaultFunction,
         term: Rc<Term<NamedDeBruijn>>,
-        runtime: Rc<BuiltinRuntime>,
-    ) -> Result<Rc<Value>, Error> {
+        runtime: BuiltinRuntime,
+    ) -> Result<Value, Error> {
         if runtime.is_ready() {
             let cost = match self.version {
                 Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
@@ -335,11 +261,11 @@ impl Machine {
 
             runtime.call(&mut self.logs)
         } else {
-            Ok(Value::Builtin { fun, term, runtime }.into())
+            Ok(Value::Builtin { fun, term, runtime })
         }
     }
 
-    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Rc<Value>]) -> Result<Rc<Value>, Error> {
+    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {
         env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
             .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone().into())))
@@ -386,365 +312,6 @@ impl Machine {
     }
 }
 
-fn discharge_value(value: Rc<Value>) -> Rc<Term<NamedDeBruijn>> {
-    let mut stack = vec![DischargeStep::DischargeValue(value)];
-    let mut arg_stack = vec![];
-    while let Some(stack_frame) = stack.pop() {
-        match stack_frame {
-            DischargeStep::DischargeValue(value) => match value.as_ref() {
-                Value::Con(x) => arg_stack.push(Term::Constant(x.clone()).into()),
-                Value::Builtin { term, .. } => arg_stack.push(term.clone()),
-                Value::Delay(body, env) => {
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        0,
-                        env.clone(),
-                        Term::Delay(body.clone()).into(),
-                    ));
-                }
-                Value::Lambda {
-                    parameter_name,
-                    body,
-                    env,
-                } => {
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        0,
-                        env.clone(),
-                        Term::Lambda {
-                            parameter_name: parameter_name.clone(),
-                            body: body.clone(),
-                        }
-                        .into(),
-                    ));
-                }
-            },
-            DischargeStep::DischargeValueEnv(lam_cnt, env, term) => match term.as_ref() {
-                Term::Var(name) => {
-                    let index: usize = name.index.into();
-
-                    if lam_cnt >= index {
-                        arg_stack.push(Rc::new(Term::Var(name.clone())));
-                    } else {
-                        let env = env.get::<usize>(env.len() - (index - lam_cnt)).cloned();
-                        if let Some(v) = env {
-                            stack.push(DischargeStep::DischargeValue(v));
-                        } else {
-                            arg_stack.push(Rc::new(Term::Var(name.clone())));
-                        }
-                    }
-                }
-                Term::Lambda {
-                    parameter_name,
-                    body,
-                } => {
-                    stack.push(DischargeStep::PopArgStack(PartialTerm::Lambda(
-                        parameter_name.to_owned(),
-                    )));
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        lam_cnt + 1,
-                        env,
-                        body.to_owned(),
-                    ));
-                }
-                Term::Apply { function, argument } => {
-                    stack.push(DischargeStep::PopArgStack(PartialTerm::Apply));
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        lam_cnt,
-                        env.clone(),
-                        argument.to_owned(),
-                    ));
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        lam_cnt,
-                        env,
-                        function.to_owned(),
-                    ));
-                }
-                Term::Delay(body) => {
-                    stack.push(DischargeStep::PopArgStack(PartialTerm::Delay));
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        lam_cnt,
-                        env.clone(),
-                        body.to_owned(),
-                    ));
-                }
-
-                Term::Force(body) => {
-                    stack.push(DischargeStep::PopArgStack(PartialTerm::Force));
-                    stack.push(DischargeStep::DischargeValueEnv(
-                        lam_cnt,
-                        env.clone(),
-                        body.to_owned(),
-                    ));
-                }
-                rest => {
-                    arg_stack.push(rest.to_owned().into());
-                }
-            },
-            DischargeStep::PopArgStack(term) => match term {
-                PartialTerm::Delay => {
-                    let body = arg_stack.pop().unwrap();
-                    arg_stack.push(Term::Delay(body).into())
-                }
-                PartialTerm::Lambda(parameter_name) => {
-                    let body = arg_stack.pop().unwrap();
-                    arg_stack.push(
-                        Term::Lambda {
-                            parameter_name,
-                            body,
-                        }
-                        .into(),
-                    )
-                }
-                PartialTerm::Apply => {
-                    let argument = arg_stack.pop().unwrap();
-                    let function = arg_stack.pop().unwrap();
-                    arg_stack.push(Term::Apply { function, argument }.into());
-                }
-                PartialTerm::Force => {
-                    let body = arg_stack.pop().unwrap();
-                    arg_stack.push(Term::Force(body).into())
-                }
-            },
-        }
-    }
-
-    arg_stack.pop().unwrap()
-}
-
-#[derive(Clone)]
-enum Context {
-    FrameApplyFun(Rc<Value>, Rc<Context>),
-    FrameApplyArg(Rc<Vec<Rc<Value>>>, Rc<Term<NamedDeBruijn>>, Rc<Context>),
-    FrameForce(Rc<Context>),
-    NoFrame,
-}
-
-#[derive(Clone, Debug)]
-pub enum Value {
-    Con(Rc<Constant>),
-    Delay(Rc<Term<NamedDeBruijn>>, Rc<Vec<Rc<Value>>>),
-    Lambda {
-        parameter_name: Rc<NamedDeBruijn>,
-        body: Rc<Term<NamedDeBruijn>>,
-        env: Rc<Vec<Rc<Value>>>,
-    },
-    Builtin {
-        fun: DefaultFunction,
-        term: Rc<Term<NamedDeBruijn>>,
-        runtime: Rc<BuiltinRuntime>,
-    },
-}
-
-fn integer_log2(i: BigInt) -> i64 {
-    let (_, bytes) = i.to_bytes_be();
-    match bytes.first() {
-        None => unreachable!("empty number?"),
-        Some(u) => (8 - u.leading_zeros() - 1) as i64 + 8 * (bytes.len() - 1) as i64,
-    }
-}
-
-pub fn from_pallas_bigint(n: &pallas::BigInt) -> BigInt {
-    match n {
-        pallas::BigInt::Int(i) => i128::from(*i).into(),
-        pallas::BigInt::BigUInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes),
-        pallas::BigInt::BigNInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Minus, bytes),
-    }
-}
-
-pub fn to_pallas_bigint(n: &BigInt) -> pallas::BigInt {
-    if n.bits() <= 64 {
-        let regular_int: i64 = n.try_into().unwrap();
-        let pallas_int: pallas_codec::utils::Int = regular_int.into();
-
-        pallas::BigInt::Int(pallas_int)
-    } else if n.is_positive() {
-        let (_, bytes) = n.to_bytes_be();
-        pallas::BigInt::BigUInt(bytes.into())
-    } else {
-        let (_, bytes) = n.to_bytes_be();
-        pallas::BigInt::BigNInt(bytes.into())
-    }
-}
-
-impl Value {
-    pub fn is_integer(&self) -> bool {
-        matches!(self, Value::Con(i) if matches!(i.as_ref(), Constant::Integer(_)))
-    }
-
-    pub fn is_bool(&self) -> bool {
-        matches!(self, Value::Con(b) if matches!(b.as_ref(), Constant::Bool(_)))
-    }
-
-    // TODO: Make this to_ex_mem not recursive.
-    pub fn to_ex_mem(&self) -> i64 {
-        match self {
-            Value::Con(c) => match c.as_ref() {
-                Constant::Integer(i) => {
-                    if *i == 0.into() {
-                        1
-                    } else {
-                        (integer_log2(i.abs()) / 64) + 1
-                    }
-                }
-                Constant::ByteString(b) => {
-                    if b.is_empty() {
-                        1
-                    } else {
-                        ((b.len() as i64 - 1) / 8) + 1
-                    }
-                }
-                Constant::String(s) => s.chars().count() as i64,
-                Constant::Unit => 1,
-                Constant::Bool(_) => 1,
-                Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
-                    acc + Value::Con(constant.clone().into()).to_ex_mem()
-                }),
-                Constant::ProtoPair(_, _, l, r) => {
-                    Value::Con(l.clone()).to_ex_mem() + Value::Con(r.clone()).to_ex_mem()
-                }
-                Constant::Data(item) => self.data_to_ex_mem(item),
-            },
-            Value::Delay(_, _) => 1,
-            Value::Lambda { .. } => 1,
-            Value::Builtin { .. } => 1,
-        }
-    }
-
-    // I made data not recursive since data tends to be deeply nested
-    // thus causing a significant hit on performance
-    pub fn data_to_ex_mem(&self, data: &PlutusData) -> i64 {
-        let mut stack: VecDeque<&PlutusData> = VecDeque::new();
-        let mut total = 0;
-        stack.push_front(data);
-        while let Some(item) = stack.pop_front() {
-            // each time we deconstruct a data we add 4 memory units
-            total += 4;
-            match item {
-                PlutusData::Constr(c) => {
-                    // note currently tag is not factored into cost of memory
-                    // create new stack with of items from the list of data
-                    let mut new_stack: VecDeque<&PlutusData> =
-                        VecDeque::from_iter(c.fields.deref().iter());
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
-                }
-                PlutusData::Map(m) => {
-                    let mut new_stack: VecDeque<&PlutusData>;
-                    // create new stack with of items from the list of pairs of data
-                    new_stack = m.iter().fold(VecDeque::new(), |mut acc, d| {
-                        acc.push_back(&d.0);
-                        acc.push_back(&d.1);
-                        acc
-                    });
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
-                }
-                PlutusData::BigInt(i) => {
-                    let i = from_pallas_bigint(i);
-
-                    total += Value::Con(Constant::Integer(i).into()).to_ex_mem();
-                }
-                PlutusData::BoundedBytes(b) => {
-                    let byte_string: Vec<u8> = b.deref().clone();
-                    total += Value::Con(Constant::ByteString(byte_string).into()).to_ex_mem();
-                }
-                PlutusData::Array(a) => {
-                    // create new stack with of items from the list of data
-                    let mut new_stack: VecDeque<&PlutusData> =
-                        VecDeque::from_iter(a.deref().iter());
-                    // Append old stack to the back of the new stack
-                    new_stack.append(&mut stack);
-                    stack = new_stack;
-                }
-            }
-        }
-        total
-    }
-
-    pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
-        let constant: Constant = self.clone().try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        if constant_type == r#type {
-            Ok(())
-        } else {
-            Err(Error::TypeMismatch(r#type, constant_type))
-        }
-    }
-
-    pub fn expect_list(&self) -> Result<(), Error> {
-        let constant: Constant = self.clone().try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        if matches!(constant_type, Type::List(_)) {
-            Ok(())
-        } else {
-            Err(Error::ListTypeMismatch(constant_type))
-        }
-    }
-
-    pub fn expect_pair(&self) -> Result<(), Error> {
-        let constant: Constant = self.clone().try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        if matches!(constant_type, Type::Pair(_, _)) {
-            Ok(())
-        } else {
-            Err(Error::PairTypeMismatch(constant_type))
-        }
-    }
-}
-
-impl TryFrom<Value> for Type {
-    type Error = Error;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let constant: Constant = value.try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        Ok(constant_type)
-    }
-}
-
-impl TryFrom<&Value> for Type {
-    type Error = Error;
-
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        let constant: Constant = value.try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        Ok(constant_type)
-    }
-}
-
-impl TryFrom<Value> for Constant {
-    type Error = Error;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Con(constant) => Ok(constant.as_ref().clone()),
-            rest => Err(Error::NotAConstant(rest)),
-        }
-    }
-}
-
-impl TryFrom<&Value> for Constant {
-    type Error = Error;
-
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Con(constant) => Ok(constant.as_ref().clone()),
-            rest => Err(Error::NotAConstant(rest.clone())),
-        }
-    }
-}
-
 impl From<&Constant> for Type {
     fn from(constant: &Constant) -> Self {
         match constant {
@@ -766,7 +333,7 @@ impl From<&Constant> for Type {
 mod tests {
     use num_bigint::BigInt;
 
-    use super::{cost_model::ExBudget, integer_log2, Value};
+    use super::cost_model::ExBudget;
     use crate::{
         ast::{Constant, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
@@ -842,153 +409,5 @@ mod tests {
                 Term::Constant(Constant::Integer(result.into()).into())
             );
         }
-    }
-
-    #[test]
-    fn to_ex_mem_bigint() {
-        let value = Value::Con(Constant::Integer(1.into()).into());
-
-        assert_eq!(value.to_ex_mem(), 1);
-
-        let value = Value::Con(Constant::Integer(42.into()).into());
-
-        assert_eq!(value.to_ex_mem(), 1);
-
-        let value = Value::Con(
-            Constant::Integer(BigInt::parse_bytes("18446744073709551615".as_bytes(), 10).unwrap())
-                .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 1);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("999999999999999999999999999999".as_bytes(), 10).unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 2);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("170141183460469231731687303715884105726".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 2);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("170141183460469231731687303715884105727".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 2);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("170141183460469231731687303715884105728".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 2);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("170141183460469231731687303715884105729".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 2);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("340282366920938463463374607431768211458".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 3);
-
-        let value = Value::Con(
-            Constant::Integer(
-                BigInt::parse_bytes("999999999999999999999999999999999999999999".as_bytes(), 10)
-                    .unwrap(),
-            )
-            .into(),
-        );
-
-        assert_eq!(value.to_ex_mem(), 3);
-
-        let value =
-            Value::Con(Constant::Integer(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()).into());
-
-        assert_eq!(value.to_ex_mem(), 5);
-    }
-
-    #[test]
-    fn integer_log2_oracle() {
-        // Values come from the Haskell implementation
-        assert_eq!(integer_log2(1.into()), 0);
-        assert_eq!(integer_log2(42.into()), 5);
-        assert_eq!(
-            integer_log2(BigInt::parse_bytes("18446744073709551615".as_bytes(), 10).unwrap()),
-            63
-        );
-        assert_eq!(
-            integer_log2(
-                BigInt::parse_bytes("999999999999999999999999999999".as_bytes(), 10).unwrap()
-            ),
-            99
-        );
-        assert_eq!(
-            integer_log2(
-                BigInt::parse_bytes("170141183460469231731687303715884105726".as_bytes(), 10)
-                    .unwrap()
-            ),
-            126
-        );
-        assert_eq!(
-            integer_log2(
-                BigInt::parse_bytes("170141183460469231731687303715884105727".as_bytes(), 10)
-                    .unwrap()
-            ),
-            126
-        );
-        assert_eq!(
-            integer_log2(
-                BigInt::parse_bytes("170141183460469231731687303715884105728".as_bytes(), 10)
-                    .unwrap()
-            ),
-            127
-        );
-        assert_eq!(
-            integer_log2(
-                BigInt::parse_bytes("340282366920938463463374607431768211458".as_bytes(), 10)
-                    .unwrap()
-            ),
-            128
-        );
-        assert_eq!(
-            integer_log2(
-                BigInt::parse_bytes("999999999999999999999999999999999999999999".as_bytes(), 10)
-                    .unwrap()
-            ),
-            139
-        );
-        assert_eq!(
-            integer_log2(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()),
-            279
-        );
     }
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use pallas_primitives::babbage::Language;
 
@@ -975,7 +975,7 @@ impl Default for BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget_v2(&self, fun: DefaultFunction, args: &[Rc<Value>]) -> ExBudget {
+    pub fn to_ex_budget_v2(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
         match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
@@ -1402,7 +1402,7 @@ impl BuiltinCosts {
         }
     }
 
-    pub fn to_ex_budget_v1(&self, fun: DefaultFunction, args: &[Rc<Value>]) -> ExBudget {
+    pub fn to_ex_budget_v1(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
         match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
