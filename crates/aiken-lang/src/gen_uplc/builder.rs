@@ -286,7 +286,11 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     // TODO: how shall tails be weighted? Since any clause after will not run
     sorted_clauses.sort_by(|clause1, clause2| {
         let clause1_len = match &clause1.pattern {
-            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
+            Pattern::List { elements, tail, .. } => {
+                elements.len() * 3
+                    + usize::from(tail.is_some())
+                    + usize::from(clause1.guard.is_some())
+            }
             _ => 10000000,
         };
         let clause2_len = match &clause2.pattern {
@@ -306,27 +310,44 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
     // If we have a catch all, use that. Otherwise use todo which will result in error
     // TODO: fill in todo label with description
-    let plug_in_then = match &sorted_clauses[sorted_clauses.len() - 1].pattern {
-        Pattern::Var { name, .. } => {
-            assign_plug_in_name = Some(name);
-            sorted_clauses[sorted_clauses.len() - 1].clone().then
-        }
-        Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
-        _ => {
-            let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
-            TypedExpr::Trace {
-                location: Span::empty(),
-                tipo: tipo.clone(),
-                text: Box::new(TypedExpr::String {
-                    location: Span::empty(),
-                    tipo: crate::builtins::string(),
-                    value: "Clause not filled".to_string(),
-                }),
-                then: Box::new(TypedExpr::ErrorTerm {
-                    location: Span::empty(),
-                    tipo,
-                }),
+    let plug_in_then = if sorted_clauses[sorted_clauses.len() - 1].guard.is_none() {
+        match &sorted_clauses[sorted_clauses.len() - 1].pattern {
+            Pattern::Var { name, .. } => {
+                assign_plug_in_name = Some(name);
+                sorted_clauses[sorted_clauses.len() - 1].clone().then
             }
+            Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
+            _ => {
+                let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
+                TypedExpr::Trace {
+                    location: Span::empty(),
+                    tipo: tipo.clone(),
+                    text: Box::new(TypedExpr::String {
+                        location: Span::empty(),
+                        tipo: crate::builtins::string(),
+                        value: "Clause not filled".to_string(),
+                    }),
+                    then: Box::new(TypedExpr::ErrorTerm {
+                        location: Span::empty(),
+                        tipo,
+                    }),
+                }
+            }
+        }
+    } else {
+        let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
+        TypedExpr::Trace {
+            location: Span::empty(),
+            tipo: tipo.clone(),
+            text: Box::new(TypedExpr::String {
+                location: Span::empty(),
+                tipo: crate::builtins::string(),
+                value: "Clause not filled".to_string(),
+            }),
+            then: Box::new(TypedExpr::ErrorTerm {
+                location: Span::empty(),
+                tipo,
+            }),
         }
     };
 
@@ -379,33 +400,34 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
         }
 
         // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
-        match &clause.pattern {
-            Pattern::Var { .. } => {
-                last_clause_index = index + 1;
-                last_clause_set = true;
-            }
-            Pattern::Discard { .. } => {
-                last_clause_index = index + 1;
-                last_clause_set = true;
-            }
-            Pattern::List {
-                elements,
-                tail: Some(tail),
-                ..
-            } => {
-                let mut elements = elements.clone();
-                elements.push(*tail.clone());
-                if elements
-                    .iter()
-                    .all(|element| matches!(element, Pattern::Var { .. } | Pattern::Discard { .. }))
-                    && !last_clause_set
-                    && !elements.is_empty()
-                {
+        if clause.guard.is_none() {
+            match &clause.pattern {
+                Pattern::Var { .. } => {
                     last_clause_index = index + 1;
                     last_clause_set = true;
                 }
+                Pattern::Discard { .. } => {
+                    last_clause_index = index + 1;
+                    last_clause_set = true;
+                }
+                Pattern::List {
+                    elements,
+                    tail: Some(tail),
+                    ..
+                } => {
+                    let mut elements = elements.clone();
+                    elements.push(*tail.clone());
+                    if elements.iter().all(|element| {
+                        matches!(element, Pattern::Var { .. } | Pattern::Discard { .. })
+                    }) && !last_clause_set
+                        && !elements.is_empty()
+                    {
+                        last_clause_index = index + 1;
+                        last_clause_set = true;
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
 
         // If the last condition doesn't have a catch all or tail then add a catch all with a todo
