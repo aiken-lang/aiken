@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::ast::{Constant, NamedDeBruijn, Term};
+use crate::ast::{NamedDeBruijn, Term};
 
 use super::value::{Env, Value};
 
@@ -19,7 +19,7 @@ enum DischargeStep {
     PopArgStack(PartialTerm),
 }
 
-pub(super) fn value_as_term(value: Value) -> Rc<Term<NamedDeBruijn>> {
+pub(super) fn value_as_term(value: Value) -> Term<NamedDeBruijn> {
     let mut stack = vec![DischargeStep::DischargeValue(value)];
 
     let mut arg_stack = vec![];
@@ -27,9 +27,18 @@ pub(super) fn value_as_term(value: Value) -> Rc<Term<NamedDeBruijn>> {
     while let Some(stack_frame) = stack.pop() {
         match stack_frame {
             DischargeStep::DischargeValue(value) => match value {
-                Value::Con(x) => arg_stack.push(Term::Constant(x.clone()).into()),
-                Value::Builtin { .. } => {
-                    arg_stack.push(Term::Constant(Constant::Unit.into()).into())
+                Value::Con(x) => arg_stack.push(Term::Constant(x.clone())),
+                Value::Builtin { runtime, fun } => {
+                    let mut term = Term::Builtin(fun);
+
+                    for _ in 0..runtime.forces {
+                        term = term.force();
+                    }
+
+                    for arg in runtime.args {
+                        term = term.apply(value_as_term(arg));
+                    }
+                    arg_stack.push(term)
                 }
                 Value::Delay(body, env) => {
                     stack.push(DischargeStep::DischargeValueEnv(
@@ -59,14 +68,14 @@ pub(super) fn value_as_term(value: Value) -> Rc<Term<NamedDeBruijn>> {
                     let index: usize = name.index.into();
 
                     if lam_cnt >= index {
-                        arg_stack.push(Rc::new(Term::Var(name.clone())));
+                        arg_stack.push(Term::Var(name.clone()));
                     } else {
                         let env = env.get::<usize>(env.len() - (index - lam_cnt)).cloned();
 
                         if let Some(v) = env {
                             stack.push(DischargeStep::DischargeValue(v));
                         } else {
-                            arg_stack.push(Rc::new(Term::Var(name.clone())));
+                            arg_stack.push(Term::Var(name.clone()));
                         }
                     }
                 }
@@ -114,33 +123,33 @@ pub(super) fn value_as_term(value: Value) -> Rc<Term<NamedDeBruijn>> {
                     ));
                 }
                 rest => {
-                    arg_stack.push(rest.to_owned().into());
+                    arg_stack.push(rest.to_owned());
                 }
             },
             DischargeStep::PopArgStack(term) => match term {
                 PartialTerm::Delay => {
                     let body = arg_stack.pop().unwrap();
-                    arg_stack.push(Term::Delay(body).into())
+
+                    arg_stack.push(Term::Delay(body.into()))
                 }
                 PartialTerm::Lambda(parameter_name) => {
                     let body = arg_stack.pop().unwrap();
-                    arg_stack.push(
-                        Term::Lambda {
-                            parameter_name,
-                            body,
-                        }
-                        .into(),
-                    )
+
+                    arg_stack.push(Term::Lambda {
+                        parameter_name,
+                        body: body.into(),
+                    })
                 }
                 PartialTerm::Apply => {
                     let argument = arg_stack.pop().unwrap();
                     let function = arg_stack.pop().unwrap();
 
-                    arg_stack.push(Term::Apply { function, argument }.into());
+                    arg_stack.push(function.apply(argument));
                 }
                 PartialTerm::Force => {
                     let body = arg_stack.pop().unwrap();
-                    arg_stack.push(Term::Force(body).into())
+
+                    arg_stack.push(body.force())
                 }
             },
         }
