@@ -22,13 +22,13 @@ use self::{
 enum MachineState {
     Return(Context, Value),
     Compute(Context, Env, Term<NamedDeBruijn>),
-    Done(Rc<Term<NamedDeBruijn>>),
+    Done(Term<NamedDeBruijn>),
 }
 
 #[derive(Clone)]
 enum Context {
     FrameApplyFun(Value, Box<Context>),
-    FrameApplyArg(Env, Rc<Term<NamedDeBruijn>>, Box<Context>),
+    FrameApplyArg(Env, Term<NamedDeBruijn>, Box<Context>),
     FrameForce(Box<Context>),
     NoFrame,
 }
@@ -73,7 +73,7 @@ impl Machine {
                 Compute(context, env, t) => self.compute(context, env, t)?,
                 Return(context, value) => self.return_compute(context, value)?,
                 Done(t) => {
-                    return Ok(t.as_ref().clone());
+                    return Ok(t);
                 }
             };
         }
@@ -117,7 +117,7 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 Ok(MachineState::Compute(
-                    Context::FrameApplyArg(Rc::clone(&env), argument, context.into()),
+                    Context::FrameApplyArg(env.clone(), argument.as_ref().clone(), context.into()),
                     env,
                     function.as_ref().clone(),
                 ))
@@ -156,7 +156,7 @@ impl Machine {
             Context::FrameApplyArg(arg_var_env, arg, ctx) => Ok(MachineState::Compute(
                 Context::FrameApplyFun(value, ctx),
                 arg_var_env,
-                arg.as_ref().clone(),
+                arg,
             )),
             Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
             Context::NoFrame => {
@@ -188,9 +188,9 @@ impl Machine {
 
                     Ok(MachineState::Return(context, res))
                 } else {
-                    Err(Error::BuiltinTermArgumentExpected(Term::Constant(
-                        Constant::Unit.into(),
-                    )))
+                    let term = discharge::value_as_term(Value::Builtin { fun, runtime });
+
+                    Err(Error::BuiltinTermArgumentExpected(term))
                 }
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
@@ -216,8 +216,6 @@ impl Machine {
                 ))
             }
             Value::Builtin { fun, runtime } => {
-                // let arg_term = discharge::value_as_term(argument.clone());
-
                 if runtime.is_arrow() && !runtime.needs_force() {
                     let mut runtime = runtime;
 
@@ -231,9 +229,9 @@ impl Machine {
 
                     Ok(MachineState::Return(context, res))
                 } else {
-                    Err(Error::UnexpectedBuiltinTermArgument(Term::Constant(
-                        Constant::Unit.into(),
-                    )))
+                    let term = discharge::value_as_term(Value::Builtin { fun, runtime });
+
+                    Err(Error::UnexpectedBuiltinTermArgument(term))
                 }
             }
             rest => Err(Error::NonFunctionalApplication(rest, argument)),

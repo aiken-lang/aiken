@@ -23,9 +23,9 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub struct BuiltinRuntime {
-    args: Vec<Value>,
+    pub(super) args: Vec<Value>,
     fun: DefaultFunction,
-    forces: u32,
+    pub(super) forces: u32,
 }
 
 impl BuiltinRuntime {
