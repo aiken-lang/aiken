@@ -24,7 +24,6 @@ pub enum Value {
     },
     Builtin {
         fun: DefaultFunction,
-        term: Rc<Term<NamedDeBruijn>>,
         runtime: BuiltinRuntime,
     },
 }

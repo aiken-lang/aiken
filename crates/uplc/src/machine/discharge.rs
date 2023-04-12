@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::ast::{NamedDeBruijn, Term};
+use crate::ast::{Constant, NamedDeBruijn, Term};
 
 use super::value::{Env, Value};
 
@@ -28,7 +28,9 @@ pub(super) fn value_as_term(value: Value) -> Rc<Term<NamedDeBruijn>> {
         match stack_frame {
             DischargeStep::DischargeValue(value) => match value {
                 Value::Con(x) => arg_stack.push(Term::Constant(x.clone()).into()),
-                Value::Builtin { term, .. } => arg_stack.push(term.clone()),
+                Value::Builtin { .. } => {
+                    arg_stack.push(Term::Constant(Constant::Unit.into()).into())
+                }
                 Value::Delay(body, env) => {
                     stack.push(DischargeStep::DischargeValueEnv(
                         0,
