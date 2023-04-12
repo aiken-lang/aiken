@@ -1,9 +1,6 @@
 use std::rc::Rc;
 
-use crate::{
-    ast::{Constant, NamedDeBruijn, Term, Type},
-    builtins::DefaultFunction,
-};
+use crate::ast::{Constant, NamedDeBruijn, Term, Type};
 
 pub mod cost_model;
 mod discharge;
@@ -147,11 +144,7 @@ impl Machine {
 
                 Ok(MachineState::Return(
                     context,
-                    Value::Builtin {
-                        fun,
-                        term: term.into(),
-                        runtime,
-                    },
+                    Value::Builtin { fun, runtime },
                 ))
             }
         }
@@ -183,21 +176,21 @@ impl Machine {
             Value::Delay(body, env) => {
                 Ok(MachineState::Compute(context, env, body.as_ref().clone()))
             }
-            Value::Builtin {
-                fun,
-                term,
-                mut runtime,
-            } => {
-                let force_term = Term::Force(term);
-
+            Value::Builtin { fun, mut runtime } => {
                 if runtime.needs_force() {
                     runtime.consume_force();
 
-                    let res = self.eval_builtin_app(fun, force_term.into(), runtime)?;
+                    let res = if runtime.is_ready() {
+                        self.eval_builtin_app(runtime)?
+                    } else {
+                        Value::Builtin { fun, runtime }
+                    };
 
                     Ok(MachineState::Return(context, res))
                 } else {
-                    Err(Error::BuiltinTermArgumentExpected(force_term))
+                    Err(Error::BuiltinTermArgumentExpected(Term::Constant(
+                        Constant::Unit.into(),
+                    )))
                 }
             }
             rest => Err(Error::NonPolymorphicInstantiation(rest)),
@@ -222,47 +215,40 @@ impl Machine {
                     body.as_ref().clone(),
                 ))
             }
-            Value::Builtin { fun, term, runtime } => {
-                let arg_term = discharge::value_as_term(argument.clone());
-
-                let t = Rc::new(Term::<NamedDeBruijn>::Apply {
-                    function: term,
-                    argument: arg_term,
-                });
+            Value::Builtin { fun, runtime } => {
+                // let arg_term = discharge::value_as_term(argument.clone());
 
                 if runtime.is_arrow() && !runtime.needs_force() {
                     let mut runtime = runtime;
 
                     runtime.push(argument)?;
 
-                    let res = self.eval_builtin_app(fun, t, runtime.to_owned())?;
+                    let res = if runtime.is_ready() {
+                        self.eval_builtin_app(runtime)?
+                    } else {
+                        Value::Builtin { fun, runtime }
+                    };
 
                     Ok(MachineState::Return(context, res))
                 } else {
-                    Err(Error::UnexpectedBuiltinTermArgument(t.as_ref().clone()))
+                    Err(Error::UnexpectedBuiltinTermArgument(Term::Constant(
+                        Constant::Unit.into(),
+                    )))
                 }
             }
             rest => Err(Error::NonFunctionalApplication(rest, argument)),
         }
     }
 
-    fn eval_builtin_app(
-        &mut self,
-        fun: DefaultFunction,
-        term: Rc<Term<NamedDeBruijn>>,
-        runtime: BuiltinRuntime,
-    ) -> Result<Value, Error> {
-        if runtime.is_ready() {
-            let cost = match self.version {
-                Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
-                Language::PlutusV2 => runtime.to_ex_budget_v2(&self.costs.builtin_costs),
-            };
-            self.spend_budget(cost)?;
+    fn eval_builtin_app(&mut self, runtime: BuiltinRuntime) -> Result<Value, Error> {
+        let cost = match self.version {
+            Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
+            Language::PlutusV2 => runtime.to_ex_budget_v2(&self.costs.builtin_costs),
+        };
 
-            runtime.call(&mut self.logs)
-        } else {
-            Ok(Value::Builtin { fun, term, runtime })
-        }
+        self.spend_budget(cost)?;
+
+        runtime.call(&mut self.logs)
     }
 
     fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {
