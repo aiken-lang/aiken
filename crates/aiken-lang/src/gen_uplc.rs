@@ -1929,7 +1929,9 @@ impl<'a> CodeGenerator<'a> {
                         .collect_vec();
 
                     pattern_stack.fields_expose(indices, false, expect_stack);
-                } else if tipo.is_bool() || tipo.is_void() {
+                } else if (tipo.is_bool() || tipo.is_void())
+                    && assignment_properties.kind.is_expect()
+                {
                     pattern_stack.merge_child(expect_stack);
                 } else {
                     pattern_stack.let_assignment("_", expect_stack);
@@ -2086,102 +2088,112 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let field_map = match constructor {
-                    PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
-                };
+                if tipo.is_bool() {
+                    let PatternConstructor::Record { name, .. } = constructor;
 
-                let data_type =
-                    builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                    expect_stack.expect_bool(name == "True", value_stack);
+                } else if tipo.is_void() {
+                    expect_stack.choose_unit(value_stack);
+                } else {
+                    let field_map = match constructor {
+                        PatternConstructor::Record { field_map, .. } => field_map,
+                    };
 
-                let (index, data_type_constr) = data_type
-                    .constructors
-                    .iter()
-                    .enumerate()
-                    .find(|(_, constr)| &constr.name == constr_name)
-                    .unwrap();
+                    let data_type =
+                        builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
 
-                let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
-
-                let arg_types = tipo.arg_types().unwrap();
-
-                for (index, arg) in arg_types.iter().enumerate() {
-                    let field_type = arg.clone();
-                    type_map.insert(index, field_type);
-                }
-
-                let mut stacks = expect_stack.empty_with_scope();
-
-                let arguments_index = arguments
-                    .iter()
-                    .filter_map(|item| {
-                        let label = item.label.clone().unwrap_or_default();
-
-                        let field_index = field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
-
-                        let mut inner_stack = expect_stack.empty_with_scope();
-
-                        let name = self.extract_arg_name(
-                            &item.value,
-                            &mut inner_stack,
-                            type_map.get(field_index).unwrap(),
-                            &assignment_properties,
-                        );
-
-                        stacks.merge(inner_stack);
-
-                        name.map(|name| (name, *field_index))
-                    })
-                    .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
-                    .collect::<Vec<(String, usize)>>();
-
-                let total_fields = data_type_constr.arguments.len();
-                let mut final_args = vec![];
-                let mut current_index = 0;
-
-                for index in 0..total_fields {
-                    if arguments_index.get(current_index).is_some()
-                        && arguments_index[current_index].1 == index
-                    {
-                        final_args.push(arguments_index.get(current_index).unwrap().clone());
-                        current_index += 1;
-                    } else {
-                        let id_next = self.id_gen.next();
-
-                        final_args.push((format!("__field_{index}_{id_next}"), index));
-
-                        self.expect_type(
-                            type_map.get(&index).unwrap(),
-                            &mut stacks,
-                            &format!("__field_{index}_{id_next}"),
-                            &mut IndexMap::new(),
-                        )
-                    }
-                }
-
-                let constr_var = format!("__constr_{}", self.id_gen.next());
-
-                expect_stack.let_assignment(constr_var.clone(), value_stack);
-
-                let mut var_stack = expect_stack.empty_with_scope();
-                var_stack.local_var(tipo.clone(), constr_var.clone());
-                expect_stack.expect_constr(index, var_stack);
-
-                if !arguments_index.is_empty() {
-                    let mut fields_stack = expect_stack.empty_with_scope();
-                    fields_stack.local_var(tipo.clone(), constr_var);
-
-                    let indices = final_args
+                    let (index, data_type_constr) = data_type
+                        .constructors
                         .iter()
-                        .map(|(var_name, index)| {
-                            let field_type = type_map.get(index).unwrap();
-                            (*index, var_name.clone(), field_type.clone())
+                        .enumerate()
+                        .find(|(_, constr)| &constr.name == constr_name)
+                        .unwrap();
+
+                    let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
+
+                    let arg_types = tipo.arg_types().unwrap();
+
+                    for (index, arg) in arg_types.iter().enumerate() {
+                        let field_type = arg.clone();
+                        type_map.insert(index, field_type);
+                    }
+
+                    let mut stacks = expect_stack.empty_with_scope();
+
+                    let arguments_index = arguments
+                        .iter()
+                        .filter_map(|item| {
+                            let label = item.label.clone().unwrap_or_default();
+                            let field_map = field_map.as_ref().unwrap_or_else(|| unreachable!());
+
+                            let field_index =
+                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+
+                            let mut inner_stack = expect_stack.empty_with_scope();
+
+                            let name = self.extract_arg_name(
+                                &item.value,
+                                &mut inner_stack,
+                                type_map.get(field_index).unwrap(),
+                                &assignment_properties,
+                            );
+
+                            stacks.merge(inner_stack);
+
+                            name.map(|name| (name, *field_index))
                         })
-                        .collect_vec();
+                        .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
+                        .collect::<Vec<(String, usize)>>();
 
-                    expect_stack.fields_expose(indices, true, fields_stack);
+                    let total_fields = data_type_constr.arguments.len();
+                    let mut final_args = vec![];
+                    let mut current_index = 0;
+
+                    for index in 0..total_fields {
+                        if arguments_index.get(current_index).is_some()
+                            && arguments_index[current_index].1 == index
+                        {
+                            final_args.push(arguments_index.get(current_index).unwrap().clone());
+                            current_index += 1;
+                        } else {
+                            let id_next = self.id_gen.next();
+
+                            final_args.push((format!("__field_{index}_{id_next}"), index));
+
+                            self.expect_type(
+                                type_map.get(&index).unwrap(),
+                                &mut stacks,
+                                &format!("__field_{index}_{id_next}"),
+                                &mut IndexMap::new(),
+                            )
+                        }
+                    }
+
+                    let constr_var = format!("__constr_{}", self.id_gen.next());
+
+                    expect_stack.let_assignment(constr_var.clone(), value_stack);
+
+                    let mut var_stack = expect_stack.empty_with_scope();
+                    var_stack.local_var(tipo.clone(), constr_var.clone());
+                    expect_stack.expect_constr(index, var_stack);
+
+                    if !arguments_index.is_empty() {
+                        let mut fields_stack = expect_stack.empty_with_scope();
+                        fields_stack.local_var(tipo.clone(), constr_var);
+
+                        let indices = final_args
+                            .iter()
+                            .map(|(var_name, index)| {
+                                let field_type = type_map.get(index).unwrap();
+                                (*index, var_name.clone(), field_type.clone())
+                            })
+                            .collect_vec();
+
+                        expect_stack.fields_expose(indices, true, fields_stack);
+                    }
+
+                    expect_stack.merge_child(stacks);
                 }
-
-                expect_stack.merge_child(stacks);
             }
             Pattern::Tuple { elems, .. } => {
                 let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
@@ -4157,7 +4169,8 @@ impl<'a> CodeGenerator<'a> {
                                 arg_stack.push(term);
                                 return;
                             } else if tipo.is_void() {
-                                arg_stack.push(Term::bool(true));
+                                let term = left.choose_unit(right.choose_unit(Term::bool(true)));
+                                arg_stack.push(term);
                                 return;
                             }
 
