@@ -1,6 +1,6 @@
 # Changelog
 
-## [next] - 2023-MM-DD
+## 1.0.0-alpha - 2023-04-13
 
 ### Added
 
@@ -10,6 +10,7 @@
 
 - **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
 - **aiken-project**: fixed generation of blueprints for recursive and mutually recursive data-types
+- **aiken-project**: perform validation of parameters on `blueprint apply`
 
 - **aiken-lang**: block `Data` and `String` from unifying when casting
 - **aiken-lang**: remove ability for a type with many variants with matching field labels and types to support field access
@@ -22,7 +23,9 @@
 - **aiken-lang**: support multi-clause patterns (only as a syntactic sugar)
 - **aiken-lang**: fix lexer panic when parsing too large (> u32) tuple-indexes
 
-## [v0.0.29] - 2023-MM-DD
+- **uplc**: Greatly improved the Plutus virtual machine performances for script evaluation
+
+## [v0.0.29] - 2023-02-23
 
 ### Added
 

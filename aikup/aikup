@@ -132,7 +132,7 @@ EOF
 list_versions() {
   say "available versions"
   curl -sSL "https://api.github.com/repos/aiken-lang/aiken/tags" |
-    grep -E '"name": "v' |
+    grep -E '"name": "v[1-9]' |
     sed 's/.*\(v[^"]*\)",.*/\1/'
 }
 
