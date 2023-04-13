@@ -29,7 +29,7 @@ args@{
   ignoreLockHash,
 }:
 let
-  nixifiedLockHash = "3b5f0de0ee7a3869a5b67426e4e9c2c6c3d53eec1d5c103bf394ce9590a3ac0c";
+  nixifiedLockHash = "de7000f92c1cdd62fddcd2e2e4fffdc45f7d746070c309ffa38fcbfe71a097e1";
   workspaceSrc = if args.workspaceSrc == null then ./. else args.workspaceSrc;
   currentLockHash = builtins.hashFile "sha256" (workspaceSrc + /Cargo.lock);
   lockHashIgnored = if ignoreLockHash
@@ -55,7 +55,7 @@ in
     aiken = rustPackages.unknown.aiken."1.0.0-alpha";
     aiken-lang = rustPackages.unknown.aiken-lang."1.0.0-alpha";
     uplc = rustPackages.unknown.uplc."1.0.0-alpha";
-    flat-rs = rustPackages.unknown.flat-rs."0.0.27";
+    flat-rs = rustPackages.unknown.flat-rs."1.0.0-alpha";
     aiken-lsp = rustPackages.unknown.aiken-lsp."1.0.0-alpha";
     aiken-project = rustPackages.unknown.aiken-project."1.0.0-alpha";
   };
@@ -1149,9 +1149,9 @@ in
     src = fetchCratesIo { inherit name version; sha256 = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"; };
   });
   
-  "unknown".flat-rs."0.0.27" = overridableMkRustCrate (profileName: rec {
+  "unknown".flat-rs."1.0.0-alpha" = overridableMkRustCrate (profileName: rec {
     name = "flat-rs";
-    version = "0.0.27";
+    version = "1.0.0-alpha";
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/crates/flat-rs");
     dependencies = {
@@ -3970,7 +3970,7 @@ in
     dependencies = {
       anyhow = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".anyhow."1.0.70" { inherit profileName; }).out;
       cryptoxide = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".cryptoxide."0.4.4" { inherit profileName; }).out;
-      flat_rs = (rustPackages."unknown".flat-rs."0.0.27" { inherit profileName; }).out;
+      flat_rs = (rustPackages."unknown".flat-rs."1.0.0-alpha" { inherit profileName; }).out;
       hex = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".hex."0.4.3" { inherit profileName; }).out;
       indexmap = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".indexmap."1.9.3" { inherit profileName; }).out;
       itertools = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; }).out;
