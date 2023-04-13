@@ -17,6 +17,10 @@ main() {
       --)               shift; break;;
 
       install)     shift; AIKUP_VERSION=$1;;
+      -l|--list)
+	list_versions
+	exit 0
+	;;
       -h|--help)
         usage
         exit 0
@@ -30,7 +34,7 @@ main() {
 
   if [ -z "$AIKUP_VERSION" ]; then
     err "must specify a version"
-  fi  
+  fi
 
   # Print the banner after successfully parsing args
   banner
@@ -116,11 +120,17 @@ USAGE:
     aikup <SUBCOMMAND>
 
 OPTIONS:
+    -l, --list      List available versions
     -h, --help      Print help information
 
 SUBCOMMANDS:
     install         Install a specific version
 EOF
+}
+
+list_versions() {
+  say "available versions"
+  curl -sSL "https://api.github.com/repos/aiken-lang/aiken/tags" | grep -E '"name": "v' | sed 's/.*\(v[^"]*\)",.*/\1/'
 }
 
 say() {
@@ -153,25 +163,24 @@ ensure() {
   if ! "$@"; then err "command failed: $*"; fi
 }
 
-# Banner Function for Aiken 
+# Banner Function for Aiken
 banner() {
   printf '
 
-.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx
- 
- ╔═╗ ╦ ╔╦ ║ ╔══ ╔╗╔           Modern and modular toolkit
- ╠═╣ ║  ╠═╣ ╠═  ║║║     for Cardano Smart Contract Development 
- ╚ ╝ ╩  ╚ ╚ ╚══ ╝╚╝               written in Rust.
+================================================================================
 
-.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx
+░█▀▀▄░▀█▀░▒█░▄▀░▒█▀▀▀░▒█▄░▒█             Modern and modular toolkit
+▒█▄▄█░▒█░░▒█▀▄░░▒█▀▀▀░▒█▒█▒█       for Cardano Smart Contract development.
+▒█░▒█░▄█▄░▒█░▒█░▒█▄▄▄░▒█░░▀█                 Written in Rust.
+
+================================================================================
 
 Repo       : https://github.com/aiken-lang/aiken
-Docs       : https://aiken-lang.org/                      
-Chat       : https://discord.gg/Vc3x8N9nz2                         
+Docs       : https://aiken-lang.org/
+Chat       : https://discord.gg/Vc3x8N9nz2
 Contribute : https://github.com/aiken-lang/aiken/blob/main/CONTRIBUTING.md
 
-.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx.xOx
-
+================================================================================
 '
 }
 
