@@ -33,7 +33,8 @@ main() {
   done
 
   if [ -z "$AIKUP_VERSION" ]; then
-    err "must specify a version"
+    AIKUP_VERSION=$(get_latest_release)
+    say "no version specified; installing latest: $AIKUP_VERSION"
   fi
 
   # Print the banner after successfully parsing args
@@ -130,7 +131,15 @@ EOF
 
 list_versions() {
   say "available versions"
-  curl -sSL "https://api.github.com/repos/aiken-lang/aiken/tags" | grep -E '"name": "v' | sed 's/.*\(v[^"]*\)",.*/\1/'
+  curl -sSL "https://api.github.com/repos/aiken-lang/aiken/tags" |
+    grep -E '"name": "v' |
+    sed 's/.*\(v[^"]*\)",.*/\1/'
+}
+
+get_latest_release () {
+  curl --silent "https://api.github.com/repos/aiken-lang/aiken/releases/latest" |
+    grep '"tag_name":' |
+    sed -E 's/.*"([^"]+)".*/\1/'
 }
 
 say() {
