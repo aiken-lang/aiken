@@ -7,6 +7,7 @@ repository = "https://github.com/aiken-lang/aiken/crates/project"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
+rust-version = "1.66.1"
 
 [dependencies]
 aiken-lang = { path = "../aiken-lang", version = "0.0.29" }

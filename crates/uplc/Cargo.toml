@@ -7,10 +7,8 @@ repository = "https://github.com/aiken-lang/aiken/crates/uplc"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
-
+rust-version = "1.66.1"
 exclude = ["test_data/*"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.69"
