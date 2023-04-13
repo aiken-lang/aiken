@@ -7,7 +7,11 @@ use uplc::ast::{Constant, DeBruijn, Term};
 /// Apply a parameter to a parameterized validator.
 #[derive(clap::Args)]
 pub struct Args {
-    /// The parameter, as a Plutus Data (CBOR, hex-encoded)
+    /// The parameter, as a Plutus Data (CBOR, hex-encoded).
+    ///
+    /// For example, `182A` designates an integer of value 42. If you're unsure about the shape of
+    /// the parameter, look at the schema specified in the project's blueprint (i.e.
+    /// `plutus.json`), or use the `cbor.serialise` function from the Aiken standard library.
     parameter: String,
 
     /// Path to project
