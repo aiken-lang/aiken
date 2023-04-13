@@ -30,7 +30,7 @@ jobs:
 
       - name: Extract release notes
         id: extract_release_notes
-        run: echo "release_notes=$(sed -n '/^## .*$/,$p' CHANGELOG.md | sed '1d;/^## /,$d')" >> $GITHUB_OUTPUT
+        run: echo "release_notes=\"$(sed -n '/^## .*$/,$p' CHANGELOG.md | sed '1d;/^## /,$d')\"" >> $GITHUB_OUTPUT
 
   release:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
