@@ -176,45 +176,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .field_map())
     }
 
-    fn assert_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
-        if !matches!(*expr, UntypedExpr::Assignment { .. }) {
-            return Err(Error::ImplicitlyDiscardedExpression {
-                location: expr.location(),
-            });
-        }
-        Ok(())
-    }
-
-    #[allow(clippy::only_used_in_recursion)]
-    fn assert_no_assignment(&self, expr: &UntypedExpr) -> Result<(), Error> {
-        match expr {
-            UntypedExpr::Assignment { value, .. } => Err(Error::LastExpressionIsAssignment {
-                location: expr.location(),
-                expr: *value.clone(),
-            }),
-            UntypedExpr::Trace { then, .. } => self.assert_no_assignment(then),
-            UntypedExpr::Fn { .. }
-            | UntypedExpr::BinOp { .. }
-            | UntypedExpr::ByteArray { .. }
-            | UntypedExpr::Call { .. }
-            | UntypedExpr::ErrorTerm { .. }
-            | UntypedExpr::FieldAccess { .. }
-            | UntypedExpr::If { .. }
-            | UntypedExpr::Int { .. }
-            | UntypedExpr::List { .. }
-            | UntypedExpr::PipeLine { .. }
-            | UntypedExpr::RecordUpdate { .. }
-            | UntypedExpr::Sequence { .. }
-            | UntypedExpr::String { .. }
-            | UntypedExpr::Tuple { .. }
-            | UntypedExpr::TupleIndex { .. }
-            | UntypedExpr::UnOp { .. }
-            | UntypedExpr::Var { .. }
-            | UntypedExpr::TraceIfFalse { .. }
-            | UntypedExpr::When { .. } => Ok(()),
-        }
-    }
-
     pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
         // Create new scope
         let environment_reset_data = self.environment.open_new_scope();
@@ -1088,6 +1049,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             let guard = scope.infer_optional_clause_guard(guard)?;
 
+            assert_no_assignment(&then)?;
+
             let then = scope.infer(then)?;
 
             Ok::<_, Error>((guard, then, typed_patterns))
@@ -1394,6 +1357,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             false,
         )?;
 
+        assert_no_assignment(&first.body)?;
         let body = self.infer(first.body.clone())?;
 
         let tipo = body.tipo();
@@ -1414,6 +1378,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 false,
             )?;
 
+            assert_no_assignment(&branch.body)?;
             let body = self.infer(branch.body.clone())?;
 
             self.unify(
@@ -1430,6 +1395,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             });
         }
 
+        assert_no_assignment(&final_else)?;
         let typed_final_else = self.infer(final_else)?;
 
         self.unify(
@@ -1478,7 +1444,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         body: UntypedExpr,
         return_type: Option<Arc<Type>>,
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
-        self.assert_no_assignment(&body)?;
+        assert_no_assignment(&body)?;
 
         let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
             let mut argument_names = HashMap::with_capacity(args.len());
@@ -1622,11 +1588,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 match i.cmp(&(count - 1)) {
                     // When the expression is the last in a sequence, we enforce it is NOT
                     // an assignment (kind of treat assignments like statements).
-                    Ordering::Equal => scope.assert_no_assignment(&expression)?,
+                    Ordering::Equal => assert_no_assignment(&expression)?,
 
                     // This isn't the final expression in the sequence, so it *must*
                     // be a let-binding; we do not allow anything else.
-                    Ordering::Less => scope.assert_assignment(&expression)?,
+                    Ordering::Less => assert_assignment(&expression)?,
 
                     // Can't actually happen
                     Ordering::Greater => (),
@@ -1946,4 +1912,42 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<(), Error> {
         self.environment.unify(t1, t2, location, allow_cast)
     }
+}
+
+fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
+    match expr {
+        UntypedExpr::Assignment { value, .. } => Err(Error::LastExpressionIsAssignment {
+            location: expr.location(),
+            expr: *value.clone(),
+        }),
+        UntypedExpr::Trace { then, .. } => assert_no_assignment(then),
+        UntypedExpr::Fn { .. }
+        | UntypedExpr::BinOp { .. }
+        | UntypedExpr::ByteArray { .. }
+        | UntypedExpr::Call { .. }
+        | UntypedExpr::ErrorTerm { .. }
+        | UntypedExpr::FieldAccess { .. }
+        | UntypedExpr::If { .. }
+        | UntypedExpr::Int { .. }
+        | UntypedExpr::List { .. }
+        | UntypedExpr::PipeLine { .. }
+        | UntypedExpr::RecordUpdate { .. }
+        | UntypedExpr::Sequence { .. }
+        | UntypedExpr::String { .. }
+        | UntypedExpr::Tuple { .. }
+        | UntypedExpr::TupleIndex { .. }
+        | UntypedExpr::UnOp { .. }
+        | UntypedExpr::Var { .. }
+        | UntypedExpr::TraceIfFalse { .. }
+        | UntypedExpr::When { .. } => Ok(()),
+    }
+}
+fn assert_assignment(expr: &UntypedExpr) -> Result<(), Error> {
+    if !matches!(*expr, UntypedExpr::Assignment { .. }) {
+        return Err(Error::ImplicitlyDiscardedExpression {
+            location: expr.location(),
+        });
+    }
+
+    Ok(())
 }
