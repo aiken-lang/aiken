@@ -1,7 +1,7 @@
 [package]
 name = "aiken-lang"
 description = "The Aiken compiler"
-version = "1.0.0-alpha"
+version = "1.0.1-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -22,7 +22,7 @@ strum = "0.24.1"
 thiserror = "1.0.39"
 vec1 = "1.10.1"
 
-uplc = { path = '../uplc', version = "1.0.0-alpha" }
+uplc = { path = '../uplc', version = "1.0.1-alpha" }
 
 [dev-dependencies]
 indoc = "2.0.1"
