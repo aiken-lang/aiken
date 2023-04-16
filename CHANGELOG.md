@@ -1,5 +1,12 @@
 # Changelog
 
+## [next] - 2023-MM-DD
+
+### Fixed
+
+- **aiken-lang**: incorrect scoping for anonymous functions
+- **aiken-lang**: duplicate arguments were allowed in anonymous functions
+
 ## v1.0.0-alpha - 2023-04-13
 
 ### Added

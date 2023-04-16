@@ -155,6 +155,56 @@ fn multi_validator_warning() {
 }
 
 #[test]
+fn anonymous_function_scoping() {
+    let source_code = r#"
+        fn reduce(list, f, i) {
+          todo
+        }
+
+        pub fn foo() {
+          let sum =
+            reduce(
+              [1, 2, 3],
+              fn(acc: Int, n: Int) { acc + n },
+              0,
+            )
+
+          sum + acc
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::UnknownVariable { name, .. })) if name == "acc"
+    ))
+}
+
+#[test]
+fn anonymous_function_dupicate_args() {
+    let source_code = r#"
+        fn reduce(list, f, i) {
+          todo
+        }
+
+        pub fn foo() {
+          let sum =
+            reduce(
+              [1, 2, 3],
+              fn(acc: Int, acc: Int) { acc + acc },
+              0,
+            )
+
+          sum
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DuplicateArgument { label, .. })) if label == "acc"
+    ))
+}
+
+#[test]
 fn if_scoping() {
     let source_code = r#"
         pub fn foo(c) {

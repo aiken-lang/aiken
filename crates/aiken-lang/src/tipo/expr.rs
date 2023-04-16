@@ -1480,32 +1480,45 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
         self.assert_no_assignment(&body)?;
 
-        for arg in &args {
-            match &arg.arg_name {
-                ArgName::Named {
-                    name,
-                    is_validator_param,
-                    ..
-                } if !is_validator_param => {
-                    self.environment.insert_variable(
-                        name.to_string(),
-                        ValueConstructorVariant::LocalVariable {
-                            location: arg.location,
-                        },
-                        arg.tipo.clone(),
-                    );
+        let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
+            let mut argument_names = HashMap::with_capacity(args.len());
 
-                    self.environment.init_usage(
-                        name.to_string(),
-                        EntityKind::Variable,
-                        arg.location,
-                    );
-                }
-                ArgName::Named { .. } | ArgName::Discarded { .. } => (),
-            };
-        }
+            for arg in &args {
+                match &arg.arg_name {
+                    ArgName::Named {
+                        name,
+                        is_validator_param,
+                        location,
+                        ..
+                    } if !is_validator_param => {
+                        if let Some(duplicate_location) = argument_names.insert(name, location) {
+                            return Err(Error::DuplicateArgument {
+                                location: *location,
+                                duplicate_location: *duplicate_location,
+                                label: name.to_string(),
+                            });
+                        }
 
-        let (body_rigid_names, body_infer) = (self.hydrator.rigid_names(), self.infer(body));
+                        body_typer.environment.insert_variable(
+                            name.to_string(),
+                            ValueConstructorVariant::LocalVariable {
+                                location: arg.location,
+                            },
+                            arg.tipo.clone(),
+                        );
+
+                        body_typer.environment.init_usage(
+                            name.to_string(),
+                            EntityKind::Variable,
+                            arg.location,
+                        );
+                    }
+                    ArgName::Named { .. } | ArgName::Discarded { .. } => (),
+                };
+            }
+
+            Ok((body_typer.hydrator.rigid_names(), body_typer.infer(body)))
+        })?;
 
         let body = body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names))?;
 
