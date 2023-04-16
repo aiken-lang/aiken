@@ -1,6 +1,6 @@
 # Changelog
 
-## [next] - 2023-MM-DD
+## v1.0.1-alpha - 2023-04-16
 
 ### Fixed
 
