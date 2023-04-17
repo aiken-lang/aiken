@@ -833,8 +833,13 @@ impl DefaultFunction {
                 Ok(value)
             }
             DefaultFunction::UnConstrData => match &args[0] {
-                Value::Con(inner) => {
-                    let Constant::Data(PlutusData::Constr(c)) = inner.as_ref() else {unreachable!()};
+                v @ Value::Con(inner) => {
+                    let Constant::Data(PlutusData::Constr(c)) = inner.as_ref() else {
+                        return Err(Error::DeserialisationError(
+                            "UnConstrData".to_string(),
+                            v.clone(),
+                        ))
+                    };
 
                     let constant = Constant::ProtoPair(
                         Type::Integer,
@@ -866,8 +871,13 @@ impl DefaultFunction {
                 )),
             },
             DefaultFunction::UnMapData => match &args[0] {
-                Value::Con(inner) => {
-                    let Constant::Data(PlutusData::Map(m)) = inner.as_ref() else {unreachable!()};
+                v @ Value::Con(inner) => {
+                    let Constant::Data(PlutusData::Map(m)) = inner.as_ref() else {
+                        return Err(Error::DeserialisationError(
+                            "UnMapData".to_string(),
+                            v.clone(),
+                        ))
+                    };
 
                     let constant = Constant::ProtoList(
                         Type::Pair(Type::Data.into(), Type::Data.into()),
@@ -894,8 +904,13 @@ impl DefaultFunction {
                 )),
             },
             DefaultFunction::UnListData => match &args[0] {
-                Value::Con(inner) => {
-                    let Constant::Data(PlutusData::Array(l)) = inner.as_ref() else {unreachable!()};
+                v @ Value::Con(inner) => {
+                    let Constant::Data(PlutusData::Array(l)) = inner.as_ref() else {
+                        return Err(Error::DeserialisationError(
+                            "UnListData".to_string(),
+                            v.clone(),
+                        ))
+                    };
 
                     let value = Value::list(
                         Type::Data,
@@ -913,8 +928,13 @@ impl DefaultFunction {
                 )),
             },
             DefaultFunction::UnIData => match &args[0] {
-                Value::Con(inner) => {
-                    let Constant::Data(PlutusData::BigInt(b)) = inner.as_ref() else {unreachable!()};
+                v @ Value::Con(inner) => {
+                    let Constant::Data(PlutusData::BigInt(b)) = inner.as_ref() else {
+                        return Err(Error::DeserialisationError(
+                            "UnIData".to_string(),
+                            v.clone(),
+                        ))
+                    };
 
                     let value = Value::integer(from_pallas_bigint(b));
 
@@ -926,8 +946,13 @@ impl DefaultFunction {
                 )),
             },
             DefaultFunction::UnBData => match &args[0] {
-                Value::Con(inner) => {
-                    let Constant::Data(PlutusData::BoundedBytes(b)) = inner.as_ref() else {unreachable!()};
+                v @ Value::Con(inner) => {
+                    let Constant::Data(PlutusData::BoundedBytes(b)) = inner.as_ref() else {
+                        return Err(Error::DeserialisationError(
+                            "UnBData".to_string(),
+                            v.clone(),
+                        ))
+                    };
 
                     let value = Value::byte_string(b.to_vec());
 

@@ -5,6 +5,7 @@
 ### Fixed
 
 - **aiken-lang**: needed to assert_no_assignment in when and if blocks
+- **uplc**: need to return deserialization error in some cases for the machine builtins
 
 ## v1.0.1-alpha - 2023-04-16
 
