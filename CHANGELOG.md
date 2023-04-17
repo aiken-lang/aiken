@@ -1,6 +1,6 @@
 # Changelog
 
-## [next] - 2021-MM-DD
+## v1.0.2.alpha - 2021-04-17
 
 ### Fixed
 
