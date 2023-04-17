@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - 2021-MM-DD
+
+### Fixed
+
+- **aiken-lang**: needed to assert_no_assignment in when and if blocks
+
 ## v1.0.1-alpha - 2023-04-16
 
 ### Fixed
