@@ -134,6 +134,7 @@ dependencies = [
  "pallas",
  "pallas-traverse",
  "petgraph",
+ "pretty_assertions",
  "proptest",
  "pulldown-cmark",
  "rayon",

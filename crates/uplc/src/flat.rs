@@ -20,7 +20,7 @@ const TERM_TAG_WIDTH: u32 = 4;
 pub trait Binder<'b>: Encode + Decode<'b> {
     fn binder_encode(&self, e: &mut Encoder) -> Result<(), en::Error>;
     fn binder_decode(d: &mut Decoder) -> Result<Self, de::Error>;
-    fn text(&self) -> &str;
+    fn text(&self) -> String;
 }
 
 impl<'b, T> Flat<'b> for Program<T> where T: Binder<'b> + Debug {}
@@ -255,7 +255,7 @@ where
                 let var_option = T::binder_decode(d);
                 match var_option {
                     Ok(var) => {
-                        state_log.push(var.text().to_string());
+                        state_log.push(var.text());
                         let term_option = Term::decode_debug(d, state_log);
                         match term_option {
                             Ok(term) => {
@@ -650,8 +650,8 @@ impl<'b> Binder<'b> for Name {
         Name::decode(d)
     }
 
-    fn text(&self) -> &str {
-        &self.text
+    fn text(&self) -> String {
+        self.text.clone()
     }
 }
 
@@ -687,8 +687,8 @@ impl<'b> Binder<'b> for NamedDeBruijn {
         })
     }
 
-    fn text(&self) -> &str {
-        &self.text
+    fn text(&self) -> String {
+        format!("{}_{}", &self.text, self.index)
     }
 }
 
@@ -715,8 +715,8 @@ impl<'b> Binder<'b> for DeBruijn {
         Ok(DeBruijn::new(0))
     }
 
-    fn text(&self) -> &str {
-        "i"
+    fn text(&self) -> String {
+        format!("i_{}", self)
     }
 }
 
@@ -749,8 +749,8 @@ impl<'b> Binder<'b> for FakeNamedDeBruijn {
         Ok(index.into())
     }
 
-    fn text(&self) -> &str {
-        &self.0.text
+    fn text(&self) -> String {
+        format!("{}_{}", self.0.text, self.0.index)
     }
 }
 
