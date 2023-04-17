@@ -3035,7 +3035,7 @@ impl<'a> CodeGenerator<'a> {
             } = ir else {
                 let scope = ir.scope();
 
-                process_scope_updates(&mut to_be_defined_map, scope, func_index_map);
+                process_scope_updates(&mut to_be_defined_map, &scope, func_index_map);
                 continue;
             };
 
@@ -3043,7 +3043,7 @@ impl<'a> CodeGenerator<'a> {
             let ValueConstructorVariant::ModuleFn {name, module, builtin: None, ..} = &constructor.variant else {
                 let scope = ir.scope();
 
-                process_scope_updates(&mut to_be_defined_map, scope, func_index_map);
+                process_scope_updates(&mut to_be_defined_map, &scope, func_index_map);
                 continue;
             };
 
@@ -3263,6 +3263,7 @@ impl<'a> CodeGenerator<'a> {
             } else {
                 unreachable!("We found a function with no definitions");
             }
+            process_scope_updates(&mut to_be_defined_map, scope, func_index_map);
         }
 
         // Still to be defined
@@ -5023,13 +5024,13 @@ impl<'a> CodeGenerator<'a> {
 
 fn process_scope_updates(
     to_be_defined_map: &mut IndexMap<FunctionAccessKey, Scope>,
-    scope: Scope,
+    scope: &Scope,
     func_index_map: &mut IndexMap<FunctionAccessKey, Scope>,
 ) {
     for func in to_be_defined_map.clone().iter() {
-        if scope.common_ancestor(func.1) == scope.clone() {
+        if &scope.common_ancestor(func.1) == scope {
             if let Some(index_scope) = func_index_map.get(func.0) {
-                if index_scope.common_ancestor(func.1) == scope.clone() {
+                if &index_scope.common_ancestor(func.1) == scope {
                     func_index_map.insert(func.0.clone(), scope.clone());
                     to_be_defined_map.shift_remove(func.0);
                 } else {

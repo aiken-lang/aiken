@@ -175,6 +175,27 @@ impl Validator {
 
 #[cfg(test)]
 mod test {
+    use assert_json_diff::assert_json_eq;
+    use indexmap::IndexMap;
+    use pretty_assertions::assert_eq;
+    use serde_json::{self, json};
+    use std::{collections::HashMap, path::PathBuf};
+
+    use aiken_lang::{
+        self,
+        ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
+        builtins,
+        gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
+        parser,
+        tipo::TypeInfo,
+        IdGenerator,
+    };
+    use uplc::{
+        ast::{self as uplc_ast, Constant, Name},
+        machine::cost_model::ExBudget,
+        optimize, BigInt, PlutusData,
+    };
+
     use super::{
         super::{
             definitions::{Definitions, Reference},
@@ -184,20 +205,6 @@ mod test {
         *,
     };
     use crate::{module::ParsedModule, PackageName};
-    use aiken_lang::{
-        self,
-        ast::{ModuleKind, Tracing, TypedDataType, TypedFunction},
-        builtins,
-        gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
-        parser,
-        tipo::TypeInfo,
-        IdGenerator,
-    };
-    use assert_json_diff::assert_json_eq;
-    use indexmap::IndexMap;
-    use serde_json::{self, json};
-    use std::{collections::HashMap, path::PathBuf};
-    use uplc::ast as uplc;
 
     // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
     // be to make this struct below the actual project, and wrap it in another metadata struct
@@ -319,6 +326,58 @@ mod test {
         assert_json_eq!(serde_json::to_value(validator).unwrap(), expected);
     }
 
+    fn assert_uplc(source_code: &str, expected: Term<Name>) {
+        let mut project = TestProject::new();
+
+        let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
+        let mut generator = modules.new_generator(
+            &project.functions,
+            &project.data_types,
+            &project.module_types,
+        );
+
+        let Some(checked_module) = modules.values().next()
+        else {
+          unreachable!("There's got to be one right?")
+        };
+
+        let mut scripts = vec![];
+
+        for def in checked_module.ast.definitions() {
+            if let Definition::Test(func) = def {
+                scripts.push((
+                    checked_module.input_path.clone(),
+                    checked_module.name.clone(),
+                    func,
+                ));
+            }
+        }
+
+        assert_eq!(scripts.len(), 1);
+
+        let script = &scripts[0];
+
+        let Function { body, .. } = script.2;
+
+        let program = generator.generate_test(body);
+
+        let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: expected,
+        };
+
+        let expected = optimize::aiken_optimize_and_intern(expected);
+        let expected: Program<DeBruijn> = expected.try_into().unwrap();
+
+        assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
+
+        let eval = debruijn_program.eval(ExBudget::default());
+
+        assert!(!eval.failed())
+    }
+
     fn fixture_definitions() -> Definitions<Annotated<Schema>> {
         let mut definitions = Definitions::new();
 
@@ -409,6 +468,139 @@ mod test {
                 }
               }
             }),
+        );
+    }
+
+    #[test]
+    fn acceptance_test_6_if_else() {
+        let src = r#"
+            test bar() {
+              let x = 1
+              if x == 1 {
+                True
+              } else {
+                False
+              }
+            }
+        "#;
+
+        assert_uplc(
+            src,
+            Term::equals_integer()
+                .apply(Term::integer(1.into()))
+                .apply(Term::integer(1.into()))
+                .delayed_if_else(Term::bool(true), Term::bool(false)),
+        );
+    }
+
+    #[test]
+    fn acceptance_test_1_length() {
+        let src = r#"
+            pub fn length(xs: List<a>) -> Int {
+              when xs is {
+                [] ->
+                  0
+                [_, ..rest] ->
+                  1 + length(rest)
+              }
+            }
+            
+            test length_1() {
+              length([1, 2, 3]) == 3
+            }
+        "#;
+
+        assert_uplc(
+            src,
+            Term::equals_integer()
+                .apply(
+                    Term::var("length")
+                        .lambda("length")
+                        .apply(Term::var("length").apply(Term::var("length")))
+                        .lambda("length")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::integer(0.into()),
+                                    Term::add_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(
+                                            Term::var("length")
+                                                .apply(Term::var("length"))
+                                                .apply(Term::var("rest")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs"))),
+                                )
+                                .lambda("xs")
+                                .lambda("length"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
+                            Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
+                            Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                        ])),
+                )
+                .apply(Term::integer(3.into())),
+        );
+    }
+
+    #[test]
+    fn acceptance_test_2_repeat() {
+        let src = r#"
+            pub fn repeat(x: a, n: Int) -> List<a> {
+              if n <= 0 {
+                []
+              } else {
+                [x, ..repeat(x, n - 1)]
+              }
+            }
+          
+            test repeat_1() {
+              repeat("aiken", 2) == ["aiken", "aiken"]
+            }
+        "#;
+
+        assert_uplc(
+            src,
+            Term::equals_data()
+                .apply(
+                    Term::list_data().apply(
+                        Term::var("repeat")
+                            .lambda("repeat")
+                            .apply(Term::var("repeat").apply(Term::var("repeat")))
+                            .lambda("repeat")
+                            .apply(
+                                Term::less_than_equals_integer()
+                                    .apply(Term::var("n"))
+                                    .apply(Term::integer(0.into()))
+                                    .delayed_if_else(
+                                        Term::empty_list(),
+                                        Term::mk_cons()
+                                            .apply(Term::b_data().apply(Term::var("x")))
+                                            .apply(
+                                                Term::var("repeat")
+                                                    .apply(Term::var("repeat"))
+                                                    .apply(Term::var("x"))
+                                                    .apply(
+                                                        Term::sub_integer()
+                                                            .apply(Term::var("n"))
+                                                            .apply(Term::integer(1.into())),
+                                                    ),
+                                            ),
+                                    )
+                                    .lambda("n")
+                                    .lambda("x")
+                                    .lambda("repeat"),
+                            )
+                            .apply(Term::byte_string("aiken".as_bytes().to_vec()))
+                            .apply(Term::integer(3.into())),
+                    ),
+                )
+                .apply(Term::list_data().apply(Term::list_values(vec![
+                    Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
+                    Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
+                ]))),
         );
     }
 
@@ -1165,7 +1357,7 @@ mod test {
     fn validate_arguments_integer() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc::Data::integer(42.into()));
+        let term = Term::data(uplc_ast::Data::integer(42.into()));
 
         let param = Parameter {
             title: None,
@@ -1179,7 +1371,7 @@ mod test {
     fn validate_arguments_bytestring() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc::Data::bytestring(vec![102, 111, 111]));
+        let term = Term::data(uplc_ast::Data::bytestring(vec![102, 111, 111]));
 
         let param = Parameter {
             title: None,
@@ -1208,9 +1400,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::list(vec![
-            uplc::Data::integer(42.into()),
-            uplc::Data::integer(14.into()),
+        let term = Term::data(uplc_ast::Data::list(vec![
+            uplc_ast::Data::integer(42.into()),
+            uplc_ast::Data::integer(14.into()),
         ]));
 
         let param: Parameter = schema.into();
@@ -1237,9 +1429,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::list(vec![uplc::Data::bytestring(vec![
-            102, 111, 111,
-        ])]));
+        let term = Term::data(uplc_ast::Data::list(vec![uplc_ast::Data::bytestring(
+            vec![102, 111, 111],
+        )]));
 
         let param: Parameter = schema.into();
 
@@ -1269,9 +1461,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::list(vec![
-            uplc::Data::integer(42.into()),
-            uplc::Data::bytestring(vec![102, 111, 111]),
+        let term = Term::data(uplc_ast::Data::list(vec![
+            uplc_ast::Data::integer(42.into()),
+            uplc_ast::Data::bytestring(vec![102, 111, 111]),
         ]));
 
         let param: Parameter = schema.into();
@@ -1300,9 +1492,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::map(vec![(
-            uplc::Data::bytestring(vec![102, 111, 111]),
-            uplc::Data::integer(42.into()),
+        let term = Term::data(uplc_ast::Data::map(vec![(
+            uplc_ast::Data::bytestring(vec![102, 111, 111]),
+            uplc_ast::Data::integer(42.into()),
         )]));
 
         let param: Parameter = schema.into();
@@ -1316,7 +1508,7 @@ mod test {
 
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc::Data::constr(1, vec![]));
+        let term = Term::data(uplc_ast::Data::constr(1, vec![]));
 
         let param: Parameter = schema.into();
 
@@ -1351,7 +1543,10 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::constr(0, vec![uplc::Data::constr(0, vec![])]));
+        let term = Term::data(uplc_ast::Data::constr(
+            0,
+            vec![uplc_ast::Data::constr(0, vec![])],
+        ));
 
         let param: Parameter = schema.into();
 
@@ -1404,15 +1599,15 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::constr(
+        let term = Term::data(uplc_ast::Data::constr(
             1,
             vec![
-                uplc::Data::integer(14.into()),
-                uplc::Data::constr(
+                uplc_ast::Data::integer(14.into()),
+                uplc_ast::Data::constr(
                     1,
                     vec![
-                        uplc::Data::integer(42.into()),
-                        uplc::Data::constr(0, vec![]),
+                        uplc_ast::Data::integer(42.into()),
+                        uplc_ast::Data::constr(0, vec![]),
                     ],
                 ),
             ],

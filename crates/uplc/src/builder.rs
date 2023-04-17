@@ -53,6 +53,10 @@ impl<T> Term<T> {
         Term::Constant(Constant::ProtoList(Type::Data, vec![]).into())
     }
 
+    pub fn list_values(vals: Vec<Constant>) -> Self {
+        Term::Constant(Constant::ProtoList(Type::Data, vals).into())
+    }
+
     pub fn empty_map() -> Self {
         Term::Constant(
             Constant::ProtoList(Type::Pair(Type::Data.into(), Type::Data.into()), vec![]).into(),
@@ -101,6 +105,14 @@ impl<T> Term<T> {
 
     pub fn equals_integer() -> Self {
         Term::Builtin(DefaultFunction::EqualsInteger)
+    }
+
+    pub fn less_than_integer() -> Self {
+        Term::Builtin(DefaultFunction::LessThanInteger)
+    }
+
+    pub fn less_than_equals_integer() -> Self {
+        Term::Builtin(DefaultFunction::LessThanEqualsInteger)
     }
 
     pub fn equals_string() -> Self {
