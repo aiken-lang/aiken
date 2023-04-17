@@ -368,7 +368,11 @@ mod test {
             term: expected,
         };
 
+        println!("EXP BEFORE {}", expected.to_pretty());
+
         let expected = optimize::aiken_optimize_and_intern(expected);
+
+        println!("EXP AFTER {}", expected.to_pretty());
         let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
         assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
@@ -594,12 +598,107 @@ mod test {
                                     .lambda("repeat"),
                             )
                             .apply(Term::byte_string("aiken".as_bytes().to_vec()))
-                            .apply(Term::integer(3.into())),
+                            .apply(Term::integer(2.into())),
                     ),
                 )
                 .apply(Term::list_data().apply(Term::list_values(vec![
                     Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
                     Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
+                ]))),
+        );
+    }
+
+    #[test]
+    fn acceptance_test_3_concat() {
+        let src = r#"
+          pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
+            when xs is {
+              [] ->
+                zero
+              [x, ..rest] ->
+                f(x, foldr(rest, f, zero))
+            }
+          }
+          
+          pub fn concat(left: List<a>, right: List<a>) -> List<a> {
+            foldr(left, fn(x, xs) { [x, ..xs] }, right)
+          }
+          
+          test concat_1() {
+            concat([1, 2, 3], [4, 5, 6]) == [1, 2, 3, 4, 5, 6]
+          }
+        "#;
+
+        assert_uplc(
+            src,
+            Term::equals_data()
+                .apply(
+                    Term::list_data().apply(
+                        Term::var("concat")
+                            .lambda("concat")
+                            .apply(
+                                Term::var("foldr")
+                                    .apply(Term::var("left"))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(Term::i_data().apply(Term::var("x")))
+                                            .apply(Term::var("xs"))
+                                            .lambda("xs")
+                                            .lambda("x"),
+                                    )
+                                    .apply(Term::var("right"))
+                                    .lambda("right")
+                                    .lambda("left"),
+                            )
+                            .lambda("foldr")
+                            .apply(Term::var("foldr").apply(Term::var("foldr")))
+                            .lambda("foldr")
+                            .apply(
+                                Term::var("xs")
+                                    .delayed_choose_list(
+                                        Term::var("zero"),
+                                        Term::var("f")
+                                            .apply(Term::var("x"))
+                                            .apply(
+                                                Term::var("foldr")
+                                                    .apply(Term::var("foldr"))
+                                                    .apply(Term::var("rest"))
+                                                    .apply(Term::var("f"))
+                                                    .apply(Term::var("zero")),
+                                            )
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("xs")))
+                                            .lambda("x")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("zero")
+                                    .lambda("f")
+                                    .lambda("xs")
+                                    .lambda("foldr"),
+                            )
+                            .apply(Term::list_values(vec![
+                                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
+                                Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
+                                Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                            ]))
+                            .apply(Term::list_values(vec![
+                                Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))),
+                                Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
+                                Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
+                            ])),
+                    ),
+                )
+                .apply(Term::list_data().apply(Term::list_values(vec![
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))),
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
                 ]))),
         );
     }
