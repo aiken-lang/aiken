@@ -26,3 +26,7 @@ urlencoding = "2.1.2"
 
 aiken-lang = { path = '../aiken-lang', version = "1.0.2-alpha" }
 aiken-project = { path = '../aiken-project', version = "1.0.2-alpha" }
+
+[features]
+default = ["aiken-project/default", "aiken-lang/default"]
+native-secp256k1 = ["aiken-project/native-secp256k1", "aiken-lang/native-secp256k1"]
