@@ -38,8 +38,8 @@ toml = "0.7.2"
 walkdir = "2.3.2"
 zip = "0.6.4"
 
-aiken-lang = { path = "../aiken-lang", version = "1.0.2-alpha" }
-uplc = { path = '../uplc', version = "1.0.2-alpha" }
+aiken-lang = { path = "../aiken-lang", default-features = false, version = "1.0.2-alpha" }
+uplc = { path = '../uplc', default-features = false, version = "1.0.2-alpha" }
 
 [dev-dependencies]
 proptest = "1.1.0"

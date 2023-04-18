@@ -22,7 +22,7 @@ strum = "0.24.1"
 thiserror = "1.0.39"
 vec1 = "1.10.1"
 
-uplc = { path = '../uplc', version = "1.0.2-alpha" }
+uplc = { path = '../uplc', default-features = false, version = "1.0.2-alpha" }
 
 [dev-dependencies]
 indoc = "2.0.1"

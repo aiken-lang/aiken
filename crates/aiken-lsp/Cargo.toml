@@ -24,8 +24,8 @@ tracing = "0.1.37"
 url = "2.3.1"
 urlencoding = "2.1.2"
 
-aiken-lang = { path = '../aiken-lang', version = "1.0.2-alpha" }
-aiken-project = { path = '../aiken-project', version = "1.0.2-alpha" }
+aiken-lang = { path = '../aiken-lang', default-features = false, version = "1.0.2-alpha" }
+aiken-project = { path = '../aiken-project', default-features = false, version = "1.0.2-alpha" }
 
 [features]
 default = ["aiken-project/default", "aiken-lang/default"]
