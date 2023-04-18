@@ -48,8 +48,3 @@ uplc = { path = '../uplc', version = "1.0.2-alpha" }
 
 [dev-dependencies]
 proptest = "1.1.0"
-pretty_assertions = "1.3.0"
-
-[features]
-default = ["uplc/default", "aiken-lang/default"]
-native-secp256k1 = ["uplc/native-secp256k1", "aiken-lang/native-secp256k1"]
