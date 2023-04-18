@@ -3786,9 +3786,24 @@ impl<'a> CodeGenerator<'a> {
 
                             let fields = Term::empty_list();
 
-                            let term = Term::constr_data()
+                            let mut term = Term::constr_data()
                                 .apply(Term::integer(constr_index.try_into().unwrap()))
                                 .apply(fields);
+
+                            let mut program: Program<Name> = Program {
+                                version: (1, 0, 0),
+                                term,
+                            };
+
+                            let mut interner = Interner::new();
+
+                            interner.program(&mut program);
+
+                            let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+                            let evaluated_term: Term<NamedDeBruijn> =
+                                eval_program.eval(ExBudget::default()).result().unwrap();
+                            term = evaluated_term.try_into().unwrap();
 
                             arg_stack.push(term);
                         }

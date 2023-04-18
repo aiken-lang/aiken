@@ -193,7 +193,7 @@ mod test {
     use uplc::{
         ast::{self as uplc_ast, Constant, Name},
         machine::cost_model::ExBudget,
-        optimize, BigInt, PlutusData,
+        optimize, BigInt, Constr, PlutusData,
     };
 
     use super::{
@@ -368,11 +368,8 @@ mod test {
             term: expected,
         };
 
-        println!("EXP BEFORE {}", expected.to_pretty());
-
         let expected = optimize::aiken_optimize_and_intern(expected);
 
-        println!("EXP AFTER {}", expected.to_pretty());
         let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
         assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
@@ -801,6 +798,65 @@ mod test {
                     Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
                     Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
                 ]))),
+        );
+    }
+
+    #[test]
+    fn acceptance_test_5_head_not_empty() {
+        let src = r#"
+          use aiken/builtin.{head_list}
+
+          pub fn head(xs: List<a>) -> Option<a> {
+            when xs is {
+              [] -> None
+              _ -> Some(head_list(xs))
+            }
+          }
+            
+          test head_1() {
+            head([1, 2, 3]) == Some(1)
+          }     
+        "#;
+
+        assert_uplc(
+            src,
+            Term::equals_data()
+                .apply(
+                    Term::var("head")
+                        .lambda("head")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::Constant(
+                                        Constant::Data(PlutusData::Constr(Constr {
+                                            tag: 122,
+                                            any_constructor: None,
+                                            fields: vec![],
+                                        }))
+                                        .into(),
+                                    ),
+                                    Term::constr_data().apply(Term::integer(0.into())).apply(
+                                        Term::mk_cons()
+                                            .apply(Term::head_list().apply(Term::var("xs")))
+                                            .apply(Term::empty_list()),
+                                    ),
+                                )
+                                .lambda("xs"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
+                            Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
+                            Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                        ])),
+                )
+                .apply(Term::Constant(
+                    Constant::Data(PlutusData::Constr(Constr {
+                        tag: 121,
+                        any_constructor: None,
+                        fields: vec![PlutusData::BigInt(BigInt::Int(1.into()))],
+                    }))
+                    .into(),
+                )),
         );
     }
 
