@@ -236,46 +236,20 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
                 return;
             };
 
+            wrap_data_reduce(Rc::make_mut(inner_arg));
+
             match (first_action, second_action) {
-                (DefaultFunction::UnIData, DefaultFunction::IData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::IData, DefaultFunction::UnIData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::BData, DefaultFunction::UnBData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::UnBData, DefaultFunction::BData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::ListData, DefaultFunction::UnListData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::UnListData, DefaultFunction::ListData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::MapData, DefaultFunction::UnMapData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::UnConstrData, DefaultFunction::ConstrData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
-                }
-                (DefaultFunction::ConstrData, DefaultFunction::UnConstrData) => {
-                    *term = argument.as_ref().clone();
-                    wrap_data_reduce(term);
+                (DefaultFunction::UnIData, DefaultFunction::IData)
+                | (DefaultFunction::IData, DefaultFunction::UnIData)
+                | (DefaultFunction::BData, DefaultFunction::UnBData)
+                | (DefaultFunction::UnBData, DefaultFunction::BData)
+                | (DefaultFunction::ListData, DefaultFunction::UnListData)
+                | (DefaultFunction::UnListData, DefaultFunction::ListData)
+                | (DefaultFunction::MapData, DefaultFunction::UnMapData)
+                | (DefaultFunction::UnMapData, DefaultFunction::MapData)
+                | (DefaultFunction::UnConstrData, DefaultFunction::ConstrData)
+                | (DefaultFunction::ConstrData, DefaultFunction::UnConstrData) => {
+                    *term = inner_arg.as_ref().clone();
                 }
                 _ => {}
             }
