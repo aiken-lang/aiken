@@ -11,6 +11,8 @@ pub mod paths;
 pub mod pretty;
 pub mod script;
 pub mod telemetry;
+#[cfg(test)]
+mod tests;
 
 use crate::blueprint::Blueprint;
 use aiken_lang::{
