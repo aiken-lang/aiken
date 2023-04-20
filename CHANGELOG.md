@@ -9,6 +9,10 @@
 
 ### Fixed
 
+- **aiken-lang**: Add name of var to the unused var warning
+
+### Fixed
+
 - **aiken**: fixed 'new' instructions to properly show project name and folder
 
 ## v1.0.2.alpha - 2023-04-17

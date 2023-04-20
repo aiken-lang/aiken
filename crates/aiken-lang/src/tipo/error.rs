@@ -1376,7 +1376,10 @@ pub enum Warning {
         name: String,
     },
 
-    #[error("I came across an unused variable.\n")]
+    #[error(
+        "I came across an unused variable: {}.\n",
+        name.if_supports_color(Stderr, |s| s.purple())
+    )]
     #[diagnostic(help("{}", formatdoc! {
         r#"No big deal, but you might want to remove it to get rid of that warning.
 
