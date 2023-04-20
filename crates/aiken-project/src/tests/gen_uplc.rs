@@ -728,3 +728,265 @@ fn acceptance_test_8_is_empty() {
             ),
     );
 }
+
+#[test]
+fn acceptance_test_8_is_not_empty() {
+    let src = r#"
+      use aiken/builtin
+
+      pub fn is_empty(bytes: ByteArray) -> Bool {
+        builtin.length_of_bytearray(bytes) == 0
+      }
+    
+      test is_empty_1() {
+        is_empty(#"01") == False
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("is_empty")
+            .lambda("is_empty")
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
+                    .apply(Term::integer(0.into()))
+                    .lambda("bytes"),
+            )
+            .apply(Term::byte_string(vec![1]))
+            .delayed_if_else(
+                Term::bool(false),
+                Term::bool(false).if_else(Term::bool(false), Term::bool(true)),
+            ),
+    );
+}
+
+#[test]
+fn acceptance_test_9_is_empty() {
+    let src = r#"
+      use aiken/builtin.{length_of_bytearray}
+
+      pub fn is_empty(bytes: ByteArray) -> Bool {
+        length_of_bytearray(bytes) == 0
+      }
+    
+      test is_empty_1() {
+        is_empty(#"") == True
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("is_empty")
+            .lambda("is_empty")
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
+                    .apply(Term::integer(0.into()))
+                    .lambda("bytes"),
+            )
+            .apply(Term::byte_string(vec![]))
+            .delayed_if_else(
+                Term::bool(true),
+                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+            ),
+    );
+}
+
+#[test]
+fn acceptance_test_10_map_none() {
+    let src = r#"
+      pub fn map(opt: Option<a>, f: fn(a) -> b) -> Option<b> {
+        when opt is {
+          None ->
+            None
+          Some(a) ->
+            Some(f(a))
+        }
+      }
+      
+      fn add_one(n: Int) -> Int {
+        n + 1
+      }
+      
+      test map_1() {
+        map(None, add_one) == None
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("constr_index"))
+                            .delayed_if_else(
+                                Term::Constant(
+                                    Constant::Data(PlutusData::Constr(Constr {
+                                        tag: 122,
+                                        any_constructor: None,
+                                        fields: vec![],
+                                    }))
+                                    .into(),
+                                ),
+                                Term::constr_data()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::i_data()
+                                                    .apply(Term::var("f").apply(Term::var("a"))),
+                                            )
+                                            .apply(Term::empty_list()),
+                                    )
+                                    .lambda("a")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("constr_fields")),
+                                        ),
+                                    )
+                                    .lambda("constr_fields")
+                                    .apply(
+                                        Term::snd_pair()
+                                            .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                                    ),
+                            )
+                            .lambda("constr_index")
+                            .apply(
+                                Term::fst_pair()
+                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                            )
+                            .lambda("f")
+                            .lambda("opt"),
+                    )
+                    .apply(Term::Constant(
+                        Constant::Data(PlutusData::Constr(Constr {
+                            tag: 122,
+                            any_constructor: None,
+                            fields: vec![],
+                        }))
+                        .into(),
+                    ))
+                    .apply(
+                        Term::var("add_one").lambda("add_one").apply(
+                            Term::add_integer()
+                                .apply(Term::var("n"))
+                                .apply(Term::integer(1.into()))
+                                .lambda("n"),
+                        ),
+                    ),
+            )
+            .apply(Term::Constant(
+                Constant::Data(PlutusData::Constr(Constr {
+                    tag: 122,
+                    any_constructor: None,
+                    fields: vec![],
+                }))
+                .into(),
+            ))
+            .constr_get_field(),
+    );
+}
+
+#[test]
+fn acceptance_test_10_map_some() {
+    let src = r#"
+      pub fn map(opt: Option<a>, f: fn(a) -> b) -> Option<b> {
+        when opt is {
+          None ->
+            None
+          Some(a) ->
+            Some(f(a))
+        }
+      }
+      
+      fn add_one(n: Int) -> Int {
+        n + 1
+      }
+      
+      test map_1() {
+        map(Some(1), add_one) == Some(2)
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("constr_index"))
+                            .delayed_if_else(
+                                Term::Constant(
+                                    Constant::Data(PlutusData::Constr(Constr {
+                                        tag: 122,
+                                        any_constructor: None,
+                                        fields: vec![],
+                                    }))
+                                    .into(),
+                                ),
+                                Term::constr_data()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::i_data()
+                                                    .apply(Term::var("f").apply(Term::var("a"))),
+                                            )
+                                            .apply(Term::empty_list()),
+                                    )
+                                    .lambda("a")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("constr_fields")),
+                                        ),
+                                    )
+                                    .lambda("constr_fields")
+                                    .apply(
+                                        Term::snd_pair()
+                                            .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                                    ),
+                            )
+                            .lambda("constr_index")
+                            .apply(
+                                Term::fst_pair()
+                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                            )
+                            .lambda("f")
+                            .lambda("opt"),
+                    )
+                    .apply(Term::Constant(
+                        Constant::Data(PlutusData::Constr(Constr {
+                            tag: 121,
+                            any_constructor: None,
+                            fields: vec![PlutusData::BigInt(BigInt::Int(1.into()))],
+                        }))
+                        .into(),
+                    ))
+                    .apply(
+                        Term::var("add_one").lambda("add_one").apply(
+                            Term::add_integer()
+                                .apply(Term::var("n"))
+                                .apply(Term::integer(1.into()))
+                                .lambda("n"),
+                        ),
+                    ),
+            )
+            .apply(Term::Constant(
+                Constant::Data(PlutusData::Constr(Constr {
+                    tag: 121,
+                    any_constructor: None,
+                    fields: vec![PlutusData::BigInt(BigInt::Int(2.into()))],
+                }))
+                .into(),
+            ))
+            .constr_get_field(),
+    );
+}
