@@ -1,6 +1,13 @@
 # Changelog
 
-## v1.0.2.alpha - 2021-04-17
+## [next] - 2023-MM-DD
+
+### Added
+
+- **aiken-lang**: added optimization to help prevent unnecessary data wraps or unwraps
+- **aiken-project**: added end to end tests on conversion from aiken lang to uplc
+
+## v1.0.2.alpha - 2023-04-17
 
 ### Fixed
 
