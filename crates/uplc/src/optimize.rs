@@ -19,12 +19,11 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
 
     program
         .lambda_reduce()
-        .inline_basic_reduce()
+        .inline_reduce()
         .lambda_reduce()
-        .inline_basic_reduce()
+        .inline_reduce()
         .force_delay_reduce()
         .wrap_data_reduce()
         .lambda_reduce()
-        .inline_basic_reduce()
-        .inline_direct_reduce()
+        .inline_reduce()
 }
