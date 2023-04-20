@@ -58,10 +58,10 @@ fn print_success_message(package_name: &PackageName) {
     eprintln!(
         "\n{}",
         formatdoc! {
-            r#"Your Aiken project {name} has been {s} created.
+            r#"Your Aiken project {package} has been {s} created.
                The project can be compiled and tested by running these commands:
 
-                   {cd} {name}
+                   {cd} {folder}
                    {aiken} check
             "#,
             s = "successfully"
@@ -70,8 +70,10 @@ fn print_success_message(package_name: &PackageName) {
             cd = "cd"
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
-            name = package_name
-                .if_supports_color(Stderr, |s| s.repo.bright_blue()),
+            package = package_name.to_string()
+                .if_supports_color(Stderr, |s| s.bright_blue()),
+            folder = package_name.repo
+                .if_supports_color(Stderr, |s| s.bright_blue()),
             aiken = "aiken"
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold())

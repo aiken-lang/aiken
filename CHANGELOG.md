@@ -7,6 +7,10 @@
 - **aiken-lang**: added optimization to help prevent unnecessary data wraps or unwraps
 - **aiken-project**: added end to end tests on conversion from aiken lang to uplc
 
+### Fixed
+
+- **aiken**: fixed 'new' instructions to properly show project name and folder
+
 ## v1.0.2.alpha - 2023-04-17
 
 ### Fixed
