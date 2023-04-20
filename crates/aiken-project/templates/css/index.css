@@ -222,6 +222,24 @@ p code {
   margin: 0 var(--small-gap) 0 0;
 }
 
+.page-header nav {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 2rem;
+}
+
+.page-header nav > a + a {
+  margin-left: 1rem;
+}
+
+@media (min-width: 919px) {
+  .page-header nav {
+    display: none;
+  }
+}
+
 /* Version selector */
 
 #project-version {
@@ -407,6 +425,12 @@ body.drawer-open .label-closed {
   background-color: var(--color-background-accent);
 }
 
+@media(max-width: 770px) {
+  .member-name {
+    overflow-x: auto;
+  }
+}
+
 .member-name h2 {
   display: flex;
   font-size: 1.25rem;
@@ -541,9 +565,11 @@ table tr:nth-child(2n) {
 
 /* Pre-Wrap Option */
 
-body.prewrap-on code,
-body.prewrap-on pre {
-  white-space: pre-wrap;
+@media(min-width: 769px) {
+  body.prewrap-on code,
+  body.prewrap-on pre {
+    white-space: pre-wrap;
+  }
 }
 
 /* Dark Theme Option */
@@ -574,10 +600,8 @@ body.theme-dark {
 }
 
 /* Medium and larger displays */
-@media (min-width: 680px) {
-  #prewrap-toggle {
-    display: none;
-  }
+#prewrap-toggle {
+  display: none;
 }
 
 /* Small displays */
