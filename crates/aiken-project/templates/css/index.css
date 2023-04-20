@@ -234,7 +234,7 @@ p code {
   margin-left: 1rem;
 }
 
-@media (min-width: 919px) {
+@media (max-width: 920px) {
   .page-header nav {
     display: none;
   }
