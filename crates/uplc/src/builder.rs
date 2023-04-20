@@ -135,6 +135,10 @@ impl<T> Term<T> {
         Term::Builtin(DefaultFunction::SubtractInteger)
     }
 
+    pub fn length_of_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::LengthOfByteString)
+    }
+
     pub fn head_list() -> Self {
         Term::Builtin(DefaultFunction::HeadList).force()
     }

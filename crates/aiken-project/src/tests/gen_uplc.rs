@@ -696,3 +696,35 @@ fn acceptance_test_7_unzip() {
             )),
     );
 }
+
+#[test]
+fn acceptance_test_8_is_empty() {
+    let src = r#"
+      use aiken/builtin
+
+      pub fn is_empty(bytes: ByteArray) -> Bool {
+        builtin.length_of_bytearray(bytes) == 0
+      }
+    
+      test is_empty_1() {
+        is_empty(#"") == True
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("is_empty")
+            .lambda("is_empty")
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
+                    .apply(Term::integer(0.into()))
+                    .lambda("bytes"),
+            )
+            .apply(Term::byte_string(vec![]))
+            .delayed_if_else(
+                Term::bool(true),
+                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+            ),
+    );
+}
