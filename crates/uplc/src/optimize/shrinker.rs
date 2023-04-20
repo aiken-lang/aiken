@@ -47,9 +47,20 @@ impl Program<Name> {
         }
     }
 
-    pub fn inline_reduce(self) -> Program<Name> {
+    pub fn inline_basic_reduce(self) -> Program<Name> {
         let mut term = self.term;
         inline_basic_reduce(&mut term);
+
+        Program {
+            version: self.version,
+            term,
+        }
+    }
+
+    pub fn inline_direct_reduce(self) -> Program<Name> {
+        let mut term = self.term;
+        inline_direct_reduce(&mut term);
+
         Program {
             version: self.version,
             term,
@@ -155,6 +166,40 @@ fn force_delay_reduce(term: &mut Term<Name>) {
 
             let arg = Rc::make_mut(argument);
             force_delay_reduce(arg);
+        }
+        _ => {}
+    }
+}
+
+fn inline_direct_reduce(term: &mut Term<Name>) {
+    match term {
+        Term::Delay(d) => {
+            let d = Rc::make_mut(d);
+            inline_direct_reduce(d);
+        }
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => {
+            let body = Rc::make_mut(body);
+            inline_direct_reduce(body);
+
+            if let Term::Var(name) = body {
+                if name.as_ref() == parameter_name.as_ref() {
+                    *term = body.clone();
+                }
+            }
+        }
+        Term::Apply { function, argument } => {
+            let func = Rc::make_mut(function);
+            let arg = Rc::make_mut(argument);
+            inline_direct_reduce(func);
+
+            inline_direct_reduce(arg);
+        }
+        Term::Force(f) => {
+            let f = Rc::make_mut(f);
+            inline_direct_reduce(f);
         }
         _ => {}
     }
