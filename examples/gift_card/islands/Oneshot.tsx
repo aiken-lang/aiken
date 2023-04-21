@@ -209,7 +209,7 @@ export default function App({ validators }: AppProps) {
           >
             <Input
               type="password"
-              id="kupoUrl"
+              id="blockfrostAPIKey"
               onInput={(e) => setBlockfrostAPIKey(e.currentTarget.value)}
             >
               Blockfrost API Key
