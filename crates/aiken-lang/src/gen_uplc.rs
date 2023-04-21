@@ -1824,7 +1824,7 @@ impl<'a> CodeGenerator<'a> {
                         value_stack,
                     );
                 } else {
-                    pattern_stack.let_assignment("_", value_stack);
+                    pattern_stack.list_empty(value_stack);
                 }
 
                 pattern_stack.merge_child(elements_stack);
@@ -4693,6 +4693,17 @@ impl<'a> CodeGenerator<'a> {
                         term,
                         Term::Error.trace(Term::string("Expected no fields for Constr")),
                     );
+
+                arg_stack.push(term);
+            }
+            Air::ListEmpty { .. } => {
+                let value = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
+
+                term = value.delayed_choose_list(
+                    term,
+                    Term::Error.trace(Term::string("Expected no items for List")),
+                );
 
                 arg_stack.push(term);
             }

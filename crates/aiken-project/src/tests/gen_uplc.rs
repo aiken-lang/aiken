@@ -11,7 +11,7 @@ use crate::module::CheckedModules;
 
 use super::TestProject;
 
-fn assert_uplc(source_code: &str, expected: Term<Name>) {
+fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
     let mut project = TestProject::new();
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
@@ -59,9 +59,14 @@ fn assert_uplc(source_code: &str, expected: Term<Name>) {
 
     assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
 
-    let eval = debruijn_program.eval(ExBudget::default());
+    let mut eval = debruijn_program.eval(ExBudget::default());
 
-    assert!(!eval.failed())
+    assert_eq!(
+        eval.failed(),
+        should_fail,
+        "logs - {}\n",
+        format!("{:#?}", eval.logs())
+    )
 }
 
 #[test]
@@ -113,6 +118,7 @@ fn acceptance_test_1_length() {
                     ])),
             )
             .apply(Term::integer(3.into())),
+        false,
     );
 }
 
@@ -172,6 +178,7 @@ fn acceptance_test_2_repeat() {
                 Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
                 Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
             ]))),
+        false,
     );
 }
 
@@ -266,6 +273,7 @@ fn acceptance_test_3_concat() {
                 Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
                 Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
             ]))),
+        false,
     );
 }
 
@@ -366,6 +374,7 @@ fn acceptance_test_4_concat_no_anon_func() {
                 Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
                 Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
             ]))),
+        false,
     );
 }
 
@@ -425,6 +434,7 @@ fn acceptance_test_5_head_not_empty() {
                 }))
                 .into(),
             )),
+        false,
     );
 }
 
@@ -480,6 +490,7 @@ fn acceptance_test_5_head_empty() {
                 }))
                 .into(),
             )),
+        false,
     );
 }
 
@@ -502,6 +513,7 @@ fn acceptance_test_6_if_else() {
             .apply(Term::integer(1.into()))
             .apply(Term::integer(1.into()))
             .delayed_if_else(Term::bool(true), Term::bool(false)),
+        false,
     );
 }
 
@@ -546,6 +558,7 @@ fn acceptance_test_6_equals() {
                         .apply(Term::empty_map()),
                 ),
             ),
+        false,
     );
 }
 
@@ -694,6 +707,7 @@ fn acceptance_test_7_unzip() {
                 )
                 .into(),
             )),
+        false,
     );
 }
 
@@ -726,6 +740,7 @@ fn acceptance_test_8_is_empty() {
                 Term::bool(true),
                 Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
             ),
+        false,
     );
 }
 
@@ -758,6 +773,7 @@ fn acceptance_test_8_is_not_empty() {
                 Term::bool(false),
                 Term::bool(false).if_else(Term::bool(false), Term::bool(true)),
             ),
+        false,
     );
 }
 
@@ -790,6 +806,7 @@ fn acceptance_test_9_is_empty() {
                 Term::bool(true),
                 Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
             ),
+        false,
     );
 }
 
@@ -889,6 +906,7 @@ fn acceptance_test_10_map_none() {
                 .into(),
             ))
             .constr_get_field(),
+        false,
     );
 }
 
@@ -988,5 +1006,57 @@ fn acceptance_test_10_map_some() {
                 .into(),
             ))
             .constr_get_field(),
+        false,
+    );
+}
+
+#[test]
+fn expect_empty_list_on_filled_list() {
+    let src = r#"  
+      test empty_list1() {
+        let x = [1,2]
+        expect [] = x
+
+        True
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("x")
+            .delayed_choose_list(
+                Term::bool(true),
+                Term::Error.trace(Term::string("Expected no items for List")),
+            )
+            .lambda("x")
+            .apply(Term::list_values(vec![
+                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
+                Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
+            ])),
+        true,
+    );
+}
+
+#[test]
+fn expect_empty_list_on_new_list() {
+    let src = r#"  
+      test empty_list1() {
+        let x = []
+        expect [] = x
+
+        True
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("x")
+            .delayed_choose_list(
+                Term::bool(true),
+                Term::Error.trace(Term::string("Expected no items for List")),
+            )
+            .lambda("x")
+            .apply(Term::list_values(vec![])),
+        false,
     );
 }
