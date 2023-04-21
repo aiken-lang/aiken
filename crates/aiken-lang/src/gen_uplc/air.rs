@@ -219,6 +219,9 @@ pub enum Air {
     FieldsEmpty {
         scope: Scope,
     },
+    ListEmpty {
+        scope: Scope,
+    },
 }
 
 impl Air {
@@ -257,6 +260,7 @@ impl Air {
             | Air::RecordAccess { scope, .. }
             | Air::FieldsExpose { scope, .. }
             | Air::FieldsEmpty { scope }
+            | Air::ListEmpty { scope }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
             | Air::TupleAccessor { scope, .. }
@@ -301,6 +305,7 @@ impl Air {
             | Air::RecordAccess { scope, .. }
             | Air::FieldsExpose { scope, .. }
             | Air::FieldsEmpty { scope }
+            | Air::ListEmpty { scope }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
             | Air::TupleAccessor { scope, .. }
@@ -398,6 +403,7 @@ impl Air {
             | Air::Finally { .. }
             | Air::FieldsExpose { .. }
             | Air::FieldsEmpty { .. }
+            | Air::ListEmpty { .. }
             | Air::NoOp { .. } => None,
             Air::UnOp { op, .. } => match op {
                 UnOp::Not => Some(

@@ -781,6 +781,16 @@ impl AirStack {
 
         self.call(void(), expect_stack, vec![tail_stack, arg_stack2])
     }
+
+    pub fn list_empty(&mut self, value_stack: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::ListEmpty {
+            scope: self.scope.clone(),
+        });
+
+        self.merge_child(value_stack);
+    }
 }
 
 #[cfg(test)]
