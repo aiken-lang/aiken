@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { Constr, Data, fromText, Kupmios, Lucid } from "lucid/mod.ts";
+import { Blockfrost, Constr, Data, fromText, Lucid } from "lucid/mod.ts";
 
 import { Input } from "~/components/Input.tsx";
 import { Button } from "~/components/Button.tsx";
@@ -17,8 +17,7 @@ export interface AppProps {
 
 export default function App({ validators }: AppProps) {
   const [lucid, setLucid] = useState<Lucid | null>(null);
-  const [kupoUrl, setKupoUrl] = useState<string>("");
-  const [ogmiosUrl, setOgmiosUrl] = useState<string>("");
+  const [blockfrostAPIKey, setBlockfrostAPIKey] = useState<string>("");
   const [tokenName, setTokenName] = useState<string>("");
   const [giftADA, setGiftADA] = useState<string | undefined>();
   const [lockTxHash, setLockTxHash] = useState<string | undefined>(undefined);
@@ -35,9 +34,9 @@ export default function App({ validators }: AppProps) {
     e.preventDefault();
 
     const lucid = await Lucid.new(
-      new Kupmios(
-        kupoUrl,
-        ogmiosUrl,
+      new Blockfrost(
+        "https://cardano-preprod.blockfrost.io/api/v0",
+        blockfrostAPIKey,
       ),
       "Preprod",
     );
@@ -209,18 +208,11 @@ export default function App({ validators }: AppProps) {
             onSubmit={setupLucid}
           >
             <Input
-              type="text"
-              id="kupoUrl"
-              onInput={(e) => setKupoUrl(e.currentTarget.value)}
+              type="password"
+              id="blockfrostAPIKey"
+              onInput={(e) => setBlockfrostAPIKey(e.currentTarget.value)}
             >
-              Kupo URL
-            </Input>
-            <Input
-              type="text"
-              id="ogmiosUrl"
-              onInput={(e) => setOgmiosUrl(e.currentTarget.value)}
-            >
-              Ogmios URL
+              Blockfrost API Key
             </Input>
 
             <Button type="submit">Setup Lucid</Button>

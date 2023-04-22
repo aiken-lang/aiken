@@ -18,7 +18,7 @@ jobs:
           ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v18
+        uses: cachix/install-nix-action@v20
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v12

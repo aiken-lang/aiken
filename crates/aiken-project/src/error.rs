@@ -279,11 +279,11 @@ impl Diagnostic for Error {
                     None => None,
                     Some(hint) => {
                         let budget = ExBudget { mem: i64::MAX, cpu: i64::MAX, };
-                        let left = pretty::boxed("left", &match hint.left.eval(budget).result() {
+                        let left = pretty::boxed("left", &match hint.left.clone().eval(budget).result() {
                             Ok(term) => format!("{term}"),
                             Err(err) => format!("{err}"),
                         });
-                        let right = pretty::boxed("right", &match hint.right.eval(budget).result() {
+                        let right = pretty::boxed("right", &match hint.right.clone().eval(budget).result() {
                             Ok(term) => format!("{term}"),
                             Err(err) => format!("{err}"),
                         });

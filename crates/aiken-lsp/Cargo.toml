@@ -1,17 +1,15 @@
 [package]
 name = "aiken-lsp"
-version = "0.0.29"
+version = "1.0.2-alpha"
 edition = "2021"
 description = "Cardano smart contract language and toolchain"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>"]
-
+rust-version = "1.66.1"
 
 [dependencies]
-aiken-lang = { path = '../aiken-lang', version = "0.0.29" }
-aiken-project = { path = '../aiken-project', version = "0.0.29" }
 crossbeam-channel = "0.5.7"
 indoc = "2.0.1"
 itertools = "0.10.5"
@@ -25,3 +23,6 @@ thiserror = "1.0.39"
 tracing = "0.1.37"
 url = "2.3.1"
 urlencoding = "2.1.2"
+
+aiken-lang = { path = '../aiken-lang', version = "1.0.2-alpha" }
+aiken-project = { path = '../aiken-project', version = "1.0.2-alpha" }

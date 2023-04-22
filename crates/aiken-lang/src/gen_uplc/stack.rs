@@ -1,10 +1,12 @@
 use std::{rc::Rc, sync::Arc};
 
 use indexmap::IndexSet;
+
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
     ast::Span,
+    builtins::{data, list, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
     IdGenerator,
 };
@@ -268,7 +270,21 @@ impl AirStack {
             tipo: tipo.clone(),
         });
 
-        self.local_var(tipo.clone(), EXPECT_ON_LIST);
+        self.var(
+            ValueConstructor::public(
+                void(),
+                ValueConstructorVariant::ModuleFn {
+                    name: EXPECT_ON_LIST.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 2,
+                    location: Span::empty(),
+                    builtin: None,
+                },
+            ),
+            EXPECT_ON_LIST,
+            "",
+        );
 
         self.local_var(tipo, name);
 
@@ -332,6 +348,16 @@ impl AirStack {
             scope: self.scope.clone(),
             indices,
             check_last_item,
+        });
+
+        self.merge_child(value);
+    }
+
+    pub fn fields_empty(&mut self, value: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::FieldsEmpty {
+            scope: self.scope.clone(),
         });
 
         self.merge_child(value);
@@ -656,20 +682,20 @@ impl AirStack {
 
     pub fn define_func(
         &mut self,
-        func_name: String,
-        module_name: String,
-        variant_name: String,
+        func_name: impl ToString,
+        module_name: impl ToString,
+        variant_name: impl ToString,
         params: Vec<String>,
         recursive: bool,
         body_stack: AirStack,
     ) {
         self.air.push(Air::DefineFunc {
             scope: self.scope.clone(),
-            func_name,
-            module_name,
+            func_name: func_name.to_string(),
+            module_name: module_name.to_string(),
             params,
             recursive,
-            variant_name,
+            variant_name: variant_name.to_string(),
         });
 
         self.merge_child(body_stack);
@@ -678,9 +704,92 @@ impl AirStack {
     pub fn noop(&mut self) {
         self.new_scope();
 
-        self.air.push(Air::Noop {
+        self.air.push(Air::NoOp {
             scope: self.scope.clone(),
         });
+    }
+
+    pub fn choose_unit(&mut self, value_stack: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::Builtin {
+            scope: self.scope.clone(),
+            func: DefaultFunction::ChooseUnit,
+            tipo: void(),
+            count: DefaultFunction::ChooseUnit.arity(),
+        });
+
+        self.merge_child(value_stack);
+    }
+
+    pub fn expect_on_list(&mut self) {
+        let mut head_stack = self.empty_with_scope();
+        let mut tail_stack = self.empty_with_scope();
+        let mut check_with_stack = self.empty_with_scope();
+        let mut expect_stack = self.empty_with_scope();
+        let mut var_stack = self.empty_with_scope();
+        let mut void_stack = self.empty_with_scope();
+        let mut fun_stack = self.empty_with_scope();
+        let mut arg_stack1 = self.empty_with_scope();
+        let mut arg_stack2 = self.empty_with_scope();
+
+        self.air.push(Air::DefineFunc {
+            scope: self.scope.clone(),
+            func_name: EXPECT_ON_LIST.to_string(),
+            module_name: "".to_string(),
+            params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
+            recursive: true,
+            variant_name: "".to_string(),
+        });
+
+        var_stack.local_var(list(data()), "__list_to_check");
+
+        head_stack.builtin(DefaultFunction::HeadList, data(), vec![var_stack]);
+
+        fun_stack.local_var(void(), "__check_with".to_string());
+
+        check_with_stack.call(void(), fun_stack, vec![head_stack]);
+
+        void_stack.void();
+        void_stack.void();
+
+        self.list_clause(void(), "__list_to_check", None, false, void_stack);
+
+        self.choose_unit(check_with_stack);
+
+        expect_stack.var(
+            ValueConstructor::public(
+                void(),
+                ValueConstructorVariant::ModuleFn {
+                    name: EXPECT_ON_LIST.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 2,
+                    location: Span::empty(),
+                    builtin: None,
+                },
+            ),
+            EXPECT_ON_LIST,
+            "",
+        );
+
+        arg_stack1.local_var(list(data()), "__list_to_check");
+
+        arg_stack2.local_var(void(), "__check_with");
+
+        tail_stack.builtin(DefaultFunction::TailList, list(data()), vec![arg_stack1]);
+
+        self.call(void(), expect_stack, vec![tail_stack, arg_stack2])
+    }
+
+    pub fn list_empty(&mut self, value_stack: AirStack) {
+        self.new_scope();
+
+        self.air.push(Air::ListEmpty {
+            scope: self.scope.clone(),
+        });
+
+        self.merge_child(value_stack);
     }
 }
 
@@ -688,7 +797,15 @@ impl AirStack {
 mod test {
     use std::rc::Rc;
 
-    use crate::{gen_uplc::air::Air, IdGenerator};
+    use uplc::builtins::DefaultFunction;
+
+    use crate::{
+        ast::Span,
+        builtins::{data, list, void},
+        gen_uplc::air::Air,
+        tipo::{ValueConstructor, ValueConstructorVariant},
+        IdGenerator,
+    };
 
     use super::AirStack;
 
@@ -787,5 +904,140 @@ mod test {
                 },
             ],
         )
+    }
+
+    #[test]
+    fn assert_on_list_matches_air() {
+        let id_gen: Rc<IdGenerator> = IdGenerator::new().into();
+
+        let scope = vec![id_gen.next()];
+
+        let mut stack1 = AirStack {
+            id_gen,
+            scope: scope.into(),
+            air: vec![],
+        };
+
+        stack1.expect_on_list();
+
+        println!("{:#?}", stack1);
+
+        let air_vec = vec![
+            Air::DefineFunc {
+                scope: vec![0].into(),
+                func_name: "__expect_on_list".to_string(),
+                module_name: "".to_string(),
+                params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
+                recursive: true,
+                variant_name: "".to_string(),
+            },
+            Air::ListClause {
+                scope: vec![0, 7].into(),
+                tipo: void(),
+                tail_name: "__list_to_check".to_string(),
+                next_tail_name: None,
+                complex_clause: false,
+            },
+            Air::Void {
+                scope: vec![0, 7, 5].into(),
+            },
+            Air::Void {
+                scope: vec![0, 7, 5, 6].into(),
+            },
+            Air::Builtin {
+                scope: vec![0, 7, 8].into(),
+                count: 2,
+                func: DefaultFunction::ChooseUnit,
+                tipo: void(),
+            },
+            Air::Call {
+                scope: vec![0, 7, 8, 4].into(),
+                count: 1,
+                tipo: void(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 4, 3].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: void(),
+                },
+                name: "__check_with".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Builtin {
+                scope: vec![0, 7, 8, 4, 2].into(),
+                count: 1,
+                func: DefaultFunction::HeadList,
+                tipo: data(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 4, 2, 1].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: list(data()),
+                },
+                name: "__list_to_check".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Call {
+                scope: vec![0, 7, 8, 13].into(),
+                count: 2,
+                tipo: void(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 13, 9].into(),
+                constructor: ValueConstructor::public(
+                    void(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: "__expect_on_list".to_string(),
+                        field_map: None,
+                        module: "".to_string(),
+                        arity: 2,
+                        location: Span::empty(),
+                        builtin: None,
+                    },
+                ),
+                name: "__expect_on_list".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Builtin {
+                scope: vec![0, 7, 8, 13, 12].into(),
+                count: 1,
+                func: DefaultFunction::TailList,
+                tipo: list(data()),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 13, 12, 10].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: list(data()),
+                },
+                name: "__list_to_check".to_string(),
+                variant_name: "".to_string(),
+            },
+            Air::Var {
+                scope: vec![0, 7, 8, 13, 11].into(),
+                constructor: ValueConstructor {
+                    public: true,
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                    tipo: void(),
+                },
+                name: "__check_with".to_string(),
+                variant_name: "".to_string(),
+            },
+        ];
+
+        assert_eq!(stack1.air, air_vec)
     }
 }

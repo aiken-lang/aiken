@@ -1,12 +1,13 @@
 [package]
 name = "aiken"
 description = "Cardano smart contract language and toolchain"
-version = "0.0.29"
+version = "1.0.2-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
-authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
+authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>", "KtorZ <matthias.benkort@gmail.com>"]
+rust-version = "1.66.1"
 
 [dependencies]
 anyhow = "1.0.69"
@@ -25,7 +26,7 @@ regex = "1.7.1"
 serde_json = "1.0.94"
 thiserror = "1.0.39"
 
-aiken-lang = { path = "../aiken-lang", version = "0.0.29" }
-aiken-lsp = { path = "../aiken-lsp", version = "0.0.29" }
-aiken-project = { path = '../aiken-project', version = "0.0.29" }
-uplc = { path = '../uplc', version = "0.0.29" }
+aiken-lang = { path = "../aiken-lang", version = "1.0.2-alpha" }
+aiken-lsp = { path = "../aiken-lsp", version = "1.0.2-alpha" }
+aiken-project = { path = '../aiken-project', version = "1.0.2-alpha" }
+uplc = { path = '../uplc', version = "1.0.2-alpha" }

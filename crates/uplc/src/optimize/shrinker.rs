@@ -7,7 +7,6 @@ use crate::{
     ast::{Name, Program, Term},
     builtins::DefaultFunction,
 };
-// use crate::builtins::{DefaultFunction};
 
 #[derive(Eq, Hash, PartialEq, Clone)]
 pub struct Occurrence {
@@ -17,7 +16,7 @@ pub struct Occurrence {
 
 impl Program<Name> {
     pub fn lambda_reduce(self) -> Program<Name> {
-        let mut term = self.term.clone();
+        let mut term = self.term;
         lambda_reduce(&mut term);
         Program {
             version: self.version,
@@ -26,7 +25,7 @@ impl Program<Name> {
     }
 
     pub fn builtin_force_reduce(self) -> Program<Name> {
-        let mut term = self.term.clone();
+        let mut term = self.term;
         let mut builtin_map = IndexMap::new();
         builtin_force_reduce(&mut term, &mut builtin_map);
 
@@ -49,8 +48,28 @@ impl Program<Name> {
     }
 
     pub fn inline_reduce(self) -> Program<Name> {
-        let mut term = self.term.clone();
+        let mut term = self.term;
         inline_basic_reduce(&mut term);
+        inline_direct_reduce(&mut term);
+
+        Program {
+            version: self.version,
+            term,
+        }
+    }
+
+    pub fn force_delay_reduce(self) -> Program<Name> {
+        let mut term = self.term;
+        force_delay_reduce(&mut term);
+        Program {
+            version: self.version,
+            term,
+        }
+    }
+
+    pub fn wrap_data_reduce(self) -> Program<Name> {
+        let mut term = self.term;
+        wrap_data_reduce(&mut term);
         Program {
             version: self.version,
             term,
@@ -112,6 +131,76 @@ fn builtin_force_reduce(term: &mut Term<Name>, builtin_map: &mut IndexMap<u8, ()
     }
 }
 
+fn force_delay_reduce(term: &mut Term<Name>) {
+    match term {
+        Term::Force(f) => {
+            let f = Rc::make_mut(f);
+
+            if let Term::Delay(body) = f {
+                *term = body.as_ref().clone();
+                force_delay_reduce(term);
+            } else {
+                force_delay_reduce(f);
+            }
+        }
+        Term::Delay(d) => {
+            let d = Rc::make_mut(d);
+            force_delay_reduce(d);
+        }
+        Term::Lambda { body, .. } => {
+            let body = Rc::make_mut(body);
+            force_delay_reduce(body);
+        }
+        Term::Apply { function, argument } => {
+            let func = Rc::make_mut(function);
+            force_delay_reduce(func);
+
+            let arg = Rc::make_mut(argument);
+            force_delay_reduce(arg);
+        }
+        _ => {}
+    }
+}
+
+fn inline_direct_reduce(term: &mut Term<Name>) {
+    match term {
+        Term::Delay(d) => {
+            let d = Rc::make_mut(d);
+            inline_direct_reduce(d);
+        }
+        Term::Lambda { body, .. } => {
+            let body = Rc::make_mut(body);
+            inline_direct_reduce(body);
+        }
+        Term::Apply { function, argument } => {
+            let func = Rc::make_mut(function);
+            let arg = Rc::make_mut(argument);
+
+            inline_direct_reduce(func);
+            inline_direct_reduce(arg);
+
+            let Term::Lambda { parameter_name, body } = arg
+            else{
+                return;
+            };
+
+            let Term::Var(name) = body.as_ref()
+            else {
+                return;
+            };
+
+            if name.as_ref() == parameter_name.as_ref() {
+                *term = arg.clone();
+            }
+        }
+        Term::Force(f) => {
+            let f = Rc::make_mut(f);
+            inline_direct_reduce(f);
+        }
+        _ => {}
+    }
+}
+
 fn inline_basic_reduce(term: &mut Term<Name>) {
     match term {
         Term::Delay(d) => {
@@ -134,14 +223,14 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
                 body,
             } = func
             {
-                let mut occurrences = 0;
-                var_occurrences(body, parameter_name.clone(), &mut occurrences);
+                let occurrences = var_occurrences(body, parameter_name.clone());
                 if occurrences == 1 {
                     if let replace_term @ (Term::Var(_)
                     | Term::Constant(_)
                     | Term::Error
                     | Term::Delay(_)
-                    | Term::Lambda { .. }) = argument.as_ref()
+                    | Term::Lambda { .. }
+                    | Term::Builtin(_)) = arg
                     {
                         *term =
                             substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
@@ -157,56 +246,90 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
     }
 }
 
-fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>, occurrences: &mut usize) {
+fn wrap_data_reduce(term: &mut Term<Name>) {
     match term {
-        Term::Var(name) => {
-            if name.as_ref() == search_for.as_ref() {
-                *occurrences += 1;
-            }
+        Term::Delay(d) => {
+            wrap_data_reduce(Rc::make_mut(d));
         }
-        Term::Delay(body) => {
-            var_occurrences(body.as_ref(), search_for, occurrences);
-        }
-        Term::Lambda {
-            parameter_name,
-            body,
-        } => {
-            if parameter_name.clone() != search_for {
-                var_occurrences(body.as_ref(), search_for, occurrences);
-            }
+        Term::Lambda { body, .. } => {
+            wrap_data_reduce(Rc::make_mut(body));
         }
         Term::Apply { function, argument } => {
-            var_occurrences(function.as_ref(), search_for.clone(), occurrences);
-            var_occurrences(argument.as_ref(), search_for, occurrences);
+            let Term::Builtin(
+                first_action
+            ) = function.as_ref()
+            else {
+                wrap_data_reduce(Rc::make_mut(function));
+                wrap_data_reduce(Rc::make_mut(argument));
+                return;
+            };
+
+            let Term::Apply { function: inner_func, argument: inner_arg } = Rc::make_mut(argument)
+            else {
+                wrap_data_reduce(Rc::make_mut(argument));
+                return;
+            };
+
+            let Term::Builtin(second_action) = inner_func.as_ref()
+            else {
+                wrap_data_reduce(Rc::make_mut(inner_func));
+                wrap_data_reduce(Rc::make_mut(inner_arg));
+                return;
+            };
+
+            wrap_data_reduce(Rc::make_mut(inner_arg));
+
+            match (first_action, second_action) {
+                (DefaultFunction::UnIData, DefaultFunction::IData)
+                | (DefaultFunction::IData, DefaultFunction::UnIData)
+                | (DefaultFunction::BData, DefaultFunction::UnBData)
+                | (DefaultFunction::UnBData, DefaultFunction::BData)
+                | (DefaultFunction::ListData, DefaultFunction::UnListData)
+                | (DefaultFunction::UnListData, DefaultFunction::ListData)
+                | (DefaultFunction::MapData, DefaultFunction::UnMapData)
+                | (DefaultFunction::UnMapData, DefaultFunction::MapData)
+                | (DefaultFunction::UnConstrData, DefaultFunction::ConstrData)
+                | (DefaultFunction::ConstrData, DefaultFunction::UnConstrData) => {
+                    *term = inner_arg.as_ref().clone();
+                }
+                _ => {}
+            }
         }
-        Term::Force(x) => {
-            var_occurrences(x.as_ref(), search_for, occurrences);
+        Term::Force(f) => {
+            wrap_data_reduce(Rc::make_mut(f));
         }
         _ => {}
     }
 }
 
-// fn error_occurrences(term: &Term<Name>, occurrences: &mut usize) {
-//     match term {
-//         Term::Delay(body) => {
-//             error_occurrences(body.as_ref(), occurrences);
-//         }
-//         Term::Lambda { body, .. } => {
-//             error_occurrences(body.as_ref(), occurrences);
-//         }
-//         Term::Apply { function, argument } => {
-//             error_occurrences(function.as_ref(), occurrences);
-//             error_occurrences(argument.as_ref(), occurrences);
-//         }
-//         Term::Force(x) => {
-//             error_occurrences(x.as_ref(), occurrences);
-//         }
-//         Term::Error => {
-//             *occurrences += 1;
-//         }
-//         _ => {}
-//     }
-// }
+fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>) -> usize {
+    match term {
+        Term::Var(name) => {
+            if name.as_ref() == search_for.as_ref() {
+                1
+            } else {
+                0
+            }
+        }
+        Term::Delay(body) => var_occurrences(body.as_ref(), search_for),
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => {
+            if parameter_name.clone() != search_for {
+                var_occurrences(body.as_ref(), search_for)
+            } else {
+                0
+            }
+        }
+        Term::Apply { function, argument } => {
+            var_occurrences(function.as_ref(), search_for.clone())
+                + var_occurrences(argument.as_ref(), search_for)
+        }
+        Term::Force(x) => var_occurrences(x.as_ref(), search_for),
+        _ => 0,
+    }
+}
 
 fn lambda_reduce(term: &mut Term<Name>) {
     match term {
@@ -222,7 +345,7 @@ fn lambda_reduce(term: &mut Term<Name>) {
                 body,
             } = func
             {
-                if let replace_term @ (Term::Var(_) | Term::Constant(_)) = argument.as_ref() {
+                if let replace_term @ (Term::Var(_) | Term::Constant(_) | Term::Builtin(_)) = arg {
                     let body = Rc::make_mut(body);
                     *term = substitute_term(body, parameter_name.clone(), replace_term);
                 }

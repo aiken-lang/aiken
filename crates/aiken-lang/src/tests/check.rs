@@ -155,6 +155,135 @@ fn multi_validator_warning() {
 }
 
 #[test]
+fn anonymous_function_scoping() {
+    let source_code = r#"
+        fn reduce(list, f, i) {
+          todo
+        }
+
+        pub fn foo() {
+          let sum =
+            reduce(
+              [1, 2, 3],
+              fn(acc: Int, n: Int) { acc + n },
+              0,
+            )
+
+          sum + acc
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::UnknownVariable { name, .. })) if name == "acc"
+    ))
+}
+
+#[test]
+fn anonymous_function_dupicate_args() {
+    let source_code = r#"
+        fn reduce(list, f, i) {
+          todo
+        }
+
+        pub fn foo() {
+          let sum =
+            reduce(
+              [1, 2, 3],
+              fn(acc: Int, acc: Int) { acc + acc },
+              0,
+            )
+
+          sum
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DuplicateArgument { label, .. })) if label == "acc"
+    ))
+}
+
+#[test]
+fn assignement_last_expr_when() {
+    let source_code = r#"
+        pub fn foo() {
+          let bar = None
+
+          when bar is {
+            Some(_) -> {
+              let wow = 1
+            }
+            None -> {
+              2
+            }
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
+fn assignement_last_expr_if_first_branch() {
+    let source_code = r#"
+        pub fn foo() {
+          if True {
+            let thing = 1
+          } else {
+            1
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
+fn assignement_last_expr_if_branches() {
+    let source_code = r#"
+        pub fn foo() {
+          if True {
+            2
+          } else if False {
+            let thing = 1
+          } else {
+            1
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
+fn assignement_last_expr_if_final_else() {
+    let source_code = r#"
+        pub fn foo() {
+          if True {
+            1
+          } else {
+            let thing = 1
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
 fn if_scoping() {
     let source_code = r#"
         pub fn foo(c) {

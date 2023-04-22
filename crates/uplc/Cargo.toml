@@ -1,21 +1,18 @@
 [package]
 name = "uplc"
 description = "Utilities for working with Untyped Plutus Core"
-version = "0.0.29"
+version = "1.0.2-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken/crates/uplc"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
-
+rust-version = "1.66.1"
 exclude = ["test_data/*"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.69"
 cryptoxide = "0.4.4"
-flat-rs = { path = "../flat-rs", version = "0.0.27" }
 hex = "0.4.3"
 indexmap = "1.9.2"
 itertools = "0.10.5"
@@ -38,6 +35,8 @@ serde_json = "1.0.94"
 strum = "0.24.1"
 strum_macros = "0.24.3"
 thiserror = "1.0.39"
+
+flat-rs = { path = "../flat-rs", version = "1.0.2-alpha" }
 
 [dev-dependencies]
 hex = "0.4.3"

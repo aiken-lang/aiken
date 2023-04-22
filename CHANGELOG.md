@@ -4,12 +4,42 @@
 
 ### Added
 
+- **aiken-lang**: added optimization to help prevent unnecessary data wraps or unwraps
+- **aiken-project**: added end to end tests on conversion from aiken lang to uplc
+
+### Fixed
+
+- **aiken-lang**: Add name of var to the unused var warning
+
+### Fixed
+
+- **aiken**: fixed 'new' instructions to properly show project name and folder
+
+## v1.0.2.alpha - 2023-04-17
+
+### Fixed
+
+- **aiken-lang**: needed to assert_no_assignment in when and if blocks
+- **uplc**: need to return deserialization error in some cases for the machine builtins
+
+## v1.0.1-alpha - 2023-04-16
+
+### Fixed
+
+- **aiken-lang**: incorrect scoping for anonymous functions
+- **aiken-lang**: duplicate arguments were allowed in anonymous functions
+
+## v1.0.0-alpha - 2023-04-13
+
+### Added
+
 - **aiken**: new command `blueprint convert`
 
 ### Changed
 
 - **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
 - **aiken-project**: fixed generation of blueprints for recursive and mutually recursive data-types
+- **aiken-project**: perform validation of parameters on `blueprint apply`
 
 - **aiken-lang**: block `Data` and `String` from unifying when casting
 - **aiken-lang**: remove ability for a type with many variants with matching field labels and types to support field access
@@ -22,7 +52,9 @@
 - **aiken-lang**: support multi-clause patterns (only as a syntactic sugar)
 - **aiken-lang**: fix lexer panic when parsing too large (> u32) tuple-indexes
 
-## [v0.0.29] - 2023-MM-DD
+- **uplc**: Greatly improved the Plutus virtual machine performances for script evaluation
+
+## v0.0.29 - 2023-02-23
 
 ### Added
 
@@ -53,7 +85,7 @@
 - **aiken-project**: remove assets folder in favor of `plutus.json`
 - **aiken-lang**: removed some unused constant related data types
 
-## [v0.0.28] - 2023-01-06
+## v0.0.28 - 2023-01-06
 
 ### Added
 
@@ -68,7 +100,7 @@ N/A
 
 N/A
 
-## [v0.0.27] - 2022-MM-DD
+## v0.0.27 - 2022-MM-DD
 
 ### Added
 
@@ -95,7 +127,7 @@ N/A
 
 N/A
 
-## [v0.0.26] - 2022-11-23
+## v0.0.26 - 2022-11-23
 
 ### Added
 
@@ -107,7 +139,7 @@ N/A
 - **aiken-lang**: added Option to builtins
 - **aiken-lang**: properly handle record parsing and sugar in patterns
 
-## [v0.0.25] - 2022-11-14
+## v0.0.25 - 2022-11-14
 
 ### Added
 
@@ -127,19 +159,19 @@ N/A
 
 - **uplc**: `Converter::get_index` now takes the full name to provide better error messages for `Error::FreeUnique`
 
-## [v0.0.24] - 2022-11-04
+## v0.0.24 - 2022-11-04
 
 ### Changed
 
 - **uplc**: Sorted remaining structured in the ScriptContext (Value, Wdrl, (Ref) Inputs, Mint, Required signers, Data, Redeemers)
 
-## [v0.0.23] - 2022-11-03
+## v0.0.23 - 2022-11-03
 
 ### Changed
 
 - **uplc**: sort inputs for script context fixes an issue in lucid https://github.com/spacebudz/lucid/issues/109
 
-## [v0.0.22] - 2022-10-31
+## v0.0.22 - 2022-10-31
 
 ### Added
 
@@ -154,7 +186,7 @@ N/A
 
 - **aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/aiken-lang/aiken/tree/main/examples/sample) for more
 
-## [v0.0.21] - 2022-10-23
+## v0.0.21 - 2022-10-23
 
 ### Added
 
@@ -165,7 +197,7 @@ N/A
 - **uplc**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int` instances
 - **uplc**: Added `apply_params_to_script` function (applies params to script and serializes the new script).
 
-## [v0.0.20] - 2022-10-17
+## v0.0.20 - 2022-10-17
 
 ### Added
 

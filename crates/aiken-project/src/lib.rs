@@ -11,6 +11,8 @@ pub mod paths;
 pub mod pretty;
 pub mod script;
 pub mod telemetry;
+#[cfg(test)]
+mod tests;
 
 use crate::blueprint::Blueprint;
 use aiken_lang::{
@@ -732,7 +734,7 @@ where
         scripts
             .into_par_iter()
             .map(|script| {
-                let mut eval_result = script.program.eval(initial_budget);
+                let mut eval_result = script.program.clone().eval(initial_budget);
 
                 EvalInfo {
                     success: !eval_result.failed(),

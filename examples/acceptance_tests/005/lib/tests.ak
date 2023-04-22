@@ -2,10 +2,8 @@ use aiken/builtin.{head_list}
 
 pub fn head(xs: List<a>) -> Option<a> {
   when xs is {
-    [] ->
-      None
-    _ ->
-      Some(head_list(xs))
+    [] -> None
+    _ -> Some(head_list(xs))
   }
 }
 

@@ -5,6 +5,7 @@ use super::{
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
+
 use aiken_lang::{
     ast::{TypedArg, TypedFunction, TypedValidator},
     gen_uplc::CodeGenerator,
@@ -175,6 +176,16 @@ impl Validator {
 
 #[cfg(test)]
 mod test {
+    use assert_json_diff::assert_json_eq;
+
+    use serde_json::{self, json};
+    use std::collections::HashMap;
+
+    use aiken_lang::{self, builtins};
+    use uplc::ast::{self as uplc_ast};
+
+    use crate::tests::TestProject;
+
     use super::{
         super::{
             definitions::{Definitions, Reference},
@@ -183,109 +194,6 @@ mod test {
         },
         *,
     };
-    use crate::{module::ParsedModule, PackageName};
-    use aiken_lang::{
-        self,
-        ast::{ModuleKind, Tracing, TypedDataType, TypedFunction},
-        builtins,
-        gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
-        parser,
-        tipo::TypeInfo,
-        IdGenerator,
-    };
-    use assert_json_diff::assert_json_eq;
-    use indexmap::IndexMap;
-    use serde_json::{self, json};
-    use std::{collections::HashMap, path::PathBuf};
-    use uplc::ast as uplc;
-
-    // TODO: Possible refactor this out of the module and have it used by `Project`. The idea would
-    // be to make this struct below the actual project, and wrap it in another metadata struct
-    // which contains all the config and I/O stuff regarding the project.
-    struct TestProject {
-        package: PackageName,
-        id_gen: IdGenerator,
-        module_types: HashMap<String, TypeInfo>,
-        functions: IndexMap<FunctionAccessKey, TypedFunction>,
-        data_types: IndexMap<DataTypeKey, TypedDataType>,
-    }
-
-    impl TestProject {
-        fn new() -> Self {
-            let id_gen = IdGenerator::new();
-
-            let package = PackageName {
-                owner: "test".to_owned(),
-                repo: "project".to_owned(),
-            };
-
-            let mut module_types = HashMap::new();
-            module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
-            module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
-
-            let functions = builtins::prelude_functions(&id_gen);
-            let data_types = builtins::prelude_data_types(&id_gen);
-
-            TestProject {
-                package,
-                id_gen,
-                module_types,
-                functions,
-                data_types,
-            }
-        }
-
-        fn parse(&self, source_code: &str) -> ParsedModule {
-            let kind = ModuleKind::Validator;
-            let name = "test_module".to_owned();
-            let (mut ast, extra) =
-                parser::module(source_code, kind).expect("Failed to parse module");
-            ast.name = name.clone();
-
-            ParsedModule {
-                kind,
-                ast,
-                code: source_code.to_string(),
-                name,
-                path: PathBuf::new(),
-                extra,
-                package: self.package.to_string(),
-            }
-        }
-
-        fn check(&mut self, module: ParsedModule) -> CheckedModule {
-            let mut warnings = vec![];
-
-            let ast = module
-                .ast
-                .infer(
-                    &self.id_gen,
-                    module.kind,
-                    &self.package.to_string(),
-                    &self.module_types,
-                    Tracing::NoTraces,
-                    &mut warnings,
-                )
-                .expect("Failed to type-check module");
-
-            self.module_types
-                .insert(module.name.clone(), ast.type_info.clone());
-
-            let mut checked_module = CheckedModule {
-                kind: module.kind,
-                extra: module.extra,
-                name: module.name,
-                code: module.code,
-                package: module.package,
-                input_path: module.path,
-                ast,
-            };
-
-            checked_module.attach_doc_and_module_comments();
-
-            checked_module
-        }
-    }
 
     fn assert_validator(source_code: &str, expected: serde_json::Value) {
         let mut project = TestProject::new();
@@ -400,8 +308,8 @@ mod test {
                   "$ref": "#/definitions/Data"
                 }
               },
-              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881",
-              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+              "compiledCode": "4f010000322253330034a22930b2b9a1",
+              "hash": "69eb6e27b7098c51cef74d8929553456e0ff6748c50a08c0daae7986",
               "definitions": {
                 "Data": {
                   "title": "Data",
@@ -438,8 +346,8 @@ mod test {
                   }
                 }
               ],
-              "compiledCode": "5840010000323232323232322322253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101",
-              "hash": "a82df717fd39f5b273c4eb89ae5252e11cc272ac59d815419bf2e4c3",
+              "compiledCode": "54010000322322253330054a22930b1bad00157341",
+              "hash": "0e31a2048fe4751926c4a1e5fd93c9c2ecc8035777884c15db157d11",
               "definitions": {
                 "Data": {
                   "title": "Data",
@@ -507,8 +415,8 @@ mod test {
                   "$ref": "#/definitions/test_module~1Input"
                 }
               },
-              "compiledCode": "583b0100003232323232323222253330064a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae89",
-              "hash": "e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
+              "compiledCode": "5902aa01000032323232323232323232323232322223232533300c4a22930b1980619299980619b87480000044c8c8c8c8c8c94ccc05cc0640084cc04cc94ccc04ccdc3a400000226464a66603460380042930a9980ba481334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375a6034002602200c2a6602a9212b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e7400163011005330133300c003232498dd7000a4c2a660289201334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375c602e002602e0046eb0c054004c054008c04c004c02801454cc0392412b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300a0040043300b32533300b3370e90000008a99980818048018a4c2a6601a92011d4578706563746564206e6f206669656c647320666f7220436f6e73747200161533300b3370e90010008a99980818048018a4c2a6601a92011d4578706563746564206e6f206669656c647320666f7220436f6e73747200161533300b3370e90020008a99980818048018a4c2a6601a92011d4578706563746564206e6f206669656c647320666f7220436f6e7374720016153300d4912b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e74001630090020023001001222533300d00214984cc024c004c038008ccc00c00cc03c008004cc0040052000222233330073370e00200601a4666600a00a66e000112002300f0010020022300737540024600a6ea80055cd2b9b5738aae7555cf2ab9f5742ae89",
+              "hash": "bef7fc82378088fbd29dda8c16b018424b5d73bfed7aaf591c7fbfc1",
               "definitions": {
                 "ByteArray": {
                   "dataType": "bytes"
@@ -619,8 +527,8 @@ mod test {
                   "$ref": "#/definitions/Tuple$Int_Int_Int"
                 }
               },
-              "compiledCode": "585301000032323232323232232232253330084a22930b1bac0013232337606012004601200260120026eb0004c0040048894ccc0180085261330053001300700233300300330080020015734ae6d55cfaba157441",
-              "hash": "500b9b576c11ad73dee3b9d5202496a7df78e8de4097c57f0acfcc3a",
+              "compiledCode": "58ab01000032323232323232222323253330064a22930b1919190019bae300a002375a6010002646466ec0c030008c030004c030004dd60021919191919192999807180800108030a99805a481334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375a601c002601c0046eb4c030004c030008dd698050009bac0025734ae7155ceaab9e5573eae855d101",
+              "hash": "f8258ac5409f8c0a921f99f4427e3f9362e0ed0146ff71914f80fc4e",
               "definitions": {
                 "ByteArray": {
                   "dataType": "bytes"
@@ -688,8 +596,8 @@ mod test {
                   "$ref": "#/definitions/test_module~1Either$ByteArray_test_module~1Interval$Int"
                 }
               },
-              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881",
-              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+              "compiledCode": "590213010000323232323232323232323232223253330084a22930b1980419299980419b87480000044c8c94ccc03cc044008526153300c491334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375c601e002600c0062a66601066e1d200200113232533300f301100213300b32533300b3370e9000000899192999809180a0010a4c2a6601e9201334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375a602400260120042a66601666e1d2002001153330103009002149854cc03524011d4578706563746564206e6f206669656c647320666f7220436f6e7374720016153300d4912b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300900149854cc031241334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016300f0013006003153300a4912b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300600200233001001480008888cccc01ccdc38008018069199980280299b8000448008c03c0040080088c01cdd5000918029baa0015734ae6d5ce2ab9d5573caae7d5d0aba201",
+              "hash": "bfca0d21daa5694b321ee99bb82a74976f998a691f0a08b1ac2bac7d",
               "definitions": {
                 "ByteArray": {
                   "dataType": "bytes"
@@ -772,8 +680,8 @@ mod test {
                   "$ref": "#/definitions/test_module~1Dict$test_module~1UUID_Int"
                 }
               },
-              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881",
-              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+              "compiledCode": "590119010000323232323232323232323232223253330084a22930b1980419299980419b87480000044c8c94ccc03cc0440084cc02ccc0180048c8c926375a60200046eb8c03800526153300c491334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e20657870656374656400163756601e00260186ea800c54cc0292412b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300a37540040046002002444a66601600429309980398009806001199801801980680100099800800a40004444666600a66e1c00400c02c8cccc014014cdc000224004601a002004004ae695cdab9c5573aaae7955cfaba15745",
+              "hash": "7404377d39dac5f1daa00e60bb22397d81944d036a2466e3d51c10ba",
               "definitions": {
                 "ByteArray": {
                   "dataType": "bytes"
@@ -835,8 +743,8 @@ mod test {
                   "$ref": "#/definitions/test_module~1Dict$test_module~1UUID_Int"
                 }
               },
-              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881",
-              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+              "compiledCode": "585d010000323232323232323232223253330064a22930b1919803998020009191924c6eb4c02c008dd718048008009bab0023001001222533300800214984cc014c004c024008ccc00c00cc0280080055cd2b9b5573aaae7955cfaba15745",
+              "hash": "0d852f5a9ad295b4067d434fcfede80a56661e687e07424fad11c281",
               "definitions": {
                 "ByteArray": {
                   "dataType": "bytes"
@@ -887,8 +795,8 @@ mod test {
                   "$ref": "#/definitions/Int"
                 }
               },
-              "compiledCode": "5840010000323232323232322232253330074a22930b1bad0013001001222533300600214984cc014c004c01c008ccc00c00cc0200080055cd2b9b5573eae855d101",
-              "hash": "a3dbab684d90d19e6bab3a0b00a7290ff59fe637d14428859bf74376",
+              "compiledCode": "58eb01000032323232323232323232222323253330084a22930b1980419299980419b87480000044c8c94ccc03cc044008526153300c4901334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016300f001300c375400a2a660149212b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300a3754008008640026eb4008cc0040052000222233330053370e0020060164666600a00a66e000112002300d0010020025734ae6d5ce2ab9d5573caae7d5d0aba201",
+              "hash": "383294aa3b7818236ac49ae310e6ef85a702a3ceddf8c256837fc883",
               "definitions": {
                 "Data": {
                   "title": "Data",
@@ -942,8 +850,8 @@ mod test {
                   "$ref": "#/definitions/test_module~1Expr"
                 }
               },
-              "compiledCode": "583b010000323232323232322253330054a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae881",
-              "hash": "afddc16c18e7d8de379fb9aad39b3d1b5afd27603e5ebac818432a72",
+              "compiledCode": "5901d601000032323232323232323232323232223253330094a22930b19804980180100118008009119299980399b87480000044c8c94ccc038c040008526153300b4901334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375a601c002600c0042a66600e66e1d20020011323232325333010301200213300c330070070033300c3300700700149854cc0352401334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e206578706563746564001630100013010002300e0013006002153330073370e900200089919191929998081809001099806198038038019980619803803800a4c2a6601a9201334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e206578706563746564001630100013010002300e001300600215330094912b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300937540026600200290001111199980319b8700100300c233330050053370000890011807000801001118031baa0015734ae6d5ce2ab9d5573caae7d5d0aba21",
+              "hash": "c312bfeaf481c336f851eaf80acb056c0a26175e558b094a60de4cb3",
               "definitions": {
                 "Int": {
                   "dataType": "integer"
@@ -1033,8 +941,8 @@ mod test {
                   "$ref": "#/definitions/test_module~1LinkedList$Int"
                 }
               },
-              "compiledCode": "583b0100003232323232323222253330064a22930b180080091129998030010a4c26600a6002600e0046660060066010004002ae695cdaab9f5742ae89",
-              "hash": "e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
+              "compiledCode": "590373010000323232323232323232323232323232323232222323253330104a22930b1980819299980819b87480000044c8c94ccc05cc0640084cc04cc0200052615330144901334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e20657870656374656400163017001300e005153330103370e9001000899191919299980c980d801099191980b9980700091980c1808800a4c931bac3019002375c602e0022a6602c9201334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e20657870656374656400163232337606036004603600260360026eb0c064004c064008dd6980b80098070028a9980924812b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300e0040043300f300800200230010012232533300c3370e9000000899191919299980a980b80109980899803803800a4c2a66024921334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016301500130150023370e900118081baa3013001300a0021533300c3370e90010008a99980898050010a4c2a6601c9211d4578706563746564206e6f206669656c647320666f7220436f6e7374720016153300e4912b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300a0013001001222533300f00214984cc02cc004c040008ccc00c00cc044008004c00400488c94ccc020cdc3a4000002264646464a666022602600426601a6600e00e002930a998072481334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e206578706563746564001630110013011002375a601e002600c0042a66601066e1d20020011533300d3006002149854cc02924011d4578706563746564206e6f206669656c647320666f7220436f6e7374720016153300a4912b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300600133001001480008888cccc01ccdc38008018069199980280299b8000448008c03c0040080088c01cdd5000918029baa0015734ae6d5ce2ab9d5573caae7d5d0aba21",
+              "hash": "39f12c7e94363986531f5661c912d91f99ecdd50955e1d6d049a1489",
               "definitions": {
                 "Bool": {
                   "title": "Bool",
@@ -1165,7 +1073,7 @@ mod test {
     fn validate_arguments_integer() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc::Data::integer(42.into()));
+        let term = Term::data(uplc_ast::Data::integer(42.into()));
 
         let param = Parameter {
             title: None,
@@ -1179,7 +1087,7 @@ mod test {
     fn validate_arguments_bytestring() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc::Data::bytestring(vec![102, 111, 111]));
+        let term = Term::data(uplc_ast::Data::bytestring(vec![102, 111, 111]));
 
         let param = Parameter {
             title: None,
@@ -1208,9 +1116,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::list(vec![
-            uplc::Data::integer(42.into()),
-            uplc::Data::integer(14.into()),
+        let term = Term::data(uplc_ast::Data::list(vec![
+            uplc_ast::Data::integer(42.into()),
+            uplc_ast::Data::integer(14.into()),
         ]));
 
         let param: Parameter = schema.into();
@@ -1237,9 +1145,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::list(vec![uplc::Data::bytestring(vec![
-            102, 111, 111,
-        ])]));
+        let term = Term::data(uplc_ast::Data::list(vec![uplc_ast::Data::bytestring(
+            vec![102, 111, 111],
+        )]));
 
         let param: Parameter = schema.into();
 
@@ -1269,9 +1177,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::list(vec![
-            uplc::Data::integer(42.into()),
-            uplc::Data::bytestring(vec![102, 111, 111]),
+        let term = Term::data(uplc_ast::Data::list(vec![
+            uplc_ast::Data::integer(42.into()),
+            uplc_ast::Data::bytestring(vec![102, 111, 111]),
         ]));
 
         let param: Parameter = schema.into();
@@ -1300,9 +1208,9 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::map(vec![(
-            uplc::Data::bytestring(vec![102, 111, 111]),
-            uplc::Data::integer(42.into()),
+        let term = Term::data(uplc_ast::Data::map(vec![(
+            uplc_ast::Data::bytestring(vec![102, 111, 111]),
+            uplc_ast::Data::integer(42.into()),
         )]));
 
         let param: Parameter = schema.into();
@@ -1316,7 +1224,7 @@ mod test {
 
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc::Data::constr(1, vec![]));
+        let term = Term::data(uplc_ast::Data::constr(1, vec![]));
 
         let param: Parameter = schema.into();
 
@@ -1351,7 +1259,10 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::constr(0, vec![uplc::Data::constr(0, vec![])]));
+        let term = Term::data(uplc_ast::Data::constr(
+            0,
+            vec![uplc_ast::Data::constr(0, vec![])],
+        ));
 
         let param: Parameter = schema.into();
 
@@ -1404,15 +1315,15 @@ mod test {
             .into(),
         );
 
-        let term = Term::data(uplc::Data::constr(
+        let term = Term::data(uplc_ast::Data::constr(
             1,
             vec![
-                uplc::Data::integer(14.into()),
-                uplc::Data::constr(
+                uplc_ast::Data::integer(14.into()),
+                uplc_ast::Data::constr(
                     1,
                     vec![
-                        uplc::Data::integer(42.into()),
-                        uplc::Data::constr(0, vec![]),
+                        uplc_ast::Data::integer(42.into()),
+                        uplc_ast::Data::constr(0, vec![]),
                     ],
                 ),
             ],

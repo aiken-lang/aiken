@@ -2,4 +2,9 @@
 members = ["crates/*"]
 
 [profile.release]
+# debug = true
 strip = true
+
+[workspace.metadata.release]
+shared-version = true
+tag-name = "v{{version}}"

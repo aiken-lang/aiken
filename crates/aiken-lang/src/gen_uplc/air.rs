@@ -213,7 +213,13 @@ pub enum Air {
         scope: Scope,
         tipo: Arc<Type>,
     },
-    Noop {
+    NoOp {
+        scope: Scope,
+    },
+    FieldsEmpty {
+        scope: Scope,
+    },
+    ListEmpty {
         scope: Scope,
     },
 }
@@ -253,13 +259,15 @@ impl Air {
             | Air::RecordUpdate { scope, .. }
             | Air::RecordAccess { scope, .. }
             | Air::FieldsExpose { scope, .. }
+            | Air::FieldsEmpty { scope }
+            | Air::ListEmpty { scope }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
             | Air::ErrorTerm { scope, .. }
             | Air::Trace { scope, .. }
-            | Air::Noop { scope } => scope.clone(),
+            | Air::NoOp { scope, .. } => scope.clone(),
         }
     }
     pub fn scope_mut(&mut self) -> &mut Scope {
@@ -296,13 +304,15 @@ impl Air {
             | Air::RecordUpdate { scope, .. }
             | Air::RecordAccess { scope, .. }
             | Air::FieldsExpose { scope, .. }
+            | Air::FieldsEmpty { scope }
+            | Air::ListEmpty { scope }
             | Air::ListAccessor { scope, .. }
             | Air::ListExpose { scope, .. }
             | Air::TupleAccessor { scope, .. }
             | Air::TupleIndex { scope, .. }
             | Air::ErrorTerm { scope, .. }
             | Air::Trace { scope, .. }
-            | Air::Noop { scope } => scope,
+            | Air::NoOp { scope, .. } => scope,
         }
     }
     pub fn tipo(&self) -> Option<Arc<Type>> {
@@ -392,7 +402,9 @@ impl Air {
             | Air::AssertBool { .. }
             | Air::Finally { .. }
             | Air::FieldsExpose { .. }
-            | Air::Noop { .. } => None,
+            | Air::FieldsEmpty { .. }
+            | Air::ListEmpty { .. }
+            | Air::NoOp { .. } => None,
             Air::UnOp { op, .. } => match op {
                 UnOp::Not => Some(
                     Type::App {
