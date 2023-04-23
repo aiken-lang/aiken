@@ -4402,7 +4402,7 @@ impl<'a> CodeGenerator<'a> {
                     let other_clauses = if complex_clause {
                         Term::var("__other_clauses_delayed")
                     } else {
-                        term.clone()
+                        term.clone().delay()
                     };
 
                     if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
@@ -4418,6 +4418,8 @@ impl<'a> CodeGenerator<'a> {
 
                     if complex_clause {
                         term = body.lambda("__other_clauses_delayed").apply(term.delay());
+                    } else {
+                        term = body;
                     }
                 } else {
                     let condition = if tipo.is_int() {
