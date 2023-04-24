@@ -5,15 +5,16 @@
 ### Added
 
 - **aiken-lang**: added optimization to help prevent unnecessary data wraps or unwraps
+- **aiken-lang**: optimization to strip unnecessary lambdas
+- **aiken-lang**: implement Clone for ParseError and tipo::Error for the playground
 - **aiken-project**: added end to end tests on conversion from aiken lang to uplc
 
 ### Fixed
 
-- **aiken-lang**: Add name of var to the unused var warning
-
-### Fixed
-
 - **aiken**: fixed 'new' instructions to properly show project name and folder
+- **aiken-lang**: Add name of var to the unused var warning
+- **aiken-lang**: fix expect on an empty list
+- **aiken-lang**: pattern match on boolean with simple clause bodies
 
 ## v1.0.2.alpha - 2023-04-17
 

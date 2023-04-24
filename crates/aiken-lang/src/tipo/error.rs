@@ -15,14 +15,14 @@ use owo_colors::{
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
-#[derive(Debug, thiserror::Error, Diagnostic)]
+#[derive(Debug, thiserror::Error, Diagnostic, Clone)]
 #[error("Something is possibly wrong here...")]
 pub struct Snippet {
     #[label]
     pub location: Span,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 #[error(
     "I don't know some of the labels used in this expression. I've highlighted them just below."
 )]
@@ -53,7 +53,7 @@ impl Diagnostic for UnknownLabels {
     }
 }
 
-#[derive(Debug, thiserror::Error, Diagnostic)]
+#[derive(Debug, thiserror::Error, Diagnostic, Clone)]
 pub enum Error {
     #[error("I discovered a type cast from Data without an annotation")]
     #[diagnostic(code("illegal::type_cast"))]

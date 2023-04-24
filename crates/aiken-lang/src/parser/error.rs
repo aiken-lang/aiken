@@ -4,7 +4,7 @@ use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::collections::HashSet;
 
-#[derive(Debug, Diagnostic, thiserror::Error)]
+#[derive(Debug, Clone, Diagnostic, thiserror::Error)]
 #[error("{kind}\n")]
 pub struct ParseError {
     pub kind: ErrorKind,
@@ -98,7 +98,7 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Diagnostic, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Diagnostic, thiserror::Error)]
 pub enum ErrorKind {
     #[error("I arrived at the end of the file unexpectedly.")]
     UnexpectedEnd,
@@ -155,7 +155,7 @@ pub enum ErrorKind {
     InvalidWhenClause,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
 pub enum Pattern {
     #[error("I found an unexpected char '{0:?}'.")]
     #[diagnostic(help("Try removing it!"))]
