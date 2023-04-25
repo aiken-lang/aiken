@@ -15,6 +15,7 @@
 - **aiken-lang**: Add name of var to the unused var warning
 - **aiken-lang**: fix expect on an empty list
 - **aiken-lang**: pattern match on boolean with simple clause bodies
+- **aiken-lang**: fix for inline_direct_reduce to be applied to pattern match function instead of argument
 
 ## v1.0.2.alpha - 2023-04-17
 
