@@ -179,7 +179,7 @@ fn inline_direct_reduce(term: &mut Term<Name>) {
             inline_direct_reduce(func);
             inline_direct_reduce(arg);
 
-            let Term::Lambda { parameter_name, body } = arg
+            let Term::Lambda { parameter_name, body } = func
             else{
                 return;
             };
