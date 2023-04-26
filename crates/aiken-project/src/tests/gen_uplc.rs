@@ -1060,3 +1060,72 @@ fn expect_empty_list_on_new_list() {
         false,
     );
 }
+
+#[test]
+fn when_bool_is_true() {
+    let src = r#"  
+      test it() {
+        when True is {
+          True ->
+            True
+          False ->
+            error
+        }
+      }    
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("subject")
+            .delayed_if_else(Term::bool(true), Term::Error)
+            .lambda("subject")
+            .apply(Term::bool(true)),
+        false,
+    );
+}
+
+#[test]
+fn when_bool_is_true_switched_cases() {
+    let src = r#"  
+      test it() {
+        when True is {
+          False ->
+            error
+          True ->
+            True
+        }
+      } 
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("subject")
+            .delayed_if_else(Term::bool(true), Term::Error)
+            .lambda("subject")
+            .apply(Term::bool(true)),
+        false,
+    );
+}
+
+#[test]
+fn when_bool_is_false() {
+    let src = r#"  
+      test it() {
+        when False is {
+          False ->
+            error
+          True ->
+            True
+        }
+      }  
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("subject")
+            .delayed_if_else(Term::bool(true), Term::Error)
+            .lambda("subject")
+            .apply(Term::bool(false)),
+        true,
+    );
+}
