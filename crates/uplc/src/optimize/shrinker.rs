@@ -272,12 +272,9 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
 
             let Term::Builtin(second_action) = inner_func.as_ref()
             else {
-                wrap_data_reduce(Rc::make_mut(inner_func));
-                wrap_data_reduce(Rc::make_mut(inner_arg));
+                wrap_data_reduce(Rc::make_mut(argument));
                 return;
             };
-
-            wrap_data_reduce(Rc::make_mut(inner_arg));
 
             match (first_action, second_action) {
                 (DefaultFunction::UnIData, DefaultFunction::IData)
@@ -290,9 +287,12 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
                 | (DefaultFunction::UnMapData, DefaultFunction::MapData)
                 | (DefaultFunction::UnConstrData, DefaultFunction::ConstrData)
                 | (DefaultFunction::ConstrData, DefaultFunction::UnConstrData) => {
+                    wrap_data_reduce(Rc::make_mut(inner_arg));
                     *term = inner_arg.as_ref().clone();
                 }
-                _ => {}
+                _ => {
+                    wrap_data_reduce(Rc::make_mut(argument));
+                }
             }
         }
         Term::Force(f) => {
@@ -405,5 +405,176 @@ fn substitute_term(term: &Term<Name>, original: Rc<Name>, replace_with: &Term<Na
         },
         Term::Force(x) => Term::Force(Rc::new(substitute_term(x.as_ref(), original, replace_with))),
         x => x.clone(),
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use pallas_primitives::babbage::{BigInt, PlutusData};
+
+    use crate::ast::{Constant, Name, NamedDeBruijn, Program, Term};
+
+    #[test]
+    fn lambda_reduce_var() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::var("bar")
+                .lambda("bar")
+                .apply(Term::var("foo"))
+                .lambda("foo")
+                .apply(
+                    Term::constr_data()
+                        .apply(Term::integer(3.into()))
+                        .apply(Term::list_values(vec![])),
+                ),
+        }
+        .try_into()
+        .unwrap();
+
+        let program: Program<Name> = program.try_into().unwrap();
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::var("foo").lambda("foo").apply(
+                Term::constr_data()
+                    .apply(Term::integer(3.into()))
+                    .apply(Term::list_values(vec![])),
+            ),
+        };
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+        let actual = program.lambda_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn lambda_reduce_constant() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::var("foo")
+                .lambda("foo")
+                .apply(Term::integer(6.into())),
+        }
+        .try_into()
+        .unwrap();
+
+        let program: Program<Name> = program.try_into().unwrap();
+
+        let expected: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::integer(6.into()),
+        };
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+        let actual = program.lambda_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn lambda_reduce_builtin() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::var("foo").lambda("foo").apply(Term::add_integer()),
+        }
+        .try_into()
+        .unwrap();
+
+        let program: Program<Name> = program.try_into().unwrap();
+
+        let expected: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::add_integer(),
+        };
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+        let actual = program.lambda_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn lambda_reduce_force_delay_error_lam() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::var("foo")
+                .apply(Term::var("bar"))
+                .apply(Term::var("baz"))
+                .apply(Term::var("bat"))
+                .lambda("foo")
+                .apply(Term::snd_pair())
+                .lambda("bar")
+                .apply(Term::integer(1.into()).delay())
+                .lambda("baz")
+                .apply(Term::Error)
+                .lambda("bat")
+                .apply(Term::bool(false).lambda("x")),
+        }
+        .try_into()
+        .unwrap();
+
+        let program: Program<Name> = program.try_into().unwrap();
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::var("foo")
+                .apply(Term::var("bar"))
+                .apply(Term::var("baz"))
+                .apply(Term::var("bat"))
+                .lambda("foo")
+                .apply(Term::snd_pair())
+                .lambda("bar")
+                .apply(Term::integer(1.into()).delay())
+                .lambda("baz")
+                .apply(Term::Error)
+                .lambda("bat")
+                .apply(Term::bool(false).lambda("x")),
+        };
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+        let actual = program.lambda_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn wrap_data_reduce_i_data() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::equals_data()
+                .apply(Term::i_data().apply(Term::un_i_data().apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                ))))
+                .apply(Term::i_data().apply(Term::integer(1.into())))
+                .lambda("x"),
+        }
+        .try_into()
+        .unwrap();
+
+        let program: Program<Name> = program.try_into().unwrap();
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::equals_data()
+                .apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                ))
+                .apply(Term::i_data().apply(Term::integer(1.into())))
+                .lambda("x"),
+        };
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+        let actual = program.wrap_data_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
     }
 }
