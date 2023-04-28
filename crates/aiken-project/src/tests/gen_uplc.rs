@@ -71,7 +71,6 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             };
 
             let expected = optimize::aiken_optimize_and_intern(expected);
-            println!("EXP {}", expected.to_pretty());
 
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
@@ -101,8 +100,6 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             };
 
             let expected = optimize::aiken_optimize_and_intern(expected);
-
-            println!("EXP {}", expected.to_pretty());
 
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 

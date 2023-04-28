@@ -2506,7 +2506,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     for (_index, name, tipo) in arg_indices.clone() {
-                        let mut call_stack = expect_stack.empty_with_scope();
+                        let mut call_stack = arg_stack.empty_with_scope();
 
                         self.expect_type(&tipo, &mut call_stack, &name, defined_data_types);
 
@@ -3240,10 +3240,20 @@ impl<'a> CodeGenerator<'a> {
                     variant_name: "".to_string(),
                 };
 
+                let function_stack = AirStack {
+                    id_gen: self.id_gen.clone(),
+                    scope: scope.clone(),
+                    air: func_ir,
+                };
+
+                let mut new_stack = AirStack::with_scope(self.id_gen.clone(), scope.clone());
+
+                new_stack.merge_child(function_stack);
+
                 func_components.insert(
                     function_key.clone(),
                     FuncComponents {
-                        ir: func_ir,
+                        ir: new_stack.complete(),
                         dependencies: dependencies
                             .into_iter()
                             .map(|item| FunctionAccessKey {
