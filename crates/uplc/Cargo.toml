@@ -1,7 +1,7 @@
 [package]
 name = "uplc"
 description = "Utilities for working with Untyped Plutus Core"
-version = "1.0.2-alpha"
+version = "1.0.3-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken/crates/uplc"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -36,7 +36,7 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 thiserror = "1.0.39"
 
-flat-rs = { path = "../flat-rs", version = "1.0.2-alpha" }
+flat-rs = { path = "../flat-rs", version = "1.0.3-alpha" }
 
 [dev-dependencies]
 hex = "0.4.3"
