@@ -63,6 +63,18 @@ impl<T> Term<T> {
         )
     }
 
+    pub fn map_values(vals: Vec<Constant>) -> Self {
+        Term::Constant(
+            Constant::ProtoList(Type::Pair(Type::Data.into(), Type::Data.into()), vals).into(),
+        )
+    }
+
+    pub fn pair_values(fst_val: Constant, snd_val: Constant) -> Self {
+        Term::Constant(
+            Constant::ProtoPair(Type::Data, Type::Data, fst_val.into(), snd_val.into()).into(),
+        )
+    }
+
     pub fn constr_data() -> Self {
         Term::Builtin(DefaultFunction::ConstrData)
     }
@@ -133,6 +145,14 @@ impl<T> Term<T> {
 
     pub fn sub_integer() -> Self {
         Term::Builtin(DefaultFunction::SubtractInteger)
+    }
+
+    pub fn div_integer() -> Self {
+        Term::Builtin(DefaultFunction::DivideInteger)
+    }
+
+    pub fn mod_integer() -> Self {
+        Term::Builtin(DefaultFunction::ModInteger)
     }
 
     pub fn length_of_bytearray() -> Self {

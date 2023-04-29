@@ -577,4 +577,38 @@ mod test {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn wrap_data_reduce_un_i_data() {
+        let program: Program<NamedDeBruijn> = Program {
+            version: (1, 0, 0),
+            term: Term::equals_integer()
+                .apply(Term::un_i_data().apply(Term::i_data().apply(Term::integer(1.into()))))
+                .apply(Term::un_i_data().apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                )))
+                .lambda("x"),
+        }
+        .try_into()
+        .unwrap();
+
+        let program: Program<Name> = program.try_into().unwrap();
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::equals_integer()
+                .apply(Term::integer(1.into()))
+                .apply(Term::un_i_data().apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                )))
+                .lambda("x"),
+        };
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+        let actual = program.wrap_data_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
 }

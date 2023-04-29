@@ -1,15 +1,26 @@
+use std::sync::Arc;
+
 use pretty_assertions::assert_eq;
 
-use aiken_lang::ast::{Definition, Function};
+use aiken_lang::{
+    ast::{Definition, Function, Validator},
+    expr::TypedExpr,
+    tipo::Type as AikenType,
+};
 use uplc::{
-    ast::{Constant, DeBruijn, Name, Program, Term, Type},
+    ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     machine::cost_model::ExBudget,
-    optimize, BigInt, Constr, PlutusData,
+    optimize,
 };
 
 use crate::module::CheckedModules;
 
 use super::TestProject;
+
+enum TestType {
+    Func(Function<Arc<AikenType>, TypedExpr>),
+    Validator(Validator<Arc<AikenType>, TypedExpr>),
+}
 
 fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
     let mut project = TestProject::new();
@@ -33,7 +44,13 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             scripts.push((
                 checked_module.input_path.clone(),
                 checked_module.name.clone(),
-                func,
+                TestType::Func(func.clone()),
+            ));
+        } else if let Definition::Validator(func) = def {
+            scripts.push((
+                checked_module.input_path.clone(),
+                checked_module.name.clone(),
+                TestType::Validator(func.clone()),
             ));
         }
     }
@@ -42,31 +59,53 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     let script = &scripts[0];
 
-    let Function { body, .. } = script.2;
+    match &script.2 {
+        TestType::Func(Function { body: func, .. }) => {
+            let program = generator.generate_test(func);
 
-    let program = generator.generate_test(body);
+            let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
-    let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+            let expected = Program {
+                version: (1, 0, 0),
+                term: expected,
+            };
 
-    let expected = Program {
-        version: (1, 0, 0),
-        term: expected,
-    };
+            let expected = optimize::aiken_optimize_and_intern(expected);
 
-    let expected = optimize::aiken_optimize_and_intern(expected);
+            let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
-    let expected: Program<DeBruijn> = expected.try_into().unwrap();
+            assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
 
-    assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
+            let mut eval = debruijn_program.eval(ExBudget::default());
 
-    let mut eval = debruijn_program.eval(ExBudget::default());
+            assert_eq!(
+                eval.failed(),
+                should_fail,
+                "logs - {}\n",
+                format!("{:#?}", eval.logs())
+            );
 
-    assert_eq!(
-        eval.failed(),
-        should_fail,
-        "logs - {}\n",
-        format!("{:#?}", eval.logs())
-    )
+            if !should_fail {
+                assert_eq!(eval.result().unwrap(), Term::bool(true));
+            }
+        }
+        TestType::Validator(func) => {
+            let program = generator.generate(func);
+
+            let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+
+            let expected = Program {
+                version: (1, 0, 0),
+                term: expected,
+            };
+
+            let expected = optimize::aiken_optimize_and_intern(expected);
+
+            let expected: Program<DeBruijn> = expected.try_into().unwrap();
+
+            assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
+        }
+    }
 }
 
 #[test]
@@ -112,9 +151,9 @@ fn acceptance_test_1_length() {
                             .lambda("length"),
                     )
                     .apply(Term::list_values(vec![
-                        Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                        Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
-                        Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
                     ])),
             )
             .apply(Term::integer(3.into())),
@@ -175,8 +214,8 @@ fn acceptance_test_2_repeat() {
                 ),
             )
             .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
-                Constant::Data(PlutusData::BoundedBytes("aiken".as_bytes().to_vec().into())),
+                Constant::Data(Data::bytestring("aiken".as_bytes().to_vec())),
+                Constant::Data(Data::bytestring("aiken".as_bytes().to_vec())),
             ]))),
         false,
     );
@@ -254,24 +293,24 @@ fn acceptance_test_3_concat() {
                                 .lambda("foldr"),
                         )
                         .apply(Term::list_values(vec![
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
                         ]))
                         .apply(Term::list_values(vec![
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
+                            Constant::Data(Data::integer(4.into())),
+                            Constant::Data(Data::integer(5.into())),
+                            Constant::Data(Data::integer(6.into())),
                         ])),
                 ),
             )
             .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+                Constant::Data(Data::integer(4.into())),
+                Constant::Data(Data::integer(5.into())),
+                Constant::Data(Data::integer(6.into())),
             ]))),
         false,
     );
@@ -355,24 +394,24 @@ fn acceptance_test_4_concat_no_anon_func() {
                                 .lambda("foldr"),
                         )
                         .apply(Term::list_values(vec![
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
                         ]))
                         .apply(Term::list_values(vec![
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
+                            Constant::Data(Data::integer(4.into())),
+                            Constant::Data(Data::integer(5.into())),
+                            Constant::Data(Data::integer(6.into())),
                         ])),
                 ),
             )
             .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(6.into()))),
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+                Constant::Data(Data::integer(4.into())),
+                Constant::Data(Data::integer(5.into())),
+                Constant::Data(Data::integer(6.into())),
             ]))),
         false,
     );
@@ -404,14 +443,7 @@ fn acceptance_test_5_head_not_empty() {
                     .apply(
                         Term::var("xs")
                             .delayed_choose_list(
-                                Term::Constant(
-                                    Constant::Data(PlutusData::Constr(Constr {
-                                        tag: 122,
-                                        any_constructor: None,
-                                        fields: vec![],
-                                    }))
-                                    .into(),
-                                ),
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data().apply(Term::integer(0.into())).apply(
                                     Term::mk_cons()
                                         .apply(Term::head_list().apply(Term::var("xs")))
@@ -421,18 +453,13 @@ fn acceptance_test_5_head_not_empty() {
                             .lambda("xs"),
                     )
                     .apply(Term::list_values(vec![
-                        Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                        Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
-                        Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))),
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
                     ])),
             )
             .apply(Term::Constant(
-                Constant::Data(PlutusData::Constr(Constr {
-                    tag: 121,
-                    any_constructor: None,
-                    fields: vec![PlutusData::BigInt(BigInt::Int(1.into()))],
-                }))
-                .into(),
+                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
             )),
         false,
     );
@@ -464,14 +491,7 @@ fn acceptance_test_5_head_empty() {
                     .apply(
                         Term::var("xs")
                             .delayed_choose_list(
-                                Term::Constant(
-                                    Constant::Data(PlutusData::Constr(Constr {
-                                        tag: 122,
-                                        any_constructor: None,
-                                        fields: vec![],
-                                    }))
-                                    .into(),
-                                ),
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data().apply(Term::integer(0.into())).apply(
                                     Term::mk_cons()
                                         .apply(Term::head_list().apply(Term::var("xs")))
@@ -483,12 +503,7 @@ fn acceptance_test_5_head_empty() {
                     .apply(Term::list_values(vec![])),
             )
             .apply(Term::Constant(
-                Constant::Data(PlutusData::Constr(Constr {
-                    tag: 122,
-                    any_constructor: None,
-                    fields: vec![],
-                }))
-                .into(),
+                Constant::Data(Data::constr(1, vec![])).into(),
             )),
         false,
     );
@@ -535,8 +550,8 @@ fn acceptance_test_6_equals() {
                             Constant::ProtoPair(
                                 Type::Data,
                                 Type::Data,
-                                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))).into(),
-                                Constant::Data(PlutusData::Array(vec![])).into(),
+                                Constant::Data(Data::integer(1.into())).into(),
+                                Constant::Data(Data::list(vec![])).into(),
                             )
                             .into(),
                         ))
@@ -550,8 +565,8 @@ fn acceptance_test_6_equals() {
                             Constant::ProtoPair(
                                 Type::Data,
                                 Type::Data,
-                                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))).into(),
-                                Constant::Data(PlutusData::Array(vec![])).into(),
+                                Constant::Data(Data::integer(1.into())).into(),
+                                Constant::Data(Data::list(vec![])).into(),
                             )
                             .into(),
                         ))
@@ -596,16 +611,9 @@ fn acceptance_test_7_unzip() {
                                 .apply(
                                     Term::var("xs")
                                         .delayed_choose_list(
-                                            Term::Constant(
-                                                Constant::ProtoPair(
-                                                    Type::Data,
-                                                    Type::Data,
-                                                    Constant::Data(PlutusData::Array(vec![]))
-                                                        .into(),
-                                                    Constant::Data(PlutusData::Array(vec![]))
-                                                        .into(),
-                                                )
-                                                .into(),
+                                            Term::pair_values(
+                                                Constant::Data(Data::list(vec![])),
+                                                Constant::Data(Data::list(vec![])),
                                             ),
                                             Term::mk_pair_data()
                                                 .apply(
@@ -666,47 +674,34 @@ fn acceptance_test_7_unzip() {
             .apply(
                 Term::map_data().apply(
                     Term::mk_cons()
-                        .apply(Term::Constant(
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(PlutusData::Array(vec![
-                                    PlutusData::BigInt(BigInt::Int(3.into())),
-                                    PlutusData::BigInt(BigInt::Int(4.into())),
-                                ]))
-                                .into(),
-                                Constant::Data(PlutusData::Array(vec![
-                                    PlutusData::BoundedBytes(vec![85].into()),
-                                    PlutusData::BoundedBytes(vec![119, 153].into()),
-                                ]))
-                                .into(),
-                            )
-                            .into(),
+                        .apply(Term::pair_values(
+                            Constant::Data(Data::list(vec![
+                                Data::integer(3.into()),
+                                Data::integer(4.into()),
+                            ])),
+                            Constant::Data(Data::list(vec![
+                                Data::bytestring(vec![85]),
+                                Data::bytestring(vec![119, 153]),
+                            ])),
                         ))
                         .apply(Term::empty_map()),
                 ),
             )
             .lambda("x")
-            .apply(Term::Constant(
-                Constant::ProtoList(
-                    Type::Pair(Type::Data.into(), Type::Data.into()),
-                    vec![
-                        Constant::ProtoPair(
-                            Type::Data,
-                            Type::Data,
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(3.into()))).into(),
-                            Constant::Data(PlutusData::BoundedBytes(vec![85].into())).into(),
-                        ),
-                        Constant::ProtoPair(
-                            Type::Data,
-                            Type::Data,
-                            Constant::Data(PlutusData::BigInt(BigInt::Int(4.into()))).into(),
-                            Constant::Data(PlutusData::BoundedBytes(vec![119, 153].into())).into(),
-                        ),
-                    ],
-                )
-                .into(),
-            )),
+            .apply(Term::map_values(vec![
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::integer(3.into())).into(),
+                    Constant::Data(Data::bytestring(vec![85])).into(),
+                ),
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::integer(4.into())).into(),
+                    Constant::Data(Data::bytestring(vec![119, 153])).into(),
+                ),
+            ])),
         false,
     );
 }
@@ -842,14 +837,7 @@ fn acceptance_test_10_map_none() {
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("constr_index"))
                             .delayed_if_else(
-                                Term::Constant(
-                                    Constant::Data(PlutusData::Constr(Constr {
-                                        tag: 122,
-                                        any_constructor: None,
-                                        fields: vec![],
-                                    }))
-                                    .into(),
-                                ),
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
                                     .apply(
@@ -881,12 +869,7 @@ fn acceptance_test_10_map_none() {
                             .lambda("opt"),
                     )
                     .apply(Term::Constant(
-                        Constant::Data(PlutusData::Constr(Constr {
-                            tag: 122,
-                            any_constructor: None,
-                            fields: vec![],
-                        }))
-                        .into(),
+                        Constant::Data(Data::constr(1, vec![])).into(),
                     ))
                     .apply(
                         Term::var("add_one").lambda("add_one").apply(
@@ -898,12 +881,7 @@ fn acceptance_test_10_map_none() {
                     ),
             )
             .apply(Term::Constant(
-                Constant::Data(PlutusData::Constr(Constr {
-                    tag: 122,
-                    any_constructor: None,
-                    fields: vec![],
-                }))
-                .into(),
+                Constant::Data(Data::constr(1, vec![])).into(),
             ))
             .constr_get_field(),
         false,
@@ -942,14 +920,7 @@ fn acceptance_test_10_map_some() {
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("constr_index"))
                             .delayed_if_else(
-                                Term::Constant(
-                                    Constant::Data(PlutusData::Constr(Constr {
-                                        tag: 122,
-                                        any_constructor: None,
-                                        fields: vec![],
-                                    }))
-                                    .into(),
-                                ),
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
                                     .apply(
@@ -981,12 +952,7 @@ fn acceptance_test_10_map_some() {
                             .lambda("opt"),
                     )
                     .apply(Term::Constant(
-                        Constant::Data(PlutusData::Constr(Constr {
-                            tag: 121,
-                            any_constructor: None,
-                            fields: vec![PlutusData::BigInt(BigInt::Int(1.into()))],
-                        }))
-                        .into(),
+                        Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
                     ))
                     .apply(
                         Term::var("add_one").lambda("add_one").apply(
@@ -998,12 +964,7 @@ fn acceptance_test_10_map_some() {
                     ),
             )
             .apply(Term::Constant(
-                Constant::Data(PlutusData::Constr(Constr {
-                    tag: 121,
-                    any_constructor: None,
-                    fields: vec![PlutusData::BigInt(BigInt::Int(2.into()))],
-                }))
-                .into(),
+                Constant::Data(Data::constr(0, vec![Data::integer(2.into())])).into(),
             ))
             .constr_get_field(),
         false,
@@ -1030,8 +991,8 @@ fn expect_empty_list_on_filled_list() {
             )
             .lambda("x")
             .apply(Term::list_values(vec![
-                Constant::Data(PlutusData::BigInt(BigInt::Int(1.into()))),
-                Constant::Data(PlutusData::BigInt(BigInt::Int(2.into()))),
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
             ])),
         true,
     );
@@ -1129,3 +1090,510 @@ fn when_bool_is_false() {
         true,
     );
 }
+
+#[test]
+fn acceptance_test_11_map_empty() {
+    let src = r#"
+      pub fn map(xs: List<a>, f: fn(a) -> result) -> List<result> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            [f(x), ..map(rest, f)]
+        }
+      }
+      
+      test map_1() {
+        map([], fn(n) { n + 1 }) == []
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("map")
+                        .lambda("map")
+                        .apply(Term::var("map").apply(Term::var("map")))
+                        .lambda("map")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::i_data()
+                                                .apply(Term::var("f").apply(Term::var("x"))),
+                                        )
+                                        .apply(
+                                            Term::var("map")
+                                                .apply(Term::var("map"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("map"),
+                        )
+                        .apply(Term::empty_list())
+                        .apply(
+                            Term::add_integer()
+                                .apply(Term::var("n"))
+                                .apply(Term::integer(1.into()))
+                                .lambda("n"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::empty_list())),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_11_map_filled() {
+    let src = r#"
+      pub fn map(xs: List<a>, f: fn(a) -> result) -> List<result> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            [f(x), ..map(rest, f)]
+        }
+      }
+      
+      test map_1() {
+        map([6, 7, 8], fn(n) { n + 1 }) == [7, 8, 9]
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("map")
+                        .lambda("map")
+                        .apply(Term::var("map").apply(Term::var("map")))
+                        .lambda("map")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::i_data()
+                                                .apply(Term::var("f").apply(Term::var("x"))),
+                                        )
+                                        .apply(
+                                            Term::var("map")
+                                                .apply(Term::var("map"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("map"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::integer(6.into())),
+                            Constant::Data(Data::integer(7.into())),
+                            Constant::Data(Data::integer(8.into())),
+                        ]))
+                        .apply(
+                            Term::add_integer()
+                                .apply(Term::var("n"))
+                                .apply(Term::integer(1.into()))
+                                .lambda("n"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(7.into())),
+                Constant::Data(Data::integer(8.into())),
+                Constant::Data(Data::integer(9.into())),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_12_filter_even() {
+    let src = r#"
+      use aiken/builtin
+
+      pub fn filter(xs: List<a>, f: fn(a) -> Bool) -> List<a> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            if f(x) {
+              [x, ..filter(rest, f)]
+            } else {
+              filter(rest, f)
+            }
+        }
+      }
+    
+      test filter_1() {
+        filter([1, 2, 3, 4, 5, 6], fn(x) { builtin.mod_integer(x, 2) == 0 }) == [2, 4, 6]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("filter")
+                        .lambda("filter")
+                        .apply(Term::var("filter").apply(Term::var("filter")))
+                        .lambda("filter")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::var("f")
+                                        .apply(Term::var("x"))
+                                        .delayed_if_else(
+                                            Term::mk_cons()
+                                                .apply(Term::i_data().apply(Term::var("x")))
+                                                .apply(
+                                                    Term::var("filter")
+                                                        .apply(Term::var("filter"))
+                                                        .apply(Term::var("rest"))
+                                                        .apply(Term::var("f")),
+                                                ),
+                                            Term::var("filter")
+                                                .apply(Term::var("filter"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("filter"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
+                            Constant::Data(Data::integer(4.into())),
+                            Constant::Data(Data::integer(5.into())),
+                            Constant::Data(Data::integer(6.into())),
+                        ]))
+                        .apply(
+                            Term::equals_integer()
+                                .apply(
+                                    Term::mod_integer()
+                                        .apply(Term::var("x"))
+                                        .apply(Term::integer(2.into())),
+                                )
+                                .apply(Term::integer(0.into()))
+                                .lambda("x"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(4.into())),
+                Constant::Data(Data::integer(6.into())),
+            ]))),
+        false,
+    );
+}
+
+// #[test]
+// fn acceptance_test_14_list_creation() {
+//     let src = r#"
+//       test foo() {
+//         [0 - 2, 0 - 1, 0] == [-2, -1, 0]
+//       }
+//     "#;
+
+//     assert_uplc(
+//         src,
+//         Term::equals_data()
+//             .apply(
+//                 Term::list_data().apply(
+//                     Term::mk_cons()
+//                         .apply(
+//                             Term::i_data().apply(
+//                                 Term::sub_integer()
+//                                     .apply(Term::integer(0.into()))
+//                                     .apply(Term::integer(2.into())),
+//                             ),
+//                         )
+//                         .apply(
+//                             Term::mk_cons().apply(
+//                                 Term::i_data().apply(
+//                                     Term::sub_integer()
+//                                         .apply(Term::integer(0.into()))
+//                                         .apply(Term::integer(1.into())),
+//                                 ),
+//                             ),
+//                         )
+//                         .apply(
+//                             Term::mk_cons()
+//                                 .apply(Term::i_data().apply(Term::integer(0.into())))
+//                                 .apply(Term::empty_list()),
+//                         ),
+//                 ),
+//             )
+//             .apply(Term::list_data().apply(Term::list_values(vec![
+//                 Constant::Data(Data::integer((-2).into())),
+//                 Constant::Data(Data::integer((-1).into())),
+//                 Constant::Data(Data::integer(0.into())),
+//             ]))),
+//         false,
+//     );
+// }
+
+// #[test]
+// fn when_tuple_deconstruction() {
+//     let src = r#"
+//       type Thing {
+//         idx: Int,
+//       }
+
+//       type Datum {
+//         A(Thing)
+//         B
+//       }
+
+//       type RedSpend {
+//         Spend(Int)
+//         Buy
+//       }
+
+//       validator {
+//         fn spend(dat: Datum, red: RedSpend, ctx: Data) {
+//           when (dat, red) is {
+//             (A(a), Spend(x)) ->
+//               (a.idx == x)?
+//             (_, _) ->
+//               True
+//           }
+//         }
+//       }
+//     "#;
+
+//     assert_uplc(
+//         src,
+//         Term::equals_integer()
+//             .apply(Term::integer(0.into()))
+//             .apply(Term::var("constr_index_exposer").apply(Term::var("dat")))
+//             .if_else(
+//                 Term::equals_integer()
+//                     .apply(Term::integer(0.into()))
+//                     .apply(Term::var("constr_index_exposer").apply(Term::var("red")))
+//                     .if_else(
+//                         Term::equals_integer()
+//                             .apply(
+//                                 Term::un_i_data().apply(
+//                                     Term::var("constr_get_field")
+//                                         .apply(
+//                                             Term::var("constr_fields_exposer")
+//                                                 .apply(Term::var("a")),
+//                                         )
+//                                         .apply(Term::integer(0.into())),
+//                                 ),
+//                             )
+//                             .apply(Term::var("x"))
+//                             .lambda("x")
+//                             .apply(
+//                                 Term::un_i_data()
+//                                     .apply(Term::head_list().apply(Term::var("red_constr_fields"))),
+//                             )
+//                             .lambda("red_constr_fields")
+//                             .apply(Term::var("constr_fields_exposer").apply(Term::var("red")))
+//                             .delay(),
+//                         Term::var("other_clauses"),
+//                     )
+//                     .force()
+//                     .lambda("a")
+//                     .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
+//                     .lambda("dat_constr_fields")
+//                     .apply(Term::var("constr_fields_exposer").apply(Term::var("dat")))
+//                     .delay(),
+//                 Term::var("other_clauses"),
+//             )
+//             .force()
+//             .lambda("other_clauses")
+//             .apply(Term::bool(true).delay())
+//             .lambda("dat")
+//             .apply(Term::fst_pair().apply(Term::var("pair_subject")))
+//             .lambda("red")
+//             .apply(Term::snd_pair().apply(Term::var("pair_subject")))
+//             .lambda("pair_subject")
+//             .apply(
+//                 Term::mk_pair_data()
+//                     .apply(Term::var("dat"))
+//                     .apply(Term::var("red")),
+//             )
+//             .delayed_if_else(Term::unit(), Term::Error)
+//             .lambda("dat")
+//             .apply(
+//                 Term::var("expect_Datum")
+//                     .lambda("expect_Datum")
+//                     .apply(
+//                         Term::equals_integer()
+//                             .apply(Term::integer(0.into()))
+//                             .apply(Term::var("constr_index_exposer").apply(Term::var("dat")))
+//                             .delayed_if_else(
+//                                 Term::tail_list()
+//                                     .apply(Term::var("dat_constr_fields"))
+//                                     .delayed_choose_list(
+//                                         Term::var("expect_Thing")
+//                                             .apply(Term::var("field_1"))
+//                                             .choose_unit(Term::unit())
+//                                             .lambda("field_1")
+//                                             .apply(
+//                                                 Term::head_list()
+//                                                     .apply(Term::var("dat_constr_fields")),
+//                                             ),
+//                                         Term::Error.trace(Term::string("Expected...")),
+//                                     )
+//                                     .lambda("dat_constr_fields")
+//                                     .apply(
+//                                         Term::var("constr_fields_exposer").apply(Term::var("dat")),
+//                                     ),
+//                                 Term::equals_integer()
+//                                     .apply(Term::integer(1.into()))
+//                                     .apply(
+//                                         Term::var("constr_index_exposer").apply(Term::var("dat")),
+//                                     )
+//                                     .delayed_if_else(
+//                                         Term::unit().lambda("_").apply(
+//                                             Term::var("constr_fields_exposer")
+//                                                 .apply(Term::var("dat"))
+//                                                 .delayed_choose_list(
+//                                                     Term::unit(),
+//                                                     Term::Error
+//                                                         .trace(Term::string("Expected......")),
+//                                                 ),
+//                                         ),
+//                                         Term::Error.trace(Term::string("Expected...")),
+//                                     ),
+//                             )
+//                             .lambda("dat"),
+//                     )
+//                     .lambda("expect_Thing")
+//                     .apply(
+//                         Term::equals_integer()
+//                             .apply(Term::integer(0.into()))
+//                             .apply(Term::var("constr_index_exposer").apply(Term::var("field_1")))
+//                             .delayed_if_else(
+//                                 Term::tail_list()
+//                                     .apply(Term::var("field_1_constr_fields"))
+//                                     .delayed_choose_list(
+//                                         Term::unit().lambda("_").apply(
+//                                             Term::un_i_data().apply(
+//                                                 Term::head_list()
+//                                                     .apply(Term::var("field_1_constr_fields")),
+//                                             ),
+//                                         ),
+//                                         Term::Error.trace(Term::string("Expected...")),
+//                                     )
+//                                     .lambda("field_1_constr_fields")
+//                                     .apply(
+//                                         Term::var("constr_fields_exposer")
+//                                             .apply(Term::var("field_1")),
+//                                     ),
+//                                 Term::Error.trace(Term::string("Expected...")),
+//                             )
+//                             .lambda("field_1"),
+//                     )
+//                     .apply(Term::var("dat"))
+//                     .choose_unit(Term::var("dat")),
+//             )
+//             .lambda("red")
+//             .apply(
+//                 Term::var("expect_RedSpend")
+//                     .lambda("expect_RedSpend")
+//                     .apply(
+//                         Term::equals_integer()
+//                             .apply(Term::integer(0.into()))
+//                             .apply(Term::var("constr_index_exposer").apply(Term::var("red")))
+//                             .delayed_if_else(
+//                                 Term::tail_list()
+//                                     .apply(Term::var("red_constr_fields"))
+//                                     .delayed_choose_list(
+//                                         Term::unit().lambda("_").apply(Term::un_i_data().apply(
+//                                             Term::head_list().apply(Term::var("red_constr_fields")),
+//                                         )),
+//                                         Term::Error.trace(Term::string("Too many items")),
+//                                     )
+//                                     .lambda("red_constr_fields")
+//                                     .apply(
+//                                         Term::var("constr_fields_exposer").apply(Term::var("red")),
+//                                     ),
+//                                 Term::equals_integer()
+//                                     .apply(Term::integer(1.into()))
+//                                     .apply(
+//                                         Term::var("constr_index_exposer").apply(Term::var("red")),
+//                                     )
+//                                     .delayed_if_else(
+//                                         Term::var("constr_fields_exposer")
+//                                             .apply(Term::var("red"))
+//                                             .delayed_choose_list(
+//                                                 Term::unit(),
+//                                                 Term::Error.trace(Term::string("Expected......")),
+//                                             ),
+//                                         Term::Error.trace(Term::string("Expected...")),
+//                                     ),
+//                             )
+//                             .lambda("red"),
+//                     )
+//                     .apply(Term::var("red"))
+//                     .choose_unit(Term::var("red")),
+//             )
+//             .lambda("ctx")
+//             .lambda("red")
+//             .lambda("dat")
+//             .lambda("constr_get_field")
+//             .apply(
+//                 Term::var("constr_get_field")
+//                     .apply(Term::var("constr_get_field"))
+//                     .apply(Term::integer(0.into())),
+//             )
+//             .lambda("constr_get_field")
+//             .apply(Term::bool(false).lambda("x"))
+//             .lambda("constr_fields_exposer")
+//             .apply(
+//                 Term::snd_pair()
+//                     .apply(Term::unconstr_data().apply(Term::var("x")))
+//                     .lambda("x"),
+//             )
+//             .lambda("constr_index_exposer")
+//             .apply(
+//                 Term::fst_pair()
+//                     .apply(Term::unconstr_data().apply(Term::var("x")))
+//                     .lambda("x"),
+//             ),
+//         false,
+//     );
+// }

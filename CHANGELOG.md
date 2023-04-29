@@ -1,6 +1,6 @@
 # Changelog
 
-## [next] - 2023-MM-DD
+## v1.0.3.alpha - 2023-04-28
 
 ### Added
 
@@ -16,6 +16,7 @@
 - **aiken-lang**: fix expect on an empty list
 - **aiken-lang**: pattern match on boolean with simple clause bodies
 - **aiken-lang**: fix for inline_direct_reduce to be applied to pattern match function instead of argument
+- **aiken-lang**: code gen function dependencies won't be hoisted to the top, instead hoisted at the location depended on.
 
 ## v1.0.2.alpha - 2023-04-17
 
