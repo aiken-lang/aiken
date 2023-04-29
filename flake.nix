@@ -6,9 +6,13 @@
 #
 {
   inputs = {
-    cargo2nix.url = "github:cargo2nix/cargo2nix/release-0.11.0";
-    flake-utils.follows = "cargo2nix/flake-utils";
-    nixpkgs.follows = "cargo2nix/nixpkgs";
+    cargo2nix = {
+      url = "github:cargo2nix/cargo2nix/release-0.11.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs";
     devshell.url = "github:numtide/devshell";
     unstable.url = "github:nixos/nixpkgs";
   };
@@ -31,7 +35,7 @@
         deno = unstable.legacyPackages.${system}.deno;
 
         rustPkgs = pkgs.rustBuilder.makePackageSet {
-          rustVersion = "1.66.1";
+          rustVersion = "1.69.0";
           packageFun = import ./Cargo.nix;
         };
 
