@@ -10,20 +10,21 @@
       url = "github:cargo2nix/cargo2nix/release-0.11.0";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
+      inputs.rust-overlay.follows = "rust-overlay";
     };
+    rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:nixos/nixpkgs";
     devshell.url = "github:numtide/devshell";
-    unstable.url = "github:nixos/nixpkgs";
   };
 
   outputs = {
     self,
     cargo2nix,
+    rust-overlay,
     nixpkgs,
     flake-utils,
     devshell,
-    unstable,
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
@@ -32,7 +33,7 @@
           overlays = [cargo2nix.overlays.default devshell.overlays.default];
         };
 
-        deno = unstable.legacyPackages.${system}.deno;
+        deno = nixpkgs.legacyPackages.${system}.deno;
 
         rustPkgs = pkgs.rustBuilder.makePackageSet {
           rustVersion = "1.69.0";
