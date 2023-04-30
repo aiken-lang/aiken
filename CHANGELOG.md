@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.4.alpha - 2023-MM-DD
+
+### Added
+
+### Fixed
+
+
+- **aiken-lang**: Negative numbers now show up as a constant instead of 0 - that number
+- **aiken-lang**: Expect on constructors without field maps no longer panics
+- **aiken-lang**: Expect on constructors with discard as assigned field names now no longer throws free unique
+
 ## v1.0.3.alpha - 2023-04-28
 
 ### Added

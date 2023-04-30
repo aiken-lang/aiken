@@ -1326,51 +1326,52 @@ fn acceptance_test_12_filter_even() {
     );
 }
 
-// #[test]
-// fn acceptance_test_14_list_creation() {
-//     let src = r#"
-//       test foo() {
-//         [0 - 2, 0 - 1, 0] == [-2, -1, 0]
-//       }
-//     "#;
+#[test]
+fn acceptance_test_14_list_creation() {
+    let src = r#"
+      test foo() {
+        [0 - 2, 0 - 1, 0] == [-2, -1, 0]
+      }
+    "#;
 
-//     assert_uplc(
-//         src,
-//         Term::equals_data()
-//             .apply(
-//                 Term::list_data().apply(
-//                     Term::mk_cons()
-//                         .apply(
-//                             Term::i_data().apply(
-//                                 Term::sub_integer()
-//                                     .apply(Term::integer(0.into()))
-//                                     .apply(Term::integer(2.into())),
-//                             ),
-//                         )
-//                         .apply(
-//                             Term::mk_cons().apply(
-//                                 Term::i_data().apply(
-//                                     Term::sub_integer()
-//                                         .apply(Term::integer(0.into()))
-//                                         .apply(Term::integer(1.into())),
-//                                 ),
-//                             ),
-//                         )
-//                         .apply(
-//                             Term::mk_cons()
-//                                 .apply(Term::i_data().apply(Term::integer(0.into())))
-//                                 .apply(Term::empty_list()),
-//                         ),
-//                 ),
-//             )
-//             .apply(Term::list_data().apply(Term::list_values(vec![
-//                 Constant::Data(Data::integer((-2).into())),
-//                 Constant::Data(Data::integer((-1).into())),
-//                 Constant::Data(Data::integer(0.into())),
-//             ]))),
-//         false,
-//     );
-// }
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::mk_cons()
+                        .apply(
+                            Term::i_data().apply(
+                                Term::sub_integer()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(Term::integer(2.into())),
+                            ),
+                        )
+                        .apply(
+                            Term::mk_cons()
+                                .apply(
+                                    Term::i_data().apply(
+                                        Term::sub_integer()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(Term::integer(1.into())),
+                                    ),
+                                )
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::integer(0.into())))
+                                        .apply(Term::empty_list()),
+                                ),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer((-2).into())),
+                Constant::Data(Data::integer((-1).into())),
+                Constant::Data(Data::integer(0.into())),
+            ]))),
+        false,
+    );
+}
 
 // #[test]
 // fn when_tuple_deconstruction() {

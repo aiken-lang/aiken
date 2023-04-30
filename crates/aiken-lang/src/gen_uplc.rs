@@ -2122,12 +2122,16 @@ impl<'a> CodeGenerator<'a> {
 
                     let arguments_index = arguments
                         .iter()
-                        .filter_map(|item| {
+                        .enumerate()
+                        .filter_map(|(index, item)| {
                             let label = item.label.clone().unwrap_or_default();
-                            let field_map = field_map.as_ref().unwrap_or_else(|| unreachable!());
 
-                            let field_index =
-                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+                            let field_index = field_map
+                                .as_ref()
+                                .map(|field_map| {
+                                    field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
+                                })
+                                .unwrap_or(&index);
 
                             let mut inner_stack = expect_stack.empty_with_scope();
 
@@ -2177,7 +2181,7 @@ impl<'a> CodeGenerator<'a> {
                     var_stack.local_var(tipo.clone(), constr_var.clone());
                     expect_stack.expect_constr(index, var_stack);
 
-                    if !arguments_index.is_empty() {
+                    if !final_args.is_empty() {
                         let mut fields_stack = expect_stack.empty_with_scope();
                         fields_stack.local_var(tipo.clone(), constr_var);
 
@@ -4868,9 +4872,21 @@ impl<'a> CodeGenerator<'a> {
 
                 let term = match op {
                     UnOp::Not => value.if_else(Term::bool(false), Term::bool(true)),
-                    UnOp::Negate => Term::sub_integer()
-                        .apply(Term::integer(0.into()))
-                        .apply(value),
+                    UnOp::Negate => {
+                        if let Term::Constant(c) = &value {
+                            if let UplcConstant::Integer(i) = c.as_ref() {
+                                Term::integer(-i)
+                            } else {
+                                Term::sub_integer()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(value)
+                            }
+                        } else {
+                            Term::sub_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(value)
+                        }
+                    }
                 };
 
                 arg_stack.push(term);
