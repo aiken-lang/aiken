@@ -1845,27 +1845,37 @@ pub fn to_data_builtin(
     func: &DefaultFunction,
     count: usize,
     tipo: &Arc<Type>,
-    args: Vec<Term<Name>>,
+    mut args: Vec<Term<Name>>,
 ) -> Term<Name> {
     let mut term: Term<Name> = (*func).into();
 
     term = apply_builtin_forces(term, func.force_count());
 
-    for arg in args {
-        term = term.apply(arg);
+    if count == 0 {
+        assert!(args.is_empty());
+
+        for arg_index in 0..func.arity() {
+            let temp_var = format!("__item_index_{}", arg_index);
+
+            args.push(Term::var(temp_var))
+        }
     }
 
-    let temp_var = "__item_x";
+    for (index, arg) in args.into_iter().enumerate() {
+        if index == 0 || matches!(func, DefaultFunction::MkPairData) {
+            term = term.apply(convert_type_to_data(arg, tipo));
+        } else {
+            term = term.apply(arg);
+        }
+    }
 
     if count == 0 {
-        term = term.apply(Term::var(temp_var));
+        for arg_index in (0..func.arity()).rev() {
+            let temp_var = format!("__item_index_{}", arg_index);
+            term = term.lambda(temp_var);
+        }
     }
 
-    term = convert_type_to_data(term, tipo);
-
-    if count == 0 {
-        term = term.lambda(temp_var);
-    }
     term
 }
 
