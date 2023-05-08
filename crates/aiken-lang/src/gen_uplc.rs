@@ -4083,6 +4083,7 @@ impl<'a> CodeGenerator<'a> {
                         for arg in arg_vec {
                             term = term.apply(arg.clone());
                         }
+
                         term
                     }
                 };
