@@ -1658,7 +1658,7 @@ impl<'a> CodeGenerator<'a> {
         };
 
         match pattern {
-            Pattern::Int { .. } => todo!(),
+            Pattern::Int { .. } => todo!("Pattern match with integer assignment not supported"),
             Pattern::Var { name, .. } => {
                 let expect_value_stack = value_stack.empty_with_scope();
                 pattern_stack.let_assignment(name, value_stack);
@@ -1762,10 +1762,10 @@ impl<'a> CodeGenerator<'a> {
         assignment_properties: AssignmentProperties,
     ) {
         match pattern {
-            Pattern::Int { .. } => todo!(),
-            Pattern::Var { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => todo!(),
+            Pattern::Int { .. } => unreachable!("Pattern Integer"),
+            Pattern::Var { .. } => unreachable!("Pattern Var"),
+            Pattern::Assign { .. } => unreachable!("Pattern Assign"),
+            Pattern::Discard { .. } => unreachable!("Pattern Discard"),
             Pattern::List { elements, tail, .. } => {
                 let inner_list_type = &tipo.get_inner_types()[0];
                 let mut elements_stack = pattern_stack.empty_with_scope();
@@ -1799,8 +1799,8 @@ impl<'a> CodeGenerator<'a> {
 
                             elements_stack.merge(element_stack);
                         }
-                        Pattern::Int { .. } => todo!(),
-                        Pattern::Assign { .. } => todo!(),
+                        Pattern::Int { .. } => unreachable!("Inner List: Pattern Integer"),
+                        Pattern::Assign { .. } => todo!("Assign in lists not supported yet"),
                         Pattern::Discard { .. } => {
                             names.push("_".to_string());
                         }
@@ -2009,13 +2009,13 @@ impl<'a> CodeGenerator<'a> {
         assignment_properties: AssignmentProperties,
     ) {
         match pattern {
-            Pattern::Int { .. } => unreachable!(),
+            Pattern::Int { .. } => unreachable!("Expect Integer"),
             Pattern::Var { name, .. } => {
                 expect_stack.merge(value_stack);
 
                 self.expect_type(tipo, expect_stack, name, &mut IndexMap::new());
             }
-            Pattern::Assign { .. } => todo!(),
+            Pattern::Assign { .. } => todo!("Expect Assign not supported yet"),
             Pattern::Discard { .. } => unreachable!(),
             Pattern::List { elements, tail, .. } => {
                 let inner_list_type = &tipo.get_inner_types()[0];
@@ -2028,7 +2028,9 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
-                        Pattern::Assign { .. } => todo!(),
+                        Pattern::Assign { .. } => {
+                            todo!("Inner List: Expect Assign not supported yet")
+                        }
                         element_pattern @ (Pattern::List { .. }
                         | Pattern::Constructor { .. }
                         | Pattern::Tuple { .. }) => {
@@ -2051,6 +2053,7 @@ impl<'a> CodeGenerator<'a> {
 
                             expect_list_stacks.push(element_stack);
                         }
+                        Pattern::Int { .. } => unreachable!("Inner List: Expect Integer"),
                         _ => {}
                     }
                 }
@@ -2709,8 +2712,8 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(tuple_name)
             }
-            Pattern::Int { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
+            Pattern::Int { .. } => todo!("Extract Arg Name: Int"),
+            Pattern::Assign { .. } => todo!("Extract Arg Name: Assign"),
         }
     }
 
