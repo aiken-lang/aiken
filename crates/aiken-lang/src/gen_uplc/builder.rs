@@ -1805,3 +1805,150 @@ pub fn handle_clause_guard(
         }
     }
 }
+
+pub fn apply_builtin_forces(mut term: Term<Name>, force_count: u32) -> Term<Name> {
+    for _ in 0..force_count {
+        term = term.force();
+    }
+    term
+}
+
+pub fn undata_builtin(
+    func: &DefaultFunction,
+    count: usize,
+    tipo: &Arc<Type>,
+    args: Vec<Term<Name>>,
+) -> Term<Name> {
+    let mut term: Term<Name> = (*func).into();
+
+    term = apply_builtin_forces(term, func.force_count());
+
+    for arg in args {
+        term = term.apply(arg);
+    }
+
+    let temp_var = "__item_x";
+
+    if count == 0 {
+        term = term.apply(Term::var(temp_var));
+    }
+
+    term = convert_data_to_type(term, tipo);
+
+    if count == 0 {
+        term = term.lambda(temp_var);
+    }
+    term
+}
+
+pub fn to_data_builtin(
+    func: &DefaultFunction,
+    count: usize,
+    tipo: &Arc<Type>,
+    args: Vec<Term<Name>>,
+) -> Term<Name> {
+    let mut term: Term<Name> = (*func).into();
+
+    term = apply_builtin_forces(term, func.force_count());
+
+    for arg in args {
+        term = term.apply(arg);
+    }
+
+    let temp_var = "__item_x";
+
+    if count == 0 {
+        term = term.apply(Term::var(temp_var));
+    }
+
+    term = convert_type_to_data(term, tipo);
+
+    if count == 0 {
+        term = term.lambda(temp_var);
+    }
+    term
+}
+
+pub fn special_case_builtin(
+    func: &DefaultFunction,
+    count: usize,
+    mut args: Vec<Term<Name>>,
+) -> Term<Name> {
+    match func {
+        DefaultFunction::IfThenElse
+        | DefaultFunction::ChooseList
+        | DefaultFunction::ChooseData
+        | DefaultFunction::Trace => {
+            let mut term: Term<Name> = (*func).into();
+
+            term = apply_builtin_forces(term, func.force_count());
+
+            if count == 0 {
+                assert!(args.is_empty());
+
+                for arg_index in 0..func.arity() {
+                    let temp_var = format!("__item_index_{}", arg_index);
+
+                    args.push(Term::var(temp_var))
+                }
+            }
+
+            for (index, arg) in args.into_iter().enumerate() {
+                if index == 0 {
+                    term = term.apply(arg);
+                } else {
+                    term = term.apply(arg.delay());
+                }
+            }
+
+            term = term.force();
+
+            if count == 0 {
+                for arg_index in (0..func.arity()).rev() {
+                    let temp_var = format!("__item_index_{}", arg_index);
+                    term = term.lambda(temp_var);
+                }
+            }
+
+            term
+        }
+        DefaultFunction::ChooseUnit => {
+            if count == 0 {
+                unimplemented!("Honestly, why are you doing this?")
+            } else {
+                let term = args.pop().unwrap();
+                let unit = args.pop().unwrap();
+
+                term.lambda("_").apply(unit)
+            }
+        }
+        DefaultFunction::UnConstrData => {
+            let mut term: Term<Name> = (*func).into();
+
+            let temp_tuple = "__unconstr_tuple";
+
+            for arg in args {
+                term = term.apply(arg);
+            }
+
+            let temp_var = "__item_x";
+
+            if count == 0 {
+                term = term.apply(Term::var(temp_var));
+            }
+
+            term = Term::mk_pair_data()
+                .apply(Term::i_data().apply(Term::fst_pair().apply(Term::var(temp_tuple))))
+                .apply(Term::list_data().apply(Term::snd_pair().apply(Term::var(temp_tuple))))
+                .lambda(temp_tuple)
+                .apply(term);
+
+            if count == 0 {
+                term = term.lambda(temp_var);
+            }
+
+            term
+        }
+        _ => unreachable!(),
+    }
+}

@@ -4051,97 +4051,42 @@ impl<'a> CodeGenerator<'a> {
             Air::Builtin {
                 func, tipo, count, ..
             } => {
-                let mut term: Term<Name> = Term::Builtin(func);
-                for _ in 0..func.force_count() {
-                    term = term.force();
-                }
-
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                for (index, arg) in arg_vec.into_iter().enumerate() {
-                    let arg = if matches!(func, DefaultFunction::ChooseData) && index > 0 {
-                        arg.delay()
-                    } else {
-                        arg
-                    };
-                    term = term.apply(arg.clone());
-                }
+                let term = match &func {
+                    DefaultFunction::IfThenElse
+                    | DefaultFunction::ChooseUnit
+                    | DefaultFunction::Trace
+                    | DefaultFunction::ChooseList
+                    | DefaultFunction::ChooseData
+                    | DefaultFunction::UnConstrData => {
+                        builder::special_case_builtin(&func, count, arg_vec)
+                    }
 
-                match func {
                     DefaultFunction::FstPair
                     | DefaultFunction::SndPair
                     | DefaultFunction::HeadList => {
-                        let temp_var = format!("__item_{}", self.id_gen.next());
-
-                        if count == 0 {
-                            term = term.apply(Term::var(temp_var.clone()));
-                        }
-
-                        term = builder::convert_data_to_type(term, &tipo);
-
-                        if count == 0 {
-                            term = term.lambda(temp_var);
-                        }
+                        builder::undata_builtin(&func, count, &tipo, arg_vec)
                     }
-                    DefaultFunction::UnConstrData => {
-                        let temp_tuple = format!("__unconstr_tuple_{}", self.id_gen.next());
 
-                        let temp_var = format!("__item_{}", self.id_gen.next());
-
-                        if count == 0 {
-                            term = term.apply(Term::var(temp_var.clone()));
-                        }
-
-                        term = Term::mk_pair_data()
-                            .apply(
-                                Term::i_data()
-                                    .apply(Term::fst_pair().apply(Term::var(temp_tuple.clone()))),
-                            )
-                            .apply(
-                                Term::list_data()
-                                    .apply(Term::snd_pair().apply(Term::var(temp_tuple.clone()))),
-                            )
-                            .lambda(temp_tuple)
-                            .apply(term);
-
-                        if count == 0 {
-                            term = term.lambda(temp_var);
-                        }
+                    DefaultFunction::MkCons | DefaultFunction::MkPairData => {
+                        builder::to_data_builtin(&func, count, &tipo, arg_vec)
                     }
-                    DefaultFunction::MkCons => {
-                        unimplemented!("Use brackets instead.");
-                    }
-                    DefaultFunction::IfThenElse
-                    | DefaultFunction::ChooseList
-                    | DefaultFunction::Trace => unimplemented!("{func:#?}"),
-                    DefaultFunction::ChooseData => {
-                        let temp_vars = (0..func.arity())
-                            .map(|_| format!("__item_{}", self.id_gen.next()))
-                            .collect_vec();
+                    _ => {
+                        let mut term: Term<Name> = func.into();
 
-                        if count == 0 {
-                            for (index, temp_var) in temp_vars.iter().enumerate() {
-                                term = term.apply(if index > 0 {
-                                    Term::var(temp_var.clone()).delay()
-                                } else {
-                                    Term::var(temp_var.clone())
-                                });
-                            }
+                        term = builder::apply_builtin_forces(term, func.force_count());
+
+                        for arg in arg_vec {
+                            term = term.apply(arg.clone());
                         }
-
-                        term = term.force();
-
-                        if count == 0 {
-                            for temp_var in temp_vars.into_iter().rev() {
-                                term = term.lambda(temp_var);
-                            }
-                        }
+                        term
                     }
-                    _ => {}
-                }
+                };
+
                 arg_stack.push(term);
             }
             Air::BinOp { name, tipo, .. } => {

@@ -51,6 +51,7 @@ impl Program<Name> {
         let mut term = self.term;
         inline_basic_reduce(&mut term);
         inline_direct_reduce(&mut term);
+        inline_identity_reduce(&mut term);
 
         Program {
             version: self.version,
@@ -201,6 +202,50 @@ fn inline_direct_reduce(term: &mut Term<Name>) {
     }
 }
 
+fn inline_identity_reduce(term: &mut Term<Name>) {
+    match term {
+        Term::Delay(d) => {
+            let d = Rc::make_mut(d);
+            inline_identity_reduce(d);
+        }
+        Term::Lambda { body, .. } => {
+            let body = Rc::make_mut(body);
+            inline_identity_reduce(body);
+        }
+        Term::Apply { function, argument } => {
+            let func = Rc::make_mut(function);
+            let arg = Rc::make_mut(argument);
+
+            inline_identity_reduce(func);
+            inline_identity_reduce(arg);
+
+            let Term::Lambda { parameter_name, body } = func
+            else {
+                return;
+            };
+
+            let Term::Lambda { parameter_name: identity_name, body: identity_body } = arg
+            else {
+                return;
+            };
+
+            let Term::Var(identity_var) = Rc::make_mut(identity_body)
+            else {
+                return;
+            };
+
+            if identity_var.as_ref() == identity_name.as_ref() {
+                *term = replace_identity_usage(body, parameter_name.clone());
+            }
+        }
+        Term::Force(f) => {
+            let f = Rc::make_mut(f);
+            inline_identity_reduce(f);
+        }
+        _ => {}
+    }
+}
+
 fn inline_basic_reduce(term: &mut Term<Name>) {
     match term {
         Term::Delay(d) => {
@@ -212,11 +257,11 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
             inline_basic_reduce(body);
         }
         Term::Apply { function, argument } => {
-            let arg = Rc::make_mut(argument);
-            inline_basic_reduce(arg);
-
             let func = Rc::make_mut(function);
+            let arg = Rc::make_mut(argument);
+
             inline_basic_reduce(func);
+            inline_basic_reduce(arg);
 
             if let Term::Lambda {
                 parameter_name,
@@ -404,6 +449,51 @@ fn substitute_term(term: &Term<Name>, original: Rc<Name>, replace_with: &Term<Na
             argument: Rc::new(substitute_term(argument.as_ref(), original, replace_with)),
         },
         Term::Force(x) => Term::Force(Rc::new(substitute_term(x.as_ref(), original, replace_with))),
+        x => x.clone(),
+    }
+}
+
+fn replace_identity_usage(term: &Term<Name>, original: Rc<Name>) -> Term<Name> {
+    match term {
+        Term::Delay(body) => Term::Delay(replace_identity_usage(body.as_ref(), original).into()),
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => {
+            if parameter_name.as_ref() != original.as_ref() {
+                Term::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: Rc::new(replace_identity_usage(body.as_ref(), original)),
+                }
+            } else {
+                Term::Lambda {
+                    parameter_name: parameter_name.clone(),
+                    body: body.clone(),
+                }
+            }
+        }
+        Term::Apply { function, argument } => {
+            let func = function.as_ref();
+            let arg = argument.as_ref();
+
+            let func = replace_identity_usage(func, original.clone());
+            let arg = replace_identity_usage(arg, original.clone());
+
+            let Term::Var(f) = function.as_ref()
+            else {
+                return Term::Apply { function: func.into(), argument: arg.into() }
+            };
+
+            if f.as_ref() == original.as_ref() {
+                arg
+            } else {
+                Term::Apply {
+                    function: func.into(),
+                    argument: arg.into(),
+                }
+            }
+        }
+        Term::Force(x) => Term::Force(Rc::new(replace_identity_usage(x.as_ref(), original))),
         x => x.clone(),
     }
 }
