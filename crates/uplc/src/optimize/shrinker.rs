@@ -504,6 +504,7 @@ mod test {
 
     use crate::{
         ast::{Constant, Name, NamedDeBruijn, Program, Term},
+        builtins::DefaultFunction,
         parser::interner::Interner,
     };
 
@@ -762,6 +763,65 @@ mod test {
                 .apply(Term::head_list())
                 .lambda("__tail_list_wrapped")
                 .apply(Term::tail_list()),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let mut actual = program.builtin_force_reduce();
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut actual);
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn builtin_force_reduce_if_builtin() {
+        let program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::equals_integer()
+                .apply(Term::var("x"))
+                .apply(
+                    Term::add_integer()
+                        .apply(Term::integer(2.into()))
+                        .apply(Term::var("y")),
+                )
+                .delayed_if_else(
+                    Term::length_of_bytearray().apply(Term::byte_string(vec![])),
+                    Term::Error,
+                )
+                .lambda("x")
+                .lambda("y"),
+        };
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::var("__if_then_else_wrapped")
+                .apply(
+                    Term::equals_integer().apply(Term::var("x")).apply(
+                        Term::add_integer()
+                            .apply(Term::integer(2.into()))
+                            .apply(Term::var("y")),
+                    ),
+                )
+                .apply(
+                    Term::length_of_bytearray()
+                        .apply(Term::byte_string(vec![]))
+                        .delay(),
+                )
+                .apply(Term::Error.delay())
+                .force()
+                .lambda("x")
+                .lambda("y")
+                .lambda("__if_then_else_wrapped")
+                .apply(Term::Builtin(DefaultFunction::IfThenElse).force()),
         };
 
         let mut interner = Interner::new();
