@@ -329,9 +329,7 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
                 | (DefaultFunction::ListData, DefaultFunction::UnListData)
                 | (DefaultFunction::UnListData, DefaultFunction::ListData)
                 | (DefaultFunction::MapData, DefaultFunction::UnMapData)
-                | (DefaultFunction::UnMapData, DefaultFunction::MapData)
-                | (DefaultFunction::UnConstrData, DefaultFunction::ConstrData)
-                | (DefaultFunction::ConstrData, DefaultFunction::UnConstrData) => {
+                | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
                     wrap_data_reduce(Rc::make_mut(inner_arg));
                     *term = inner_arg.as_ref().clone();
                 }
