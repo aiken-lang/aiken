@@ -840,4 +840,36 @@ mod test {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn inline_reduce_delay_sha() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay()),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.inline_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
 }
