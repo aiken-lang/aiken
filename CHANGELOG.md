@@ -6,6 +6,9 @@
 
 - **aiken-lang**: ChooseUnit builtin uses a more efficient way of handling the
   first arg (unit) by just assigning to lambda
+- **aiken-lang**: Added some optimization tests
+- **aiken-lang**: Added an Aiken to uplc conversion tests on validators
+- **aiken-lang**: Added some uplc builder functions for builtin creation
 
 ### Fixed
 
