@@ -11,27 +11,11 @@
   <hr/>
 </div>
 
-## QuickStart
+## Installation
 
-### Prerequisites
-
-For now you'll need rust installed, see [rustup](https://rustup.rs).
-
-### Getting started
-
-In case you have fresh installation of `rustup` you might need to do:
-
-```console
-rustup install stable
-```
-
-```console
-$ cargo install --git https://github.com/aiken-lang/aiken.git
-
-$ aiken --help
-```
-
-Alternatively nix builds are available via [flakes](https://aiken-lang.org/getting-started#from-nix-flakes).
+- [Linux/MacOS](https://aiken-lang.org/installation-instructions#from-aikup-linux--macos-only)
+- [Windows](https://aiken-lang.org/installation-instructions#from-sources-all-platforms)
+- [nix](https://aiken-lang.org/installation-instructions#from-nix-flakes-linux--macos-only)
 
 ### How to use
 
