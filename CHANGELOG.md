@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken-lang**: Add Record Module support for records with 0 fields
 - **aiken-lang**: Added some optimization tests
 - **aiken-lang**: Added an Aiken to uplc conversion tests on validators
 - **aiken-lang**: Added some uplc builder functions for builtin creation
