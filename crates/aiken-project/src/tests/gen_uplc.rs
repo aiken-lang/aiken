@@ -9,7 +9,7 @@ use aiken_lang::{
 };
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
-    builder::CONSTR_GET_FIELD,
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
     machine::cost_model::ExBudget,
     optimize,
 };
@@ -1407,18 +1407,18 @@ fn when_tuple_deconstruction() {
         src,
         Term::equals_integer()
             .apply(Term::integer(0.into()))
-            .apply(Term::var("constr_index_exposer").apply(Term::var("dat")))
+            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
             .if_else(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
-                    .apply(Term::var("constr_index_exposer").apply(Term::var("red")))
+                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
                     .if_else(
                         Term::equals_integer()
                             .apply(
                                 Term::un_i_data().apply(
-                                    Term::var("constr_get_field")
+                                    Term::var(CONSTR_GET_FIELD)
                                         .apply(
-                                            Term::var("constr_fields_exposer")
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
                                                 .apply(Term::var("a")),
                                         )
                                         .apply(Term::integer(0.into())),
@@ -1431,7 +1431,7 @@ fn when_tuple_deconstruction() {
                                     .apply(Term::head_list().apply(Term::var("red_constr_fields"))),
                             )
                             .lambda("red_constr_fields")
-                            .apply(Term::var("constr_fields_exposer").apply(Term::var("red")))
+                            .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("red")))
                             .delay(),
                         Term::var("other_clauses"),
                     )
@@ -1439,7 +1439,7 @@ fn when_tuple_deconstruction() {
                     .lambda("a")
                     .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
                     .lambda("dat_constr_fields")
-                    .apply(Term::var("constr_fields_exposer").apply(Term::var("dat")))
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")))
                     .delay(),
                 Term::var("other_clauses"),
             )
@@ -1482,14 +1482,14 @@ fn when_tuple_deconstruction() {
                                         )
                                         .lambda("dat_constr_fields")
                                         .apply(
-                                            Term::var("constr_fields_exposer")
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
                                                 .apply(Term::var("dat")),
                                         ),
                                     Term::equals_integer()
                                         .apply(Term::integer(1.into()))
                                         .apply(Term::var("subject"))
                                         .delayed_if_else(
-                                            Term::var("constr_fields_exposer")
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
                                                 .apply(Term::var("dat"))
                                                 .delayed_choose_list(
                                                     Term::unit(),
@@ -1500,7 +1500,7 @@ fn when_tuple_deconstruction() {
                                         ),
                                 )
                                 .lambda("subject")
-                                .apply(Term::var("constr_index_exposer").apply(Term::var("dat")))
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
                                 .lambda("dat"),
                         )
                         .lambda("expect_Thing")
@@ -1524,7 +1524,7 @@ fn when_tuple_deconstruction() {
                                         )
                                         .lambda("field_1_constr_fields")
                                         .apply(
-                                            Term::var("constr_fields_exposer")
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
                                                 .apply(Term::var("field_1")),
                                         ),
                                     Term::Error.trace(Term::string(
@@ -1533,7 +1533,7 @@ fn when_tuple_deconstruction() {
                                 )
                                 .lambda("subject")
                                 .apply(
-                                    Term::var("constr_index_exposer").apply(Term::var("field_1")),
+                                    Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")),
                                 )
                                 .lambda("field_1"),
                         )
@@ -1562,14 +1562,14 @@ fn when_tuple_deconstruction() {
                                         ))
                                         .lambda("red_constr_fields")
                                         .apply(
-                                            Term::var("constr_fields_exposer")
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
                                                 .apply(Term::var("red")),
                                         ),
                                     Term::equals_integer()
                                         .apply(Term::integer(1.into()))
                                         .apply(Term::var("subject"))
                                         .delayed_if_else(
-                                            Term::var("constr_fields_exposer")
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
                                                 .apply(Term::var("red"))
                                                 .delayed_choose_list(
                                                     Term::unit(),
@@ -1580,7 +1580,7 @@ fn when_tuple_deconstruction() {
                                         ),
                                 )
                                 .lambda("subject")
-                                .apply(Term::var("constr_index_exposer").apply(Term::var("red")))
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
                                 .lambda("red"),
                         )
                         .apply(Term::var("red")),
@@ -1589,13 +1589,13 @@ fn when_tuple_deconstruction() {
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
-            .lambda("constr_get_field")
+            .lambda(CONSTR_GET_FIELD)
             .apply(
-                Term::var("constr_get_field")
-                    .apply(Term::var("constr_get_field"))
+                Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_GET_FIELD))
                     .apply(Term::integer(0.into())),
             )
-            .lambda("constr_get_field")
+            .lambda(CONSTR_GET_FIELD)
             .apply(
                 Term::equals_integer()
                     .apply(Term::var("__wanted_arg".to_string()))
@@ -1621,13 +1621,232 @@ fn when_tuple_deconstruction() {
                     .lambda("__current_arg_number")
                     .lambda(CONSTR_GET_FIELD),
             )
-            .lambda("constr_fields_exposer")
+            .lambda(CONSTR_FIELDS_EXPOSER)
             .apply(
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
             )
-            .lambda("constr_index_exposer")
+            .lambda(CONSTR_INDEX_EXPOSER)
+            .apply(
+                Term::fst_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("x")))
+                    .lambda("x"),
+            ),
+        false,
+    );
+}
+
+#[test]
+fn generic_validator_type_test() {
+    let error_string = "List/Tuple/Constr contains more items than expected";
+    let src = r#"
+      type A<x> {
+        NoA
+        SomeA(Void, x)
+      }
+
+      type B {
+        something: Void,
+      }
+
+      validator {
+        fn err_example(r: A<B>, _ctx: Data) -> Bool {
+          when r is {
+            NoA ->
+              False
+            SomeA(_, B(something)) ->
+              something == Void
+          }
+        }
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::var("subject"))
+            .delayed_if_else(
+                Term::bool(false),
+                Term::choose_unit(
+                    Term::var("something"),
+                    Term::choose_unit(Term::unit(), Term::bool(true)),
+                )
+                .lambda("something")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(0.into()))
+                        .apply(
+                            Term::fst_pair().apply(
+                                Term::unconstr_data()
+                                    .apply(Term::head_list().apply(Term::var("B_fields"))),
+                            ),
+                        )
+                        .delayed_if_else(Term::unit(), Term::Error),
+                )
+                .lambda("B_fields")
+                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("field_B")))
+                .lambda("field_B")
+                .apply(Term::head_list().apply(Term::var("tail_1")))
+                .lambda("tail_1")
+                .apply(Term::tail_list().apply(Term::var("r_fields")))
+                .lambda("r_fields")
+                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("r"))),
+            )
+            .lambda("subject")
+            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
+            .delayed_if_else(Term::unit(), Term::Error)
+            .lambda("r")
+            .apply(
+                Term::var("r").lambda("_").apply(
+                    Term::var("__expect_A")
+                        .lambda("__expect_A")
+                        .apply(
+                            Term::equals_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(Term::var("subject"))
+                                .delayed_if_else(
+                                    Term::var(CONSTR_FIELDS_EXPOSER)
+                                        .apply(Term::var("r"))
+                                        .delayed_choose_list(
+                                            Term::unit(),
+                                            Term::Error.trace(Term::string(
+                                                "Expected no fields for Constr",
+                                            )),
+                                        ),
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(Term::var("subject"))
+                                        .delayed_if_else(
+                                            Term::tail_list()
+                                                .apply(Term::var("tail_1"))
+                                                .delayed_choose_list(
+                                                    Term::unit().lambda("_").apply(
+                                                        Term::var("__expect_B")
+                                                            .apply(Term::var("field_B")),
+                                                    ),
+                                                    Term::Error
+                                                        .trace(Term::string("List/Tuple/Constr contains more items than expected")),
+                                                )
+                                                .lambda("field_B")
+                                                .apply(Term::head_list().apply(Term::var("tail_1")))
+                                                .lambda("tail_1")
+                                                .apply(
+                                                    Term::tail_list().apply(Term::var("r_fields")),
+                                                )
+                                                .lambda("field_0")
+                                                .apply(
+                                                    Term::equals_integer()
+                                                        .apply(Term::integer(0.into()))
+                                                        .apply(
+                                                            Term::fst_pair().apply(
+                                                                Term::unconstr_data().apply(
+                                                                    Term::head_list().apply(
+                                                                        Term::var("r_fields"),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        )
+                                                        .delayed_if_else(Term::unit(), Term::Error),
+                                                )
+                                                .lambda("r_fields")
+                                                .apply(
+                                                    Term::var(CONSTR_FIELDS_EXPOSER)
+                                                        .apply(Term::var("r")),
+                                                ),
+                                            Term::Error.trace(Term::string(
+                                                "Constr index did not match any type variant",
+                                            )),
+                                        ),
+                                )
+                                .lambda("subject")
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
+                                .lambda("r"),
+                        )
+                        .lambda("__expect_B")
+                        .apply(
+                            Term::equals_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(Term::var("subject"))
+                                .delayed_if_else(
+                                    Term::tail_list()
+                                        .apply(Term::var("B_fields"))
+                                        .delayed_choose_list(
+                                            Term::unit(),
+                                            Term::Error.trace(Term::string(error_string)),
+                                        )
+                                        .lambda("something")
+                                        .apply(
+                                            Term::equals_integer()
+                                                .apply(Term::integer(0.into()))
+                                                .apply(
+                                                    Term::fst_pair().apply(
+                                                        Term::unconstr_data().apply(
+                                                            Term::head_list()
+                                                                .apply(Term::var("B_fields")),
+                                                        ),
+                                                    ),
+                                                )
+                                                .delayed_if_else(Term::unit(), Term::Error),
+                                        )
+                                        .lambda("B_fields")
+                                        .apply(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("field_B")),
+                                        ),
+                                    Term::Error.trace(Term::string(
+                                        "Constr index did not match any type variant",
+                                    )),
+                                )
+                                .lambda("subject")
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
+                                .lambda("field_B"),
+                        )
+                        .apply(Term::var("r")),
+                ),
+            )
+            .lambda("_ctx")
+            .lambda("r")
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_GET_FIELD))
+                    .apply(Term::integer(0.into())),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::var("__wanted_arg".to_string()))
+                    .apply(Term::var("__current_arg_number".to_string()))
+                    .if_else(
+                        Term::head_list(),
+                        Term::var(CONSTR_GET_FIELD)
+                            .apply(Term::var(CONSTR_GET_FIELD))
+                            .apply(
+                                Term::add_integer()
+                                    .apply(Term::var("__current_arg_number"))
+                                    .apply(Term::integer(1.into())),
+                            )
+                            .apply(
+                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
+                            )
+                            .apply(Term::var("__wanted_arg"))
+                            .lambda("__current_list_of_constr_args"),
+                    )
+                    .apply(Term::var("__list_of_constr_args"))
+                    .lambda("__wanted_arg")
+                    .lambda("__list_of_constr_args")
+                    .lambda("__current_arg_number")
+                    .lambda(CONSTR_GET_FIELD),
+            )
+            .lambda(CONSTR_FIELDS_EXPOSER)
+            .apply(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("x")))
+                    .lambda("x"),
+            )
+            .lambda(CONSTR_INDEX_EXPOSER)
             .apply(
                 Term::fst_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))

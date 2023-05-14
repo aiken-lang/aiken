@@ -1283,6 +1283,7 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
                         .collect::<Vec<(String, String, usize)>>();
+
                     let indices = arguments_index
                         .iter()
                         .map(|(label, var_name, index)| {
@@ -1562,6 +1563,8 @@ impl<'a> CodeGenerator<'a> {
                             empty_stack,
                         );
                     }
+                } else {
+                    pattern_stack.merge_child(when_stack);
                 }
 
                 Some(constr_var_name)

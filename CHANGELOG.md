@@ -1,16 +1,26 @@
 # Changelog
 
+## next - 2023-MM-DD
+
+### Added
+
+- **aiken-lang**: Added some optimization tests
+- **aiken-lang**: Added an Aiken to uplc conversion tests on validators
+- **aiken-lang**: Added some uplc builder functions for builtin creation
+- **aiken-lang**: Added optimization where identity functions called on an arg
+  are reduced to just the arg.
+
+### Fixed
+
+- **aiken-lang**: Fix for nested constructors where the type had a single
+  constructor. The fields exposed were not being added to the Air.
+
 ## v1.0.4.alpha - 2023-05-09
 
 ### Added
 
 - **aiken-lang**: ChooseUnit builtin uses a more efficient way of handling the
   first arg (unit) by just assigning to lambda
-- **aiken-lang**: Added some optimization tests
-- **aiken-lang**: Added an Aiken to uplc conversion tests on validators
-- **aiken-lang**: Added some uplc builder functions for builtin creation
-- **aiken-lang**: Added optimization where identity functions called on an arg
-  are reduced to just the arg.
 
 ### Fixed
 
