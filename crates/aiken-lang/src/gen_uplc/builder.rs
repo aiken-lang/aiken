@@ -1588,7 +1588,7 @@ pub fn handle_recursion_ir(
 }
 
 pub fn lookup_data_type_by_tipo(
-    data_types: IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
     tipo: &Type,
 ) -> Option<DataType<Arc<Type>>> {
     match tipo {
@@ -1625,7 +1625,7 @@ pub fn check_replaceable_opaque_type(
     t: &Arc<Type>,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) -> bool {
-    let data_type = lookup_data_type_by_tipo(data_types.clone(), t);
+    let data_type = lookup_data_type_by_tipo(data_types, t);
 
     if let Some(data_type) = data_type {
         let data_type_args = data_type.constructors[0].arguments.clone();
@@ -1635,9 +1635,9 @@ pub fn check_replaceable_opaque_type(
     }
 }
 
-pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, &TypedDataType>) {
-    if check_replaceable_opaque_type(t, &data_types) && matches!(&**t, Type::App { .. }) {
-        let data_type = lookup_data_type_by_tipo(data_types.clone(), t).unwrap();
+pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: &IndexMap<DataTypeKey, &TypedDataType>) {
+    if check_replaceable_opaque_type(t, data_types) && matches!(&**t, Type::App { .. }) {
+        let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
         let new_type_fields = data_type.typed_parameters.clone();
 
         let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
@@ -1652,7 +1652,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
 
         find_and_replace_generics(&mut generic_type, &mono_types);
 
-        replace_opaque_type(&mut generic_type, data_types.clone());
+        replace_opaque_type(&mut generic_type, data_types);
         *t = generic_type;
     } else {
         match (**t).clone() {
@@ -1665,7 +1665,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
                 let mut new_args = vec![];
                 for arg in args {
                     let mut new_arg_type = arg.clone();
-                    replace_opaque_type(&mut new_arg_type, data_types.clone());
+                    replace_opaque_type(&mut new_arg_type, data_types);
                     new_args.push(new_arg_type);
                 }
                 *t = Type::App {
@@ -1680,12 +1680,12 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
                 let mut new_args = vec![];
                 for arg in args {
                     let mut new_arg_type = arg.clone();
-                    replace_opaque_type(&mut new_arg_type, data_types.clone());
+                    replace_opaque_type(&mut new_arg_type, data_types);
                     new_args.push(new_arg_type);
                 }
 
                 let mut new_ret = ret;
-                replace_opaque_type(&mut new_ret, data_types.clone());
+                replace_opaque_type(&mut new_ret, data_types);
 
                 *t = Type::Fn {
                     args: new_args,
@@ -1696,7 +1696,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
             Type::Var { tipo } => {
                 if let TypeVar::Link { tipo } = &*tipo.borrow() {
                     let mut new_type = tipo.clone();
-                    replace_opaque_type(&mut new_type, data_types.clone());
+                    replace_opaque_type(&mut new_type, data_types);
                     *t = new_type;
                 }
             }
@@ -1704,7 +1704,7 @@ pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: IndexMap<DataTypeKey, 
                 let mut new_elems = vec![];
                 for arg in elems {
                     let mut new_arg_type = arg.clone();
-                    replace_opaque_type(&mut new_arg_type, data_types.clone());
+                    replace_opaque_type(&mut new_arg_type, data_types);
                     new_elems.push(new_arg_type);
                 }
                 *t = Type::Tuple { elems: new_elems }.into();
