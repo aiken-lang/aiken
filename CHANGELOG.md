@@ -1,6 +1,6 @@
 # Changelog
 
-## next - 2023-MM-DD
+## v1.0.5-alpha - 2023-05-14
 
 ### Added
 
@@ -16,7 +16,7 @@
 - **aiken-lang**: Fix for nested constructors where the type had a single
   constructor. The fields exposed were not being added to the Air.
 
-## v1.0.4.alpha - 2023-05-09
+## v1.0.4-alpha - 2023-05-09
 
 ### Added
 
@@ -35,7 +35,7 @@
 
 - **aiken-lang**: Refactor how builtins are processed to uplc in code gen
 
-## v1.0.3.alpha - 2023-04-28
+## v1.0.3-alpha - 2023-04-28
 
 ### Added
 
@@ -58,7 +58,7 @@
 - **aiken-lang**: code gen function dependencies won't be hoisted to the top,
   instead hoisted at the location depended on.
 
-## v1.0.2.alpha - 2023-04-17
+## v1.0.2-alpha - 2023-04-17
 
 ### Fixed
 
