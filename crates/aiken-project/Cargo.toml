@@ -1,7 +1,7 @@
 [package]
 name = "aiken-project"
 description = "Aiken project utilities"
-version = "1.0.4-alpha"
+version = "1.0.5-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken/crates/project"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -42,8 +42,8 @@ toml = "0.7.2"
 walkdir = "2.3.2"
 zip = "0.6.4"
 
-aiken-lang = { path = "../aiken-lang", version = "1.0.4-alpha" }
-uplc = { path = '../uplc', version = "1.0.4-alpha" }
+aiken-lang = { path = "../aiken-lang", version = "1.0.5-alpha" }
+uplc = { path = '../uplc', version = "1.0.5-alpha" }
 
 
 [dev-dependencies]
