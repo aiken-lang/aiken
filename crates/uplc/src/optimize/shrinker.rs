@@ -235,7 +235,13 @@ fn inline_identity_reduce(term: &mut Term<Name>) {
             };
 
             if identity_var.as_ref() == identity_name.as_ref() {
-                *term = replace_identity_usage(body, parameter_name.clone());
+                let temp_term = replace_identity_usage(body, parameter_name.clone());
+                if var_occurrences(body, parameter_name.clone()) > 0 {
+                    let body = Rc::make_mut(body);
+                    *body = temp_term;
+                } else {
+                    *term = temp_term;
+                }
             }
         }
         Term::Force(f) => {
