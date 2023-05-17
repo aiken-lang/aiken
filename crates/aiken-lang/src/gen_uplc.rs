@@ -2600,6 +2600,8 @@ impl<'a> CodeGenerator<'a> {
                 );
             } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
                 *counter += 1;
+            } else {
+                defined_data_types.insert(data_type_name.clone(), 1);
             }
 
             func_stack.var(
@@ -2792,6 +2794,7 @@ impl<'a> CodeGenerator<'a> {
 
                 *dep_scope = dep_scope.common_ancestor(&func_scope);
             }
+
             dependency_map.insert(function.0, function.1);
         }
 

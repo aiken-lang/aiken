@@ -6,6 +6,8 @@
 
 - **aiken-lang**: Fix for cases where identity function is used as a param to a
   function or assigned to a var.
+- **aiken-lang**: Fix for free unique caused by code gen function having a
+  missing dependency.
 
 ## v1.0.5-alpha - 2023-05-14
 
