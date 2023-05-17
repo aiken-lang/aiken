@@ -2,6 +2,8 @@
 
 ## next - 2023-MM-DD
 
+## v1.0.6-alpha - 2023-05-17
+
 ### Fixed
 
 - **aiken-lang**: Fix for cases where identity function is used as a param to a
