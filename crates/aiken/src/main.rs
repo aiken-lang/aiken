@@ -1,14 +1,17 @@
-use aiken::cmd::{
-    blueprint::{self, address},
-    build, check, docs, fmt, lsp, new,
-    packages::{self, add},
-    tx, uplc,
+use aiken::{
+    built_info,
+    cmd::{
+        blueprint::{self, address},
+        build, check, docs, fmt, lsp, new,
+        packages::{self, add},
+        tx, uplc,
+    },
 };
 use clap::Parser;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]
-#[clap(version, about, long_about = None)]
+#[clap(version = version(), about, long_about = None)]
 #[clap(propagate_version = true)]
 pub enum Cmd {
     New(new::Args),
@@ -57,4 +60,12 @@ fn main() -> miette::Result<()> {
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
     }
+}
+
+fn version() -> String {
+    format!(
+        "v{} {}",
+        built_info::PKG_VERSION,
+        built_info::GIT_COMMIT_HASH_SHORT.unwrap()
+    )
 }
