@@ -66,6 +66,6 @@ fn version() -> String {
     format!(
         "v{} {}",
         built_info::PKG_VERSION,
-        built_info::GIT_COMMIT_HASH_SHORT.unwrap()
+        built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown")
     )
 }
