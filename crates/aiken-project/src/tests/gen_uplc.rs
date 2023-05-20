@@ -1855,3 +1855,95 @@ fn generic_validator_type_test() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_15_zero_arg() {
+    let src = r#"
+      pub opaque type Map<key, value> {
+        inner: List<(key, value)>,
+      }
+
+      pub fn new() {
+        Map { inner: [] }
+      }
+
+      test new_1() {
+        new() == Map { inner: [] }
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::map_data().apply(Term::empty_map()))
+            .apply(Term::map_data().apply(Term::empty_map())),
+        false,
+    );
+}
+#[test]
+fn acceptance_test_16_drop() {
+    let src = r#"
+      use aiken/builtin
+
+      pub fn slice(bytes: ByteArray, start: Int, end: Int) -> ByteArray {
+        builtin.slice_bytearray(start, end, bytes)
+      }
+
+      pub fn length(bytes: ByteArray) -> Int {
+        builtin.length_of_bytearray(bytes)
+      }
+
+      pub fn drop(bytes: ByteArray, n: Int) -> ByteArray {
+        slice(bytes, n, length(bytes) - n)
+      }
+
+      test drop_1() {
+        let x =
+            #"01020304050607"
+        drop(x, 2) == #"0304050607"
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_bytestring()
+            .apply(
+                Term::var("drop")
+                    .lambda("drop")
+                    .apply(
+                        Term::var("slice")
+                            .apply(Term::var("bytes"))
+                            .apply(Term::var("n"))
+                            .apply(
+                                Term::sub_integer()
+                                    .apply(Term::var("length").apply(Term::var("bytes")))
+                                    .apply(Term::var("n")),
+                            )
+                            .lambda("n")
+                            .lambda("bytes"),
+                    )
+                    .lambda("slice")
+                    .apply(
+                        Term::slice_bytearray()
+                            .apply(Term::var("start"))
+                            .apply(Term::var("end"))
+                            .apply(Term::var("bytes"))
+                            .lambda("end")
+                            .lambda("start")
+                            .lambda("bytes"),
+                    )
+                    .lambda("length")
+                    .apply(
+                        Term::length_of_bytearray()
+                            .apply(Term::var("bytes"))
+                            .lambda("bytes"),
+                    )
+                    .apply(Term::var("x"))
+                    .apply(Term::integer(2.into())),
+            )
+            .apply(Term::byte_string(vec![3, 4, 5, 6, 7]))
+            .lambda("x")
+            .apply(Term::byte_string(vec![1, 2, 3, 4, 5, 6, 7])),
+        false,
+    );
+}
