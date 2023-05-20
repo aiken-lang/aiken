@@ -1947,3 +1947,53 @@ fn acceptance_test_16_drop() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_17_take() {
+    let src = r#"
+      use aiken/builtin
+
+      pub fn slice(bytes: ByteArray, start: Int, end: Int) -> ByteArray {
+        builtin.slice_bytearray(start, end, bytes)
+      }
+
+      pub fn take(bytes: ByteArray, n: Int) -> ByteArray {
+        slice(bytes, 0, n)
+      }
+
+      test take_1() {
+        take(#"010203", 2) == #"0102"
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_bytestring()
+            .apply(
+                Term::var("take")
+                    .lambda("take")
+                    .apply(
+                        Term::var("slice")
+                            .apply(Term::var("bytes"))
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("n"))
+                            .lambda("n")
+                            .lambda("bytes"),
+                    )
+                    .lambda("slice")
+                    .apply(
+                        Term::slice_bytearray()
+                            .apply(Term::var("start"))
+                            .apply(Term::var("end"))
+                            .apply(Term::var("bytes"))
+                            .lambda("end")
+                            .lambda("start")
+                            .lambda("bytes"),
+                    )
+                    .apply(Term::byte_string(vec![1, 2, 3]))
+                    .apply(Term::integer(2.into())),
+            )
+            .apply(Term::byte_string(vec![1, 2])),
+        false,
+    );
+}
