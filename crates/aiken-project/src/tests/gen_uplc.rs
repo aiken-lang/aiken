@@ -2092,3 +2092,285 @@ fn acceptance_test_18_or_else() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_19_map_none_wrap_int() {
+    let src = r#"
+      pub fn map(opt: Option<a>, f: fn(a) -> result) -> Option<result> {
+        when opt is {
+          None ->
+            None
+          Some(a) ->
+            Some(f(a))
+        }
+      }
+
+      test map_1() {
+        map(None, fn(_) { 14 }) == None
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::data(Data::constr(1, vec![])),
+                                Term::constr_data()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::i_data()
+                                                    .apply(Term::var("f").apply(Term::var("a"))),
+                                            )
+                                            .apply(Term::empty_list()),
+                                    )
+                                    .lambda("a")
+                                    // "a" generic is unbound in this case thus
+                                    // the aiken compiler does not unwrap the value to pass to f
+                                    .apply(Term::head_list().apply(Term::var("opt_fields")))
+                                    .lambda("opt_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(
+                                Term::fst_pair()
+                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                            )
+                            .lambda("f")
+                            .lambda("opt"),
+                    )
+                    .apply(Term::data(Data::constr(1, vec![])))
+                    .apply(Term::integer(14.into()).lambda("_")),
+            )
+            .apply(Term::data(Data::constr(1, vec![])))
+            .lambda(CONSTR_FIELDS_EXPOSER)
+            .apply(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("x")))
+                    .lambda("x"),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_GET_FIELD))
+                    .apply(Term::integer(0.into())),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::var("__wanted_arg".to_string()))
+                    .apply(Term::var("__current_arg_number".to_string()))
+                    .if_else(
+                        Term::head_list(),
+                        Term::var(CONSTR_GET_FIELD)
+                            .apply(Term::var(CONSTR_GET_FIELD))
+                            .apply(
+                                Term::add_integer()
+                                    .apply(Term::var("__current_arg_number"))
+                                    .apply(Term::integer(1.into())),
+                            )
+                            .apply(
+                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
+                            )
+                            .apply(Term::var("__wanted_arg"))
+                            .lambda("__current_list_of_constr_args"),
+                    )
+                    .apply(Term::var("__list_of_constr_args"))
+                    .lambda("__wanted_arg")
+                    .lambda("__list_of_constr_args")
+                    .lambda("__current_arg_number")
+                    .lambda(CONSTR_GET_FIELD),
+            ),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_19_map_wrap_void() {
+    let src = r#"
+      pub fn map(opt: Option<a>, f: fn(a) -> result) -> Option<result> {
+        when opt is {
+          None ->
+            None
+          Some(a) ->
+            Some(f(a))
+        }
+      }
+
+      test map_1() {
+        map(None, fn(_) { Void }) == None
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::data(Data::constr(1, vec![])),
+                                Term::constr_data()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::var("f").apply(Term::var("a")).choose_unit(
+                                                    Term::data(Data::constr(0, vec![])),
+                                                ),
+                                            )
+                                            .apply(Term::empty_list()),
+                                    )
+                                    .lambda("a")
+                                    // "a" generic is unbound in this case thus
+                                    // the aiken compiler does not unwrap the value to pass to f
+                                    .apply(Term::head_list().apply(Term::var("opt_fields")))
+                                    .lambda("opt_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(
+                                Term::fst_pair()
+                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                            )
+                            .lambda("f")
+                            .lambda("opt"),
+                    )
+                    .apply(Term::data(Data::constr(1, vec![])))
+                    .apply(Term::unit().lambda("_")),
+            )
+            .apply(Term::data(Data::constr(1, vec![])))
+            .lambda(CONSTR_FIELDS_EXPOSER)
+            .apply(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("x")))
+                    .lambda("x"),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_GET_FIELD))
+                    .apply(Term::integer(0.into())),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::var("__wanted_arg".to_string()))
+                    .apply(Term::var("__current_arg_number".to_string()))
+                    .if_else(
+                        Term::head_list(),
+                        Term::var(CONSTR_GET_FIELD)
+                            .apply(Term::var(CONSTR_GET_FIELD))
+                            .apply(
+                                Term::add_integer()
+                                    .apply(Term::var("__current_arg_number"))
+                                    .apply(Term::integer(1.into())),
+                            )
+                            .apply(
+                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
+                            )
+                            .apply(Term::var("__wanted_arg"))
+                            .lambda("__current_list_of_constr_args"),
+                    )
+                    .apply(Term::var("__list_of_constr_args"))
+                    .lambda("__wanted_arg")
+                    .lambda("__list_of_constr_args")
+                    .lambda("__current_arg_number")
+                    .lambda(CONSTR_GET_FIELD),
+            ),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_20_map_some() {
+    let src = r#"
+      pub fn map(opt: Option<a>, f: fn(a) -> result) -> Option<result> {
+        when opt is {
+          None ->
+            None
+          Some(a) ->
+            Some(f(a))
+        }
+      }
+      
+      test map_1() {
+        map(Some(14), fn(n){ n + 1 }) == Some(15)
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("constr_index"))
+                            .delayed_if_else(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::constr_data()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::i_data()
+                                                    .apply(Term::var("f").apply(Term::var("a"))),
+                                            )
+                                            .apply(Term::empty_list()),
+                                    )
+                                    .lambda("a")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("constr_fields")),
+                                        ),
+                                    )
+                                    .lambda("constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
+                                    ),
+                            )
+                            .lambda("constr_index")
+                            .apply(
+                                Term::fst_pair()
+                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                            )
+                            .lambda("f")
+                            .lambda("opt"),
+                    )
+                    .apply(Term::Constant(
+                        Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
+                    ))
+                    .apply(
+                        Term::add_integer()
+                            .apply(Term::var("n"))
+                            .apply(Term::integer(1.into()))
+                            .lambda("n"),
+                    ),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(0, vec![Data::integer(15.into())])).into(),
+            ))
+            .constr_fields_exposer()
+            .constr_get_field(),
+        false,
+    );
+}
