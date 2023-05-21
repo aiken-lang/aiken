@@ -1997,3 +1997,98 @@ fn acceptance_test_17_take() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_18_or_else() {
+    let src = r#"
+      pub fn or_else(opt: Option<a>, default: a) -> a {
+        when opt is {
+            None ->
+              default
+            Some(a) ->
+              a
+        }
+      }
+
+      test or_else_2() {
+        or_else(Some(42), 14) == 42
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(
+                Term::var("or_else")
+                    .lambda("or_else")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::var("default"),
+                                Term::var("a")
+                                    .lambda("a")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("opt_fields")),
+                                        ),
+                                    )
+                                    .lambda("opt_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(
+                                Term::fst_pair()
+                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                            )
+                            .lambda("default")
+                            .lambda("opt"),
+                    )
+                    .apply(Term::data(Data::constr(0, vec![Data::integer(42.into())])))
+                    .apply(Term::integer(14.into())),
+            )
+            .apply(Term::integer(42.into()))
+            .lambda(CONSTR_FIELDS_EXPOSER)
+            .apply(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("x")))
+                    .lambda("x"),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_GET_FIELD))
+                    .apply(Term::integer(0.into())),
+            )
+            .lambda(CONSTR_GET_FIELD)
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::var("__wanted_arg".to_string()))
+                    .apply(Term::var("__current_arg_number".to_string()))
+                    .if_else(
+                        Term::head_list(),
+                        Term::var(CONSTR_GET_FIELD)
+                            .apply(Term::var(CONSTR_GET_FIELD))
+                            .apply(
+                                Term::add_integer()
+                                    .apply(Term::var("__current_arg_number"))
+                                    .apply(Term::integer(1.into())),
+                            )
+                            .apply(
+                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
+                            )
+                            .apply(Term::var("__wanted_arg"))
+                            .lambda("__current_list_of_constr_args"),
+                    )
+                    .apply(Term::var("__list_of_constr_args"))
+                    .lambda("__wanted_arg")
+                    .lambda("__list_of_constr_args")
+                    .lambda("__current_arg_number")
+                    .lambda(CONSTR_GET_FIELD),
+            ),
+        false,
+    );
+}
