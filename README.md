@@ -21,11 +21,6 @@
 
 For more information please see the [user manual](https://aiken-lang.org).
 
-## Roadmap
-
-Aiken defines its roadmap [using _Github Milestones_](https://aiken-lang.org/#roadmap).
-The roadmap isn't set in stone, but gives a high-level overview of where the project is headed for.
-
 ## Contributing
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
