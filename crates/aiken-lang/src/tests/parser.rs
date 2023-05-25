@@ -41,7 +41,7 @@ fn windows_newline() {
 #[test]
 fn test_fail() {
     let code = indoc! {r#"
-       test fail invalid_inputs() {
+       !test invalid_inputs() {
          expect True = False
 
          False
@@ -53,17 +53,17 @@ fn test_fail() {
         vec![ast::UntypedDefinition::Test(ast::Function {
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
-                location: Span::new((), 31..59),
+                location: Span::new((), 27..55),
                 expressions: vec![
                     expr::UntypedExpr::Assignment {
-                        location: Span::new((), 31..50),
+                        location: Span::new((), 27..46),
                         value: Box::new(expr::UntypedExpr::Var {
-                            location: Span::new((), 45..50),
+                            location: Span::new((), 41..46),
                             name: "False".to_string(),
                         }),
                         pattern: ast::UntypedPattern::Constructor {
                             is_record: false,
-                            location: Span::new((), 38..42),
+                            location: Span::new((), 34..38),
                             name: "True".to_string(),
                             arguments: vec![],
                             module: None,
@@ -75,18 +75,18 @@ fn test_fail() {
                         annotation: None,
                     },
                     expr::UntypedExpr::Var {
-                        location: Span::new((), 54..59),
+                        location: Span::new((), 50..55),
                         name: "False".to_string(),
                     },
                 ],
             },
             doc: None,
-            location: Span::new((), 0..26),
+            location: Span::new((), 0..22),
             name: "invalid_inputs".to_string(),
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 60,
+            end_position: 56,
             can_error: true,
         })],
     );

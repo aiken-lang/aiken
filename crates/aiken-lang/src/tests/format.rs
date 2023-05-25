@@ -786,3 +786,16 @@ fn match_record() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn test_fail() {
+    let src = indoc! { r#"
+      !test foo() {
+        expect Some(a) = bar
+
+        a
+      }
+    "#};
+
+    assert_fmt(src, src);
+}

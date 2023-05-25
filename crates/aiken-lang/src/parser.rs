@@ -337,8 +337,10 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
 }
 
 pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    just(Token::Test)
-        .ignore_then(just(Token::Fail).ignored().or_not())
+    just(Token::Bang)
+        .ignored()
+        .or_not()
+        .then_ignore(just(Token::Test))
         .then(select! {Token::Name {name} => name})
         .then_ignore(just(Token::LeftParen))
         .then_ignore(just(Token::RightParen))

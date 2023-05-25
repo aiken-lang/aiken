@@ -251,8 +251,17 @@ impl<'comments> Formatter<'comments> {
                 arguments: args,
                 body,
                 end_position,
+                can_error,
                 ..
-            }) => self.definition_fn(&false, "test", name, args, &None, body, *end_position),
+            }) => self.definition_fn(
+                &false,
+                if *can_error { "!test" } else { "test" },
+                name,
+                args,
+                &None,
+                body,
+                *end_position,
+            ),
 
             Definition::TypeAlias(TypeAlias {
                 alias,

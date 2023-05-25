@@ -118,7 +118,6 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "test" => Some(Token::Test),
         "error" => Some(Token::ErrorTerm),
         "validator" => Some(Token::Validator),
-        "fail" => Some(Token::Fail),
         _ => None,
     }
 }
