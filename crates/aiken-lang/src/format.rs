@@ -286,8 +286,9 @@ impl<'comments> Formatter<'comments> {
                     None => head,
                     Some(t) => head.append(": ").append(self.annotation(t)),
                 };
+
                 head.append(" =")
-                    .append(line())
+                    .append(break_("", " "))
                     .append(self.const_expr(value))
                     .nest(INDENT)
                     .group()
@@ -1452,12 +1453,13 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::When { .. } => line().append(self.expr(expr)).nest(INDENT).group(),
 
-            _ => line().append(self.expr(expr)).nest(INDENT).group(),
+            _ => break_("", " ").append(self.expr(expr)).nest(INDENT).group(),
         }
     }
 
     fn clause<'a>(&mut self, clause: &'a UntypedClause, index: u32) -> Document<'a> {
         let space_before = self.pop_empty_lines(clause.location.start);
+        let after_position = clause.location.end;
         let clause_doc = join(
             clause.patterns.iter().map(|p| self.pattern(p)),
             " | ".to_doc(),
@@ -1466,6 +1468,9 @@ impl<'comments> Formatter<'comments> {
             None => clause_doc,
             Some(guard) => clause_doc.append(" if ").append(self.clause_guard(guard)),
         };
+
+        // Remove any unused empty lines within the clause
+        self.pop_empty_lines(after_position);
 
         if index == 0 {
             clause_doc
