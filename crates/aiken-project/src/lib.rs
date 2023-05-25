@@ -670,7 +670,12 @@ where
         let mut programs = Vec::new();
 
         for (input_path, module_name, func_def) in scripts {
-            let Function { name, body, .. } = func_def;
+            let Function {
+                name,
+                body,
+                can_error,
+                ..
+            } = func_def;
 
             if verbose {
                 self.event_listener.handle_event(Event::GeneratingUPLCFor {
@@ -711,6 +716,7 @@ where
                 input_path,
                 module_name,
                 name.to_string(),
+                *can_error,
                 program.try_into().unwrap(),
                 evaluation_hint,
             );
@@ -737,7 +743,7 @@ where
                 let mut eval_result = script.program.clone().eval(initial_budget);
 
                 EvalInfo {
-                    success: !eval_result.failed(),
+                    success: !eval_result.failed(script.can_error),
                     script,
                     spent_budget: eval_result.cost(),
                     logs: eval_result.logs(),

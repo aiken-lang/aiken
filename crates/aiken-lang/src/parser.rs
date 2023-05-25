@@ -10,7 +10,7 @@ use crate::{
     },
     expr,
 };
-use chumsky::prelude::*;
+use chumsky::{chain::Chain, prelude::*};
 use error::ParseError;
 use extra::ModuleExtra;
 use token::Token;
@@ -73,7 +73,8 @@ pub fn module(
         result
     });
 
-    let definitions = module_parser().parse(chumsky::Stream::from_iter(span(len), tokens))?;
+    let definitions =
+        module_parser().parse(chumsky::Stream::from_iter(span(tokens.len()), tokens))?;
 
     let module = ast::UntypedModule {
         kind,
@@ -329,6 +330,7 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
                     public: opt_pub.is_some(),
                     return_annotation,
                     return_type: (),
+                    can_error: true,
                 })
             },
         )
@@ -336,7 +338,8 @@ pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseEr
 
 pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     just(Token::Test)
-        .ignore_then(select! {Token::Name {name} => name})
+        .ignore_then(just(Token::Fail).ignored().or_not())
+        .then(select! {Token::Name {name} => name})
         .then_ignore(just(Token::LeftParen))
         .then_ignore(just(Token::RightParen))
         .map_with_span(|name, span| (name, span))
@@ -345,7 +348,7 @@ pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
                 .or_not()
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
-        .map_with_span(|((name, span_end), body), span| {
+        .map_with_span(|(((fail, name), span_end), body), span| {
             ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
                 body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
@@ -356,6 +359,7 @@ pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = Parse
                 public: false,
                 return_annotation: None,
                 return_type: (),
+                can_error: fail.is_some(),
             })
         })
 }

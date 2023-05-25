@@ -681,6 +681,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 annotation: None,
                 tipo: bool(),
             }],
+            can_error: false,
             doc: None,
             location: Span::empty(),
             name: "not".to_string(),
@@ -731,6 +732,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 annotation: None,
                 tipo: a_var.clone(),
             }],
+            can_error: false,
             body: TypedExpr::Var {
                 location: Span::empty(),
                 constructor: ValueConstructor {
@@ -766,6 +768,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             variant_name: "".to_string(),
         },
         Function {
+            can_error: false,
             arguments: vec![
                 Arg {
                     arg_name: ArgName::Named {
@@ -828,6 +831,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             variant_name: "".to_string(),
         },
         Function {
+            can_error: false,
             arguments: vec![Arg {
                 arg_name: ArgName::Named {
                     name: "f".to_string(),

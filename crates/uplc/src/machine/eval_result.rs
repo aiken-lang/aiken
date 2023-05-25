@@ -32,10 +32,14 @@ impl EvalResult {
         std::mem::take(&mut self.logs)
     }
 
-    pub fn failed(&self) -> bool {
-        matches!(self.result, Err(_))
-            || matches!(self.result, Ok(Term::Error))
-            || matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(false)))
+    pub fn failed(&self, can_error: bool) -> bool {
+        if can_error {
+            !matches!(self.result, Err(_))
+        } else {
+            matches!(self.result, Err(_))
+                || matches!(self.result, Ok(Term::Error))
+                || matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(false)))
+        }
     }
 
     pub fn result(self) -> Result<Term<NamedDeBruijn>, Error> {

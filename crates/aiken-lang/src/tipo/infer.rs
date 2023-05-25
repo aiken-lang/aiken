@@ -160,6 +160,7 @@ fn infer_definition(
             body,
             return_annotation,
             end_position,
+            can_error,
             ..
         }) => {
             if public && kind.is_validator() {
@@ -246,6 +247,7 @@ fn infer_definition(
                     .return_type()
                     .expect("Could not find return type for fn"),
                 body,
+                can_error,
                 end_position,
             }))
         }

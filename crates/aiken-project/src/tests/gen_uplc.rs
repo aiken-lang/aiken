@@ -80,7 +80,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             let mut eval = debruijn_program.eval(ExBudget::default());
 
             assert_eq!(
-                eval.failed(),
+                eval.failed(false),
                 should_fail,
                 "logs - {}\n",
                 format!("{:#?}", eval.logs())

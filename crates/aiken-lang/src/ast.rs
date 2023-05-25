@@ -118,6 +118,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "test" => Some(Token::Test),
         "error" => Some(Token::ErrorTerm),
         "validator" => Some(Token::Validator),
+        "fail" => Some(Token::Fail),
         _ => None,
     }
 }
@@ -136,6 +137,7 @@ pub struct Function<T, Expr> {
     pub return_annotation: Option<Annotation>,
     pub return_type: T,
     pub end_position: usize,
+    pub can_error: bool,
 }
 
 pub type TypedTypeAlias = TypeAlias<Arc<Type>>;
