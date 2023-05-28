@@ -1,13 +1,62 @@
 # Changelog
 
-## v1.0.3.alpha - 2023-04-28
+## next - 2023-MM-DD
+
+## v1.0.6-alpha - 2023-05-17
+
+### Fixed
+
+- **aiken-lang**: Fix for cases where identity function is used as a param to a
+  function or assigned to a var.
+- **aiken-lang**: Fix for free unique caused by code gen function having a
+  missing dependency.
+
+## v1.0.5-alpha - 2023-05-14
 
 ### Added
 
-- **aiken-lang**: added optimization to help prevent unnecessary data wraps or unwraps
+- **aiken-lang**: Add Record Module support for records with 0 fields
+- **aiken-lang**: Added some optimization tests
+- **aiken-lang**: Added an Aiken to uplc conversion tests on validators
+- **aiken-lang**: Added some uplc builder functions for builtin creation
+- **aiken-lang**: Added optimization where identity functions called on an arg
+  are reduced to just the arg.
+
+### Fixed
+
+- **aiken-lang**: Fix for nested constructors where the type had a single
+  constructor. The fields exposed were not being added to the Air.
+
+## v1.0.4-alpha - 2023-05-09
+
+### Added
+
+- **aiken-lang**: ChooseUnit builtin uses a more efficient way of handling the
+  first arg (unit) by just assigning to lambda
+
+### Fixed
+
+- **aiken-lang**: Negative numbers now show up as a constant instead of 0 - that
+  number
+- **aiken-lang**: Expect on constructors without field maps no longer panics
+- **aiken-lang**: Expect on constructors with discard as assigned field names
+  now no longer throws free unique
+
+### Changed
+
+- **aiken-lang**: Refactor how builtins are processed to uplc in code gen
+
+## v1.0.3-alpha - 2023-04-28
+
+### Added
+
+- **aiken-lang**: added optimization to help prevent unnecessary data wraps or
+  unwraps
 - **aiken-lang**: optimization to strip unnecessary lambdas
-- **aiken-lang**: implement Clone for ParseError and tipo::Error for the playground
-- **aiken-project**: added end to end tests on conversion from aiken lang to uplc
+- **aiken-lang**: implement Clone for ParseError and tipo::Error for the
+  playground
+- **aiken-project**: added end to end tests on conversion from aiken lang to
+  uplc
 
 ### Fixed
 
@@ -15,15 +64,18 @@
 - **aiken-lang**: Add name of var to the unused var warning
 - **aiken-lang**: fix expect on an empty list
 - **aiken-lang**: pattern match on boolean with simple clause bodies
-- **aiken-lang**: fix for inline_direct_reduce to be applied to pattern match function instead of argument
-- **aiken-lang**: code gen function dependencies won't be hoisted to the top, instead hoisted at the location depended on.
+- **aiken-lang**: fix for inline_direct_reduce to be applied to pattern match
+  function instead of argument
+- **aiken-lang**: code gen function dependencies won't be hoisted to the top,
+  instead hoisted at the location depended on.
 
-## v1.0.2.alpha - 2023-04-17
+## v1.0.2-alpha - 2023-04-17
 
 ### Fixed
 
 - **aiken-lang**: needed to assert_no_assignment in when and if blocks
-- **uplc**: need to return deserialization error in some cases for the machine builtins
+- **uplc**: need to return deserialization error in some cases for the machine
+  builtins
 
 ## v1.0.1-alpha - 2023-04-16
 
@@ -40,22 +92,30 @@
 
 ### Changed
 
-- **aiken-project**: tests filtering with `-m` during check now happens in `Project::collect_tests`
-- **aiken-project**: fixed generation of blueprints for recursive and mutually recursive data-types
+- **aiken-project**: tests filtering with `-m` during check now happens in
+  `Project::collect_tests`
+- **aiken-project**: fixed generation of blueprints for recursive and mutually
+  recursive data-types
 - **aiken-project**: perform validation of parameters on `blueprint apply`
 
 - **aiken-lang**: block `Data` and `String` from unifying when casting
-- **aiken-lang**: remove ability for a type with many variants with matching field labels and types to support field access
+- **aiken-lang**: remove ability for a type with many variants with matching
+  field labels and types to support field access
 - **aiken-lang**: various uplc code gen fixes
 - **aiken-lang**: update todo warning to include type
-- **aiken-lang**: `|>` operator can now be formatted as a single (short) line or forced over multiline in a flexible manner
-- **aiken-lang**: the compiler now provides better feedback for type holes (i.e. `_`) in type annotations
-- **aiken-lang**: assignment and clause guard are now always formatted on a new line
-- **aiken-lang**: unused let-bindings are now fully removed from generated code and discarded unused let-binding now raise a warning
+- **aiken-lang**: `|>` operator can now be formatted as a single (short) line or
+  forced over multiline in a flexible manner
+- **aiken-lang**: the compiler now provides better feedback for type holes (i.e.
+  `_`) in type annotations
+- **aiken-lang**: assignment and clause guard are now always formatted on a new
+  line
+- **aiken-lang**: unused let-bindings are now fully removed from generated code
+  and discarded unused let-binding now raise a warning
 - **aiken-lang**: support multi-clause patterns (only as a syntactic sugar)
 - **aiken-lang**: fix lexer panic when parsing too large (> u32) tuple-indexes
 
-- **uplc**: Greatly improved the Plutus virtual machine performances for script evaluation
+- **uplc**: Greatly improved the Plutus virtual machine performances for script
+  evaluation
 
 ## v0.0.29 - 2023-02-23
 
@@ -96,7 +156,8 @@ N/A
 
 ### Changed
 
-- **uplc**: Reward accounts are now correctly turned into script credentials in ScriptContext.
+- **uplc**: Reward accounts are now correctly turned into script credentials in
+  ScriptContext.
 - **all**: bump pallas version to `v0.16.0`
 
 ### Removed
@@ -110,8 +171,8 @@ N/A
 - **aiken-lang**: integrated unit tests
 
   Aiken now supports writing unit tests directly in source files using the new
-  `test` keyword. Tests are functions with no arguments that are implicitly typed
-  to `bool`. For example:
+  `test` keyword. Tests are functions with no arguments that are implicitly
+  typed to `bool`. For example:
 
   ```gleam
   test foo () {
@@ -123,8 +184,10 @@ N/A
 
 ### Changed
 
-- **aiken**: `check` now also runs and reports on any `test` found in the project
-- **aiken**: fix Plutus V1 `to_plutus_data()` for post-alonzo txout with no datum hash
+- **aiken**: `check` now also runs and reports on any `test` found in the
+  project
+- **aiken**: fix Plutus V1 `to_plutus_data()` for post-alonzo txout with no
+  datum hash
 
 ### Removed
 
@@ -155,24 +218,28 @@ N/A
 - **aiken-lang**: add `Data` to prelude
 - **aiken-lang**: allow `Data` to unify with anything that's not in the prelude
 - **aiken-project**: validate if validator function return bool
-- **aiken-project**: validate if validator function has minimum number of arguments
+- **aiken-project**: validate if validator function has minimum number of
+  arguments
 - **aiken-lsp**: new crate that contains the aiken language server
 
 ### Changed
 
-- **uplc**: `Converter::get_index` now takes the full name to provide better error messages for `Error::FreeUnique`
+- **uplc**: `Converter::get_index` now takes the full name to provide better
+  error messages for `Error::FreeUnique`
 
 ## v0.0.24 - 2022-11-04
 
 ### Changed
 
-- **uplc**: Sorted remaining structured in the ScriptContext (Value, Wdrl, (Ref) Inputs, Mint, Required signers, Data, Redeemers)
+- **uplc**: Sorted remaining structured in the ScriptContext (Value, Wdrl, (Ref)
+  Inputs, Mint, Required signers, Data, Redeemers)
 
 ## v0.0.23 - 2022-11-03
 
 ### Changed
 
-- **uplc**: sort inputs for script context fixes an issue in lucid https://github.com/spacebudz/lucid/issues/109
+- **uplc**: sort inputs for script context fixes an issue in lucid
+  https://github.com/spacebudz/lucid/issues/109
 
 ## v0.0.22 - 2022-10-31
 
@@ -180,14 +247,18 @@ N/A
 
 - **aiken**: Fancy errors using [miette](https://github.com/zkat/miette)
 - **aiken**: Typechecking
-- **aiken**: Inject `aiken/builtin` module with some functions from `DefaultFunction` in UPLC directly exposed
-- **aiken-lang**: add `infer` method to `UntypedModule` which returns a `TypedModule`
-- **uplc**: Expose various Pallas primitives from UPLC to make constructing
-  UPLC types possible for consumers
+- **aiken**: Inject `aiken/builtin` module with some functions from
+  `DefaultFunction` in UPLC directly exposed
+- **aiken-lang**: add `infer` method to `UntypedModule` which returns a
+  `TypedModule`
+- **uplc**: Expose various Pallas primitives from UPLC to make constructing UPLC
+  types possible for consumers
 
 ### Changed
 
-- **aiken**: Project structure is now a bit different. See [examples/sample](https://github.com/aiken-lang/aiken/tree/main/examples/sample) for more
+- **aiken**: Project structure is now a bit different. See
+  [examples/sample](https://github.com/aiken-lang/aiken/tree/main/examples/sample)
+  for more
 
 ## v0.0.21 - 2022-10-23
 
@@ -197,15 +268,19 @@ N/A
 
 ### Changed
 
-- **uplc**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int` instances
-- **uplc**: Added `apply_params_to_script` function (applies params to script and serializes the new script).
+- **uplc**: Fixed overflow issue by changing `i64` to `i128` in `BigInt::Int`
+  instances
+- **uplc**: Added `apply_params_to_script` function (applies params to script
+  and serializes the new script).
 
 ## v0.0.20 - 2022-10-17
 
 ### Added
 
-- **aiken**: `Project` module which is responsible loading modules and running the compilation steps
-- **aiken**: `UplcCommand::Flat` flip the cbor_hex if condition so that the correct logic runs when using the flag
+- **aiken**: `Project` module which is responsible loading modules and running
+  the compilation steps
+- **aiken**: `UplcCommand::Flat` flip the cbor_hex if condition so that the
+  correct logic runs when using the flag
 - **uplc**: use i128 for `Constant::Integer`
 - **flat-rs**: add support for i128 encode and decode
 - **flat-rs**: add i128 zigzag function

@@ -136,6 +136,7 @@ pub struct Function<T, Expr> {
     pub return_annotation: Option<Annotation>,
     pub return_type: T,
     pub end_position: usize,
+    pub can_error: bool,
 }
 
 pub type TypedTypeAlias = TypeAlias<Arc<Type>>;

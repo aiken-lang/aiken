@@ -197,6 +197,7 @@ impl<'a> Environment<'a> {
                 return_annotation,
                 return_type,
                 end_position,
+                can_error,
             }) => {
                 // Lookup the inferred function information
                 let function = self
@@ -241,6 +242,7 @@ impl<'a> Environment<'a> {
                     return_type,
                     body,
                     end_position,
+                    can_error,
                 })
             }
 

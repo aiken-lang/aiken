@@ -10,6 +10,7 @@ pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
 pub const EXPECT_ON_LIST: &str = "__expect_on_list";
 
 impl<T> Term<T> {
+    // Terms
     pub fn apply(self, arg: Self) -> Self {
         Term::Apply {
             function: self.into(),
@@ -25,6 +26,7 @@ impl<T> Term<T> {
         Term::Delay(self.into())
     }
 
+    // Primitives
     pub fn integer(i: num_bigint::BigInt) -> Self {
         Term::Constant(Constant::Integer(i).into())
     }
@@ -75,6 +77,7 @@ impl<T> Term<T> {
         )
     }
 
+    // Builtins
     pub fn constr_data() -> Self {
         Term::Builtin(DefaultFunction::ConstrData)
     }
@@ -135,6 +138,14 @@ impl<T> Term<T> {
         Term::Builtin(DefaultFunction::EqualsByteString)
     }
 
+    pub fn less_than_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::LessThanByteString)
+    }
+
+    pub fn less_than_equals_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::LessThanEqualsByteString)
+    }
+
     pub fn equals_data() -> Self {
         Term::Builtin(DefaultFunction::EqualsData)
     }
@@ -157,6 +168,58 @@ impl<T> Term<T> {
 
     pub fn length_of_bytearray() -> Self {
         Term::Builtin(DefaultFunction::LengthOfByteString)
+    }
+
+    pub fn cons_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::ConsByteString)
+    }
+
+    pub fn slice_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::SliceByteString)
+    }
+
+    pub fn append_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::AppendByteString)
+    }
+
+    pub fn index_bytearray() -> Self {
+        Term::Builtin(DefaultFunction::IndexByteString)
+    }
+
+    pub fn sha2_256() -> Self {
+        Term::Builtin(DefaultFunction::Sha2_256)
+    }
+
+    pub fn sha3_256() -> Self {
+        Term::Builtin(DefaultFunction::Sha3_256)
+    }
+
+    pub fn blake2b_256() -> Self {
+        Term::Builtin(DefaultFunction::Blake2b_256)
+    }
+
+    pub fn verify_ed25519_signature() -> Self {
+        Term::Builtin(DefaultFunction::VerifyEd25519Signature)
+    }
+
+    pub fn verify_ecdsa_secp256k1_signature() -> Self {
+        Term::Builtin(DefaultFunction::VerifyEcdsaSecp256k1Signature)
+    }
+
+    pub fn verify_schnorr_secp256k1_signature() -> Self {
+        Term::Builtin(DefaultFunction::VerifySchnorrSecp256k1Signature)
+    }
+
+    pub fn decode_utf8() -> Self {
+        Term::Builtin(DefaultFunction::DecodeUtf8)
+    }
+
+    pub fn append_string() -> Self {
+        Term::Builtin(DefaultFunction::AppendString)
+    }
+
+    pub fn encode_utf8() -> Self {
+        Term::Builtin(DefaultFunction::EncodeUtf8)
     }
 
     pub fn head_list() -> Self {
@@ -266,83 +329,75 @@ impl Term<Name> {
     }
 
     pub fn constr_fields_exposer(self) -> Self {
-        self.lambda(CONSTR_FIELDS_EXPOSER.to_string()).apply(
+        self.lambda(CONSTR_FIELDS_EXPOSER).apply(
             Term::snd_pair()
-                .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
+                .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
                 .lambda("__constr_var"),
         )
     }
 
     pub fn constr_index_exposer(self) -> Self {
-        self.lambda(CONSTR_INDEX_EXPOSER.to_string()).apply(
+        self.lambda(CONSTR_INDEX_EXPOSER).apply(
             Term::fst_pair()
-                .apply(Term::unconstr_data().apply(Term::var("__constr_var".to_string())))
-                .lambda("__constr_var".to_string()),
+                .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
+                .lambda("__constr_var"),
         )
     }
 
     pub fn constr_get_field(self) -> Self {
-        self.lambda(CONSTR_GET_FIELD.to_string())
+        self.lambda(CONSTR_GET_FIELD)
             .apply(
-                Term::var(CONSTR_GET_FIELD.to_string())
-                    .apply(Term::var(CONSTR_GET_FIELD.to_string()))
+                Term::var(CONSTR_GET_FIELD)
+                    .apply(Term::var(CONSTR_GET_FIELD))
                     .apply(Term::integer(0.into())),
             )
             .lambda(CONSTR_GET_FIELD)
             .apply(
                 Term::equals_integer()
-                    .apply(Term::var("__wanted_arg".to_string()))
-                    .apply(Term::var("__current_arg_number".to_string()))
+                    .apply(Term::var("__wanted_arg"))
+                    .apply(Term::var("__current_arg_number"))
                     .if_else(
                         Term::head_list(),
                         Term::var(CONSTR_GET_FIELD)
                             .apply(Term::var(CONSTR_GET_FIELD))
                             .apply(
                                 Term::add_integer()
-                                    .apply(Term::var("__current_arg_number".to_string()))
+                                    .apply(Term::var("__current_arg_number"))
                                     .apply(Term::integer(1.into())),
                             )
                             .apply(
-                                Term::tail_list()
-                                    .apply(Term::var("__current_list_of_constr_args".to_string())),
+                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
                             )
                             .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args".to_string()),
+                            .lambda("__current_list_of_constr_args"),
                     )
-                    .apply(Term::var("__list_of_constr_args".to_string()))
-                    .lambda("__wanted_arg".to_string())
+                    .apply(Term::var("__list_of_constr_args"))
+                    .lambda("__wanted_arg")
                     .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number".to_string())
-                    .lambda(CONSTR_GET_FIELD.to_string()),
+                    .lambda("__current_arg_number")
+                    .lambda(CONSTR_GET_FIELD),
             )
     }
 
     pub fn assert_on_list(self) -> Self {
-        self.lambda(EXPECT_ON_LIST.to_string())
+        self.lambda(EXPECT_ON_LIST)
+            .apply(Term::var(EXPECT_ON_LIST).apply(Term::var(EXPECT_ON_LIST)))
+            .lambda(EXPECT_ON_LIST)
             .apply(
-                Term::var(EXPECT_ON_LIST.to_string()).apply(Term::var(EXPECT_ON_LIST.to_string())),
-            )
-            .lambda(EXPECT_ON_LIST.to_string())
-            .apply(
-                Term::var("__list_to_check".to_string())
+                Term::var("__list_to_check")
                     .delayed_choose_list(
                         Term::unit(),
-                        Term::var("__check_with".to_string())
-                            .apply(
-                                Term::head_list().apply(Term::var("__list_to_check".to_string())),
-                            )
+                        Term::var("__check_with")
+                            .apply(Term::head_list().apply(Term::var("__list_to_check")))
                             .choose_unit(
-                                Term::var(EXPECT_ON_LIST.to_string())
-                                    .apply(Term::var(EXPECT_ON_LIST.to_string()))
-                                    .apply(
-                                        Term::tail_list()
-                                            .apply(Term::var("__list_to_check".to_string())),
-                                    )
-                                    .apply(Term::var("__check_with".to_string())),
+                                Term::var(EXPECT_ON_LIST)
+                                    .apply(Term::var(EXPECT_ON_LIST))
+                                    .apply(Term::tail_list().apply(Term::var("__list_to_check")))
+                                    .apply(Term::var("__check_with")),
                             ),
                     )
-                    .lambda("__check_with".to_string())
-                    .lambda("__list_to_check".to_string())
+                    .lambda("__check_with")
+                    .lambda("__list_to_check")
                     .lambda(EXPECT_ON_LIST),
             )
     }

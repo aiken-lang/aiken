@@ -245,11 +245,11 @@ impl Constant {
                     RcDoc::text(","),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(_, _, left, right) => RcDoc::text("(")
+            Constant::ProtoPair(_, _, left, right) => RcDoc::text("[")
                 .append((*left).to_doc_list())
                 .append(RcDoc::text(", "))
                 .append((*right).to_doc_list())
-                .append(RcDoc::text(")")),
+                .append(RcDoc::text("]")),
 
             Constant::Data(data) => RcDoc::text("#").append(RcDoc::text(hex::encode(
                 plutus_data_to_bytes(data).unwrap(),

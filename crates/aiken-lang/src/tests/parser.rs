@@ -39,6 +39,60 @@ fn windows_newline() {
 }
 
 #[test]
+fn test_fail() {
+    let code = indoc! {r#"
+       !test invalid_inputs() {
+         expect True = False
+
+         False
+       }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Test(ast::Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 27..55),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 27..46),
+                        value: Box::new(expr::UntypedExpr::Var {
+                            location: Span::new((), 41..46),
+                            name: "False".to_string(),
+                        }),
+                        pattern: ast::UntypedPattern::Constructor {
+                            is_record: false,
+                            location: Span::new((), 34..38),
+                            name: "True".to_string(),
+                            arguments: vec![],
+                            module: None,
+                            constructor: (),
+                            with_spread: false,
+                            tipo: (),
+                        },
+                        kind: ast::AssignmentKind::Expect,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Var {
+                        location: Span::new((), 50..55),
+                        name: "False".to_string(),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..22),
+            name: "invalid_inputs".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 56,
+            can_error: true,
+        })],
+    );
+}
+
+#[test]
 fn validator() {
     let code = indoc! {r#"
         validator {
@@ -54,6 +108,7 @@ fn validator() {
             doc: None,
             end_position: 54,
             fun: Function {
+                can_error: true,
                 arguments: vec![
                     ast::Arg {
                         arg_name: ast::ArgName::Named {
@@ -128,6 +183,7 @@ fn double_validator() {
             doc: None,
             end_position: 90,
             fun: Function {
+                can_error: true,
                 arguments: vec![
                     ast::Arg {
                         arg_name: ast::ArgName::Named {
@@ -176,6 +232,7 @@ fn double_validator() {
                 end_position: 52,
             },
             other_fun: Some(Function {
+                can_error: true,
                 arguments: vec![
                     ast::Arg {
                         arg_name: ast::ArgName::Named {
@@ -487,6 +544,7 @@ fn empty_function() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Trace {
                 kind: ast::TraceKind::Todo,
@@ -522,6 +580,7 @@ fn expect() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 19..69),
@@ -592,6 +651,7 @@ fn plus_binop() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![ast::Arg {
                 arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
@@ -644,6 +704,7 @@ fn pipeline() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![ast::Arg {
                 arg_name: ast::ArgName::Named {
                     name: "a".to_string(),
@@ -715,6 +776,7 @@ fn if_expression() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::If {
                 location: Span::new((), 13..106),
@@ -813,6 +875,7 @@ fn let_bindings() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![ast::Arg {
                 arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
@@ -940,6 +1003,7 @@ fn block() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![ast::Arg {
                 arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
@@ -1034,6 +1098,7 @@ fn when() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![ast::Arg {
                 arg_name: ast::ArgName::Named {
                     label: "a".to_string(),
@@ -1159,6 +1224,7 @@ fn anonymous_function() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 25..83),
@@ -1252,6 +1318,7 @@ fn field_access() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![ast::Arg {
                 arg_name: ast::ArgName::Named {
                     label: "user".to_string(),
@@ -1302,6 +1369,7 @@ fn call() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 15..108),
@@ -1461,6 +1529,7 @@ fn record_update() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![
                 ast::Arg {
                     arg_name: ast::ArgName::Named {
@@ -1555,6 +1624,7 @@ fn record_create_labeled() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(ast::Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Call {
                 arguments: vec![
@@ -1612,6 +1682,7 @@ fn record_create_labeled_with_field_access() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(ast::Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Call {
                 arguments: vec![
@@ -1673,6 +1744,7 @@ fn record_create_unlabeled() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(ast::Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Call {
                 arguments: vec![
@@ -1726,6 +1798,7 @@ fn parse_tuple() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 13..85),
@@ -1829,6 +1902,7 @@ fn parse_tuple2() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 13..38),
@@ -1957,6 +2031,7 @@ fn base16_bytearray_literals() {
                 tipo: (),
             }),
             ast::UntypedDefinition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::BinOp {
                     location: Span::new((), 55..80),
@@ -1992,6 +2067,7 @@ fn function_def() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             doc: None,
             arguments: vec![],
             body: expr::UntypedExpr::Trace {
@@ -2026,6 +2102,7 @@ fn function_invoke() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             doc: None,
             arguments: vec![],
             body: expr::UntypedExpr::Assignment {
@@ -2089,6 +2166,7 @@ fn function_ambiguous_sequence() {
         code,
         vec![
             ast::UntypedDefinition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::Sequence {
                     location: Span::new((), 15..32),
@@ -2121,6 +2199,7 @@ fn function_ambiguous_sequence() {
                 end_position: 34,
             }),
             ast::UntypedDefinition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::Sequence {
                     location: Span::new((), 52..69),
@@ -2153,6 +2232,7 @@ fn function_ambiguous_sequence() {
                 end_position: 71,
             }),
             ast::UntypedDefinition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::Assignment {
                     location: Span::new((), 89..103),
@@ -2184,6 +2264,7 @@ fn function_ambiguous_sequence() {
                 end_position: 104,
             }),
             ast::UntypedDefinition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::Sequence {
                     location: Span::new((), 122..153),
@@ -2296,6 +2377,7 @@ fn tuple_pattern() {
     assert_definitions(
         code,
         vec![ast::UntypedDefinition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::When {
                 location: Span::new((), 13..49),
@@ -2349,6 +2431,7 @@ fn subtraction_vs_negate() {
     assert_definitions(
         code,
         vec![ast::Definition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 14..61),
@@ -2465,6 +2548,7 @@ fn clause_guards() {
     assert_definitions(
         code,
         vec![ast::Definition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::When {
                 location: Span::new((), 13..250),
@@ -2719,6 +2803,7 @@ fn scope_logical_expression() {
     assert_definitions(
         code,
         vec![ast::Definition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 13..61),
@@ -2817,6 +2902,7 @@ fn trace_expressions() {
     assert_definitions(
         code,
         vec![ast::Definition::Fn(Function {
+            can_error: true,
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
                 location: Span::new((), 13..131),
@@ -2942,6 +3028,7 @@ fn parse_keyword_error() {
         code,
         vec![
             ast::Definition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::Trace {
                     kind: ast::TraceKind::Error,
@@ -2963,6 +3050,7 @@ fn parse_keyword_error() {
                 end_position: 38,
             }),
             ast::Definition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::When {
                     location: Span::new((), 54..110),
@@ -3041,6 +3129,7 @@ fn parse_keyword_todo() {
         code,
         vec![
             ast::Definition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::Trace {
                     kind: ast::TraceKind::Todo,
@@ -3062,6 +3151,7 @@ fn parse_keyword_todo() {
                 end_position: 37,
             }),
             ast::Definition::Fn(Function {
+                can_error: true,
                 arguments: vec![],
                 body: expr::UntypedExpr::When {
                     location: Span::new((), 53..121),

@@ -251,8 +251,17 @@ impl<'comments> Formatter<'comments> {
                 arguments: args,
                 body,
                 end_position,
+                can_error,
                 ..
-            }) => self.definition_fn(&false, "test", name, args, &None, body, *end_position),
+            }) => self.definition_fn(
+                &false,
+                if *can_error { "!test" } else { "test" },
+                name,
+                args,
+                &None,
+                body,
+                *end_position,
+            ),
 
             Definition::TypeAlias(TypeAlias {
                 alias,
@@ -286,8 +295,9 @@ impl<'comments> Formatter<'comments> {
                     None => head,
                     Some(t) => head.append(": ").append(self.annotation(t)),
                 };
+
                 head.append(" =")
-                    .append(line())
+                    .append(break_("", " "))
                     .append(self.const_expr(value))
                     .nest(INDENT)
                     .group()
@@ -1452,7 +1462,7 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::When { .. } => line().append(self.expr(expr)).nest(INDENT).group(),
 
-            _ => line().append(self.expr(expr)).nest(INDENT).group(),
+            _ => break_("", " ").append(self.expr(expr)).nest(INDENT).group(),
         }
     }
 

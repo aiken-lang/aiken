@@ -202,6 +202,10 @@ impl<T> Term<T> {
     pub fn is_unit(&self) -> bool {
         matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Unit)
     }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self, Term::Constant(c) if matches!(c.as_ref(), &Constant::Integer(_)))
+    }
 }
 
 impl<'a, T> Display for Term<T>

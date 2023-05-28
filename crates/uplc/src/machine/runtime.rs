@@ -1041,7 +1041,7 @@ pub fn convert_constr_to_tag(constr: u64) -> Option<u64> {
 
 pub static ANY_TAG: u64 = 102;
 
-#[cfg(not(feature = "native-secp256k1"))]
+#[cfg(not(target_family = "wasm"))]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
     use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
 
@@ -1060,7 +1060,7 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<V
 
 /// Unlike the Haskell implementation the schnorr verification function in Aiken doesn't allow for arbitrary message sizes (at the moment).
 /// The message needs to be 32 bytes (ideally prehashed, but not a requirement).
-#[cfg(not(feature = "native-secp256k1"))]
+#[cfg(not(target_family = "wasm"))]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
     use secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
 
@@ -1077,7 +1077,7 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()))
 }
 
-#[cfg(feature = "native-secp256k1")]
+#[cfg(target_family = "wasm")]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
     use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
 
@@ -1090,7 +1090,7 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<V
     Ok(Value::Con(Constant::Bool(valid.is_ok()).into()))
 }
 
-#[cfg(feature = "native-secp256k1")]
+#[cfg(target_family = "wasm")]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
     use k256::schnorr::{self, signature::hazmat::PrehashVerifier};
 

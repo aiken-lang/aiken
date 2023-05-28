@@ -11,6 +11,8 @@ use std::{
     str::FromStr,
 };
 
+use crate::built_info;
+
 #[derive(clap::Args)]
 /// Create a new Aiken project
 pub struct Args {
@@ -49,6 +51,8 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
         .save(&root)
         .into_diagnostic()?;
 
+    create_github_action(&root)?;
+
     gitignore(&root)?;
 
     Ok(())
@@ -82,16 +86,18 @@ fn print_success_message(package_name: &PackageName) {
 }
 
 fn create_lib_folder(root: &Path, package_name: &PackageName) -> miette::Result<()> {
-    let lib = root.join("lib");
-    fs::create_dir_all(&lib).into_diagnostic()?;
-    let nested_path = lib.join(&package_name.repo);
+    let nested_path = root.join("lib").join(&package_name.repo);
+
     fs::create_dir_all(nested_path).into_diagnostic()?;
+
     Ok(())
 }
 
 fn create_validators_folder(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
+
     fs::create_dir_all(validators).into_diagnostic()?;
+
     Ok(())
 }
 
@@ -113,13 +119,6 @@ fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
                   }}
                 }}
                 ```
-
-                Validators are named after their purpose, so one of:
-
-                - `spent`
-                - `mint`
-                - `withdraw`
-                - `publish`
 
                 ## Building
 
@@ -166,6 +165,44 @@ fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
             name = project_name
         },
     ).into_diagnostic()
+}
+
+fn create_github_action(root: &Path) -> miette::Result<()> {
+    let workflows = root.join(".github").join("workflows");
+
+    fs::create_dir_all(&workflows).into_diagnostic()?;
+
+    fs::write(
+        workflows.join("tests.yml"),
+        formatdoc! {
+            r#"
+            name: Tests
+
+            on:
+              push:
+                branches: ["main"]
+              pull_request:
+
+            jobs:
+              build:
+                runs-on: ubuntu-latest
+                steps:
+                  - uses: actions/checkout@v3
+
+                  - uses: aiken-lang/setup-aiken@v0.1.0
+                    with:
+                      version: v{version}
+
+                  - run: aiken fmt --check
+                  - run: aiken check
+                  - run: aiken build
+            "#,
+            version = built_info::PKG_VERSION,
+        },
+    )
+    .into_diagnostic()?;
+
+    Ok(())
 }
 
 fn gitignore(root: &Path) -> miette::Result<()> {

@@ -8,6 +8,7 @@ pub struct Script {
     pub input_path: PathBuf,
     pub module: String,
     pub name: String,
+    pub can_error: bool,
     pub program: Program<NamedDeBruijn>,
     pub evaluation_hint: Option<EvalHint>,
 }
@@ -19,6 +20,7 @@ impl Script {
         input_path: PathBuf,
         module: String,
         name: String,
+        can_error: bool,
         program: Program<NamedDeBruijn>,
         evaluation_hint: Option<EvalHint>,
     ) -> Script {
@@ -27,6 +29,7 @@ impl Script {
             module,
             name,
             program,
+            can_error,
             evaluation_hint,
         }
     }

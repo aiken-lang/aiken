@@ -20,7 +20,10 @@ use crate::{
     },
     builtins::{bool, data, void},
     expr::TypedExpr,
-    gen_uplc::builder::{find_and_replace_generics, get_generic_id_and_type, get_variant_name},
+    gen_uplc::builder::{
+        find_and_replace_generics, get_generic_id_and_type, get_variant_name,
+        lookup_data_type_by_tipo,
+    },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
@@ -296,7 +299,7 @@ impl<'a> CodeGenerator<'a> {
                             name: constr_name, ..
                         } => {
                             if let Some(data_type) =
-                                builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo)
+                                builder::lookup_data_type_by_tipo(&self.data_types, tipo)
                             {
                                 let (constr_index, _) = data_type
                                     .constructors
@@ -365,7 +368,7 @@ impl<'a> CodeGenerator<'a> {
                             ..
                         } => {
                             if let Some(data_type) =
-                                builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo)
+                                builder::lookup_data_type_by_tipo(&self.data_types, tipo)
                             {
                                 let (constr_index, _) = data_type
                                     .constructors
@@ -470,7 +473,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut pattern_stack = ir_stack.empty_with_scope();
 
                 let mut replaced_type = tipo.clone();
-                builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                 self.build(value, &mut value_stack);
 
@@ -648,8 +651,29 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => match constructor {
-                ModuleValueConstructor::Record { .. } => {
-                    todo!("Records from modules not yet implemented.")
+                ModuleValueConstructor::Record {
+                    name,
+                    arity,
+                    tipo,
+                    field_map,
+                    ..
+                } => {
+                    assert!(arity == &0, "Wait how did you get here?");
+                    let data_type = lookup_data_type_by_tipo(&self.data_types, tipo);
+
+                    let val_constructor = ValueConstructor::public(
+                        tipo.clone(),
+                        ValueConstructorVariant::Record {
+                            name: name.clone(),
+                            arity: *arity,
+                            field_map: field_map.clone(),
+                            location: Span::empty(),
+                            module: module_name.clone(),
+                            constructors_count: data_type.unwrap().constructors.len() as u16,
+                        },
+                    );
+
+                    ir_stack.var(val_constructor, name, "");
                 }
                 ModuleValueConstructor::Fn { name, module, .. } => {
                     let func = self.functions.get(&FunctionAccessKey {
@@ -816,10 +840,8 @@ impl<'a> CodeGenerator<'a> {
                     if clause.pattern.is_var() || clause.pattern.is_discard() {
                         ir_stack.wrap_clause(clause_pattern_stack);
                     } else {
-                        let data_type = builder::lookup_data_type_by_tipo(
-                            self.data_types.clone(),
-                            subject_type,
-                        );
+                        let data_type =
+                            builder::lookup_data_type_by_tipo(&self.data_types, subject_type);
 
                         if let Some(data_type) = data_type {
                             if data_type.constructors.len() > 1 {
@@ -1057,7 +1079,7 @@ impl<'a> CodeGenerator<'a> {
 
                     // find data type definition
                     let data_type =
-                        builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                        builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
                     let (index, _) = data_type
                         .constructors
@@ -1228,8 +1250,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 ..
             } => {
-                let data_type =
-                    builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                let data_type = builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
                 let (_, constructor_type) = data_type
                     .constructors
@@ -1283,6 +1304,7 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
                         .collect::<Vec<(String, String, usize)>>();
+
                     let indices = arguments_index
                         .iter()
                         .map(|(label, var_name, index)| {
@@ -1529,8 +1551,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let id = self.id_gen.next();
                 let constr_var_name = format!("{constr_name}_{id}");
-                let data_type =
-                    builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                let data_type = builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
                 let mut when_stack = pattern_stack.empty_with_scope();
 
@@ -1562,6 +1583,8 @@ impl<'a> CodeGenerator<'a> {
                             empty_stack,
                         );
                     }
+                } else {
+                    pattern_stack.merge_child(when_stack);
                 }
 
                 Some(constr_var_name)
@@ -1658,7 +1681,7 @@ impl<'a> CodeGenerator<'a> {
         };
 
         match pattern {
-            Pattern::Int { .. } => todo!(),
+            Pattern::Int { .. } => todo!("Pattern match with integer assignment not supported"),
             Pattern::Var { name, .. } => {
                 let expect_value_stack = value_stack.empty_with_scope();
                 pattern_stack.let_assignment(name, value_stack);
@@ -1762,10 +1785,10 @@ impl<'a> CodeGenerator<'a> {
         assignment_properties: AssignmentProperties,
     ) {
         match pattern {
-            Pattern::Int { .. } => todo!(),
-            Pattern::Var { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
-            Pattern::Discard { .. } => todo!(),
+            Pattern::Int { .. } => unreachable!("Pattern Integer"),
+            Pattern::Var { .. } => unreachable!("Pattern Var"),
+            Pattern::Assign { .. } => unreachable!("Pattern Assign"),
+            Pattern::Discard { .. } => unreachable!("Pattern Discard"),
             Pattern::List { elements, tail, .. } => {
                 let inner_list_type = &tipo.get_inner_types()[0];
                 let mut elements_stack = pattern_stack.empty_with_scope();
@@ -1799,8 +1822,8 @@ impl<'a> CodeGenerator<'a> {
 
                             elements_stack.merge(element_stack);
                         }
-                        Pattern::Int { .. } => todo!(),
-                        Pattern::Assign { .. } => todo!(),
+                        Pattern::Int { .. } => unreachable!("Inner List: Pattern Integer"),
+                        Pattern::Assign { .. } => todo!("Assign in lists not supported yet"),
                         Pattern::Discard { .. } => {
                             names.push("_".to_string());
                         }
@@ -1896,8 +1919,7 @@ impl<'a> CodeGenerator<'a> {
                             unimplemented!("What are you doing with Data type?")
                         } else {
                             let data_type =
-                                builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo)
-                                    .unwrap();
+                                builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
                             let (index, _) = data_type
                                 .constructors
@@ -2009,13 +2031,13 @@ impl<'a> CodeGenerator<'a> {
         assignment_properties: AssignmentProperties,
     ) {
         match pattern {
-            Pattern::Int { .. } => unreachable!(),
+            Pattern::Int { .. } => unreachable!("Expect Integer"),
             Pattern::Var { name, .. } => {
                 expect_stack.merge(value_stack);
 
                 self.expect_type(tipo, expect_stack, name, &mut IndexMap::new());
             }
-            Pattern::Assign { .. } => todo!(),
+            Pattern::Assign { .. } => todo!("Expect Assign not supported yet"),
             Pattern::Discard { .. } => unreachable!(),
             Pattern::List { elements, tail, .. } => {
                 let inner_list_type = &tipo.get_inner_types()[0];
@@ -2028,7 +2050,9 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => {
                             names.push(name.clone());
                         }
-                        Pattern::Assign { .. } => todo!(),
+                        Pattern::Assign { .. } => {
+                            todo!("Inner List: Expect Assign not supported yet")
+                        }
                         element_pattern @ (Pattern::List { .. }
                         | Pattern::Constructor { .. }
                         | Pattern::Tuple { .. }) => {
@@ -2051,6 +2075,7 @@ impl<'a> CodeGenerator<'a> {
 
                             expect_list_stacks.push(element_stack);
                         }
+                        Pattern::Int { .. } => unreachable!("Inner List: Expect Integer"),
                         _ => {}
                     }
                 }
@@ -2100,7 +2125,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     let data_type =
-                        builder::lookup_data_type_by_tipo(self.data_types.clone(), tipo).unwrap();
+                        builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
                     let (index, data_type_constr) = data_type
                         .constructors
@@ -2122,12 +2147,16 @@ impl<'a> CodeGenerator<'a> {
 
                     let arguments_index = arguments
                         .iter()
-                        .filter_map(|item| {
+                        .enumerate()
+                        .filter_map(|(index, item)| {
                             let label = item.label.clone().unwrap_or_default();
-                            let field_map = field_map.as_ref().unwrap_or_else(|| unreachable!());
 
-                            let field_index =
-                                field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&0);
+                            let field_index = field_map
+                                .as_ref()
+                                .map(|field_map| {
+                                    field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
+                                })
+                                .unwrap_or(&index);
 
                             let mut inner_stack = expect_stack.empty_with_scope();
 
@@ -2177,7 +2206,7 @@ impl<'a> CodeGenerator<'a> {
                     var_stack.local_var(tipo.clone(), constr_var.clone());
                     expect_stack.expect_constr(index, var_stack);
 
-                    if !arguments_index.is_empty() {
+                    if !final_args.is_empty() {
                         let mut fields_stack = expect_stack.empty_with_scope();
                         fields_stack.local_var(tipo.clone(), constr_var);
 
@@ -2272,7 +2301,7 @@ impl<'a> CodeGenerator<'a> {
         defined_data_types: &mut IndexMap<String, u64>,
     ) {
         let mut tipo = tipo.clone().into();
-        builder::replace_opaque_type(&mut tipo, self.data_types.clone());
+        builder::replace_opaque_type(&mut tipo, &self.data_types);
 
         if tipo.is_bool()
             || tipo.is_bytearray()
@@ -2417,8 +2446,7 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
         } else {
-            let data_type =
-                builder::lookup_data_type_by_tipo(self.data_types.clone(), &tipo).unwrap();
+            let data_type = builder::lookup_data_type_by_tipo(&self.data_types, &tipo).unwrap();
 
             let new_id = self.id_gen.next();
 
@@ -2572,6 +2600,8 @@ impl<'a> CodeGenerator<'a> {
                 );
             } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
                 *counter += 1;
+            } else {
+                defined_data_types.insert(data_type_name.clone(), 1);
             }
 
             func_stack.var(
@@ -2705,8 +2735,8 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(tuple_name)
             }
-            Pattern::Int { .. } => todo!(),
-            Pattern::Assign { .. } => todo!(),
+            Pattern::Int { .. } => todo!("Extract Arg Name: Int"),
+            Pattern::Assign { .. } => todo!("Extract Arg Name: Assign"),
         }
     }
 
@@ -2764,6 +2794,7 @@ impl<'a> CodeGenerator<'a> {
 
                 *dep_scope = dep_scope.common_ancestor(&func_scope);
             }
+
             dependency_map.insert(function.0, function.1);
         }
 
@@ -3294,7 +3325,7 @@ impl<'a> CodeGenerator<'a> {
                     variant_name,
                 } => {
                     let mut replaced_type = constructor.tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::Var {
                         scope,
@@ -3314,7 +3345,7 @@ impl<'a> CodeGenerator<'a> {
                     tail,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::List {
                         scope,
@@ -3331,7 +3362,7 @@ impl<'a> CodeGenerator<'a> {
                     check_last_item,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::ListAccessor {
                         scope,
@@ -3348,7 +3379,7 @@ impl<'a> CodeGenerator<'a> {
                     tail,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::ListExpose {
                         scope,
@@ -3364,7 +3395,7 @@ impl<'a> CodeGenerator<'a> {
                     count,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::Builtin {
                         scope,
@@ -3375,7 +3406,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::BinOp { tipo, scope, name } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::BinOp {
                         scope,
@@ -3389,7 +3420,7 @@ impl<'a> CodeGenerator<'a> {
                     subject_name,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::When {
                         scope,
@@ -3404,7 +3435,7 @@ impl<'a> CodeGenerator<'a> {
                     complex_clause,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::Clause {
                         scope,
@@ -3421,7 +3452,7 @@ impl<'a> CodeGenerator<'a> {
                     complex_clause,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::ListClause {
                         scope,
@@ -3441,7 +3472,7 @@ impl<'a> CodeGenerator<'a> {
                     complex_clause,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::TupleClause {
                         scope,
@@ -3459,7 +3490,7 @@ impl<'a> CodeGenerator<'a> {
                     subject_name,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::ClauseGuard {
                         scope,
@@ -3475,7 +3506,7 @@ impl<'a> CodeGenerator<'a> {
                     inverse,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::ListClauseGuard {
                         scope,
@@ -3487,7 +3518,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::Tuple { tipo, scope, count } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::Tuple {
                         scope,
@@ -3501,7 +3532,7 @@ impl<'a> CodeGenerator<'a> {
                     tuple_index,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::TupleIndex {
                         scope,
@@ -3511,7 +3542,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::ErrorTerm { tipo, scope } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::ErrorTerm {
                         scope,
@@ -3520,7 +3551,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::Trace { tipo, scope } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::Trace {
                         scope,
@@ -3534,7 +3565,7 @@ impl<'a> CodeGenerator<'a> {
                     check_last_item,
                 } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::TupleAccessor {
                         scope,
@@ -3552,7 +3583,7 @@ impl<'a> CodeGenerator<'a> {
                     let mut new_indices = vec![];
                     for (ind, tipo) in indices {
                         let mut replaced_type = tipo.clone();
-                        builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                        builder::replace_opaque_type(&mut replaced_type, &self.data_types);
                         new_indices.push((ind, replaced_type));
                     }
 
@@ -3573,7 +3604,7 @@ impl<'a> CodeGenerator<'a> {
                         indices_to_remove.push(index);
                     } else {
                         let mut replaced_type = tipo.clone();
-                        builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                        builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                         ir_stack[index] = Air::Record {
                             scope,
@@ -3595,10 +3626,7 @@ impl<'a> CodeGenerator<'a> {
                             indices_to_remove.push(index);
                         } else {
                             let mut replaced_type = tipo.clone();
-                            builder::replace_opaque_type(
-                                &mut replaced_type,
-                                self.data_types.clone(),
-                            );
+                            builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                             ir_stack[index] = Air::RecordAccess {
                                 scope,
@@ -3608,7 +3636,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     } else {
                         let mut replaced_type = tipo.clone();
-                        builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                        builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                         ir_stack[index] = Air::RecordAccess {
                             scope,
@@ -3634,10 +3662,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut new_indices = vec![];
                             for (ind, name, tipo) in indices {
                                 let mut replaced_type = tipo.clone();
-                                builder::replace_opaque_type(
-                                    &mut replaced_type,
-                                    self.data_types.clone(),
-                                );
+                                builder::replace_opaque_type(&mut replaced_type, &self.data_types);
                                 new_indices.push((ind, name, replaced_type));
                             }
 
@@ -3651,10 +3676,7 @@ impl<'a> CodeGenerator<'a> {
                         let mut new_indices = vec![];
                         for (ind, name, tipo) in indices {
                             let mut replaced_type = tipo.clone();
-                            builder::replace_opaque_type(
-                                &mut replaced_type,
-                                self.data_types.clone(),
-                            );
+                            builder::replace_opaque_type(&mut replaced_type, &self.data_types);
                             new_indices.push((ind, name, replaced_type));
                         }
 
@@ -3667,7 +3689,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::Call { scope, count, tipo } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::Call {
                         scope,
@@ -3677,7 +3699,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::If { scope, tipo } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::If {
                         scope,
@@ -3686,7 +3708,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::UnWrapData { scope, tipo } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::UnWrapData {
                         scope,
@@ -3695,7 +3717,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 Air::WrapData { scope, tipo } => {
                     let mut replaced_type = tipo.clone();
-                    builder::replace_opaque_type(&mut replaced_type, self.data_types.clone());
+                    builder::replace_opaque_type(&mut replaced_type, &self.data_types);
 
                     ir_stack[index] = Air::WrapData {
                         scope,
@@ -3782,7 +3804,7 @@ impl<'a> CodeGenerator<'a> {
                             arg_stack.push(Term::Constant(UplcConstant::Unit.into()));
                         } else {
                             let data_type = builder::lookup_data_type_by_tipo(
-                                self.data_types.clone(),
+                                &self.data_types,
                                 &constructor.tipo,
                             )
                             .unwrap();
@@ -4047,97 +4069,43 @@ impl<'a> CodeGenerator<'a> {
             Air::Builtin {
                 func, tipo, count, ..
             } => {
-                let mut term: Term<Name> = Term::Builtin(func);
-                for _ in 0..func.force_count() {
-                    term = term.force();
-                }
-
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                for (index, arg) in arg_vec.into_iter().enumerate() {
-                    let arg = if matches!(func, DefaultFunction::ChooseData) && index > 0 {
-                        arg.delay()
-                    } else {
-                        arg
-                    };
-                    term = term.apply(arg.clone());
-                }
+                let term = match &func {
+                    DefaultFunction::IfThenElse
+                    | DefaultFunction::ChooseUnit
+                    | DefaultFunction::Trace
+                    | DefaultFunction::ChooseList
+                    | DefaultFunction::ChooseData
+                    | DefaultFunction::UnConstrData => {
+                        builder::special_case_builtin(&func, count, arg_vec)
+                    }
 
-                match func {
                     DefaultFunction::FstPair
                     | DefaultFunction::SndPair
                     | DefaultFunction::HeadList => {
-                        let temp_var = format!("__item_{}", self.id_gen.next());
-
-                        if count == 0 {
-                            term = term.apply(Term::var(temp_var.clone()));
-                        }
-
-                        term = builder::convert_data_to_type(term, &tipo);
-
-                        if count == 0 {
-                            term = term.lambda(temp_var);
-                        }
+                        builder::undata_builtin(&func, count, &tipo, arg_vec)
                     }
-                    DefaultFunction::UnConstrData => {
-                        let temp_tuple = format!("__unconstr_tuple_{}", self.id_gen.next());
 
-                        let temp_var = format!("__item_{}", self.id_gen.next());
-
-                        if count == 0 {
-                            term = term.apply(Term::var(temp_var.clone()));
-                        }
-
-                        term = Term::mk_pair_data()
-                            .apply(
-                                Term::i_data()
-                                    .apply(Term::fst_pair().apply(Term::var(temp_tuple.clone()))),
-                            )
-                            .apply(
-                                Term::list_data()
-                                    .apply(Term::snd_pair().apply(Term::var(temp_tuple.clone()))),
-                            )
-                            .lambda(temp_tuple)
-                            .apply(term);
-
-                        if count == 0 {
-                            term = term.lambda(temp_var);
-                        }
+                    DefaultFunction::MkCons | DefaultFunction::MkPairData => {
+                        builder::to_data_builtin(&func, count, &tipo, arg_vec)
                     }
-                    DefaultFunction::MkCons => {
-                        unimplemented!("Use brackets instead.");
-                    }
-                    DefaultFunction::IfThenElse
-                    | DefaultFunction::ChooseList
-                    | DefaultFunction::Trace => unimplemented!("{func:#?}"),
-                    DefaultFunction::ChooseData => {
-                        let temp_vars = (0..func.arity())
-                            .map(|_| format!("__item_{}", self.id_gen.next()))
-                            .collect_vec();
+                    _ => {
+                        let mut term: Term<Name> = func.into();
 
-                        if count == 0 {
-                            for (index, temp_var) in temp_vars.iter().enumerate() {
-                                term = term.apply(if index > 0 {
-                                    Term::var(temp_var.clone()).delay()
-                                } else {
-                                    Term::var(temp_var.clone())
-                                });
-                            }
+                        term = builder::apply_builtin_forces(term, func.force_count());
+
+                        for arg in arg_vec {
+                            term = term.apply(arg.clone());
                         }
 
-                        term = term.force();
-
-                        if count == 0 {
-                            for temp_var in temp_vars.into_iter().rev() {
-                                term = term.lambda(temp_var);
-                            }
-                        }
+                        term
                     }
-                    _ => {}
-                }
+                };
+
                 arg_stack.push(term);
             }
             Air::BinOp { name, tipo, .. } => {
@@ -4868,9 +4836,21 @@ impl<'a> CodeGenerator<'a> {
 
                 let term = match op {
                     UnOp::Not => value.if_else(Term::bool(false), Term::bool(true)),
-                    UnOp::Negate => Term::sub_integer()
-                        .apply(Term::integer(0.into()))
-                        .apply(value),
+                    UnOp::Negate => {
+                        if let Term::Constant(c) = &value {
+                            if let UplcConstant::Integer(i) = c.as_ref() {
+                                Term::integer(-i)
+                            } else {
+                                Term::sub_integer()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(value)
+                            }
+                        } else {
+                            Term::sub_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(value)
+                        }
+                    }
                 };
 
                 arg_stack.push(term);
@@ -5029,7 +5009,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut actual_type = arg.tipo.clone();
 
-                replace_opaque_type(&mut actual_type, self.data_types.clone());
+                replace_opaque_type(&mut actual_type, &self.data_types);
 
                 self.assignment(
                     &Pattern::Var {
