@@ -11,6 +11,7 @@
 - **uplc**: Fix pair formatting
 - **aiken-lang**: forced new line in formatter for assignments
 - **aiken-lang**: Incorrect parsing of generic type annotation prefixed with module
+- **aiken-lang**: Incorrect handling of comments at end of a file when newline not present
 
 ## v1.0.6-alpha - 2023-05-17
 

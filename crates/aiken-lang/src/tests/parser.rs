@@ -39,6 +39,26 @@ fn windows_newline() {
 }
 
 #[test]
+fn can_handle_comments_at_end_of_file() {
+    let code = indoc! {r#"
+       use aiken
+
+       // some comment
+       // more comments"#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Use(Use {
+            location: Span::new((), 0..9),
+            module: vec!["aiken".to_string()],
+            as_name: None,
+            unqualified: vec![],
+            package: (),
+        })],
+    )
+}
+
+#[test]
 fn type_annotation_with_module_prefix() {
     let code = indoc! {r#"
        use aiken
