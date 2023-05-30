@@ -2374,3 +2374,183 @@ fn acceptance_test_20_map_some() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_22_filter_map() {
+    let src = r#"
+          pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
+            when xs is {
+                [] ->
+                  zero
+                [x, ..rest] ->
+                  f(x, foldr(rest, f, zero))
+            }
+          }
+
+          pub fn filter_map(xs: List<a>, f: fn(a) -> Option<b>) -> List<b> {
+            foldr(
+                xs,
+                fn(x, ys) {
+                  when f(x) is {
+                    None ->
+                      ys
+                    Some(y) ->
+                      [y, ..ys]
+                }
+              },
+              [],
+            )
+          }
+
+          test filter_map_1() {
+            filter_map([], fn(_) { Some(43) }) == []
+          }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("filter_map")
+                        .lambda("filter_map")
+                        .apply(
+                            Term::var("foldr")
+                                .apply(Term::var("xs"))
+                                .apply(
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(Term::var("subject_index"))
+                                        .delayed_if_else(
+                                            Term::var("ys"),
+                                            Term::mk_cons()
+                                                .apply(Term::i_data().apply(Term::var("y")))
+                                                .apply(Term::var("ys"))
+                                                .lambda("y")
+                                                .apply(
+                                                    Term::un_i_data().apply(
+                                                        Term::head_list()
+                                                            .apply(Term::var("subject_fields")),
+                                                    ),
+                                                )
+                                                .lambda("subject_fields")
+                                                .apply(
+                                                    Term::var(CONSTR_FIELDS_EXPOSER)
+                                                        .apply(Term::var("subject")),
+                                                ),
+                                        )
+                                        .lambda("subject_index")
+                                        .apply(
+                                            Term::var(CONSTR_INDEX_EXPOSER)
+                                                .apply(Term::var("subject")),
+                                        )
+                                        .lambda("subject")
+                                        .apply(Term::var("f").apply(Term::var("x")))
+                                        .lambda("ys")
+                                        .lambda("x"),
+                                )
+                                .apply(Term::empty_list())
+                                .lambda("f")
+                                .lambda("xs"),
+                        )
+                        .lambda("foldr")
+                        .apply(Term::var("foldr").apply(Term::var("foldr")))
+                        .lambda("foldr")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::var("zero"),
+                                    Term::var("f")
+                                        .apply(Term::var("x"))
+                                        .apply(
+                                            Term::var("foldr")
+                                                .apply(Term::var("foldr"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f"))
+                                                .apply(Term::var("zero")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(Term::head_list().apply(Term::var("xs"))),
+                                )
+                                .lambda("zero")
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("foldr"),
+                        )
+                        .apply(Term::empty_list())
+                        .apply(
+                            Term::data(Data::constr(0, vec![Data::integer(42.into())])).lambda("_"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::empty_list()))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn pass_constr_as_function() {
+    let src = r#"
+      type Make {
+        a: Int,
+        b: SubMake
+      }
+      
+      type SubMake {
+        c: Int
+      }
+      
+      fn hi(sm: SubMake, to_make: fn (Int, SubMake) -> Make) -> Make {
+        to_make(3, sm)
+      }
+      
+      test cry() {
+        Make(3, SubMake(1)) == hi(SubMake(1), Make)
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::integer(3.into()),
+                    Data::constr(0, vec![Data::integer(1.into())]),
+                ],
+            )))
+            .apply(
+                Term::var("hi")
+                    .lambda("hi")
+                    .apply(
+                        Term::var("to_make")
+                            .apply(Term::integer(3.into()))
+                            .apply(Term::var("sm"))
+                            .lambda("to_make")
+                            .lambda("sm"),
+                    )
+                    .apply(Term::data(Data::constr(0, vec![Data::integer(1.into())])))
+                    .apply(
+                        Term::constr_data()
+                            .apply(Term::integer(0.into()))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::i_data().apply(Term::var("a")))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(Term::var("b"))
+                                            .apply(Term::empty_list()),
+                                    ),
+                            )
+                            .lambda("b")
+                            .lambda("a"),
+                    ),
+            ),
+        false,
+    );
+}

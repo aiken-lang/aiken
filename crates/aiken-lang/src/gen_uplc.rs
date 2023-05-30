@@ -3809,34 +3809,59 @@ impl<'a> CodeGenerator<'a> {
                             )
                             .unwrap();
 
-                            let (constr_index, _) = data_type
+                            let (constr_index, constr_type) = data_type
                                 .constructors
                                 .iter()
                                 .enumerate()
                                 .find(|(_, x)| x.name == *constr_name)
                                 .unwrap();
 
-                            let fields = Term::empty_list();
+                            let mut term = Term::empty_list();
 
-                            let mut term = Term::constr_data()
-                                .apply(Term::integer(constr_index.try_into().unwrap()))
-                                .apply(fields);
+                            if constr_type.arguments.is_empty() {
+                                term = Term::constr_data()
+                                    .apply(Term::integer(constr_index.try_into().unwrap()))
+                                    .apply(term);
 
-                            let mut program: Program<Name> = Program {
-                                version: (1, 0, 0),
-                                term,
-                            };
+                                let mut program: Program<Name> = Program {
+                                    version: (1, 0, 0),
+                                    term,
+                                };
 
-                            let mut interner = Interner::new();
+                                let mut interner = Interner::new();
 
-                            interner.program(&mut program);
+                                interner.program(&mut program);
 
-                            let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+                                let eval_program: Program<NamedDeBruijn> =
+                                    program.try_into().unwrap();
 
-                            let evaluated_term: Term<NamedDeBruijn> =
-                                eval_program.eval(ExBudget::default()).result().unwrap();
-                            term = evaluated_term.try_into().unwrap();
+                                let evaluated_term: Term<NamedDeBruijn> =
+                                    eval_program.eval(ExBudget::default()).result().unwrap();
+                                term = evaluated_term.try_into().unwrap();
+                            } else {
+                                for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
+                                    term = Term::mk_cons()
+                                        .apply(builder::convert_type_to_data(
+                                            Term::var(
+                                                arg.label
+                                                    .clone()
+                                                    .unwrap_or_else(|| format!("arg_{index}")),
+                                            ),
+                                            &arg.tipo,
+                                        ))
+                                        .apply(term);
+                                }
 
+                                term = Term::constr_data()
+                                    .apply(Term::integer(constr_index.into()))
+                                    .apply(term);
+
+                                for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
+                                    term = term.lambda(
+                                        arg.label.clone().unwrap_or_else(|| format!("arg_{index}")),
+                                    )
+                                }
+                            }
                             arg_stack.push(term);
                         }
                     }
@@ -4569,9 +4594,11 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 let mut arg_vec = vec![];
+
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
+
                 let mut term = Term::empty_list();
 
                 for (index, arg) in arg_vec.iter().enumerate().rev() {
