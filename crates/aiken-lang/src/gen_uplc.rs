@@ -4784,25 +4784,28 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut args = IndexMap::new();
                 let mut unchanged_field_indices = vec![];
+                // plus 2 so we get one index higher than the record update index
+                // then we add that and any other unchanged fields to an array to later create the
+                // lambda bindings
+                unchanged_field_indices.push(0);
                 let mut prev_index = 0;
+
                 for (index, tipo) in indices
-                    .iter()
+                    .into_iter()
                     .sorted_by(|(index1, _), (index2, _)| index1.cmp(index2))
-                    .rev()
                 {
                     let arg = arg_stack.pop().unwrap();
-                    args.insert(*index, (tipo.clone(), arg));
+                    args.insert(index, (tipo.clone(), arg));
 
-                    for field_index in prev_index..*index {
+                    for field_index in (prev_index + 1)..index {
                         unchanged_field_indices.push(field_index);
                     }
-                    prev_index = *index;
+                    prev_index = index;
                 }
 
-                unchanged_field_indices.reverse();
+                unchanged_field_indices.push(prev_index + 1);
 
-                let mut term = Term::tail_list()
-                    .apply(Term::var(format!("{tail_name_prefix}_{highest_index}")));
+                let mut term = Term::var(format!("{tail_name_prefix}_{}", highest_index + 1));
 
                 for current_index in (0..(highest_index + 1)).rev() {
                     let tail_name = format!("{tail_name_prefix}_{current_index}");
@@ -4822,38 +4825,33 @@ impl<'a> CodeGenerator<'a> {
                     .apply(Term::integer(0.into()))
                     .apply(term);
 
-                if !unchanged_field_indices.is_empty() {
-                    prev_index = highest_index;
-                    for index in unchanged_field_indices.into_iter() {
-                        let tail_name = format!("{tail_name_prefix}_{prev_index}");
-                        let prev_tail_name = format!("{tail_name_prefix}_{index}");
+                if unchanged_field_indices.len() > 1 {
+                    let (prev_index, rest_list) = unchanged_field_indices
+                        .split_last()
+                        .unwrap_or_else(|| panic!("WHAT HAPPENED"));
 
-                        let mut tail_list = Term::var(prev_tail_name);
+                    let mut prev_index = *prev_index;
+
+                    for index in rest_list.iter().rev() {
+                        let index = *index;
+                        let suffix_tail = format!("{tail_name_prefix}_{prev_index}");
+                        let tail = format!("{tail_name_prefix}_{index}");
+
+                        let mut tail_list = Term::var(tail);
 
                         if index < prev_index {
                             for _ in index..prev_index {
                                 tail_list = Term::tail_list().apply(tail_list);
                             }
 
-                            term = term.lambda(tail_name).apply(tail_list);
+                            term = term.lambda(suffix_tail).apply(tail_list);
                         }
                         prev_index = index;
                     }
                 }
-                let tail_name = format!("{tail_name_prefix}_{prev_index}");
-                let prev_tail_name = format!("{tail_name_prefix}_0");
-
-                let mut tail_list = Term::var(prev_tail_name.clone());
-
-                for _ in 0..prev_index {
-                    tail_list = Term::tail_list().apply(tail_list);
-                }
-                if prev_index != 0 {
-                    term = term.lambda(tail_name).apply(tail_list);
-                }
 
                 term = term
-                    .lambda(prev_tail_name)
+                    .lambda(format!("{tail_name_prefix}_0"))
                     .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(record));
 
                 arg_stack.push(term);

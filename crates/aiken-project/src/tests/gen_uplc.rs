@@ -2554,3 +2554,299 @@ fn pass_constr_as_function() {
         false,
     );
 }
+
+#[test]
+fn record_update_output_2_vals() {
+    let src = r#"
+      type Address {
+        thing: ByteArray,
+      }
+      
+      type Datum {
+        NoDatum
+        InlineDatum(Data)
+      }
+      
+      type Output {
+        address: Address,
+        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        datum: Datum,
+        script_ref: Option<ByteArray>,
+      }
+      
+      type MyDatum {
+        a: Int,
+      }
+      
+      test huh() {
+        let prev_output =
+          Output {
+            address: Address { thing: "script_hash_0" },
+            value: [],
+            datum: InlineDatum(MyDatum{a: 3}),
+            script_ref: None,
+          }
+      
+        let next_output =
+          Output { ..prev_output, value: [], datum: prev_output.datum }
+      
+        prev_output == next_output
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("prev_output"))
+            .apply(Term::var("next_output"))
+            .lambda("next_output")
+            .apply(
+                Term::constr_data()
+                    .apply(Term::integer(0.into()))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::head_list().apply(Term::var("record_fields")))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::map_data().apply(Term::empty_map()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::var(CONSTR_GET_FIELD)
+                                                    .apply(
+                                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                                            .apply(Term::var("prev_output")),
+                                                    )
+                                                    .apply(Term::integer(2.into())),
+                                            )
+                                            .apply(Term::var("tail_index_3")),
+                                    ),
+                            ),
+                    )
+                    .lambda("tail_index_3")
+                    .apply(
+                        Term::tail_list().apply(
+                            Term::tail_list()
+                                .apply(Term::tail_list().apply(Term::var("record_fields"))),
+                        ),
+                    )
+                    .lambda("record_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("prev_output"))),
+            )
+            .lambda("prev_output")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::constr(
+                        0,
+                        vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                    ),
+                    Data::map(vec![]),
+                    Data::constr(1, vec![Data::constr(0, vec![Data::integer(3.into())])]),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn record_update_output_1_val() {
+    let src = r#"
+      type Address {
+        thing: ByteArray,
+      }
+      
+      type Datum {
+        NoDatum
+        InlineDatum(Data)
+      }
+      
+      type Output {
+        address: Address,
+        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        datum: Datum,
+        script_ref: Option<ByteArray>,
+      }
+      
+      type MyDatum {
+        a: Int,
+      }
+      
+      test huh() {
+        let prev_output =
+          Output {
+            address: Address { thing: "script_hash_0" },
+            value: [],
+            datum: InlineDatum(MyDatum{a: 3}),
+            script_ref: None,
+          }
+      
+        let next_output =
+          Output { ..prev_output, datum: prev_output.datum }
+      
+        prev_output == next_output
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("prev_output"))
+            .apply(Term::var("next_output"))
+            .lambda("next_output")
+            .apply(
+                Term::constr_data()
+                    .apply(Term::integer(0.into()))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::head_list().apply(Term::var("record_fields")))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("tail_index_1")))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::var(CONSTR_GET_FIELD)
+                                                    .apply(
+                                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                                            .apply(Term::var("prev_output")),
+                                                    )
+                                                    .apply(Term::integer(2.into())),
+                                            )
+                                            .apply(Term::var("tail_index_3")),
+                                    ),
+                            ),
+                    )
+                    .lambda("tail_index_3")
+                    .apply(
+                        Term::tail_list().apply(Term::tail_list().apply(Term::var("tail_index_1"))),
+                    )
+                    .lambda("tail_index_1")
+                    .apply(Term::tail_list().apply(Term::var("record_fields")))
+                    .lambda("record_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("prev_output"))),
+            )
+            .lambda("prev_output")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::constr(
+                        0,
+                        vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                    ),
+                    Data::map(vec![]),
+                    Data::constr(1, vec![Data::constr(0, vec![Data::integer(3.into())])]),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn record_update_output_first_last_val() {
+    let src = r#"
+      type Address {
+        thing: ByteArray,
+      }
+      
+      type Datum {
+        NoDatum
+        InlineDatum(Data)
+      }
+      
+      type Output {
+        address: Address,
+        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        datum: Datum,
+        script_ref: Option<ByteArray>,
+      }
+      
+      type MyDatum {
+        a: Int,
+      }
+      
+      test huh() {
+        let prev_output =
+          Output {
+            address: Address { thing: "script_hash_0" },
+            value: [],
+            datum: InlineDatum(MyDatum{a: 3}),
+            script_ref: None,
+          }
+      
+        let next_output =
+          Output { ..prev_output, address: Address{thing: "script_hash_0"}, script_ref: None }
+      
+        prev_output == next_output
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("prev_output"))
+            .apply(Term::var("next_output"))
+            .lambda("next_output")
+            .apply(
+                Term::constr_data()
+                    .apply(Term::integer(0.into()))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::data(Data::constr(
+                                0,
+                                vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                            )))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("tail_index_1")))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::head_list().apply(Term::var("tail_index_2")),
+                                            )
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(Term::data(Data::constr(1, vec![])))
+                                                    .apply(Term::var("tail_index_4")),
+                                            ),
+                                    ),
+                            ),
+                    )
+                    .lambda("tail_index_4")
+                    .apply(
+                        Term::tail_list().apply(Term::tail_list().apply(Term::var("tail_index_2"))),
+                    )
+                    .lambda("tail_index_2")
+                    .apply(Term::tail_list().apply(Term::var("tail_index_1")))
+                    .lambda("tail_index_1")
+                    .apply(Term::tail_list().apply(Term::var("record_fields")))
+                    .lambda("record_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("prev_output"))),
+            )
+            .lambda("prev_output")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::constr(
+                        0,
+                        vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                    ),
+                    Data::map(vec![]),
+                    Data::constr(1, vec![Data::constr(0, vec![Data::integer(3.into())])]),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
