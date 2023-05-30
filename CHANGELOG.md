@@ -2,6 +2,16 @@
 
 ## next - 2023-MM-DD
 
+### Added
+
+- **aiken-lang**: Add a way to express that tests can return an error
+
+### Fixed
+
+- **uplc**: Fix pair formatting
+- **aiken-lang**: forced new line in formatter for assignments
+- **aiken-lang**: Incorrect parsing of generic type annotation prefixed with module
+
 ## v1.0.6-alpha - 2023-05-17
 
 ### Fixed
