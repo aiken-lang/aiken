@@ -2403,7 +2403,7 @@ fn acceptance_test_22_filter_map() {
           }
 
           test filter_map_1() {
-            filter_map([], fn(_) { Some(43) }) == []
+            filter_map([], fn(_) { Some(42) }) == []
           }
     "#;
 
