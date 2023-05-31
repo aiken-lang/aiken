@@ -36,7 +36,7 @@ impl<T> Definitions<T> {
     /// Retrieve a definition, if it exists.
     pub fn lookup(&self, reference: &Reference) -> Option<&T> {
         self.inner
-            .get(&reference.to_json_pointer())
+            .get(&reference.as_key())
             .map(|v| v
               .as_ref()
               .expect("All registered definitions are 'Some'. 'None' state is only transient during registration")
@@ -50,13 +50,12 @@ impl<T> Definitions<T> {
 
     /// Erase a known definition. Does nothing if the reference is unknown.
     pub fn remove(&mut self, reference: &Reference) {
-        self.inner.remove(reference.as_key());
+        self.inner.remove(&reference.as_key());
     }
 
     /// Insert a new definition
     pub fn insert(&mut self, reference: &Reference, schema: T) {
-        self.inner
-            .insert(reference.as_key().to_string(), Some(schema));
+        self.inner.insert(reference.as_key(), Some(schema));
     }
 
     /// Register a new definition only if it doesn't exist. This uses a strategy of
@@ -73,10 +72,10 @@ impl<T> Definitions<T> {
         let reference = Reference::from_type(type_info, type_parameters);
         let key = reference.as_key();
 
-        if !self.inner.contains_key(key) {
-            self.inner.insert(key.to_string(), None);
+        if !self.inner.contains_key(&key) {
+            self.inner.insert(key.clone(), None);
             let schema = build_schema(self)?;
-            self.inner.insert(key.to_string(), Some(schema));
+            self.inner.insert(key, Some(schema));
         }
 
         Ok(reference)
@@ -101,8 +100,8 @@ impl Reference {
     }
 
     /// Turn a reference into a key suitable for lookup.
-    pub(crate) fn as_key(&self) -> &str {
-        self.inner.as_str()
+    pub(crate) fn as_key(&self) -> String {
+        self.inner.replace("~1", "/")
     }
 
     /// Turn a reference into a valid JSON pointer. Note that the JSON pointer specification
@@ -110,10 +109,6 @@ impl Reference {
     /// treated as path delimiter in pointers paths).
     pub(crate) fn as_json_pointer(&self) -> String {
         format!("#/definitions/{}", self.as_key().replace('/', "~1"))
-    }
-
-    pub(crate) fn to_json_pointer(&self) -> String {
-        self.as_key().replace("~1", "/")
     }
 }
 
