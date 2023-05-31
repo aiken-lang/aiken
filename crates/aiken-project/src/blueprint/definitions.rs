@@ -36,7 +36,7 @@ impl<T> Definitions<T> {
     /// Retrieve a definition, if it exists.
     pub fn lookup(&self, reference: &Reference) -> Option<&T> {
         self.inner
-            .get(reference.as_key())
+            .get(&reference.to_json_pointer())
             .map(|v| v
               .as_ref()
               .expect("All registered definitions are 'Some'. 'None' state is only transient during registration")
@@ -110,6 +110,10 @@ impl Reference {
     /// treated as path delimiter in pointers paths).
     pub(crate) fn as_json_pointer(&self) -> String {
         format!("#/definitions/{}", self.as_key().replace('/', "~1"))
+    }
+
+    pub(crate) fn to_json_pointer(&self) -> String {
+        self.as_key().replace("~1", "/")
     }
 }
 
