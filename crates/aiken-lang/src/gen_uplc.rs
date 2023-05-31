@@ -206,7 +206,6 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
-
         program = aiken_optimize_and_intern(program);
 
         // This is very important to call here.
@@ -715,7 +714,10 @@ impl<'a> CodeGenerator<'a> {
 
                 self.build(spread, &mut update_stack);
 
-                for arg in args {
+                for arg in args
+                    .iter()
+                    .sorted_by(|arg1, arg2| arg1.index.cmp(&arg2.index))
+                {
                     let mut arg_stack = update_stack.empty_with_scope();
 
                     self.build(&arg.value, &mut arg_stack);
