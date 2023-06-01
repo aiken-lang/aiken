@@ -206,6 +206,7 @@ impl<'a> CodeGenerator<'a> {
             version: (1, 0, 0),
             term,
         };
+
         program = aiken_optimize_and_intern(program);
 
         // This is very important to call here.
@@ -4777,11 +4778,16 @@ impl<'a> CodeGenerator<'a> {
             Air::RecordUpdate {
                 highest_index,
                 indices,
+                tipo,
                 ..
             } => {
                 self.needs_field_access = true;
                 let tail_name_prefix = "__tail_index";
 
+                let data_type = lookup_data_type_by_tipo(&self.data_types, &tipo)
+                    .unwrap_or_else(|| panic!("HOW DID YOU DO THIS ON BOOL OR VOID"));
+
+                let constructor_field_count = data_type.constructors[0].arguments.len();
                 let record = arg_stack.pop().unwrap();
 
                 let mut args = IndexMap::new();
@@ -4842,11 +4848,13 @@ impl<'a> CodeGenerator<'a> {
                         let mut tail_list = Term::var(tail);
 
                         if index < prev_index {
-                            for _ in index..prev_index {
-                                tail_list = Term::tail_list().apply(tail_list);
-                            }
+                            tail_list = tail_list.repeat_tail_list(prev_index - index);
 
-                            term = term.lambda(suffix_tail).apply(tail_list);
+                            if prev_index == constructor_field_count {
+                                term = term.lambda(suffix_tail).apply(Term::empty_list());
+                            } else {
+                                term = term.lambda(suffix_tail).apply(tail_list);
+                            }
                         }
                         prev_index = index;
                     }

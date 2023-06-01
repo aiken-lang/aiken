@@ -12,6 +12,10 @@
 - **aiken-lang**: forced new line in formatter for assignments
 - **aiken-lang**: Incorrect parsing of generic type annotation prefixed with module
 - **aiken-lang**: Incorrect handling of comments at end of a file when newline not present
+- **aiken-lang**: Record update in code gen is now flexible enough to support fields being passed in any order.
+- **aiken-lang**: Record update now produces better uplc code then creating a record by the normal instantiation.
+- **aiken-lang**: Issue with Constructors being passed as functions to other function arguments was fixed.
+
 
 ## v1.0.6-alpha - 2023-05-17
 

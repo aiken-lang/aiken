@@ -2783,7 +2783,7 @@ fn record_update_output_first_last_val() {
           }
       
         let next_output =
-          Output { ..prev_output, address: Address{thing: "script_hash_0"}, script_ref: None }
+          Output { ..prev_output, script_ref: None, address: Address{thing: "script_hash_0"} }
       
         prev_output == next_output
       }
@@ -2821,9 +2821,7 @@ fn record_update_output_first_last_val() {
                             ),
                     )
                     .lambda("tail_index_4")
-                    .apply(
-                        Term::tail_list().apply(Term::tail_list().apply(Term::var("tail_index_2"))),
-                    )
+                    .apply(Term::empty_list())
                     .lambda("tail_index_2")
                     .apply(Term::tail_list().apply(Term::var("tail_index_1")))
                     .lambda("tail_index_1")
