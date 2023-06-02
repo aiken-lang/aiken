@@ -1,6 +1,6 @@
 # Changelog
 
-## next - 2023-MM-DD
+## v1.0.7-alpha - 2023-06-02
 
 ### Added
 
@@ -15,6 +15,8 @@
 - **aiken-lang**: Record update in code gen is now flexible enough to support fields being passed in any order.
 - **aiken-lang**: Record update now produces better uplc code then creating a record by the normal instantiation.
 - **aiken-lang**: Issue with Constructors being passed as functions to other function arguments was fixed.
+- **aiken-lang**: show module name when type mismatch names are the same
+- **aiken**: make `uplc flat` and `uplc unflat` subcommands more consistent and flexible
 
 
 ## v1.0.6-alpha - 2023-05-17
