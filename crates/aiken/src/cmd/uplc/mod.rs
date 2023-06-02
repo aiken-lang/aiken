@@ -1,24 +1,33 @@
+mod decode;
+mod encode;
 mod eval;
-mod flat;
 mod fmt;
-mod unflat;
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
+
+#[derive(Copy, Clone, ValueEnum)]
+pub(super) enum Format {
+    Name,
+    NamedDebruijn,
+    Debruijn,
+}
 
 /// Commands for working with untyped Plutus-core
 #[derive(Subcommand)]
 pub enum Cmd {
     Fmt(fmt::Args),
     Eval(eval::Args),
-    Flat(flat::Args),
-    Unflat(unflat::Args),
+    #[clap(alias = "flat")]
+    Encode(encode::Args),
+    #[clap(alias = "unflat")]
+    Decode(decode::Args),
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
     match cmd {
         Cmd::Fmt(args) => fmt::exec(args),
         Cmd::Eval(args) => eval::exec(args),
-        Cmd::Flat(args) => flat::exec(args),
-        Cmd::Unflat(args) => unflat::exec(args),
+        Cmd::Encode(args) => encode::exec(args),
+        Cmd::Decode(args) => decode::exec(args),
     }
 }
