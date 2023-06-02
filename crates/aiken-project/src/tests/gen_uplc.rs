@@ -2848,3 +2848,74 @@ fn record_update_output_first_last_val() {
         false,
     );
 }
+
+#[test]
+fn list_fields_unwrap() {
+    let src = r#"
+      type Fields {
+        a: ByteArray,
+        b: Int,
+      }
+      
+      fn data_fields(){
+        [
+            Fields{a: #"", b: 14}, 
+            Fields{a: #"AA", b: 0}
+        ]
+      }
+      
+      test list_fields_unwr_0() {
+        when data_fields() is {
+          [Fields { b, .. }, ..] ->
+            b > 0
+          _ ->
+            False
+        } == True
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("field_list")
+            .delayed_choose_list(
+                Term::bool(false),
+                Term::less_than_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::var("b"))
+                    .lambda("b")
+                    .apply(
+                        Term::un_i_data()
+                            .apply(Term::head_list().apply(Term::var("record_index_1"))),
+                    )
+                    .lambda("record_index_1")
+                    .apply(Term::tail_list().apply(Term::var("item_1_fields")))
+                    .lambda("item_1_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("item_1")))
+                    .lambda("item_1")
+                    .apply(Term::head_list().apply(Term::var("field_list")))
+                    .lambda("clauses_delayed")
+                    .apply(Term::bool(false).delay())
+                    .lambda("tail_1")
+                    .apply(Term::tail_list().apply(Term::var("field_list"))),
+            )
+            .lambda("field_list")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::bytestring(vec![]), Data::integer(14.into())],
+                )),
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::bytestring(vec![170]), Data::integer(0.into())],
+                )),
+            ]))
+            .delayed_if_else(
+                Term::bool(true),
+                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+            )
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
