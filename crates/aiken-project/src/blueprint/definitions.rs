@@ -33,7 +33,7 @@ impl<T> Definitions<T> {
         self.inner.is_empty()
     }
 
-    /// Retrieve a definition, if it exists.
+    /// Retrieve a definition, if it exists; fail if not resolved
     pub fn lookup(&self, reference: &Reference) -> Option<&T> {
         self.inner
             .get(&reference.as_key())
@@ -41,6 +41,11 @@ impl<T> Definitions<T> {
               .as_ref()
               .expect("All registered definitions are 'Some'. 'None' state is only transient during registration")
             )
+    }
+
+    /// Retrieve a definition, if it exists and is resolved.
+    pub fn try_lookup(&self, reference: &Reference) -> Option<&T> {
+        self.inner.get(&reference.as_key()).and_then(|v| v.as_ref())
     }
 
     /// Merge two set of definitions together. Prioritize callee.
