@@ -184,7 +184,7 @@ mod test {
     use std::collections::HashMap;
 
     use aiken_lang::{self, builtins};
-    use uplc::ast::{self as uplc_ast};
+    use uplc::ast as uplc_ast;
 
     use crate::tests::TestProject;
 

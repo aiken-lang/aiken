@@ -1675,7 +1675,7 @@ pub fn check_replaceable_opaque_type(
 pub fn replace_opaque_type(t: &mut Arc<Type>, data_types: &IndexMap<DataTypeKey, &TypedDataType>) {
     if check_replaceable_opaque_type(t, data_types) && matches!(&**t, Type::App { .. }) {
         let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
-        let new_type_fields = data_type.typed_parameters.clone();
+        let new_type_fields = data_type.typed_parameters;
 
         let mut mono_types: IndexMap<u64, Arc<Type>> = IndexMap::new();
 
