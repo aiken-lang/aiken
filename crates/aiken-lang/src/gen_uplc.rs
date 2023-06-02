@@ -825,20 +825,21 @@ impl<'a> CodeGenerator<'a> {
                 clause_then_stack = clause_guard_stack;
             }
 
+            // deal with clause pattern and then itself
+            self.when_pattern(
+                &clause.pattern,
+                &mut clause_pattern_stack,
+                clause_then_stack,
+                subject_type,
+                clause_properties,
+            );
+
             match clause_properties {
                 ClauseProperties::ConstrClause {
                     original_subject_name,
                     ..
                 } => {
                     let subject_name = original_subject_name.clone();
-
-                    self.when_pattern(
-                        &clause.pattern,
-                        &mut clause_pattern_stack,
-                        clause_then_stack,
-                        subject_type,
-                        clause_properties,
-                    );
 
                     if clause.pattern.is_var() || clause.pattern.is_discard() {
                         ir_stack.wrap_clause(clause_pattern_stack);
@@ -883,78 +884,66 @@ impl<'a> CodeGenerator<'a> {
                     current_index,
                     ..
                 } => {
-                    let (current_clause_index, has_tail) =
-                        if let Pattern::List { elements, tail, .. } = &clause.pattern {
-                            (elements.len(), tail.is_some())
-                        } else if let Pattern::Assign { pattern, .. } = &clause.pattern {
-                            let Pattern::List { elements, tail, .. } = pattern.as_ref() else {
-                                unreachable!("{:#?}", pattern)
-                            };
-
-                            (elements.len(), tail.is_some())
-                        } else {
-                            unreachable!("{:#?}", &clause.pattern)
-                        };
+                    let original_subject_name = original_subject_name.clone();
 
                     let prev_index = *current_index;
 
-                    let subject_name = if current_clause_index == 0 {
-                        original_subject_name.clone()
-                    } else {
-                        format!("__tail_{}", current_clause_index - 1)
-                    };
+                    let elements_count_and_has_tail =
+                        builder::get_list_elements_len_and_tail(&clause.pattern);
 
-                    self.when_pattern(
-                        &clause.pattern,
-                        &mut clause_pattern_stack,
-                        clause_then_stack,
-                        subject_type,
-                        clause_properties,
-                    );
-
-                    let next_tail = if index == clauses.len() - 1 {
-                        None
-                    } else {
-                        let next_list_size = if let Pattern::List { elements, .. } =
-                            &clauses[index + 1].pattern
-                        {
-                            elements.len()
-                        } else if let Pattern::Assign { pattern, .. } = &clauses[index + 1].pattern
-                        {
-                            let Pattern::List { elements, .. } = pattern.as_ref() else {
-                                unreachable!("{:#?}", pattern)
-                            };
-                            elements.len()
+                    if let Some((current_clause_index, has_tail)) = elements_count_and_has_tail {
+                        let subject_name = if current_clause_index == 0 {
+                            original_subject_name.clone()
                         } else {
-                            unreachable!()
+                            format!("__tail_{}", current_clause_index - 1)
                         };
 
-                        if next_list_size == current_clause_index {
-                            None
+                        // If current clause has already exposed all needed list items then no need to expose the
+                        // same items again.
+                        if current_clause_index as i64 - i64::from(has_tail) == prev_index {
+                            ir_stack.wrap_clause(clause_pattern_stack);
                         } else {
-                            Some(format!("__tail_{current_clause_index}"))
+                            let next_elements_count_and_has_tail = if index == clauses.len() - 1 {
+                                None
+                            } else {
+                                builder::get_list_elements_len_and_tail(
+                                    &clauses
+                                        .get(index + 1)
+                                        .unwrap_or_else(|| {
+                                            unreachable!(
+                                                "We checked length how are we out of bounds"
+                                            )
+                                        })
+                                        .pattern,
+                                )
+                            };
+
+                            let next_tail = if let Some((next_elements_len, _)) =
+                                next_elements_count_and_has_tail
+                            {
+                                if next_elements_len == current_clause_index {
+                                    None
+                                } else {
+                                    Some(format!("__tail_{current_clause_index}"))
+                                }
+                            } else {
+                                None
+                            };
+
+                            //mutate current index if we use list clause
+                            *current_index = current_clause_index as i64;
+
+                            ir_stack.list_clause(
+                                subject_type.clone(),
+                                subject_name,
+                                next_tail,
+                                *clause_properties.is_complex_clause(),
+                                clause_pattern_stack,
+                            );
                         }
-                    };
-
-                    let minus_tail = has_tail as i64;
-
-                    if current_clause_index as i64 - minus_tail == prev_index {
-                        ir_stack.wrap_clause(clause_pattern_stack);
                     } else {
-                        ir_stack.list_clause(
-                            subject_type.clone(),
-                            subject_name,
-                            next_tail,
-                            *clause_properties.is_complex_clause(),
-                            clause_pattern_stack,
-                        );
+                        ir_stack.wrap_clause(clause_pattern_stack);
                     }
-
-                    let ClauseProperties::ListClause { current_index, .. } = clause_properties else {
-                        unreachable!()
-                    };
-
-                    *current_index = current_clause_index as i64;
                 }
                 ClauseProperties::TupleClause {
                     original_subject_name,
@@ -963,14 +952,6 @@ impl<'a> CodeGenerator<'a> {
                 } => {
                     let prev_defined_tuple_indices = defined_tuple_indices.clone();
                     let subject_name = original_subject_name.clone();
-
-                    self.when_pattern(
-                        &clause.pattern,
-                        &mut clause_pattern_stack,
-                        clause_then_stack,
-                        subject_type,
-                        clause_properties,
-                    );
 
                     let current_defined_tuple_indices = match clause_properties {
                         ClauseProperties::TupleClause {
@@ -1215,7 +1196,7 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .collect_vec();
 
-                if tail.is_some() && !elements.is_empty() {
+                if tail.is_some() && !tail_head_names.is_empty() {
                     let tail_var = if elements.len() == 1 {
                         clause_properties.original_subject_name().clone()
                     } else {
@@ -1234,7 +1215,7 @@ impl<'a> CodeGenerator<'a> {
                         tail,
                         nested_pattern,
                     );
-                } else if !elements.is_empty() {
+                } else if !tail_head_names.is_empty() {
                     pattern_stack.list_expose(
                         tipo.clone().into(),
                         tail_head_names,
@@ -1255,13 +1236,13 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let data_type = builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
-                let (_, constructor_type) = data_type
+                let constructor_type = data_type
                     .constructors
                     .iter()
-                    .enumerate()
-                    .find(|(_, dt)| &dt.name == constr_name)
+                    .find(|dt| &dt.name == constr_name)
                     .unwrap();
                 let mut nested_pattern = pattern_stack.empty_with_scope();
+
                 if *is_record {
                     let field_map = match constructor {
                         PatternConstructor::Record { field_map, .. } => field_map.clone().unwrap(),
@@ -1278,13 +1259,16 @@ impl<'a> CodeGenerator<'a> {
 
                     let arguments_index = arguments
                         .iter()
-                        .filter_map(|item| {
+                        .enumerate()
+                        .map(|(index, item)| {
                             let label = item.label.clone().unwrap_or_default();
+
                             let field_index = field_map
                                 .fields
                                 .get(&label)
                                 .map(|(index, _)| index)
-                                .unwrap_or(&0);
+                                .unwrap_or(&index);
+
                             let var_name = self.nested_pattern_ir_and_label(
                                 &item.value,
                                 &mut nested_pattern,
@@ -1301,8 +1285,8 @@ impl<'a> CodeGenerator<'a> {
                             );
 
                             var_name.map_or(
-                                Some((label.clone(), "_".to_string(), *field_index)),
-                                |var_name| Some((label, var_name, *field_index)),
+                                (label.clone(), "_".to_string(), *field_index),
+                                |var_name| (label, var_name, *field_index),
                             )
                         })
                         .sorted_by(|item1, item2| item1.2.cmp(&item2.2))
@@ -1335,7 +1319,7 @@ impl<'a> CodeGenerator<'a> {
                     let arguments_index = arguments
                         .iter()
                         .enumerate()
-                        .filter_map(|(index, item)| {
+                        .map(|(index, item)| {
                             let var_name = self.nested_pattern_ir_and_label(
                                 &item.value,
                                 &mut nested_pattern,
@@ -1343,9 +1327,7 @@ impl<'a> CodeGenerator<'a> {
                                 *clause_properties.is_final_clause(),
                             );
 
-                            var_name.map_or(Some(("_".to_string(), index)), |var_name| {
-                                Some((var_name, index))
-                            })
+                            var_name.map_or(("_".to_string(), index), |var_name| (var_name, index))
                         })
                         .collect::<Vec<(String, usize)>>();
 
@@ -1878,7 +1860,7 @@ impl<'a> CodeGenerator<'a> {
                 let arguments_index = arguments
                     .iter()
                     .enumerate()
-                    .filter_map(|(index, item)| {
+                    .map(|(index, item)| {
                         let label = item.label.clone().unwrap_or_default();
 
                         let field_index = if let Some(field_map) = &field_map {
@@ -1896,11 +1878,10 @@ impl<'a> CodeGenerator<'a> {
                             &assignment_properties,
                         );
 
+                        // Note the stacks mutation here
                         stacks.merge(nested_pattern);
 
-                        name.map_or(Some(("_".to_string(), field_index)), |name| {
-                            Some((name, field_index))
-                        })
+                        name.map_or(("_".to_string(), field_index), |name| (name, field_index))
                     })
                     .sorted_by(|item1, item2| item1.1.cmp(&item2.1))
                     .collect::<Vec<(String, usize)>>();

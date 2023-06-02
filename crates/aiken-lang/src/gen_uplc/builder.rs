@@ -281,74 +281,93 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
-    // TODO: while having 10000000 element list is impossible to destructure in plutus budget,
-    // let's sort clauses by a safer manner
-    // TODO: how shall tails be weighted? Since any clause after will not run
-    sorted_clauses.sort_by(|clause1, clause2| {
-        let clause1_len = match &clause1.pattern {
-            Pattern::List { elements, tail, .. } => {
-                elements.len() * 3
-                    + usize::from(tail.is_some())
-                    + usize::from(clause1.guard.is_some())
-            }
-            _ => 10000000,
-        };
-        let clause2_len = match &clause2.pattern {
-            Pattern::List { elements, tail, .. } => elements.len() + usize::from(tail.is_some()),
-            _ => 10000001,
-        };
+    // Now we sort by elements + tail if possible and otherwise leave an index in place if var or discard
+    // This is a stable sort. i.e. matching elements amounts will remain in user given order.
+    sorted_clauses = sorted_clauses
+        .into_iter()
+        .enumerate()
+        .sorted_by(|(index1, clause1), (index2, clause2)| {
+            let clause1_len = match &clause1.pattern {
+                Pattern::List { elements, tail, .. } => {
+                    Some(elements.len() + usize::from(tail.is_some()))
+                }
+                _ if clause1.guard.is_none() => Some(100000),
+                _ => None,
+            };
 
-        clause1_len.cmp(&clause2_len)
-    });
+            let clause2_len = match &clause2.pattern {
+                Pattern::List { elements, tail, .. } => {
+                    Some(elements.len() + usize::from(tail.is_some()))
+                }
+                _ if clause2.guard.is_none() => Some(100001),
+                _ => None,
+            };
+
+            if let Some(clause1_len) = clause1_len {
+                if let Some(clause2_len) = clause2_len {
+                    return clause1_len.cmp(&clause2_len);
+                }
+            }
+
+            index1.cmp(index2)
+        })
+        .map(|(_, item)| item)
+        .collect_vec();
 
     let mut elems_len = 0;
     let mut final_clauses = sorted_clauses.clone();
     let mut holes_to_fill = vec![];
-    let mut assign_plug_in_name = None;
     let mut last_clause_index = 0;
     let mut last_clause_set = false;
 
     // If we have a catch all, use that. Otherwise use todo which will result in error
     // TODO: fill in todo label with description
-    let plug_in_then = if sorted_clauses[sorted_clauses.len() - 1].guard.is_none() {
-        match &sorted_clauses[sorted_clauses.len() - 1].pattern {
-            Pattern::Var { name, .. } => {
-                assign_plug_in_name = Some(name);
-                sorted_clauses[sorted_clauses.len() - 1].clone().then
-            }
-            Pattern::Discard { .. } => sorted_clauses[sorted_clauses.len() - 1].clone().then,
-            _ => {
-                let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
-                TypedExpr::Trace {
-                    location: Span::empty(),
-                    tipo: tipo.clone(),
-                    text: Box::new(TypedExpr::String {
+    let plug_in_then = |index: usize, last_clause: &TypedClause| {
+        if last_clause.guard.is_none() {
+            match &last_clause.pattern {
+                Pattern::Var { .. } | Pattern::Discard { .. } => last_clause.clone().then,
+                _ => {
+                    let tipo = last_clause.then.tipo();
+
+                    TypedExpr::Trace {
                         location: Span::empty(),
-                        tipo: crate::builtins::string(),
-                        value: "Clause not filled".to_string(),
-                    }),
-                    then: Box::new(TypedExpr::ErrorTerm {
-                        location: Span::empty(),
-                        tipo,
-                    }),
+                        tipo: tipo.clone(),
+                        text: Box::new(TypedExpr::String {
+                            location: Span::empty(),
+                            tipo: crate::builtins::string(),
+                            value: format!("Clause hole found for {index} elements."),
+                        }),
+                        then: Box::new(TypedExpr::ErrorTerm {
+                            location: Span::empty(),
+                            tipo,
+                        }),
+                    }
                 }
             }
+        } else {
+            let tipo = last_clause.then.tipo();
+
+            TypedExpr::Trace {
+                location: Span::empty(),
+                tipo: tipo.clone(),
+                text: Box::new(TypedExpr::String {
+                    location: Span::empty(),
+                    tipo: crate::builtins::string(),
+                    value: format!("Clause hole found for {index} elements."),
+                }),
+                then: Box::new(TypedExpr::ErrorTerm {
+                    location: Span::empty(),
+                    tipo,
+                }),
+            }
         }
+    };
+
+    let last_clause = &sorted_clauses[sorted_clauses.len() - 1];
+    let assign_plug_in_name = if let Pattern::Var { name, .. } = &last_clause.pattern {
+        Some(name)
     } else {
-        let tipo = sorted_clauses[sorted_clauses.len() - 1].then.tipo();
-        TypedExpr::Trace {
-            location: Span::empty(),
-            tipo: tipo.clone(),
-            text: Box::new(TypedExpr::String {
-                location: Span::empty(),
-                tipo: crate::builtins::string(),
-                value: "Clause not filled".to_string(),
-            }),
-            then: Box::new(TypedExpr::ErrorTerm {
-                location: Span::empty(),
-                tipo,
-            }),
-        }
+        None
     };
 
     for (index, clause) in sorted_clauses.iter().enumerate() {
@@ -379,7 +398,7 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                             .into(),
                         },
                         guard: None,
-                        then: plug_in_then.clone(),
+                        then: plug_in_then(elems_len, last_clause),
                     }
                 } else {
                     TypedClause {
@@ -390,7 +409,7 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                             tail: None,
                         },
                         guard: None,
-                        then: plug_in_then.clone(),
+                        then: plug_in_then(elems_len, last_clause),
                     }
                 };
 
@@ -440,7 +459,7 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                         location: Span::empty(),
                     },
                     guard: None,
-                    then: plug_in_then.clone(),
+                    then: plug_in_then(index + 1, last_clause),
                 });
             }
         }
@@ -459,6 +478,24 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     }
 
     final_clauses
+}
+
+/// If the pattern is a list the return the number of elements and if it has a tail
+/// Otherwise return None
+pub fn get_list_elements_len_and_tail(
+    pattern: &Pattern<PatternConstructor, Arc<Type>>,
+) -> Option<(usize, bool)> {
+    if let Pattern::List { elements, tail, .. } = &pattern {
+        Some((elements.len(), tail.is_some()))
+    } else if let Pattern::Assign { pattern, .. } = &pattern {
+        if let Pattern::List { elements, tail, .. } = pattern.as_ref() {
+            Some((elements.len(), tail.is_some()))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
