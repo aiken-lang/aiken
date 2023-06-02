@@ -825,6 +825,8 @@ impl<'a> CodeGenerator<'a> {
                 clause_then_stack = clause_guard_stack;
             }
 
+            let prev_clause_properties = clause_properties.clone();
+
             // deal with clause pattern and then itself
             self.when_pattern(
                 &clause.pattern,
@@ -950,18 +952,14 @@ impl<'a> CodeGenerator<'a> {
                     defined_tuple_indices,
                     ..
                 } => {
-                    let prev_defined_tuple_indices = defined_tuple_indices.clone();
-                    let subject_name = original_subject_name.clone();
-
-                    let current_defined_tuple_indices = match clause_properties {
-                        ClauseProperties::TupleClause {
-                            defined_tuple_indices,
-                            ..
-                        } => defined_tuple_indices.clone(),
-                        _ => unreachable!(),
+                    let ClauseProperties::TupleClause {  defined_tuple_indices: prev_defined_tuple_indices, .. } = prev_clause_properties
+                    else {
+                        unreachable!()
                     };
 
-                    let indices_to_define = current_defined_tuple_indices
+                    let subject_name = original_subject_name.clone();
+
+                    let indices_to_define = defined_tuple_indices
                         .difference(&prev_defined_tuple_indices)
                         .cloned()
                         .collect();
@@ -1196,30 +1194,23 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .collect_vec();
 
-                if tail.is_some() && !tail_head_names.is_empty() {
-                    let tail_var = if elements.len() == 1 {
-                        clause_properties.original_subject_name().clone()
-                    } else {
-                        format!("__tail_{}", elements.len() - 2)
-                    };
+                let tail_var = if elements.len() == 1 || elements.is_empty() {
+                    clause_properties.original_subject_name().clone()
+                } else {
+                    format!("__tail_{}", elements.len() - 2)
+                };
 
-                    let tail = if &tail_name == "_" {
-                        None
-                    } else {
-                        Some((tail_var, tail_name))
-                    };
+                let tail = if &tail_name == "_" || tail_name.is_empty() {
+                    None
+                } else {
+                    Some((tail_var, tail_name))
+                };
 
+                if tail.is_some() || !tail_head_names.is_empty() {
                     pattern_stack.list_expose(
                         tipo.clone().into(),
                         tail_head_names,
                         tail,
-                        nested_pattern,
-                    );
-                } else if !tail_head_names.is_empty() {
-                    pattern_stack.list_expose(
-                        tipo.clone().into(),
-                        tail_head_names,
-                        None,
                         nested_pattern,
                     );
                 }
