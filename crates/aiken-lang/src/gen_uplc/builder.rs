@@ -962,17 +962,40 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                     .map_or(Some((*b).into()), |_| None),
                 fields: vec![],
             })),
-            UplcConstant::ProtoList(_, constants) => {
-                let inner_constants =
-                    convert_constants_to_data(constants.iter().cloned().map(Rc::new).collect())
-                        .into_iter()
-                        .map(|constant| match constant {
-                            UplcConstant::Data(d) => d,
-                            _ => todo!(),
+            UplcConstant::ProtoList(list_type, constants) => {
+                if matches!(list_type, UplcType::Pair(_, _)) {
+                    let inner_constants = constants
+                        .iter()
+                        .cloned()
+                        .map(|pair| match pair {
+                            UplcConstant::ProtoPair(_, _, left, right) => {
+                                let inner_constants = vec![left, right];
+                                let inner_constants = convert_constants_to_data(inner_constants)
+                                    .into_iter()
+                                    .map(|constant| match constant {
+                                        UplcConstant::Data(d) => d,
+                                        _ => todo!(),
+                                    })
+                                    .collect_vec();
+                                (inner_constants[0].clone(), inner_constants[1].clone())
+                            }
+                            _ => unreachable!(),
                         })
                         .collect_vec();
 
-                UplcConstant::Data(PlutusData::Array(inner_constants))
+                    UplcConstant::Data(PlutusData::Map(KeyValuePairs::Def(inner_constants)))
+                } else {
+                    let inner_constants =
+                        convert_constants_to_data(constants.iter().cloned().map(Rc::new).collect())
+                            .into_iter()
+                            .map(|constant| match constant {
+                                UplcConstant::Data(d) => d,
+                                _ => todo!(),
+                            })
+                            .collect_vec();
+
+                    UplcConstant::Data(PlutusData::Array(inner_constants))
+                }
             }
             UplcConstant::ProtoPair(_, _, left, right) => {
                 let inner_constants = vec![left.clone(), right.clone()];
@@ -984,10 +1007,10 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                     })
                     .collect_vec();
 
-                UplcConstant::Data(PlutusData::Map(KeyValuePairs::Def(vec![(
+                UplcConstant::Data(PlutusData::Array(vec![
                     inner_constants[0].clone(),
                     inner_constants[1].clone(),
-                )])))
+                ]))
             }
             d @ UplcConstant::Data(_) => d.clone(),
             UplcConstant::Unit => UplcConstant::Data(PlutusData::Constr(Constr {
@@ -1540,7 +1563,7 @@ pub fn handle_func_dependencies(
             .unwrap_or_else(|| unreachable!());
 
         if (dep_scope.common_ancestor(func_scope) == *func_scope && !depend_comp.args.is_empty())
-            || function_component.args.is_empty()
+            || (function_component.args.is_empty() && !depend_comp.args.is_empty())
         {
             let mut recursion_ir = vec![];
             handle_recursion_ir(&dependency, depend_comp, &mut recursion_ir);
