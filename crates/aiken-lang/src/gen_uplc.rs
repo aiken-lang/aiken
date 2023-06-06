@@ -1078,7 +1078,7 @@ impl<'a> CodeGenerator<'a> {
                     );
 
                     // if only one constructor, no need to check
-                    if data_type.constructors.len() > 1 {
+                    if data_type.constructors.len() > 1 || *clause_properties.is_final_clause() {
                         // push constructor Index
                         let mut tag_stack = pattern_stack.empty_with_scope();
                         tag_stack.integer(index.to_string());
@@ -1527,7 +1527,6 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let id = self.id_gen.next();
                 let constr_var_name = format!("{constr_name}_{id}");
-                let data_type = builder::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap();
 
                 let mut when_stack = pattern_stack.empty_with_scope();
 
@@ -1547,10 +1546,11 @@ impl<'a> CodeGenerator<'a> {
                     &mut clause_properties,
                 );
 
-                if data_type.constructors.len() > 1 {
-                    if final_clause {
-                        pattern_stack.finally(when_stack);
-                    } else {
+                let data_type = builder::lookup_data_type_by_tipo(&self.data_types, tipo);
+                if final_clause {
+                    pattern_stack.finally(when_stack);
+                } else if let Some(data_type) = data_type {
+                    if data_type.constructors.len() > 1 {
                         let empty_stack = pattern_stack.empty_with_scope();
                         pattern_stack.clause_guard(
                             constr_var_name.clone(),
@@ -1558,9 +1558,17 @@ impl<'a> CodeGenerator<'a> {
                             when_stack,
                             empty_stack,
                         );
+                    } else {
+                        pattern_stack.merge_child(when_stack);
                     }
                 } else {
-                    pattern_stack.merge_child(when_stack);
+                    let empty_stack = pattern_stack.empty_with_scope();
+                    pattern_stack.clause_guard(
+                        constr_var_name.clone(),
+                        tipo.clone(),
+                        when_stack,
+                        empty_stack,
+                    )
                 }
 
                 Some(constr_var_name)
