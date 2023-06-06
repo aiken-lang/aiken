@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.8-alpha - unreleased
+
+### Added
+
+N/A
+
+### Fixed
+
+- Fixed operator precedences, in particular the pipe operator (`|>`) which is now of the lowest precedence.
+
+### Removed
+
+N/A
+
 ## v1.0.7-alpha - 2023-06-02
 
 ### Added

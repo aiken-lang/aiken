@@ -799,3 +799,20 @@ fn test_fail() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn pipes_and_expressions() {
+    let src = indoc! {r#"
+        test fmt() {
+          (x == y) && ((z |> length()) == x)
+        }
+    "#};
+
+    let expected = indoc! {r#"
+        test fmt() {
+          x == y && ( z |> length() ) == x
+        }
+    "#};
+
+    assert_fmt(src, expected);
+}
