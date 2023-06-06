@@ -54,10 +54,17 @@
             package = packages.aiken;
           }
         ];
-      in rec {
+        gitRev = if (builtins.hasAttr "rev" self)
+            then self.rev
+            else "dirty";
+      in {
         inherit packages;
         devShell = rustPkgs.workspaceShell {
           packages = [deno];
+          shellHook =
+          ''
+            export GIT_REVISION=${gitRev}
+          '';
         };
         devShells = {
           aiken = pkgs.devshell.mkShell {
