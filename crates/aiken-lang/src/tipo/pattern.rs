@@ -1,5 +1,5 @@
-///! Type inference and checking of patterns used in case expressions
-///! and variables bindings.
+//! Type inference and checking of patterns used in case expressions
+//! and variables bindings.
 use std::{
     collections::{HashMap, HashSet},
     ops::Deref,

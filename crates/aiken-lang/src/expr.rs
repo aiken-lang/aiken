@@ -651,7 +651,7 @@ impl UntypedExpr {
     pub fn binop_precedence(&self) -> u8 {
         match self {
             Self::BinOp { name, .. } => name.precedence(),
-            Self::PipeLine { .. } => 5,
+            Self::PipeLine { .. } => 0,
             _ => std::u8::MAX,
         }
     }

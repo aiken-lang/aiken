@@ -771,15 +771,15 @@ impl BinOp {
     pub fn precedence(&self) -> u8 {
         // Ensure that this matches the other precedence function for guards
         match self {
-            Self::Or => 1,
+            // Pipe is 0
+            // Unary operators are 1
+            Self::Or => 2,
 
-            Self::And => 2,
+            Self::And => 3,
 
-            Self::Eq | Self::NotEq => 3,
+            Self::Eq | Self::NotEq | Self::LtInt | Self::LtEqInt | Self::GtEqInt | Self::GtInt => 4,
 
-            Self::LtInt | Self::LtEqInt | Self::GtEqInt | Self::GtInt => 4,
-
-            // Pipe is 5
+            // Concatenation operators are typically 5, so we skip it.
             Self::AddInt | Self::SubInt => 6,
 
             Self::MultInt | Self::DivInt | Self::ModInt => 7,

@@ -89,27 +89,29 @@ impl Validator {
 
         let mut definitions = Definitions::new();
 
+        let parameters = params
+            .iter()
+            .map(|param| {
+                Annotated::from_type(modules.into(), &param.tipo, &mut definitions)
+                    .map(|schema| Parameter {
+                        title: Some(param.arg_name.get_label()),
+                        schema,
+                    })
+                    .map_err(|error| Error::Schema {
+                        error,
+                        location: param.location,
+                        source_code: NamedSource::new(
+                            module.input_path.display().to_string(),
+                            module.code.clone(),
+                        ),
+                    })
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok(Validator {
             title: format!("{}.{}", &module.name, &func.name),
-            description: None,
-            parameters: params
-                .iter()
-                .map(|param| {
-                    Annotated::from_type(modules.into(), &param.tipo, &mut definitions)
-                        .map(|schema| Parameter {
-                            title: Some(param.arg_name.get_label()),
-                            schema,
-                        })
-                        .map_err(|error| Error::Schema {
-                            error,
-                            location: param.location,
-                            source_code: NamedSource::new(
-                                module.input_path.display().to_string(),
-                                module.code.clone(),
-                            ),
-                        })
-                })
-                .collect::<Result<_, _>>()?,
+            description: func.doc.clone(),
+            parameters,
             datum: datum
                 .map(|datum| {
                     Annotated::from_type(modules.into(), &datum.tipo, &mut definitions).map_err(
@@ -182,7 +184,7 @@ mod test {
     use std::collections::HashMap;
 
     use aiken_lang::{self, builtins};
-    use uplc::ast::{self as uplc_ast};
+    use uplc::ast as uplc_ast;
 
     use crate::tests::TestProject;
 

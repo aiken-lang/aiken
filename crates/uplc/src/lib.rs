@@ -2,7 +2,7 @@ pub mod ast;
 pub mod builder;
 pub mod builtins;
 mod debruijn;
-mod flat;
+pub mod flat;
 pub mod machine;
 pub mod optimize;
 pub mod parser;

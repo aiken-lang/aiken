@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
-/// Build an Aiken project
+/// Build the documentation for an Aiken project
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,

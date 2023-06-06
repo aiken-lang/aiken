@@ -39,6 +39,75 @@ fn windows_newline() {
 }
 
 #[test]
+fn can_handle_comments_at_end_of_file() {
+    let code = indoc! {r#"
+       use aiken
+
+       // some comment
+       // more comments"#};
+
+    assert_definitions(
+        code,
+        vec![ast::UntypedDefinition::Use(Use {
+            location: Span::new((), 0..9),
+            module: vec!["aiken".to_string()],
+            as_name: None,
+            unqualified: vec![],
+            package: (),
+        })],
+    )
+}
+
+#[test]
+fn type_annotation_with_module_prefix() {
+    let code = indoc! {r#"
+       use aiken
+
+       pub fn go() -> aiken.Option<Int> {
+         False
+       }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![
+            ast::UntypedDefinition::Use(ast::Use {
+                as_name: None,
+                location: Span::new((), 0..9),
+                module: vec!["aiken".to_string()],
+                package: (),
+                unqualified: vec![],
+            }),
+            ast::UntypedDefinition::Fn(ast::Function {
+                arguments: vec![],
+                body: expr::UntypedExpr::Var {
+                    location: Span::new((), 48..53),
+                    name: "False".to_string(),
+                },
+                doc: None,
+                location: Span::new((), 11..43),
+                name: "go".to_string(),
+                public: true,
+                return_annotation: Some(ast::Annotation::Constructor {
+                    location: Span::new((), 26..43),
+                    module: Some("aiken".to_string()),
+                    name: "Option".to_string(),
+                    arguments: vec![ast::Annotation::Constructor {
+                        location: Span::new((), 39..42),
+                        module: None,
+                        name: "Int".to_string(),
+                        arguments: vec![],
+                    }],
+                }),
+                return_type: (),
+                end_position: 54,
+                can_error: true,
+            }),
+        ],
+    )
+}
+
+#[test]
 fn test_fail() {
     let code = indoc! {r#"
        !test invalid_inputs() {

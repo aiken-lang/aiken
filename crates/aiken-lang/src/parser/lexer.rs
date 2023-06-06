@@ -148,13 +148,13 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             // NOTE: The first case here work around a bug introduced with chumsky=0.9.0 which
             // miscalculate the offset for empty comments.
             just("/".repeat(n))
-                .ignore_then(text::newline().rewind())
+                .ignore_then(choice((text::newline().rewind(), end())))
                 .to(token.clone())
                 .map_with_span(move |token, span: Span| {
                     (token, Span::new((), span.start + n..span.end))
                 }),
             just("/".repeat(n)).ignore_then(
-                take_until(text::newline().rewind())
+                take_until(choice((text::newline().rewind(), end())))
                     .to(token)
                     .map_with_span(|token, span| (token, span)),
             ),

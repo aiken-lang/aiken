@@ -293,17 +293,11 @@ impl Annotated<Schema> {
                             // from the PlutusTx / LedgerApi Haskell codebase, which encodes some elements
                             // as such. We don't have a concept of language maps in Aiken, so we simply
                             // make all types abide by this convention.
-                            let data = match definitions
-                                .lookup(&generic)
-                                .expect(
-                                    "Generic type argument definition was registered just above.",
-                                )
-                                .clone()
-                            {
-                                Annotated {
+                            let data = match definitions.try_lookup(&generic).cloned() {
+                                Some(Annotated {
                                     annotated: Schema::Data(Data::List(Items::Many(xs))),
                                     ..
-                                } if xs.len() == 2 => {
+                                }) if xs.len() == 2 => {
                                     definitions.remove(&generic);
                                     Data::Map(
                                         xs.first()
@@ -314,6 +308,7 @@ impl Annotated<Schema> {
                                             .to_owned(),
                                     )
                                 }
+
                                 _ => Data::List(Items::One(Declaration::Referenced(generic))),
                             };
 

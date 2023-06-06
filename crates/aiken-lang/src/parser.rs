@@ -1519,7 +1519,7 @@ pub fn type_parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> 
                         .then(
                             r.separated_by(just(Token::Comma))
                                 .allow_trailing()
-                                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
+                                .delimited_by(just(Token::Less), just(Token::Greater))
                                 .or_not(),
                         )
                         .or_not(),

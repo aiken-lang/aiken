@@ -2374,3 +2374,548 @@ fn acceptance_test_20_map_some() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_22_filter_map() {
+    let src = r#"
+          pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
+            when xs is {
+                [] ->
+                  zero
+                [x, ..rest] ->
+                  f(x, foldr(rest, f, zero))
+            }
+          }
+
+          pub fn filter_map(xs: List<a>, f: fn(a) -> Option<b>) -> List<b> {
+            foldr(
+                xs,
+                fn(x, ys) {
+                  when f(x) is {
+                    None ->
+                      ys
+                    Some(y) ->
+                      [y, ..ys]
+                }
+              },
+              [],
+            )
+          }
+
+          test filter_map_1() {
+            filter_map([], fn(_) { Some(42) }) == []
+          }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("filter_map")
+                        .lambda("filter_map")
+                        .apply(
+                            Term::var("foldr")
+                                .apply(Term::var("xs"))
+                                .apply(
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(Term::var("subject_index"))
+                                        .delayed_if_else(
+                                            Term::var("ys"),
+                                            Term::mk_cons()
+                                                .apply(Term::i_data().apply(Term::var("y")))
+                                                .apply(Term::var("ys"))
+                                                .lambda("y")
+                                                .apply(
+                                                    Term::un_i_data().apply(
+                                                        Term::head_list()
+                                                            .apply(Term::var("subject_fields")),
+                                                    ),
+                                                )
+                                                .lambda("subject_fields")
+                                                .apply(
+                                                    Term::var(CONSTR_FIELDS_EXPOSER)
+                                                        .apply(Term::var("subject")),
+                                                ),
+                                        )
+                                        .lambda("subject_index")
+                                        .apply(
+                                            Term::var(CONSTR_INDEX_EXPOSER)
+                                                .apply(Term::var("subject")),
+                                        )
+                                        .lambda("subject")
+                                        .apply(Term::var("f").apply(Term::var("x")))
+                                        .lambda("ys")
+                                        .lambda("x"),
+                                )
+                                .apply(Term::empty_list())
+                                .lambda("f")
+                                .lambda("xs"),
+                        )
+                        .lambda("foldr")
+                        .apply(Term::var("foldr").apply(Term::var("foldr")))
+                        .lambda("foldr")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::var("zero"),
+                                    Term::var("f")
+                                        .apply(Term::var("x"))
+                                        .apply(
+                                            Term::var("foldr")
+                                                .apply(Term::var("foldr"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f"))
+                                                .apply(Term::var("zero")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(Term::head_list().apply(Term::var("xs"))),
+                                )
+                                .lambda("zero")
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("foldr"),
+                        )
+                        .apply(Term::empty_list())
+                        .apply(
+                            Term::data(Data::constr(0, vec![Data::integer(42.into())])).lambda("_"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::empty_list()))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn pass_constr_as_function() {
+    let src = r#"
+      type Make {
+        a: Int,
+        b: SubMake
+      }
+      
+      type SubMake {
+        c: Int
+      }
+      
+      fn hi(sm: SubMake, to_make: fn (Int, SubMake) -> Make) -> Make {
+        to_make(3, sm)
+      }
+      
+      test cry() {
+        Make(3, SubMake(1)) == hi(SubMake(1), Make)
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::integer(3.into()),
+                    Data::constr(0, vec![Data::integer(1.into())]),
+                ],
+            )))
+            .apply(
+                Term::var("hi")
+                    .lambda("hi")
+                    .apply(
+                        Term::var("to_make")
+                            .apply(Term::integer(3.into()))
+                            .apply(Term::var("sm"))
+                            .lambda("to_make")
+                            .lambda("sm"),
+                    )
+                    .apply(Term::data(Data::constr(0, vec![Data::integer(1.into())])))
+                    .apply(
+                        Term::constr_data()
+                            .apply(Term::integer(0.into()))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::i_data().apply(Term::var("a")))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(Term::var("b"))
+                                            .apply(Term::empty_list()),
+                                    ),
+                            )
+                            .lambda("b")
+                            .lambda("a"),
+                    ),
+            ),
+        false,
+    );
+}
+
+#[test]
+fn record_update_output_2_vals() {
+    let src = r#"
+      type Address {
+        thing: ByteArray,
+      }
+      
+      type Datum {
+        NoDatum
+        InlineDatum(Data)
+      }
+      
+      type Output {
+        address: Address,
+        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        datum: Datum,
+        script_ref: Option<ByteArray>,
+      }
+      
+      type MyDatum {
+        a: Int,
+      }
+      
+      test huh() {
+        let prev_output =
+          Output {
+            address: Address { thing: "script_hash_0" },
+            value: [],
+            datum: InlineDatum(MyDatum{a: 3}),
+            script_ref: None,
+          }
+      
+        let next_output =
+          Output { ..prev_output, value: [], datum: prev_output.datum }
+      
+        prev_output == next_output
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("prev_output"))
+            .apply(Term::var("next_output"))
+            .lambda("next_output")
+            .apply(
+                Term::constr_data()
+                    .apply(Term::integer(0.into()))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::head_list().apply(Term::var("record_fields")))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::map_data().apply(Term::empty_map()))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::var(CONSTR_GET_FIELD)
+                                                    .apply(
+                                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                                            .apply(Term::var("prev_output")),
+                                                    )
+                                                    .apply(Term::integer(2.into())),
+                                            )
+                                            .apply(Term::var("tail_index_3")),
+                                    ),
+                            ),
+                    )
+                    .lambda("tail_index_3")
+                    .apply(
+                        Term::tail_list().apply(
+                            Term::tail_list()
+                                .apply(Term::tail_list().apply(Term::var("record_fields"))),
+                        ),
+                    )
+                    .lambda("record_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("prev_output"))),
+            )
+            .lambda("prev_output")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::constr(
+                        0,
+                        vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                    ),
+                    Data::map(vec![]),
+                    Data::constr(1, vec![Data::constr(0, vec![Data::integer(3.into())])]),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn record_update_output_1_val() {
+    let src = r#"
+      type Address {
+        thing: ByteArray,
+      }
+      
+      type Datum {
+        NoDatum
+        InlineDatum(Data)
+      }
+      
+      type Output {
+        address: Address,
+        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        datum: Datum,
+        script_ref: Option<ByteArray>,
+      }
+      
+      type MyDatum {
+        a: Int,
+      }
+      
+      test huh() {
+        let prev_output =
+          Output {
+            address: Address { thing: "script_hash_0" },
+            value: [],
+            datum: InlineDatum(MyDatum{a: 3}),
+            script_ref: None,
+          }
+      
+        let next_output =
+          Output { ..prev_output, datum: prev_output.datum }
+      
+        prev_output == next_output
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("prev_output"))
+            .apply(Term::var("next_output"))
+            .lambda("next_output")
+            .apply(
+                Term::constr_data()
+                    .apply(Term::integer(0.into()))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::head_list().apply(Term::var("record_fields")))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("tail_index_1")))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::var(CONSTR_GET_FIELD)
+                                                    .apply(
+                                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                                            .apply(Term::var("prev_output")),
+                                                    )
+                                                    .apply(Term::integer(2.into())),
+                                            )
+                                            .apply(Term::var("tail_index_3")),
+                                    ),
+                            ),
+                    )
+                    .lambda("tail_index_3")
+                    .apply(
+                        Term::tail_list().apply(Term::tail_list().apply(Term::var("tail_index_1"))),
+                    )
+                    .lambda("tail_index_1")
+                    .apply(Term::tail_list().apply(Term::var("record_fields")))
+                    .lambda("record_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("prev_output"))),
+            )
+            .lambda("prev_output")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::constr(
+                        0,
+                        vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                    ),
+                    Data::map(vec![]),
+                    Data::constr(1, vec![Data::constr(0, vec![Data::integer(3.into())])]),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn record_update_output_first_last_val() {
+    let src = r#"
+      type Address {
+        thing: ByteArray,
+      }
+      
+      type Datum {
+        NoDatum
+        InlineDatum(Data)
+      }
+      
+      type Output {
+        address: Address,
+        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        datum: Datum,
+        script_ref: Option<ByteArray>,
+      }
+      
+      type MyDatum {
+        a: Int,
+      }
+      
+      test huh() {
+        let prev_output =
+          Output {
+            address: Address { thing: "script_hash_0" },
+            value: [],
+            datum: InlineDatum(MyDatum{a: 3}),
+            script_ref: None,
+          }
+      
+        let next_output =
+          Output { ..prev_output, script_ref: None, address: Address{thing: "script_hash_0"} }
+      
+        prev_output == next_output
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("prev_output"))
+            .apply(Term::var("next_output"))
+            .lambda("next_output")
+            .apply(
+                Term::constr_data()
+                    .apply(Term::integer(0.into()))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::data(Data::constr(
+                                0,
+                                vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                            )))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("tail_index_1")))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::head_list().apply(Term::var("tail_index_2")),
+                                            )
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(Term::data(Data::constr(1, vec![])))
+                                                    .apply(Term::var("tail_index_4")),
+                                            ),
+                                    ),
+                            ),
+                    )
+                    .lambda("tail_index_4")
+                    .apply(Term::empty_list())
+                    .lambda("tail_index_2")
+                    .apply(Term::tail_list().apply(Term::var("tail_index_1")))
+                    .lambda("tail_index_1")
+                    .apply(Term::tail_list().apply(Term::var("record_fields")))
+                    .lambda("record_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("prev_output"))),
+            )
+            .lambda("prev_output")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::constr(
+                        0,
+                        vec![Data::bytestring("script_hash_0".as_bytes().to_vec())],
+                    ),
+                    Data::map(vec![]),
+                    Data::constr(1, vec![Data::constr(0, vec![Data::integer(3.into())])]),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn list_fields_unwrap() {
+    let src = r#"
+      type Fields {
+        a: ByteArray,
+        b: Int,
+      }
+      
+      fn data_fields(){
+        [
+            Fields{a: #"", b: 14}, 
+            Fields{a: #"AA", b: 0}
+        ]
+      }
+      
+      test list_fields_unwr_0() {
+        when data_fields() is {
+          [Fields { b, .. }, ..] ->
+            b > 0
+          _ ->
+            False
+        } == True
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("field_list")
+            .delayed_choose_list(
+                Term::bool(false),
+                Term::less_than_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::var("b"))
+                    .lambda("b")
+                    .apply(
+                        Term::un_i_data()
+                            .apply(Term::head_list().apply(Term::var("record_index_1"))),
+                    )
+                    .lambda("record_index_1")
+                    .apply(Term::tail_list().apply(Term::var("item_1_fields")))
+                    .lambda("item_1_fields")
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("item_1")))
+                    .lambda("item_1")
+                    .apply(Term::head_list().apply(Term::var("field_list")))
+                    .lambda("clauses_delayed")
+                    .apply(Term::bool(false).delay())
+                    .lambda("tail_1")
+                    .apply(Term::tail_list().apply(Term::var("field_list"))),
+            )
+            .lambda("field_list")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::bytestring(vec![]), Data::integer(14.into())],
+                )),
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::bytestring(vec![170]), Data::integer(0.into())],
+                )),
+            ]))
+            .delayed_if_else(
+                Term::bool(true),
+                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+            )
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}

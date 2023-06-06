@@ -1044,83 +1044,128 @@ fn suggest_unify(
     situation: &Option<UnifyErrorSituation>,
     rigid_type_names: &HashMap<u64, String>,
 ) -> String {
-    let expected = expected.to_pretty_with_names(rigid_type_names.clone(), 4);
-    let given = given.to_pretty_with_names(rigid_type_names.clone(), 4);
+    let expected_str = expected.to_pretty_with_names(rigid_type_names.clone(), 0);
+    let given_str = given.to_pretty_with_names(rigid_type_names.clone(), 0);
+
+    let (expected, given) = match (expected.as_ref(), given.as_ref()) {
+        (
+            Type::App {
+                module: expected_module,
+                ..
+            },
+            Type::App {
+                module: given_module,
+                ..
+            },
+        ) if expected_str == given_str => {
+            let expected_module = if expected_module.is_empty() {
+                "aiken"
+            } else {
+                expected_module
+            };
+
+            let given_module = if given_module.is_empty() {
+                "aiken"
+            } else {
+                given_module
+            };
+
+            (
+                format!(
+                    "{} - {}",
+                    expected_str.if_supports_color(Stdout, |s| s.green()),
+                    expected_module.if_supports_color(Stdout, |s| s.bright_blue())
+                ),
+                format!(
+                    "{} - {}",
+                    given_str.if_supports_color(Stdout, |s| s.red()),
+                    given_module.if_supports_color(Stdout, |s| s.bright_blue())
+                ),
+            )
+        }
+        _ => (
+            expected_str
+                .if_supports_color(Stdout, |s| s.green())
+                .to_string(),
+            given_str.if_supports_color(Stdout, |s| s.red()).to_string(),
+        ),
+    };
+
     match situation {
         Some(UnifyErrorSituation::CaseClauseMismatch) => formatdoc! {
             r#"While comparing branches from a '{keyword_when}/{keyword_is}' expression, I realized not all branches have the same type.
 
                I am expecting all of them to have the following type:
 
-               {expected}
+                   {expected}
 
                but I found some with type:
 
-               {given}
+                   {given}
 
                Note that I infer the type of the entire '{keyword_when}/{keyword_is}' expression based on the type of the first branch I encounter."#,
             keyword_when = "when".if_supports_color(Stdout, |s| s.yellow()),
             keyword_is = "is".if_supports_color(Stdout, |s| s.yellow()),
-            expected = expected.if_supports_color(Stdout, |s| s.green()),
-            given = given.if_supports_color(Stdout, |s| s.red())
+            expected = expected,
+            given = given
         },
         Some(UnifyErrorSituation::ReturnAnnotationMismatch) => formatdoc! {
             r#"While comparing the return annotation of a function with its actual return type, I realized that both don't match.
 
                I am inferring the function should return:
 
-               {}
+                   {}
 
                but I found that it returns:
 
-               {}
+                   {}
 
                Either, fix the annotation or adjust the function body to return the expected type."#,
-            expected.if_supports_color(Stdout, |s| s.green()),
-            given.if_supports_color(Stdout, |s| s.red())
+            expected,
+            given
         },
         Some(UnifyErrorSituation::PipeTypeMismatch) => formatdoc! {
             r#"As I was looking at a pipeline you have defined, I realized that one of the pipe isn't valid.
 
                I am expecting the pipe to send into something of type:
 
-               {}
+                   {}
 
                but it is typed:
 
-               {}
+                   {}
 
                Either, fix the input or change the target so that both match."#,
-            expected.if_supports_color(Stdout, |s| s.green()),
-            given.if_supports_color(Stdout, |s| s.red())
+            expected,
+            given
         },
         Some(UnifyErrorSituation::Operator(op)) => formatdoc! {
             r#"While checking operands of a binary operator, I realized that at least one of them doesn't have the expected type.
 
                The '{}' operator expects operands of type:
 
-               {}
+                   {}
 
                but I discovered the following instead:
 
-               {}
+                   {}
             "#,
             op.to_doc().to_pretty_string(70).if_supports_color(Stdout, |s| s.yellow()),
-            expected.if_supports_color(Stdout, |s| s.green()),
-            given.if_supports_color(Stdout, |s| s.red())
+            expected,
+            given
         },
         None => formatdoc! {
             r#"I am inferring the following type:
 
-               {}
+                   {}
 
                but I found an expression with a different type:
 
-               {}
+                   {}
 
                Either, add type-annotation to improve my inference, or adjust the expression to have the expected type."#,
-            expected.if_supports_color(Stdout, |s| s.green()),
-            given.if_supports_color(Stdout, |s| s.red())
+            expected,
+            given
         },
     }
 }
