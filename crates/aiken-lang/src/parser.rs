@@ -34,7 +34,7 @@ pub fn module(
     let mut previous_is_newline = false;
 
     let tokens = tokens.into_iter().filter_map(|(token, ref span)| {
-        let current_is_newline = token == Token::NewLine;
+        let current_is_newline = token == Token::NewLine || token == Token::EmptyLine;
         let result = match token {
             Token::ModuleComment => {
                 extra.module_comments.push(*span);

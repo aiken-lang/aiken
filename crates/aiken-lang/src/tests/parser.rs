@@ -3297,3 +3297,43 @@ fn parse_keyword_todo() {
         ],
     )
 }
+
+#[test]
+fn brackets_followed_by_parenthesis() {
+    fn assert_sequence(code: &str) {
+        let (module, _extra) = parser::module(code, ast::ModuleKind::Validator).unwrap();
+        assert!(
+            matches!(
+                module.definitions[..],
+                [ast::Definition::Test(Function {
+                    body: expr::UntypedExpr::Sequence { .. },
+                    ..
+                })]
+            ),
+            "{}",
+            code.to_string()
+        );
+    }
+
+    assert_sequence(indoc! {r#"
+       test foo () {
+         let a = []
+         (x |> y) == []
+       }
+   "#});
+
+    assert_sequence(indoc! {r#"
+       test foo () {
+         let a = []
+         (x |> y) == []
+       }
+   "#});
+
+    assert_sequence(indoc! {r#"
+        test foo () {
+          let a = []
+          // foo
+          (x |> y) == []
+        }
+    "#});
+}
