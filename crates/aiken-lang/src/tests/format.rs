@@ -18,6 +18,23 @@ fn assert_fmt(src: &str, expected: &str) {
 }
 
 #[test]
+fn comment_at_end_of_file() {
+    let input = indoc! { r#"
+      type Foo =
+        Int
+
+      //"#};
+
+    let output = indoc! { r#"
+      type Foo =
+        Int
+      //
+    "#};
+
+    assert_fmt(input, output);
+}
+
+#[test]
 fn test_format_if() {
     let src = indoc! {r#"
         pub fn foo(a) {

@@ -24,7 +24,7 @@ pub struct Comment<'a> {
 impl<'a> From<(&Span, &'a str)> for Comment<'a> {
     fn from(src: (&Span, &'a str)) -> Comment<'a> {
         fn char_indice(s: &str, i: usize) -> usize {
-            s.char_indices().nth(i).expect("char at given indice").0
+            s.char_indices().nth(i).unwrap_or((i, ' ')).0
         }
 
         let start = char_indice(src.1, src.0.start);
