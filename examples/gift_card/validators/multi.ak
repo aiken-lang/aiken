@@ -61,6 +61,7 @@ validator(creator: ByteArray) {
 
     let minted_assets =
       mint
+        |> from_minted_value
         |> value.tokens(policy_id)
         |> dict.to_list()
 
