@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.8-alpha - unreleased
+## next - 2023-MM-DD 
 
 ### Added
 
@@ -8,7 +8,10 @@ N/A
 
 ### Fixed
 
-- Fixed operator precedences, in particular the pipe operator (`|>`) which is now of the lowest precedence.
+- **aiken-lang**: fixed operator precedences, in particular the pipe operator (`|>`) which is now of the lowest precedence.
+- **aiken-project**: need to convert to Program<Name> before dumping to uplc
+- **aiken-lang**: fmt crashing when comment at end of file with no newline
+
 
 ### Removed
 

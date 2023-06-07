@@ -537,6 +537,29 @@ impl TryFrom<Term<Name>> for Term<DeBruijn> {
     }
 }
 
+impl TryFrom<&Program<DeBruijn>> for Program<Name> {
+    type Error = debruijn::Error;
+
+    fn try_from(value: &Program<DeBruijn>) -> Result<Self, Self::Error> {
+        Ok(Program::<Name> {
+            version: value.version,
+            term: (&value.term).try_into()?,
+        })
+    }
+}
+
+impl TryFrom<&Term<DeBruijn>> for Term<Name> {
+    type Error = debruijn::Error;
+
+    fn try_from(value: &Term<DeBruijn>) -> Result<Self, debruijn::Error> {
+        let mut converter = Converter::new();
+
+        let term = converter.debruijn_to_name(value)?;
+
+        Ok(term)
+    }
+}
+
 impl TryFrom<Program<NamedDeBruijn>> for Program<Name> {
     type Error = debruijn::Error;
 

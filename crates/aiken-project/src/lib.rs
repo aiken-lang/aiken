@@ -39,7 +39,7 @@ use std::{
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{DeBruijn, Term},
+    ast::{DeBruijn, Name, Program, Term},
     machine::cost_model::ExBudget,
 };
 
@@ -227,8 +227,10 @@ where
         for validator in &blueprint.validators {
             let path = dir.clone().join(format!("{}.uplc", validator.title));
 
-            fs::write(&path, validator.program.to_pretty())
-                .map_err(|error| Error::FileIo { error, path })?;
+            let program = &validator.program;
+            let program: Program<Name> = program.try_into().unwrap();
+
+            fs::write(&path, program.to_pretty()).map_err(|error| Error::FileIo { error, path })?;
         }
 
         Ok(())
