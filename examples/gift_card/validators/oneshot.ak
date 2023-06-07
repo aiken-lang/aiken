@@ -21,6 +21,7 @@ validator(token_name: ByteArray, utxo_ref: OutputReference) {
 
     expect [(asset_name, amount)] =
       mint
+        |> from_minted_value
         |> value.tokens(policy_id)
         |> dict.to_list()
 
@@ -46,6 +47,7 @@ validator(token_name: ByteArray, policy_id: ByteArray) {
 
     expect [(asset_name, amount)] =
       mint
+        |> from_minted_value
         |> value.tokens(policy_id)
         |> dict.to_list()
 
