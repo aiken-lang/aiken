@@ -1,5 +1,11 @@
 use std::fmt;
 
+#[derive(Clone, Debug, PartialEq, Hash, Eq, Copy)]
+pub enum Base {
+    Decimal { numeric_underscore: bool },
+    Hexadecimal,
+}
+
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum Token {
     Error(char),
@@ -7,7 +13,7 @@ pub enum Token {
     Ordinal { index: u32 },
     UpName { name: String },
     DiscardName { name: String },
-    Int { value: String },
+    Int { value: String, base: Base },
     ByteString { value: String },
     String { value: String },
     // Groupings
@@ -97,7 +103,7 @@ impl fmt::Display for Token {
             }
             Token::UpName { name } => name,
             Token::DiscardName { name } => name,
-            Token::Int { value } => value,
+            Token::Int { value, .. } => value,
             Token::String { value } => value,
             Token::ByteString { value } => value,
             Token::NewLineLeftParen => "↳(",

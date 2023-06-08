@@ -13,7 +13,7 @@ use crate::{
 use chumsky::{chain::Chain, prelude::*};
 use error::ParseError;
 use extra::ModuleExtra;
-use token::Token;
+use token::{Base, Token};
 use vec1::{vec1, Vec1};
 
 pub fn module(
@@ -397,9 +397,12 @@ fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseErr
         });
 
     let constant_int_parser =
-        select! {Token::Int {value} => value}.map_with_span(|value, span| ast::Constant::Int {
-            location: span,
-            value,
+        select! {Token::Int {value, base} => (value, base)}.map_with_span(|(value, base), span| {
+            ast::Constant::Int {
+                location: span,
+                value,
+                base,
+            }
         });
 
     let constant_bytearray_parser =
@@ -422,8 +425,8 @@ pub fn bytearray_parser(
 ) -> impl Parser<Token, (ByteArrayFormatPreference, Vec<u8>), Error = ParseError> {
     let bytearray_list_parser = just(Token::Hash)
         .ignore_then(
-            select! {Token::Int {value} => value}
-                .validate(|value, span, emit| {
+            select! {Token::Int {value, base, ..} => (value, base)}
+                .validate(|(value, base), span, emit| {
                     let byte: u8 = match value.parse() {
                         Ok(b) => b,
                         Err(_) => {
@@ -432,18 +435,38 @@ pub fn bytearray_parser(
                                 None,
                                 Some(error::Pattern::Byte),
                             ));
-
                             0
                         }
                     };
-
-                    byte
+                    (byte, base)
                 })
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
         )
-        .map(|token| (ByteArrayFormatPreference::ArrayOfBytes, token));
+        .validate(|bytes, span, emit| {
+            let base = bytes.iter().fold(Ok(None), |acc, (_, base)| match acc {
+                Ok(None) => Ok(Some(base)),
+                Ok(Some(previous_base)) if previous_base == base => Ok(Some(base)),
+                _ => Err(()),
+            });
+
+            let base = match base {
+                Err(()) => {
+                    emit(ParseError::hybrid_notation_in_bytearray(span));
+                    Base::Decimal {
+                        numeric_underscore: false,
+                    }
+                }
+                Ok(None) => Base::Decimal {
+                    numeric_underscore: false,
+                },
+                Ok(Some(base)) => *base,
+            };
+
+            (bytes.into_iter().map(|(b, _)| b).collect::<Vec<u8>>(), base)
+        })
+        .map(|(bytes, base)| (ByteArrayFormatPreference::ArrayOfBytes(base), bytes));
 
     let bytearray_hexstring_parser =
         just(Token::Hash)
@@ -596,12 +619,13 @@ pub fn expr_parser(
                 }
             });
 
-        let int_parser = select! { Token::Int {value} => value}.map_with_span(|value, span| {
-            expr::UntypedExpr::Int {
+        let int_parser = select! { Token::Int {value, base} => (value, base)}.map_with_span(
+            |(value, base), span| expr::UntypedExpr::Int {
                 location: span,
                 value,
-            }
-        });
+                base,
+            },
+        );
 
         let record_update_parser = select! {Token::Name { name } => name}
             .map_with_span(|module, span: Span| (module, span))
@@ -1685,12 +1709,13 @@ pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = Parse
                     location: span,
                 }
             }),
-            select! {Token::Int {value} => value}.map_with_span(|value, span| {
-                ast::UntypedPattern::Int {
+            select! {Token::Int {value, base} => (value, base)}.map_with_span(
+                |(value, base), span| ast::UntypedPattern::Int {
                     location: span,
                     value,
-                }
-            }),
+                    base,
+                },
+            ),
             r.clone()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()

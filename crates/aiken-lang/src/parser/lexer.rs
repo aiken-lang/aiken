@@ -1,13 +1,58 @@
-use chumsky::prelude::*;
-
+use super::{
+    error::ParseError,
+    token::{Base, Token},
+};
 use crate::ast::Span;
-
+use chumsky::prelude::*;
+use num_bigint::BigInt;
 use ordinal::Ordinal;
 
-use super::{error::ParseError, token::Token};
-
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
-    let int = text::int(10).map(|value| Token::Int { value });
+    let base10 = text::int(10).map(|value| Token::Int {
+        value,
+        base: Base::Decimal {
+            numeric_underscore: false,
+        },
+    });
+
+    let base10_underscore = one_of("0123456789")
+        .repeated()
+        .at_least(1)
+        .at_most(3)
+        .separated_by(just("_"))
+        .at_least(2)
+        .flatten()
+        .collect::<String>()
+        .map(|value| Token::Int {
+            value,
+            base: Base::Decimal {
+                numeric_underscore: true,
+            },
+        });
+
+    let base16 = just("0x")
+        .ignore_then(
+            one_of("0123456789abcdefABCDEF")
+                .repeated()
+                .at_least(2)
+                .collect::<String>(),
+        )
+        .validate(|value: String, span, emit| {
+            let value = match BigInt::parse_bytes(value.as_bytes(), 16) {
+                None => {
+                    emit(ParseError::malformed_base16_digits(span));
+                    String::new()
+                }
+                Some(n) => n.to_str_radix(10),
+            };
+
+            Token::Int {
+                value,
+                base: Base::Hexadecimal,
+            }
+        });
+
+    let int = choice((base16, base10_underscore, base10));
 
     let ordinal = text::int(10)
         .then_with(|index: String| {

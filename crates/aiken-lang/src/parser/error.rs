@@ -55,6 +55,26 @@ impl ParseError {
             label: None,
         }
     }
+
+    pub fn malformed_base16_digits(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::MalformedBase16Digits,
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: None,
+        }
+    }
+
+    pub fn hybrid_notation_in_bytearray(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::HybridNotationInByteArray,
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: None,
+        }
+    }
 }
 
 impl PartialEq for ParseError {
@@ -114,6 +134,12 @@ pub enum ErrorKind {
         hint: Option<String>,
     },
 
+    #[error("I tripped over a malformed hexadecimal digits.")]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"When numbers starts with '0x', they are treated as hexadecimal numbers. Thus, only digits from 0-9 or letter from a-f (or A-F) can be used following a '0x' number declaration. Plus, hexadecimal digits always go by pairs, so the total number of digits must be even (not counting leading zeros)."#
+    }))]
+    MalformedBase16Digits,
+
     #[error("I tripped over a malformed base16-encoded string literal.")]
     #[diagnostic(help("{}", formatdoc! {
         r#"You can declare literal bytearrays from base16-encoded (a.k.a. hexadecimal) string literals.
@@ -130,6 +156,11 @@ pub enum ErrorKind {
             .if_supports_color(Stdout, |s| s.bright_purple())
     }))]
     MalformedBase16StringLiteral,
+
+    #[error("I came across a bytearray declared using two different notations")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]
+    #[diagnostic(help("Either use decimal or hexadecimal notation, but don't mix them."))]
+    HybridNotationInByteArray,
 
     #[error("I failed to understand a when clause guard.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]

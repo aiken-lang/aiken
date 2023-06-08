@@ -9,6 +9,7 @@ use crate::{
         TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
+    parser::token::Base,
     tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
 };
 
@@ -403,6 +404,7 @@ pub enum UntypedExpr {
     Int {
         location: Span,
         value: String,
+        base: Base,
     },
 
     String {

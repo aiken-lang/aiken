@@ -182,10 +182,18 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 })
             }
 
-            Pattern::Int { location, value } => {
+            Pattern::Int {
+                location,
+                value,
+                base,
+            } => {
                 self.environment.unify(tipo, int(), location, false)?;
 
-                Ok(Pattern::Int { location, value })
+                Ok(Pattern::Int {
+                    location,
+                    value,
+                    base,
+                })
             }
 
             Pattern::List {

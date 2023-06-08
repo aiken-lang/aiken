@@ -1,8 +1,3 @@
-use itertools::Itertools;
-use ordinal::Ordinal;
-use std::sync::Arc;
-use vec1::Vec1;
-
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
@@ -14,12 +9,20 @@ use crate::{
     },
     docvec,
     expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
-    parser::extra::{Comment, ModuleExtra},
+    parser::{
+        extra::{Comment, ModuleExtra},
+        token::Base,
+    },
     pretty::{
         break_, concat, flex_break, join, line, lines, nil, prebreak, Document, Documentable,
     },
     tipo::{self, Type},
 };
+use itertools::Itertools;
+use num_bigint::BigInt;
+use ordinal::Ordinal;
+use std::sync::Arc;
+use vec1::Vec1;
 
 const INDENT: isize = 2;
 const DOCS_MAX_COLUMNS: isize = 80;
@@ -348,7 +351,7 @@ impl<'comments> Formatter<'comments> {
                 preferred_format,
                 ..
             } => self.bytearray(bytes, preferred_format),
-            Constant::Int { value, .. } => value.to_doc(),
+            Constant::Int { value, base, .. } => self.int(value, base),
             Constant::String { value, .. } => self.string(value),
         }
     }
@@ -662,7 +665,7 @@ impl<'comments> Formatter<'comments> {
                 .append("\"")
                 .append(Document::String(hex::encode(bytes)))
                 .append("\""),
-            ByteArrayFormatPreference::ArrayOfBytes => "#"
+            ByteArrayFormatPreference::ArrayOfBytes(Base::Decimal { .. }) => "#"
                 .to_doc()
                 .append(
                     flex_break("[", "[")
@@ -672,10 +675,62 @@ impl<'comments> Formatter<'comments> {
                         .append("]"),
                 )
                 .group(),
+            ByteArrayFormatPreference::ArrayOfBytes(Base::Hexadecimal) => "#"
+                .to_doc()
+                .append(
+                    flex_break("[", "[")
+                        .append(join(
+                            bytes.iter().map(|b| {
+                                Document::String(if *b < 16 {
+                                    format!("0x0{b:x}")
+                                } else {
+                                    format!("{b:#x}")
+                                })
+                            }),
+                            break_(",", ", "),
+                        ))
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .append("]"),
+                )
+                .group(),
             ByteArrayFormatPreference::Utf8String => nil()
                 .append("\"")
                 .append(Document::String(String::from_utf8(bytes.to_vec()).unwrap()))
                 .append("\""),
+        }
+    }
+
+    pub fn int<'a>(&mut self, s: &'a str, base: &Base) -> Document<'a> {
+        match base {
+            Base::Decimal { numeric_underscore } if *numeric_underscore => {
+                let s = s
+                    .chars()
+                    .rev()
+                    .enumerate()
+                    .flat_map(|(i, c)| {
+                        if i != 0 && i % 3 == 0 {
+                            Some('_')
+                        } else {
+                            None
+                        }
+                        .into_iter()
+                        .chain(std::iter::once(c))
+                    })
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>();
+
+                Document::String(s)
+            }
+            Base::Decimal { .. } => s.to_doc(),
+            Base::Hexadecimal => Document::String(format!(
+                "0x{}",
+                BigInt::parse_bytes(s.as_bytes(), 10)
+                    .expect("Invalid parsed hexadecimal digits ?!")
+                    .to_str_radix(16),
+            )),
         }
     }
 
@@ -700,7 +755,7 @@ impl<'comments> Formatter<'comments> {
                 one_liner,
             } => self.pipeline(expressions, *one_liner),
 
-            UntypedExpr::Int { value, .. } => value.to_doc(),
+            UntypedExpr::Int { value, base, .. } => self.int(value, base),
 
             UntypedExpr::String { value, .. } => self.string(value),
 
@@ -1507,7 +1562,7 @@ impl<'comments> Formatter<'comments> {
     pub fn pattern<'a>(&mut self, pattern: &'a UntypedPattern) -> Document<'a> {
         let comments = self.pop_comments(pattern.location().start);
         let doc = match pattern {
-            Pattern::Int { value, .. } => value.to_doc(),
+            Pattern::Int { value, base, .. } => self.int(value, base),
 
             Pattern::Var { name, .. } => name.to_doc(),
 
