@@ -1,6 +1,7 @@
 use crate::{
     ast::{self, Constant, DataType, Function, ModuleConstant, Span, TypeAlias, Use},
-    expr, parser,
+    expr,
+    parser::{self, token::Base},
 };
 use chumsky::prelude::*;
 use indoc::indoc;
@@ -742,6 +743,9 @@ fn plus_binop() {
                 right: Box::new(expr::UntypedExpr::Int {
                     location: Span::new((), 33..34),
                     value: "1".to_string(),
+                    base: Base::Decimal {
+                        numeric_underscore: false,
+                    },
                 }),
             },
             doc: None,
@@ -803,6 +807,9 @@ fn pipeline() {
                         right: Box::new(expr::UntypedExpr::Int {
                             location: Span::new((), 35..36),
                             value: "2".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }),
                     },
                     expr::UntypedExpr::Var {
@@ -861,10 +868,16 @@ fn if_expression() {
                             left: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 27..28),
                                 value: "1".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                             right: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 31..32),
                                 value: "1".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                         },
                         location: Span::new((), 16..36),
@@ -880,11 +893,17 @@ fn if_expression() {
                             right: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 49..50),
                                 value: "4".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                         },
                         body: expr::UntypedExpr::Int {
                             location: Span::new((), 57..58),
                             value: "5".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                         location: Span::new((), 45..62),
                     },
@@ -904,6 +923,9 @@ fn if_expression() {
                         body: expr::UntypedExpr::Int {
                             location: Span::new((), 84..85),
                             value: "6".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                         location: Span::new((), 71..89),
                     },
@@ -911,6 +933,9 @@ fn if_expression() {
                 final_else: Box::new(expr::UntypedExpr::Int {
                     location: Span::new((), 101..102),
                     value: "3".to_string(),
+                    base: Base::Decimal {
+                        numeric_underscore: false,
+                    },
                 }),
             },
             doc: None,
@@ -979,6 +1004,9 @@ fn let_bindings() {
                                     right: Box::new(expr::UntypedExpr::Int {
                                         location: Span::new((), 39..40),
                                         value: "2".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     }),
                                 },
                                 expr::UntypedExpr::Var {
@@ -1006,10 +1034,16 @@ fn let_bindings() {
                                 expr::UntypedExpr::Int {
                                     location: Span::new((), 88..89),
                                     value: "1".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                                 expr::UntypedExpr::Int {
                                     location: Span::new((), 91..92),
                                     value: "2".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                                 expr::UntypedExpr::Var {
                                     location: Span::new((), 94..95),
@@ -1102,6 +1136,9 @@ fn block() {
                                     value: Box::new(expr::UntypedExpr::Int {
                                         location: Span::new((), 45..46),
                                         value: "4".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     }),
                                     pattern: ast::Pattern::Var {
                                         location: Span::new((), 41..42),
@@ -1120,6 +1157,9 @@ fn block() {
                                     right: Box::new(expr::UntypedExpr::Int {
                                         location: Span::new((), 56..57),
                                         value: "5".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     }),
                                 },
                             ],
@@ -1196,11 +1236,17 @@ fn when() {
                         patterns: vec1![ast::Pattern::Int {
                             location: Span::new((), 39..40),
                             value: "2".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }],
                         guard: None,
                         then: expr::UntypedExpr::Int {
                             location: Span::new((), 44..45),
                             value: "3".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     },
                     ast::UntypedClause {
@@ -1208,15 +1254,24 @@ fn when() {
                         patterns: vec1![
                             ast::Pattern::Int {
                                 location: Span::new((), 50..51),
-                                value: "1".to_string()
+                                value: "1".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             },
                             ast::Pattern::Int {
                                 location: Span::new((), 54..55),
                                 value: "4".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             },
                             ast::Pattern::Int {
                                 location: Span::new((), 58..59),
                                 value: "5".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             },
                         ],
                         guard: None,
@@ -1228,6 +1283,9 @@ fn when() {
                                     value: Box::new(expr::UntypedExpr::Int {
                                         location: Span::new((), 85..86),
                                         value: "5".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     }),
                                     pattern: ast::Pattern::Var {
                                         location: Span::new((), 75..82),
@@ -1248,11 +1306,17 @@ fn when() {
                         patterns: vec1![ast::Pattern::Int {
                             location: Span::new((), 111..112),
                             value: "3".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }],
                         guard: None,
                         then: expr::UntypedExpr::Int {
                             location: Span::new((), 116..117),
                             value: "9".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     },
                     ast::UntypedClause {
@@ -1265,6 +1329,9 @@ fn when() {
                         then: expr::UntypedExpr::Int {
                             location: Span::new((), 127..128),
                             value: "4".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     },
                 ],
@@ -1329,6 +1396,9 @@ fn anonymous_function() {
                                 right: Box::new(expr::UntypedExpr::Int {
                                     location: Span::new((), 64..65),
                                     value: "1".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 }),
                             }),
                             return_annotation: Some(ast::Annotation::Constructor {
@@ -1351,6 +1421,9 @@ fn anonymous_function() {
                             expr::UntypedExpr::Int {
                                 location: Span::new((), 71..72),
                                 value: "2".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             },
                             expr::UntypedExpr::Var {
                                 location: Span::new((), 76..83),
@@ -1452,6 +1525,9 @@ fn call() {
                                 value: expr::UntypedExpr::Int {
                                     location: Span::new((), 31..32),
                                     value: "3".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                             }],
                             fun: Box::new(expr::UntypedExpr::Var {
@@ -1555,14 +1631,23 @@ fn call() {
                                     expr::UntypedExpr::Int {
                                         location: Span::new((), 98..99),
                                         value: "1".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     },
                                     expr::UntypedExpr::Int {
                                         location: Span::new((), 101..102),
                                         value: "2".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     },
                                     expr::UntypedExpr::Int {
                                         location: Span::new((), 104..105),
                                         value: "3".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     },
                                 ],
                                 tail: None,
@@ -1720,6 +1805,9 @@ fn record_create_labeled() {
                         value: expr::UntypedExpr::Int {
                             location: Span::new((), 50..51),
                             value: "2".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     },
                 ],
@@ -1778,6 +1866,9 @@ fn record_create_labeled_with_field_access() {
                         value: expr::UntypedExpr::Int {
                             location: Span::new((), 62..63),
                             value: "2".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     },
                 ],
@@ -1823,6 +1914,9 @@ fn record_create_unlabeled() {
                         value: expr::UntypedExpr::Int {
                             location: Span::new((), 34..35),
                             value: "1".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     },
                     ast::CallArg {
@@ -1880,18 +1974,30 @@ fn parse_tuple() {
                                 expr::UntypedExpr::Int {
                                     location: Span::new((), 26..27),
                                     value: "1".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                                 expr::UntypedExpr::Int {
                                     location: Span::new((), 29..30),
                                     value: "2".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                                 expr::UntypedExpr::Int {
                                     location: Span::new((), 32..33),
                                     value: "3".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                                 expr::UntypedExpr::Int {
                                     location: Span::new((), 35..36),
                                     value: "4".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                             ],
                         }),
@@ -1985,6 +2091,9 @@ fn parse_tuple2() {
                                 value: expr::UntypedExpr::Int {
                                     location: Span::new((), 25..27),
                                     value: "14".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
                             }],
                             fun: Box::new(expr::UntypedExpr::Var {
@@ -2010,6 +2119,9 @@ fn parse_tuple2() {
                             expr::UntypedExpr::Int {
                                 location: Span::new((), 35..37),
                                 value: "42".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             },
                         ],
                     },
@@ -2043,6 +2155,9 @@ fn large_integer_constants() {
             value: Box::new(ast::Constant::Int {
                 location: Span::new((), 23..47),
                 value: "999999999999999999999999".to_string(),
+                base: Base::Decimal {
+                    numeric_underscore: false,
+                },
             }),
             tipo: (),
         })],
@@ -2066,7 +2181,9 @@ fn plain_bytearray_literals() {
             value: Box::new(Constant::ByteArray {
                 location: Span::new((), 25..39),
                 bytes: vec![0, 170, 255],
-                preferred_format: ast::ByteArrayFormatPreference::ArrayOfBytes,
+                preferred_format: ast::ByteArrayFormatPreference::ArrayOfBytes(Base::Decimal {
+                    numeric_underscore: false,
+                }),
             }),
             tipo: (),
         })],
@@ -2194,6 +2311,9 @@ fn function_invoke() {
                         value: expr::UntypedExpr::Int {
                             location: Span::new((), 25..27),
                             value: "42".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     }],
                 }),
@@ -2256,6 +2376,9 @@ fn function_ambiguous_sequence() {
                         expr::UntypedExpr::Int {
                             location: Span::new((), 30..32),
                             value: "40".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     ],
                 },
@@ -2289,6 +2412,9 @@ fn function_ambiguous_sequence() {
                         expr::UntypedExpr::Int {
                             location: Span::new((), 67..69),
                             value: "40".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         },
                     ],
                 },
@@ -2311,10 +2437,16 @@ fn function_ambiguous_sequence() {
                         left: Box::new(expr::UntypedExpr::Int {
                             location: Span::new((), 98..100),
                             value: "40".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }),
                         right: Box::new(expr::UntypedExpr::Int {
                             location: Span::new((), 101..102),
                             value: "2".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }),
                     }),
                     pattern: ast::Pattern::Var {
@@ -2347,6 +2479,9 @@ fn function_ambiguous_sequence() {
                                     value: expr::UntypedExpr::Int {
                                         location: Span::new((), 134..136),
                                         value: "42".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     },
                                 }],
                                 fun: Box::new(expr::UntypedExpr::Var {
@@ -2375,11 +2510,17 @@ fn function_ambiguous_sequence() {
                                 right: Box::new(expr::UntypedExpr::Int {
                                     location: Span::new((), 145..147),
                                     value: "14".to_string(),
+                                    base: Base::Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 }),
                             }),
                             right: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 151..153),
                                 value: "42".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                         },
                     ],
@@ -2514,15 +2655,24 @@ fn subtraction_vs_negate() {
                             left: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 14..15),
                                 value: "1".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                             right: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 16..17),
                                 value: "1".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                         }),
                         right: Box::new(expr::UntypedExpr::Int {
                             location: Span::new((), 22..23),
                             value: "0".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }),
                     },
                     expr::UntypedExpr::Assignment {
@@ -2533,6 +2683,9 @@ fn subtraction_vs_negate() {
                             value: Box::new(expr::UntypedExpr::Int {
                                 location: Span::new((), 35..36),
                                 value: "2".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: false,
+                                },
                             }),
                         }),
                         pattern: ast::Pattern::Var {
@@ -2556,6 +2709,9 @@ fn subtraction_vs_negate() {
                         right: Box::new(expr::UntypedExpr::Int {
                             location: Span::new((), 45..46),
                             value: "4".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }),
                     },
                     expr::UntypedExpr::BinOp {
@@ -2571,6 +2727,9 @@ fn subtraction_vs_negate() {
                                     value: Box::new(expr::UntypedExpr::Int {
                                         location: Span::new((), 54..55),
                                         value: "1".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     }),
                                 },
                             }],
@@ -2583,6 +2742,9 @@ fn subtraction_vs_negate() {
                         right: Box::new(expr::UntypedExpr::Int {
                             location: Span::new((), 59..61),
                             value: "42".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         }),
                     },
                 ],
@@ -2635,6 +2797,9 @@ fn clause_guards() {
                         guard: Some(ast::UntypedClauseGuard::Constant(ast::Constant::Int {
                             location: Span::new((), 34..36),
                             value: "42".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: false,
+                            },
                         })),
                         then: expr::UntypedExpr::Var {
                             location: Span::new((), 40..44),
@@ -2758,6 +2923,9 @@ fn clause_guards() {
                                         ast::Constant::Int {
                                             location: Span::new((), 162..164),
                                             value: "42".to_string(),
+                                            base: Base::Decimal {
+                                                numeric_underscore: false,
+                                            },
                                         },
                                     )),
                                 }),
@@ -2772,6 +2940,9 @@ fn clause_guards() {
                                         ast::Constant::Int {
                                             location: Span::new((), 172..174),
                                             value: "14".to_string(),
+                                            base: Base::Decimal {
+                                                numeric_underscore: false,
+                                            },
                                         },
                                     )),
                                 }),
@@ -2808,6 +2979,9 @@ fn clause_guards() {
                                     ast::Constant::Int {
                                         location: Span::new((), 206..208),
                                         value: "14".to_string(),
+                                        base: Base::Decimal {
+                                            numeric_underscore: false,
+                                        },
                                     },
                                 )),
                             }),
@@ -3011,6 +3185,9 @@ fn trace_expressions() {
                                         left: Box::new(expr::UntypedExpr::Int {
                                             location: Span::new((), 108..110),
                                             value: "14".to_string(),
+                                            base: Base::Decimal {
+                                                numeric_underscore: false,
+                                            },
                                         }),
                                         right: Box::new(expr::UntypedExpr::BinOp {
                                             location: Span::new((), 113..122),
@@ -3018,10 +3195,16 @@ fn trace_expressions() {
                                             left: Box::new(expr::UntypedExpr::Int {
                                                 location: Span::new((), 113..115),
                                                 value: "42".to_string(),
+                                                base: Base::Decimal {
+                                                    numeric_underscore: false,
+                                                },
                                             }),
                                             right: Box::new(expr::UntypedExpr::Int {
                                                 location: Span::new((), 118..122),
                                                 value: "1337".to_string(),
+                                                base: Base::Decimal {
+                                                    numeric_underscore: false,
+                                                },
                                             }),
                                         }),
                                     }),
@@ -3345,17 +3528,62 @@ fn int_parsing_hex() {
             let i = 0xff
           }
         "#};
-    assert_definitions(code, vec![])
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Assignment {
+                location: Span::new((), 13..25),
+                value: Box::new(expr::UntypedExpr::Int {
+                    location: Span::new((), 21..25),
+                    value: "255".to_string(),
+                    base: Base::Hexadecimal,
+                }),
+                pattern: ast::Pattern::Var {
+                    location: Span::new((), 17..18),
+                    name: "i".to_string(),
+                },
+                kind: ast::AssignmentKind::Let,
+                annotation: None,
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 26,
+            can_error: true,
+        })],
+    )
 }
 
 #[test]
 fn int_parsing_hex_bytes() {
     let code = indoc! {r#"
           fn foo() {
-            let bytes = [ 0x01, 0xa2, 0x03 ]
+            #[ 0x01, 0xa2, 0x03 ]
           }
         "#};
-    assert_definitions(code, vec![])
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::ByteArray {
+                location: Span::new((), 13..34),
+                bytes: vec![1, 162, 3],
+                preferred_format: ast::ByteArrayFormatPreference::ArrayOfBytes(Base::Hexadecimal),
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 35,
+            can_error: true,
+        })],
+    )
 }
 
 #[test]
@@ -3363,7 +3591,58 @@ fn int_parsing_numeric_underscore() {
     let code = indoc! {r#"
           fn foo() {
             let i = 1_234_567
+            let j = 1_000_000
           }
         "#};
-    assert_definitions(code, vec![]);
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: expr::UntypedExpr::Sequence {
+                location: Span::new((), 13..50),
+                expressions: vec![
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 13..30),
+                        value: Box::new(expr::UntypedExpr::Int {
+                            location: Span::new((), 21..30),
+                            value: "1234567".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: true,
+                            },
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..18),
+                            name: "i".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 33..50),
+                        value: Box::new(expr::UntypedExpr::Int {
+                            location: Span::new((), 41..50),
+                            value: "1000000".to_string(),
+                            base: Base::Decimal {
+                                numeric_underscore: true,
+                            },
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 37..38),
+                            name: "j".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 51,
+            can_error: true,
+        })],
+    )
 }

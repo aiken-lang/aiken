@@ -1304,8 +1304,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<Constant, Error> {
         let inferred = match value {
             Constant::Int {
-                location, value, ..
-            } => Ok(Constant::Int { location, value }),
+                location,
+                value,
+                base,
+            } => Ok(Constant::Int {
+                location,
+                value,
+                base,
+            }),
 
             Constant::String {
                 location, value, ..

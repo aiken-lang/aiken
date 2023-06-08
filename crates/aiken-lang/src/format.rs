@@ -662,7 +662,7 @@ impl<'comments> Formatter<'comments> {
                 .append("\"")
                 .append(Document::String(hex::encode(bytes)))
                 .append("\""),
-            ByteArrayFormatPreference::ArrayOfBytes => "#"
+            ByteArrayFormatPreference::ArrayOfBytes(base) => "#"
                 .to_doc()
                 .append(
                     flex_break("[", "[")

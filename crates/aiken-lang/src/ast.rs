@@ -1,7 +1,7 @@
 use crate::{
     builtins::{self, bool},
     expr::{TypedExpr, UntypedExpr},
-    parser::token::Token,
+    parser::token::{Base, Token},
     tipo::{PatternConstructor, Type, TypeInfo},
 };
 use miette::Diagnostic;
@@ -441,6 +441,7 @@ pub enum Constant {
     Int {
         location: Span,
         value: String,
+        base: Base,
     },
 
     String {
@@ -795,6 +796,7 @@ pub enum Pattern<Constructor, Type> {
     Int {
         location: Span,
         value: String,
+        base: Base,
     },
 
     /// The creation of a variable.
@@ -880,7 +882,7 @@ impl<A, B> Pattern<A, B> {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ByteArrayFormatPreference {
     HexadecimalString,
-    ArrayOfBytes,
+    ArrayOfBytes(Base),
     Utf8String,
 }
 
