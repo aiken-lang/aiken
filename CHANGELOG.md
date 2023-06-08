@@ -4,7 +4,8 @@
 
 ### Added
 
-N/A
+- **aiken-lang**: numbers can now be written as hexadecimal digits (e.g. `0x42`)
+- **aiken-lang**: numbers can now be written using numeric underscores as separator (e.g. `1_000_000`)
 
 ### Fixed
 
