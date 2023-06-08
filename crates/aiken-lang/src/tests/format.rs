@@ -833,3 +833,16 @@ fn pipes_and_expressions() {
 
     assert_fmt(src, expected);
 }
+
+#[test]
+fn hex_and_numeric_underscore() {
+    let src = indoc! {r#"
+        fn foo() {
+          let a = 1_000_000
+          let b = 0xA4
+          let c = #[ 0xFD, 0x12, 0x00, 0x1B ]
+        }
+    "#};
+
+    assert_fmt(src, src);
+}

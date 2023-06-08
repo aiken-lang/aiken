@@ -14,7 +14,10 @@ use crate::{
     },
     docvec,
     expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
-    parser::extra::{Comment, ModuleExtra},
+    parser::{
+        extra::{Comment, ModuleExtra},
+        token::Base,
+    },
     pretty::{
         break_, concat, flex_break, join, line, lines, nil, prebreak, Document, Documentable,
     },
@@ -348,7 +351,7 @@ impl<'comments> Formatter<'comments> {
                 preferred_format,
                 ..
             } => self.bytearray(bytes, preferred_format),
-            Constant::Int { value, .. } => value.to_doc(),
+            Constant::Int { value, base, .. } => self.int(value, base),
             Constant::String { value, .. } => self.string(value),
         }
     }
@@ -679,6 +682,10 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
+    pub fn int<'a>(&mut self, i: &'a str, base: &Base) -> Document<'a> {
+        i.to_doc()
+    }
+
     pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         let comments = self.pop_comments(expr.start_byte_index());
 
@@ -700,7 +707,7 @@ impl<'comments> Formatter<'comments> {
                 one_liner,
             } => self.pipeline(expressions, *one_liner),
 
-            UntypedExpr::Int { value, .. } => value.to_doc(),
+            UntypedExpr::Int { value, base, .. } => self.int(value, base),
 
             UntypedExpr::String { value, .. } => self.string(value),
 
@@ -1507,7 +1514,7 @@ impl<'comments> Formatter<'comments> {
     pub fn pattern<'a>(&mut self, pattern: &'a UntypedPattern) -> Document<'a> {
         let comments = self.pop_comments(pattern.location().start);
         let doc = match pattern {
-            Pattern::Int { value, .. } => value.to_doc(),
+            Pattern::Int { value, base, .. } => self.int(value, base),
 
             Pattern::Var { name, .. } => name.to_doc(),
 
