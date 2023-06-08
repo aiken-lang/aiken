@@ -21,7 +21,8 @@ N/A
   right conversion
 - Rearrange list clauses and fill in gaps now handles nested patterns in a
   uniform way
-- Discards in records was being sorted incorrectly leading to type issues
+- Fixed discards in records that were being sorted incorrectly leading to type
+  issues
 
 ### Removed
 
