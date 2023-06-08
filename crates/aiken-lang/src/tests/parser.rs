@@ -3592,43 +3592,64 @@ fn int_parsing_numeric_underscore() {
           fn foo() {
             let i = 1_234_567
             let j = 1_000_000
-          }
+            let k = -10_000
+        }
         "#};
     assert_definitions(
         code,
         vec![ast::Definition::Fn(Function {
             arguments: vec![],
             body: expr::UntypedExpr::Sequence {
-                location: Span::new((), 13..50),
+                location: Span::new((), 17..76),
                 expressions: vec![
                     expr::UntypedExpr::Assignment {
-                        location: Span::new((), 13..30),
+                        location: Span::new((), 17..34),
                         value: Box::new(expr::UntypedExpr::Int {
-                            location: Span::new((), 21..30),
+                            location: Span::new((), 25..34),
                             value: "1234567".to_string(),
                             base: Base::Decimal {
                                 numeric_underscore: true,
                             },
                         }),
                         pattern: ast::Pattern::Var {
-                            location: Span::new((), 17..18),
+                            location: Span::new((), 21..22),
                             name: "i".to_string(),
                         },
                         kind: ast::AssignmentKind::Let,
                         annotation: None,
                     },
                     expr::UntypedExpr::Assignment {
-                        location: Span::new((), 33..50),
+                        location: Span::new((), 39..56),
                         value: Box::new(expr::UntypedExpr::Int {
-                            location: Span::new((), 41..50),
+                            location: Span::new((), 47..56),
                             value: "1000000".to_string(),
                             base: Base::Decimal {
                                 numeric_underscore: true,
                             },
                         }),
                         pattern: ast::Pattern::Var {
-                            location: Span::new((), 37..38),
+                            location: Span::new((), 43..44),
                             name: "j".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    expr::UntypedExpr::Assignment {
+                        location: Span::new((), 61..76),
+                        value: Box::new(expr::UntypedExpr::UnOp {
+                            op: ast::UnOp::Negate,
+                            location: Span::new((), 69..76),
+                            value: Box::new(expr::UntypedExpr::Int {
+                                location: Span::new((), 70..76),
+                                value: "10000".to_string(),
+                                base: Base::Decimal {
+                                    numeric_underscore: true,
+                                },
+                            }),
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 65..66),
+                            name: "k".to_string(),
                         },
                         kind: ast::AssignmentKind::Let,
                         annotation: None,
@@ -3636,12 +3657,12 @@ fn int_parsing_numeric_underscore() {
                 ],
             },
             doc: None,
-            location: Span::new((), 0..8),
+            location: Span::new((), 2..10),
             name: "foo".to_string(),
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 51,
+            end_position: 77,
             can_error: true,
         })],
     )

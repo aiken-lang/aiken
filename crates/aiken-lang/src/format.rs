@@ -1,8 +1,3 @@
-use itertools::Itertools;
-use ordinal::Ordinal;
-use std::sync::Arc;
-use vec1::Vec1;
-
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
@@ -23,6 +18,11 @@ use crate::{
     },
     tipo::{self, Type},
 };
+use itertools::Itertools;
+use num_bigint::BigInt;
+use ordinal::Ordinal;
+use std::sync::Arc;
+use vec1::Vec1;
 
 const INDENT: isize = 2;
 const DOCS_MAX_COLUMNS: isize = 80;
@@ -665,11 +665,30 @@ impl<'comments> Formatter<'comments> {
                 .append("\"")
                 .append(Document::String(hex::encode(bytes)))
                 .append("\""),
-            ByteArrayFormatPreference::ArrayOfBytes(base) => "#"
+            ByteArrayFormatPreference::ArrayOfBytes(Base::Decimal { .. }) => "#"
                 .to_doc()
                 .append(
                     flex_break("[", "[")
                         .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .append("]"),
+                )
+                .group(),
+            ByteArrayFormatPreference::ArrayOfBytes(Base::Hexadecimal) => "#"
+                .to_doc()
+                .append(
+                    flex_break("[", "[")
+                        .append(join(
+                            bytes.iter().map(|b| {
+                                Document::String(if *b < 16 {
+                                    format!("0x0{b:x}")
+                                } else {
+                                    format!("{b:#x}")
+                                })
+                            }),
+                            break_(",", ", "),
+                        ))
                         .nest(INDENT)
                         .append(break_(",", ""))
                         .append("]"),
@@ -682,8 +701,37 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    pub fn int<'a>(&mut self, i: &'a str, base: &Base) -> Document<'a> {
-        i.to_doc()
+    pub fn int<'a>(&mut self, s: &'a str, base: &Base) -> Document<'a> {
+        match base {
+            Base::Decimal { numeric_underscore } if *numeric_underscore => {
+                let s = s
+                    .chars()
+                    .rev()
+                    .enumerate()
+                    .flat_map(|(i, c)| {
+                        if i != 0 && i % 3 == 0 {
+                            Some('_')
+                        } else {
+                            None
+                        }
+                        .into_iter()
+                        .chain(std::iter::once(c))
+                    })
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>();
+
+                Document::String(s)
+            }
+            Base::Decimal { .. } => s.to_doc(),
+            Base::Hexadecimal => Document::String(format!(
+                "0x{}",
+                BigInt::parse_bytes(s.as_bytes(), 10)
+                    .expect("Invalid parsed hexadecimal digits ?!")
+                    .to_str_radix(16),
+            )),
+        }
     }
 
     pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {

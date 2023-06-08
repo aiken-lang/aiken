@@ -20,7 +20,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         .at_least(1)
         .at_most(3)
         .separated_by(just("_"))
-        .at_least(1)
+        .at_least(2)
         .flatten()
         .collect::<String>()
         .map(|value| Token::Int {
