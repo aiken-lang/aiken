@@ -3337,3 +3337,33 @@ fn brackets_followed_by_parenthesis() {
         }
     "#});
 }
+
+#[test]
+fn int_parsing_hex() {
+    let code = indoc! {r#"
+          fn foo() {
+            let i = 0xff
+          }
+        "#};
+    assert_definitions(code, vec![])
+}
+
+#[test]
+fn int_parsing_hex_bytes() {
+    let code = indoc! {r#"
+          fn foo() {
+            let bytes = [ 0x01, 0xa2, 0x03 ]
+          }
+        "#};
+    assert_definitions(code, vec![])
+}
+
+#[test]
+fn int_parsing_numeric_underscore() {
+    let code = indoc! {r#"
+          fn foo() {
+            let i = 1_234_567
+          }
+        "#};
+    assert_definitions(code, vec![]);
+}
