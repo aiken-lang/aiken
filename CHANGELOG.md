@@ -1,6 +1,6 @@
 # Changelog
 
-## next - 2023-MM-DD 
+## next - 2023-MM-DD
 
 ### Added
 
@@ -8,10 +8,20 @@ N/A
 
 ### Fixed
 
-- **aiken-lang**: fixed operator precedences, in particular the pipe operator (`|>`) which is now of the lowest precedence.
+- **aiken-lang**: fixed operator precedences, in particular the pipe operator
+  (`|>`) which is now of the lowest precedence.
 - **aiken-project**: need to convert to Program<Name> before dumping to uplc
 - **aiken-lang**: fmt crashing when comment at end of file with no newline
 
+- Fixed error when using nested boolean checks in when conditions
+- Had the wrong conversion for constant maps to plutus data. Fixed to check for
+  right conversion
+- Zero arg functions were grabbing extra dependencies they didn't need to
+- Had the wrong conversion for constant maps to plutus data. Fixed to check for
+  right conversion
+- Rearrange list clauses and fill in gaps now handles nested patterns in a
+  uniform way
+- Discards in records was being sorted incorrectly leading to type issues
 
 ### Removed
 
@@ -27,14 +37,19 @@ N/A
 
 - **uplc**: Fix pair formatting
 - **aiken-lang**: forced new line in formatter for assignments
-- **aiken-lang**: Incorrect parsing of generic type annotation prefixed with module
-- **aiken-lang**: Incorrect handling of comments at end of a file when newline not present
-- **aiken-lang**: Record update in code gen is now flexible enough to support fields being passed in any order.
-- **aiken-lang**: Record update now produces better uplc code then creating a record by the normal instantiation.
-- **aiken-lang**: Issue with Constructors being passed as functions to other function arguments was fixed.
+- **aiken-lang**: Incorrect parsing of generic type annotation prefixed with
+  module
+- **aiken-lang**: Incorrect handling of comments at end of a file when newline
+  not present
+- **aiken-lang**: Record update in code gen is now flexible enough to support
+  fields being passed in any order.
+- **aiken-lang**: Record update now produces better uplc code then creating a
+  record by the normal instantiation.
+- **aiken-lang**: Issue with Constructors being passed as functions to other
+  function arguments was fixed.
 - **aiken-lang**: show module name when type mismatch names are the same
-- **aiken**: make `uplc flat` and `uplc unflat` subcommands more consistent and flexible
-
+- **aiken**: make `uplc flat` and `uplc unflat` subcommands more consistent and
+  flexible
 
 ## v1.0.6-alpha - 2023-05-17
 
