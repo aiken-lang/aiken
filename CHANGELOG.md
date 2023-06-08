@@ -1,11 +1,12 @@
 # Changelog
 
-## next - 2023-MM-DD
+## v1.0.8-alpha - 2023-06-08
 
 ### Added
 
 - **aiken-lang**: numbers can now be written as hexadecimal digits (e.g. `0x42`)
-- **aiken-lang**: numbers can now be written using numeric underscores as separator (e.g. `1_000_000`)
+- **aiken-lang**: numbers can now be written using numeric underscores as
+  separator (e.g. `1_000_000`)
 
 ### Fixed
 
@@ -13,17 +14,16 @@
   (`|>`) which is now of the lowest precedence.
 - **aiken-project**: need to convert to Program<Name> before dumping to uplc
 - **aiken-lang**: fmt crashing when comment at end of file with no newline
-
-- Fixed error when using nested boolean checks in when conditions
-- Had the wrong conversion for constant maps to plutus data. Fixed to check for
-  right conversion
-- Zero arg functions were grabbing extra dependencies they didn't need to
-- Had the wrong conversion for constant maps to plutus data. Fixed to check for
-  right conversion
-- Rearrange list clauses and fill in gaps now handles nested patterns in a
-  uniform way
-- Fixed discards in records that were being sorted incorrectly leading to type
-  issues
+- **aiken-lang**: Fixed error when using nested boolean checks in when
+  conditions
+- **aiken-lang**: Had the wrong conversion for constant maps to plutus data.
+  Fixed to check for right conversion
+- **aiken-lang**: Zero arg functions were grabbing extra dependencies they
+  didn't need to
+- **aiken-lang**: Rearrange list clauses and fill in gaps now handles nested
+  patterns in a uniform way
+- **aiken-lang**: Fixed discards in records that were being sorted incorrectly
+  leading to type issues
 
 ### Removed
 
