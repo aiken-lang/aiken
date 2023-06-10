@@ -878,4 +878,90 @@ mod test {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn inline_reduce_identity() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("identity").apply(Term::var("x")))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda("identity")
+                .apply(Term::var("y").lambda("y")),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.inline_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn inline_reduce_identity_param() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(
+                    Term::var("f")
+                        .apply(Term::var("x"))
+                        .apply(Term::var("identity")),
+                )
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda("identity")
+                .apply(Term::var("y").lambda("y"))
+                .lambda("f")
+                .apply(
+                    Term::var("with")
+                        .apply(Term::var("x"))
+                        .lambda("with")
+                        .lambda("x"),
+                ),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256().apply(
+                Term::var("with")
+                    .apply(Term::var("x"))
+                    .lambda("with")
+                    .lambda("x")
+                    .apply(Term::byte_string(vec![]).delay())
+                    .apply(Term::var("y").lambda("y")),
+            ),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.inline_reduce();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
 }
