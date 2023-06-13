@@ -35,6 +35,23 @@ fn comment_at_end_of_file() {
 }
 
 #[test]
+fn module_select_record() {
+    let input = indoc! { r#"
+      fn smth() {
+        let a = foo.Foo { bar: 1 }
+      }
+    "#};
+
+    let output = indoc! { r#"
+      fn smth() {
+        let a = foo.Foo { bar: 1 }
+      }
+    "#};
+
+    assert_fmt(input, output);
+}
+
+#[test]
 fn test_format_if() {
     let src = indoc! {r#"
         pub fn foo(a) {

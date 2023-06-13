@@ -946,9 +946,7 @@ impl<'comments> Formatter<'comments> {
     fn call<'a>(&mut self, fun: &'a UntypedExpr, args: &'a [CallArg<UntypedExpr>]) -> Document<'a> {
         let is_constr = match fun {
             UntypedExpr::Var { name, .. } => name[0..1].chars().all(|c| c.is_uppercase()),
-            UntypedExpr::FieldAccess { container, .. } => {
-                matches!(&**container, UntypedExpr::Var { name, .. } if name[0..1].chars().all(|c| c.is_uppercase()))
-            }
+            UntypedExpr::FieldAccess { label, .. } => label[0..1].chars().all(|c| c.is_uppercase()),
             _ => false,
         };
 
