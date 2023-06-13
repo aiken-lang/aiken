@@ -1,5 +1,19 @@
 # Changelog
 
+## next - 2023-MM-DD
+
+### Added
+
+N/A
+
+### Fixed
+
+- **aiken-lang**: fmt for `module.Constr { field: value }`
+
+### Removed
+
+N/A
+
 ## v1.0.8-alpha - 2023-06-08
 
 ### Added
