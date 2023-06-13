@@ -9,6 +9,12 @@ N/A
 ### Fixed
 
 - **aiken-lang**: fmt for `module.Constr { field: value }`
+- **aiken-lang**: Issue where using var pattern in a when was passing the constr
+  index instead of the constr
+- **aiken-lang**: Issue where expecting on a list had unexpected behaviors based
+  on list length.
+- **aiken-lang**: Issue where expecting on a list from data was using the wrong
+  expect cast for the list tail.
 
 ### Removed
 
