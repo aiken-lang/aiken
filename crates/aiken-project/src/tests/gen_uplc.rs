@@ -3170,7 +3170,7 @@ fn foldl_type_mismatch() {
       }
       
       test hi() {
-        let addr1 = Address { payment_credential: #"adff", stake_credential: None }
+        let addr1 = Address { payment_credential: "adff", stake_credential: None }
       
         let out =
           Output { address: addr1, value: [], datum: None, reference_script: None }
@@ -3198,7 +3198,120 @@ fn foldl_type_mismatch() {
       }
     "#;
 
-    assert_uplc(src, Term::equals_data(), false);
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::var("cry"))
+            .apply(Term::var("cry"))
+            .lambda("cry")
+            .apply(
+                Term::var("foldl")
+                    .lambda("foldl")
+                    .apply(Term::var("foldl").apply(Term::var("foldl")))
+                    .lambda("foldl")
+                    .apply(
+                        Term::var("self")
+                            .delayed_choose_list(
+                                Term::var("zero"),
+                                Term::var("foldl")
+                                    .apply(Term::var("foldl"))
+                                    .apply(Term::var("xs"))
+                                    .apply(Term::var("with"))
+                                    .apply(
+                                        Term::var("with")
+                                            .apply(Term::var("x"))
+                                            .apply(Term::var("zero")),
+                                    )
+                                    .lambda("xs")
+                                    .apply(Term::tail_list().apply(Term::var("self")))
+                                    .lambda("x")
+                                    .apply(Term::head_list().apply(Term::var("self"))),
+                            )
+                            .lambda("zero")
+                            .lambda("with")
+                            .lambda("self")
+                            .lambda("foldl"),
+                    )
+                    .apply(Term::var("outputs"))
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("mb_b_index"))
+                            .delayed_if_else(
+                                Term::equals_data()
+                                    .apply(
+                                        Term::var(CONSTR_GET_FIELD)
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("o")),
+                                            )
+                                            .apply(Term::integer(0.into())),
+                                    )
+                                    .apply(Term::var("addr1"))
+                                    .delayed_if_else(
+                                        Term::constr_data().apply(Term::integer(0.into())).apply(
+                                            Term::mk_cons()
+                                                .apply(Term::var("o"))
+                                                .apply(Term::empty_list()),
+                                        ),
+                                        Term::Constant(
+                                            Constant::Data(Data::constr(1, vec![])).into(),
+                                        ),
+                                    ),
+                                Term::var("mb_b"),
+                            )
+                            .lambda("mb_b_index")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("mb_b")))
+                            .lambda("mb_b")
+                            .lambda("o"),
+                    )
+                    .apply(Term::Constant(
+                        Constant::Data(Data::constr(1, vec![])).into(),
+                    )),
+            )
+            .lambda("outputs")
+            .apply(
+                Term::mk_cons().apply(Term::var("out")).apply(
+                    Term::mk_cons().apply(Term::var("out")).apply(
+                        Term::mk_cons()
+                            .apply(Term::var("out"))
+                            .apply(Term::empty_list()),
+                    ),
+                ),
+            )
+            .lambda("out")
+            .apply(
+                Term::constr_data().apply(Term::integer(0.into())).apply(
+                    Term::mk_cons().apply(Term::var("addr1")).apply(
+                        Term::mk_cons()
+                            .apply(Term::list_data().apply(Term::empty_list()))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::Constant(
+                                        Constant::Data(Data::constr(1, vec![])).into(),
+                                    ))
+                                    .apply(
+                                        Term::mk_cons()
+                                            .apply(Term::data(Data::constr(1, vec![])))
+                                            .apply(Term::empty_list()),
+                                    ),
+                            ),
+                    ),
+                ),
+            )
+            .lambda("addr1")
+            .apply(Term::data(Data::constr(
+                0,
+                vec![
+                    Data::bytestring("adff".as_bytes().to_vec()),
+                    Data::constr(1, vec![]),
+                ],
+            )))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
 }
 
 #[test]
