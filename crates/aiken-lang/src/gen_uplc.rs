@@ -2129,11 +2129,10 @@ impl<'a> CodeGenerator<'a> {
                     format!("__tail_{}", self.id_gen.next())
                 };
 
-                self.expect_type(tipo, &mut tail_stack, &name, &mut IndexMap::new());
-
-                expect_list_stacks.push(tail_stack);
-
                 if tail.is_some() {
+                    self.expect_type(tipo, &mut tail_stack, &name, &mut IndexMap::new());
+
+                    expect_list_stacks.push(tail_stack);
                     names.push(name);
                 }
 
