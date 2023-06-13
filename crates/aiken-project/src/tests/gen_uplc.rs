@@ -2919,3 +2919,447 @@ fn list_fields_unwrap() {
         false,
     );
 }
+
+#[test]
+fn acceptance_test_23_to_list() {
+    let src = r#"
+      pub opaque type AssocList<key, value> {
+        inner: List<(key, value)>,
+      }
+      
+      pub fn new() -> AssocList<key, value> {
+        AssocList { inner: [] }
+      }
+      
+      pub fn to_list(m: AssocList<key, value>) -> List<(key, value)> {
+        m.inner
+      }
+      
+      pub fn insert(
+        in m: AssocList<key, value>,
+        key k: key,
+        value v: value,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_insert(m.inner, k, v) }
+      }
+      
+      fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
+        when elems is {
+          [] ->
+            [(k, v)]
+          [(k2, v2), ..rest] ->
+            if k == k2 {
+              [(k, v), ..rest]
+            } else {
+              [(k2, v2), ..do_insert(rest, k, v)]
+            }
+        }
+      }
+      
+      fn fixture_1() {
+        new()
+          |> insert("foo", 42)
+          |> insert("bar", 14)
+      }
+      
+      test to_list_2() {
+        to_list(fixture_1()) == [("foo", 42), ("bar", 14)]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::map_data().apply(Term::map_values(vec![
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
+                    Constant::Data(Data::integer(42.into())).into(),
+                ),
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
+                    Constant::Data(Data::integer(14.into())).into(),
+                ),
+            ])))
+            .apply(Term::map_data().apply(Term::map_values(vec![
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
+                    Constant::Data(Data::integer(42.into())).into(),
+                ),
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
+                    Constant::Data(Data::integer(14.into())).into(),
+                ),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_24_map2() {
+    let src = r#"
+      pub fn map2(
+        opt_a: Option<a>,
+        opt_b: Option<b>,
+        f: fn(a, b) -> result,
+      ) -> Option<result> {
+        when opt_a is {
+          None ->
+            None
+          Some(a) ->
+            when opt_b is {
+              None ->
+                None
+              Some(b) ->
+                Some(f(a, b))
+            }
+        }
+      }
+      
+      test map2_3() {
+        map2(Some(14), Some(42), fn(a, b) { (a, b) }) == Some((14, 42))
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map2")
+                    .lambda("map2")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("opt_a_index"))
+                            .delayed_if_else(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("opt_b_index"))
+                                    .delayed_if_else(
+                                        Term::Constant(
+                                            Constant::Data(Data::constr(1, vec![])).into(),
+                                        ),
+                                        Term::constr_data()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(
+                                                        Term::list_data()
+                                                            .apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::fst_pair().apply(
+                                                                            Term::var("pair"),
+                                                                        ),
+                                                                    )
+                                                                    .apply(
+                                                                        Term::mk_cons()
+                                                                            .apply(
+                                                                                Term::snd_pair()
+                                                                                    .apply(
+                                                                                        Term::var(
+                                                                                            "pair",
+                                                                                        ),
+                                                                                    ),
+                                                                            )
+                                                                            .apply(
+                                                                                Term::empty_list(),
+                                                                            ),
+                                                                    ),
+                                                            )
+                                                            .lambda("pair")
+                                                            .apply(
+                                                                Term::var("f")
+                                                                    .apply(Term::var("a"))
+                                                                    .apply(Term::var("b")),
+                                                            ),
+                                                    )
+                                                    .apply(Term::empty_list()),
+                                            )
+                                            .lambda("b")
+                                            .apply(Term::un_i_data().apply(
+                                                Term::head_list().apply(Term::var("opt_b_fields")),
+                                            ))
+                                            .lambda("opt_b_fields")
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("opt_b")),
+                                            ),
+                                    )
+                                    .lambda("opt_b_index")
+                                    .apply(
+                                        Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_b")),
+                                    )
+                                    .lambda("a")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("opt_a_fields")),
+                                        ),
+                                    )
+                                    .lambda("opt_a_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt_a")),
+                                    ),
+                            )
+                            .lambda("opt_a_index")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_a")))
+                            .lambda("f")
+                            .lambda("opt_b")
+                            .lambda("opt_a"),
+                    )
+                    .apply(Term::Constant(
+                        Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
+                    ))
+                    .apply(Term::Constant(
+                        Constant::Data(Data::constr(0, vec![Data::integer(42.into())])).into(),
+                    ))
+                    .apply(
+                        Term::mk_pair_data()
+                            .apply(Term::i_data().apply(Term::var("a")))
+                            .apply(Term::i_data().apply(Term::var("b")))
+                            .lambda("b")
+                            .lambda("a"),
+                    ),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::list(vec![
+                        Data::integer(14.into()),
+                        Data::integer(42.into()),
+                    ])],
+                ))
+                .into(),
+            ))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn foldl_type_mismatch() {
+    let src = r#"
+
+      type Address {
+        payment_credential: ByteArray,
+        stake_credential: Option<ByteArray>,
+      }
+      
+      type Output {
+        address: Address,
+        value: List<Int>,
+        datum: Option<Int>,
+        reference_script: Option<Int>,
+      }
+      
+      pub fn foldl(self: List<a>, with: fn(a, b) -> b, zero: b) -> b {
+        when self is {
+          [] -> zero
+          [x, ..xs] -> foldl(xs, with, with(x, zero))
+        }
+      }
+      
+      test hi() {
+        let addr1 = Address { payment_credential: #"adff", stake_credential: None }
+      
+        let out =
+          Output { address: addr1, value: [], datum: None, reference_script: None }
+      
+        let outputs: List<Output> =
+          [out, out, out]
+        let cry =
+          foldl(
+            outputs,
+            fn(o: Output, mb_b: Option<Output>) -> Option<Output> {
+              when mb_b is {
+                None ->
+                  if o.address == addr1 {
+                    Some(o)
+                  } else {
+                    None
+                  }
+                otherwise -> otherwise
+              }
+            },
+            None,
+          )
+      
+        cry == cry
+      }
+    "#;
+
+    assert_uplc(src, Term::equals_data(), false);
+}
+
+#[test]
+fn expect_head_discard_tail() {
+    let src = r#"
+      test hi() {
+        let a = [1, 2, 3]
+        expect [h, ..] = a
+        h == h
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::var("h"))
+            .apply(Term::var("h"))
+            .lambda("h")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("a"))))
+            .lambda("a")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ])),
+        false,
+    );
+}
+
+#[test]
+fn expect_head_no_tail() {
+    let src = r#"
+      test hi() {
+        let a = [1, 2, 3]
+        expect [h] = a
+        h == h
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::tail_list()
+            .apply(Term::var("a"))
+            .delayed_choose_list(
+                Term::equals_integer()
+                    .apply(Term::var("h"))
+                    .apply(Term::var("h")),
+                Term::Error.trace(Term::string(
+                    "List/Tuple/Constr contains more items than expected",
+                )),
+            )
+            .lambda("h")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("a"))))
+            .lambda("a")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ])),
+        true,
+    );
+}
+
+#[test]
+fn expect_head_cast_data_no_tail() {
+    let src = r#"
+      test hi() {
+        let a: Data = [1, 2, 3]
+        expect [h]: List<Int> = a
+        h == h
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::tail_list()
+            .apply(Term::var("unwrap_a"))
+            .delayed_choose_list(
+                Term::equals_integer()
+                    .apply(Term::var("h"))
+                    .apply(Term::var("h")),
+                Term::Error.trace(Term::string(
+                    "List/Tuple/Constr contains more items than expected",
+                )),
+            )
+            .lambda("h")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
+            .lambda("unwrap_a")
+            .apply(Term::unlist_data().apply(Term::var("a")))
+            .lambda("a")
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ]))),
+        true,
+    );
+}
+
+#[test]
+fn expect_head_cast_data_with_tail() {
+    let src = r#"
+      test hi() {
+        let a: Data = [1, 2, 3]
+        expect [h, j, ..]: List<Int> = a
+        h == h
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::var("h"))
+            .apply(Term::var("h"))
+            .lambda("_")
+            .apply(
+                Term::var("expect_on_list")
+                    .lambda("expect_on_list")
+                    .apply(Term::var("expect_on_list").apply(Term::var("expect_on_list")))
+                    .lambda("expect_on_list")
+                    .apply(
+                        Term::var("list_to_check")
+                            .delayed_choose_list(
+                                Term::unit(),
+                                Term::var("expect_on_list")
+                                    .apply(Term::var("expect_on_list"))
+                                    .apply(Term::tail_list().apply(Term::var("list_to_check")))
+                                    .apply(Term::var("check_with"))
+                                    .lambda("_")
+                                    .apply(Term::var("check_with").apply(
+                                        Term::head_list().apply(Term::var("list_to_check")),
+                                    )),
+                            )
+                            .lambda("check_with")
+                            .lambda("list_to_check")
+                            .lambda("expect_on_list"),
+                    )
+                    .apply(Term::var("tail_2"))
+                    .apply(
+                        Term::unit()
+                            .lambda("_")
+                            .apply(Term::un_i_data().apply(Term::var("list_item")))
+                            .lambda("list_item"),
+                    ),
+            )
+            .lambda("tail_2")
+            .apply(Term::tail_list().apply(Term::var("tail_1")))
+            .lambda("j")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_1"))))
+            .lambda("tail_1")
+            .apply(Term::tail_list().apply(Term::var("unwrap_a")))
+            .lambda("h")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
+            .lambda("unwrap_a")
+            .apply(Term::unlist_data().apply(Term::var("a")))
+            .lambda("a")
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ]))),
+        false,
+    );
+}
