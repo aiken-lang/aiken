@@ -998,7 +998,24 @@ impl<'a> CodeGenerator<'a> {
 
                 var_stack.local_var(
                     tipo.clone().into(),
-                    clause_properties.original_subject_name(),
+                    match clause_properties {
+                        ClauseProperties::ConstrClause {
+                            clause_var_name,
+                            needs_constr_var,
+                            ..
+                        } => {
+                            *needs_constr_var = true;
+                            clause_var_name
+                        }
+                        ClauseProperties::ListClause {
+                            original_subject_name,
+                            ..
+                        } => original_subject_name,
+                        ClauseProperties::TupleClause {
+                            original_subject_name,
+                            ..
+                        } => original_subject_name,
+                    },
                 );
 
                 pattern_stack.let_assignment(name, var_stack);
@@ -1010,7 +1027,24 @@ impl<'a> CodeGenerator<'a> {
 
                 new_stack.local_var(
                     tipo.clone().into(),
-                    clause_properties.original_subject_name(),
+                    match clause_properties {
+                        ClauseProperties::ConstrClause {
+                            clause_var_name,
+                            needs_constr_var,
+                            ..
+                        } => {
+                            *needs_constr_var = true;
+                            clause_var_name
+                        }
+                        ClauseProperties::ListClause {
+                            original_subject_name,
+                            ..
+                        } => original_subject_name,
+                        ClauseProperties::TupleClause {
+                            original_subject_name,
+                            ..
+                        } => original_subject_name,
+                    },
                 );
 
                 let mut let_stack = pattern_stack.empty_with_scope();
@@ -1687,7 +1721,28 @@ impl<'a> CodeGenerator<'a> {
                     pattern_stack.merge(expect_stack);
                 }
             }
-            Pattern::Assign { .. } => todo!("Assign not yet implemented"),
+            Pattern::Assign { name, pattern, .. } => {
+                let mut inner_value_stack = pattern_stack.empty_with_scope();
+                inner_value_stack.var(
+                    ValueConstructor::public(
+                        tipo.clone().into(),
+                        ValueConstructorVariant::LocalVariable {
+                            location: Span::empty(),
+                        },
+                    ),
+                    name,
+                    "",
+                );
+                pattern_stack.let_assignment(name, value_stack);
+
+                self.assignment(
+                    pattern,
+                    pattern_stack,
+                    inner_value_stack,
+                    tipo,
+                    assignment_properties,
+                );
+            }
             Pattern::Discard { .. } => {
                 pattern_stack.let_assignment("_", value_stack);
             }
@@ -1827,7 +1882,7 @@ impl<'a> CodeGenerator<'a> {
                         tipo.clone().into(),
                         names,
                         tail.is_some(),
-                        true,
+                        !tail.is_some(),
                         value_stack,
                     );
                 } else {
@@ -2074,18 +2129,21 @@ impl<'a> CodeGenerator<'a> {
                     format!("__tail_{}", self.id_gen.next())
                 };
 
-                self.expect_type(
-                    inner_list_type,
-                    &mut tail_stack,
-                    &name,
-                    &mut IndexMap::new(),
-                );
+                self.expect_type(tipo, &mut tail_stack, &name, &mut IndexMap::new());
 
                 expect_list_stacks.push(tail_stack);
 
-                names.push(name);
+                if tail.is_some() {
+                    names.push(name);
+                }
 
-                expect_stack.list_accessor(tipo.clone().into(), names, true, false, value_stack);
+                expect_stack.list_accessor(
+                    tipo.clone().into(),
+                    names,
+                    tail.is_some(),
+                    !tail.is_some(),
+                    value_stack,
+                );
 
                 expect_stack.merge_children(expect_list_stacks);
             }
