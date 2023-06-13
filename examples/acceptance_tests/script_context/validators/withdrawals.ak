@@ -23,16 +23,12 @@ validator {
 
     [
       when dict.get(ctx.transaction.withdrawals, alice) is {
-        None ->
-          error @"alice's withdrawal not found"
-        Some(value) ->
-          value == 42
+        None -> error @"alice's withdrawal not found"
+        Some(value) -> value == 42
       },
       when dict.get(ctx.transaction.withdrawals, bob) is {
-        None ->
-          error @"bob's withdrawal not found"
-        Some(value) ->
-          value == 14
+        None -> error @"bob's withdrawal not found"
+        Some(value) -> value == 14
       },
       dict.keys(ctx.transaction.withdrawals) == [alice, bob],
     ]

@@ -8,6 +8,7 @@ use aiken/transaction/value.{Value}
 pub fn count(self: List<a>, predicate: fn(a) -> Bool) -> Int {
   list.foldl(
     self,
+    0,
     fn(item, total) {
       if predicate(item) {
         total + 1
@@ -15,7 +16,6 @@ pub fn count(self: List<a>, predicate: fn(a) -> Bool) -> Int {
         total
       }
     },
-    0,
   )
 }
 
@@ -25,9 +25,9 @@ test foldl_value_test1() {
   let foo =
     fn(i: Value, acc: (Value, Int)) {
       let (v, int) = acc
-      (value.add(i, v), int + 1)
+      (value.merge(i, v), int + 1)
     }
-  list.foldl([val1, val2], foo, (value.zero(), 0)) == (
+  list.foldl([val1, val2], (value.zero(), 0), foo) == (
     value.from_lovelace(3000000),
     2,
   )
@@ -39,9 +39,9 @@ test foldl_value_test2() {
   let foo =
     fn(i: Value, acc: (Value, Int)) {
       let (v, int) = acc
-      (value.add(i, v), int + 1)
+      (value.merge(i, v), int + 1)
     }
-  list.foldl([val1, val2], foo, (value.from_lovelace(0), 0)) == (
+  list.foldl([val1, val2], (value.from_lovelace(0), 0), foo) == (
     value.from_lovelace(3000000),
     2,
   )

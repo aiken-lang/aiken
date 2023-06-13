@@ -17,8 +17,7 @@ validator {
 }
 
 fn assert_datum(datum) {
-  let my_datum: Data =
-    Void
+  let my_datum: Data = Void
   datum == my_datum
 }
 
@@ -27,14 +26,12 @@ type MyDatum {
 }
 
 fn assert_datums(datums) {
-  let my_datum =
-    MyDatum(42)
+  let my_datum = MyDatum(42)
 
   expect Some(datum) =
     dict.get(datums, blake2b_256(builtin.serialise_data(my_datum)))
 
-  expect datum: MyDatum =
-    datum
+  expect datum: MyDatum = datum
 
   my_datum == datum && dict.size(datums) == 2
 }
@@ -43,8 +40,7 @@ fn assert_outputs(outputs) {
   when outputs is {
     [output_1, output_2, ..] ->
       assert_first_output(output_1) && assert_second_output(output_2)
-    _ ->
-      error @"expected transaction to have (at least) 2 outputs"
+    _ -> error @"expected transaction to have (at least) 2 outputs"
   }
 }
 
@@ -70,10 +66,8 @@ fn assert_second_output(output) {
       ),
     ),
     when output.datum is {
-      InlineDatum(_) ->
-        True
-      _ ->
-        error @"expected inline datum"
+      InlineDatum(_) -> True
+      _ -> error @"expected inline datum"
     },
   ]
     |> list.and

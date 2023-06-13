@@ -24,14 +24,11 @@ validator(creator: ByteArray) {
     _r: Data,
     ctx: ScriptContext,
   ) {
-    let ScriptContext { transaction, purpose } =
-      ctx
+    let ScriptContext { transaction, purpose } = ctx
 
-    let Transaction { inputs, mint, .. } =
-      transaction
+    let Transaction { inputs, mint, .. } = transaction
 
-    expect Spend(own_ref) =
-      purpose
+    expect Spend(own_ref) = purpose
 
     expect Some(own_input) =
       list.find(inputs, fn(input) { input.output_reference == own_ref })
@@ -39,39 +36,37 @@ validator(creator: ByteArray) {
     let Input {
       output: Output { address: Address { payment_credential, .. }, .. },
       ..
-    } =
-      own_input
+    } = own_input
 
-    expect ScriptCredential(own_validator_hash) =
-      payment_credential
+    expect ScriptCredential(own_validator_hash) = payment_credential
 
-    value.quantity_of(mint, own_validator_hash, datum) == -1
+    (
+      mint
+        |> value.from_minted_value
+        |> value.quantity_of(own_validator_hash, datum)
+    ) == -1
   }
 
   fn gift_card(rdmr: Action, ctx: ScriptContext) -> Bool {
     // get values from transaction and purpose
-    let ScriptContext { transaction, purpose } =
-      ctx
+    let ScriptContext { transaction, purpose } = ctx
 
-    expect tx.Mint(policy_id) =
-      purpose
+    expect tx.Mint(policy_id) = purpose
 
     let Transaction { inputs, mint, extra_signatories, outputs, .. } =
       transaction
 
     let minted_assets =
       mint
-        |> from_minted_value
+        |> value.from_minted_value
         |> value.tokens(policy_id)
         |> dict.to_list()
 
     when rdmr is {
       Mint(total) -> {
-        expect [input, ..] =
-          inputs
+        expect [input, ..] = inputs
         // Base is created from serializing a utxo ref being spent. Thus this guarantees a unique base
-        let base =
-          cbor.serialise(input.output_reference)
+        let base = cbor.serialise(input.output_reference)
         // Create a list of expected token names
         let expected_minted_token_names =
           create_expected_minted_nfts(base, total, [])
@@ -91,8 +86,7 @@ validator(creator: ByteArray) {
         list.all(
           minted_assets,
           fn(asset) {
-            let (_, amount) =
-              asset
+            let (_, amount) = asset
             amount == -1
           },
         )
@@ -123,8 +117,7 @@ fn check_mint_and_outputs(
   validator_cred: PaymentCredential,
 ) -> Bool {
   when minted_assets is {
-    [] ->
-      True
+    [] -> True
     [(minted_asset_name, quantity), ..rest_assets] -> {
       expect True =
         list.any(
@@ -135,8 +128,7 @@ fn check_mint_and_outputs(
         list.any(
           outputs,
           fn(output) {
-            let Output { address, datum, .. } =
-              output
+            let Output { address, datum, .. } = output
             datum == InlineDatum(minted_asset_name) && address.payment_credential == validator_cred
           },
         )
@@ -158,8 +150,7 @@ fn create_expected_minted_nfts(
   if counter == 0 {
     accum
   } else {
-    let token_name =
-      blake2b_256(bytearray.push(base, counter))
+    let token_name = blake2b_256(bytearray.push(base, counter))
 
     let accum =
       [token_name, ..accum]
