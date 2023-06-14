@@ -48,6 +48,8 @@ impl Default for Cmd {
 fn main() -> miette::Result<()> {
     panic_handler();
 
+    panic!("dam no way!");
+
     match Cmd::default() {
         Cmd::New(args) => new::exec(args),
         Cmd::Fmt(args) => fmt::exec(args),
@@ -90,7 +92,14 @@ fn panic_handler() {
 
         let location = info.location().map_or_else(
             || "".into(),
-            |location| format!("{}:{}\n\n    ", location.file(), location.line()),
+            |location| {
+                format!(
+                    "{}:{}:{}\n\n    ",
+                    location.file(),
+                    location.line(),
+                    location.column(),
+                )
+            },
         );
 
         let error_message = indoc::formatdoc! {
