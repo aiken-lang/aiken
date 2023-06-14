@@ -48,8 +48,6 @@ impl Default for Cmd {
 fn main() -> miette::Result<()> {
     panic_handler();
 
-    panic!("dam no way!");
-
     match Cmd::default() {
         Cmd::New(args) => new::exec(args),
         Cmd::Fmt(args) => fmt::exec(args),
