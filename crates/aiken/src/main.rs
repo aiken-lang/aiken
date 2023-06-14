@@ -8,6 +8,7 @@ use aiken::{
     },
 };
 use clap::Parser;
+use owo_colors::OwoColorize;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]
@@ -45,7 +46,8 @@ impl Default for Cmd {
 }
 
 fn main() -> miette::Result<()> {
-    miette::set_panic_hook();
+    panic_handler();
+
     match Cmd::default() {
         Cmd::New(args) => new::exec(args),
         Cmd::Fmt(args) => fmt::exec(args),
@@ -71,4 +73,40 @@ fn version() -> String {
         built_info::PKG_VERSION,
         built_info::GIT_COMMIT_HASH_SHORT.unwrap_or(&nix_git_rev)
     )
+}
+
+fn panic_handler() {
+    std::panic::set_hook(Box::new(move |info| {
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| {
+                info.payload()
+                    .downcast_ref::<String>()
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| "unknown error".to_string());
+
+        let location = info.location().map_or_else(
+            || "".into(),
+            |location| format!("{}:{}\n\n    ", location.file(), location.line()),
+        );
+
+        let error_message = indoc::formatdoc! {
+            r#"{fatal}
+
+                Whoops! You found a bug in the Aiken compiler.
+
+                Please report this error at https://github.com/aiken-lang/aiken/issues/new.
+                In your bug report please provide the information below and if possible the code
+                that produced it.
+
+                    {location}{message}"#,
+            fatal = "aiken::fatal::error".red().bold(),
+            location = location.purple(),
+        };
+
+        println!("{error_message}")
+    }));
 }
