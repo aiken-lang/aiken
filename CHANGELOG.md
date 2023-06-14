@@ -4,7 +4,7 @@
 
 ### Added
 
-N/A
+- **aiken**: added panic hook to present a link to make a bug report
 
 ### Fixed
 
