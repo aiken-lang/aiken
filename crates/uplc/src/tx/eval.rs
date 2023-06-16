@@ -12,7 +12,7 @@ use pallas_primitives::babbage::{
     StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
-use std::{collections::HashMap, convert::TryInto, ops::Deref, vec};
+use std::{cmp::Ordering, collections::HashMap, convert::TryInto, ops::Deref, vec};
 
 use super::{
     script_context::{
@@ -417,7 +417,20 @@ fn get_tx_info_v2(
             .as_ref()
             .unwrap_or(&MaybeIndefArray::Indef(vec![]))
             .iter()
-            .sorted_by(|a, b| a.data.compute_hash().cmp(&b.data.compute_hash()))
+            .sorted_by(|a, b| -> Ordering {
+                if a.tag == b.tag {
+                    a.index.cmp(&b.index)
+                } else {
+                    match (&a.tag, &b.tag) {
+                        (RedeemerTag::Spend, _) => Ordering::Greater,
+                        (RedeemerTag::Mint, RedeemerTag::Spend) => Ordering::Less,
+                        (RedeemerTag::Mint, _) => Ordering::Greater,
+                        (RedeemerTag::Cert, RedeemerTag::Reward) => Ordering::Greater,
+                        (RedeemerTag::Cert, _) => Ordering::Less,
+                        (RedeemerTag::Reward, _) => Ordering::Less,
+                    }
+                }
+            })
             .map(|r| {
                 (
                     get_script_purpose(
