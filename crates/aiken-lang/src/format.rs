@@ -775,11 +775,8 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Fn {
                 fn_style: FnStyle::BinOp(op),
-                body,
                 ..
-            } => {
-                unimplemented!()
-            }
+            } => op.to_doc(),
 
             UntypedExpr::Fn {
                 fn_style: FnStyle::Plain,
@@ -1070,7 +1067,9 @@ impl<'comments> Formatter<'comments> {
         let right = self.expr(right);
 
         self.operator_side(left, precedence, left_precedence)
+            .append(" ")
             .append(name)
+            .append(" ")
             .append(self.operator_side(right, precedence, right_precedence - 1))
     }
 
@@ -1726,19 +1725,19 @@ impl<'a> Documentable<'a> for &'a UnqualifiedImport {
 impl<'a> Documentable<'a> for &'a BinOp {
     fn to_doc(self) -> Document<'a> {
         match self {
-            BinOp::And => " && ",
-            BinOp::Or => " || ",
-            BinOp::LtInt => " < ",
-            BinOp::LtEqInt => " <= ",
-            BinOp::Eq => " == ",
-            BinOp::NotEq => " != ",
-            BinOp::GtEqInt => " >= ",
-            BinOp::GtInt => " > ",
-            BinOp::AddInt => " + ",
-            BinOp::SubInt => " - ",
-            BinOp::MultInt => " * ",
-            BinOp::DivInt => " / ",
-            BinOp::ModInt => " % ",
+            BinOp::And => "&&",
+            BinOp::Or => "||",
+            BinOp::LtInt => "<",
+            BinOp::LtEqInt => "<=",
+            BinOp::Eq => "==",
+            BinOp::NotEq => "!=",
+            BinOp::GtEqInt => ">=",
+            BinOp::GtInt => ">",
+            BinOp::AddInt => "+",
+            BinOp::SubInt => "-",
+            BinOp::MultInt => "*",
+            BinOp::DivInt => "/",
+            BinOp::ModInt => "%",
         }
         .to_doc()
     }
