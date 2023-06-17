@@ -404,6 +404,7 @@ impl TypedExpr {
 pub enum FnStyle {
     Plain,
     Capture,
+    BinOp(BinOp),
 }
 
 #[derive(Debug, Clone, PartialEq)]

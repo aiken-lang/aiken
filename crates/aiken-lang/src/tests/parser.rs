@@ -3667,3 +3667,114 @@ fn int_parsing_numeric_underscore() {
         })],
     )
 }
+
+#[test]
+fn first_class_binop() {
+    use expr::UntypedExpr::*;
+
+    let code = indoc! {r#"
+        fn foo() {
+          compare_with(a, >, b)
+        }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: Call {
+                arguments: vec![
+                    ast::CallArg {
+                        label: None,
+                        location: Span::new((), 26..27),
+                        value: Var {
+                            location: Span::new((), 26..27),
+                            name: "a".to_string(),
+                        },
+                    },
+                    ast::CallArg {
+                        label: None,
+                        location: Span::new((), 29..30),
+                        value: Fn {
+                            location: Span::new((), 29..30),
+                            fn_style: expr::FnStyle::BinOp(ast::BinOp::GtInt),
+                            arguments: vec![
+                                ast::Arg {
+                                    arg_name: ast::ArgName::Named {
+                                        name: "left".to_string(),
+                                        label: "left".to_string(),
+                                        location: Span::new((), 29..30),
+                                        is_validator_param: false,
+                                    },
+                                    location: Span::new((), 29..30),
+                                    annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 29..30),
+                                        module: None,
+                                        name: "Bool".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                    tipo: (),
+                                },
+                                ast::Arg {
+                                    arg_name: ast::ArgName::Named {
+                                        name: "right".to_string(),
+                                        label: "right".to_string(),
+                                        location: Span::new((), 29..30),
+                                        is_validator_param: false,
+                                    },
+                                    location: Span::new((), 29..30),
+                                    annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 29..30),
+                                        module: None,
+                                        name: "Bool".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                    tipo: (),
+                                },
+                            ],
+                            body: Box::new(BinOp {
+                                location: Span::new((), 29..30),
+                                name: ast::BinOp::GtInt,
+                                left: Box::new(Var {
+                                    location: Span::new((), 29..30),
+                                    name: "left".to_string(),
+                                }),
+                                right: Box::new(Var {
+                                    location: Span::new((), 29..30),
+                                    name: "right".to_string(),
+                                }),
+                            }),
+                            return_annotation: Some(ast::Annotation::Constructor {
+                                location: Span::new((), 29..30),
+                                module: None,
+                                name: "Bool".to_string(),
+                                arguments: vec![],
+                            }),
+                        },
+                    },
+                    ast::CallArg {
+                        label: None,
+                        location: Span::new((), 32..33),
+                        value: Var {
+                            location: Span::new((), 32..33),
+                            name: "b".to_string(),
+                        },
+                    },
+                ],
+                fun: Box::new(Var {
+                    location: Span::new((), 13..25),
+                    name: "compare_with".to_string(),
+                }),
+                location: Span::new((), 13..34),
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 35,
+            can_error: true,
+        })],
+    );
+}

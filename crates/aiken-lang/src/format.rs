@@ -774,6 +774,14 @@ impl<'comments> Formatter<'comments> {
             } => self.fn_capture(body),
 
             UntypedExpr::Fn {
+                fn_style: FnStyle::BinOp(op),
+                body,
+                ..
+            } => {
+                unimplemented!()
+            }
+
+            UntypedExpr::Fn {
                 fn_style: FnStyle::Plain,
                 return_annotation,
                 arguments: args,

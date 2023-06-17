@@ -940,6 +940,57 @@ pub fn expr_parser(
                 },
             );
 
+        let anon_binop_parser = select! {
+            Token::Greater => BinOp::GtInt,
+        }
+        .map_with_span(|name, location| {
+            let arguments = vec![
+                ast::Arg {
+                    arg_name: ast::ArgName::Named {
+                        name: "left".to_string(),
+                        label: "left".to_string(),
+                        location,
+                        is_validator_param: false,
+                    },
+                    annotation: Some(ast::Annotation::boolean(location)),
+                    location,
+                    tipo: (),
+                },
+                ast::Arg {
+                    arg_name: ast::ArgName::Named {
+                        name: "right".to_string(),
+                        label: "right".to_string(),
+                        location,
+                        is_validator_param: false,
+                    },
+                    annotation: Some(ast::Annotation::boolean(location)),
+                    location,
+                    tipo: (),
+                },
+            ];
+
+            let body = expr::UntypedExpr::BinOp {
+                location,
+                name,
+                left: Box::new(expr::UntypedExpr::Var {
+                    location,
+                    name: "left".to_string(),
+                }),
+                right: Box::new(expr::UntypedExpr::Var {
+                    location,
+                    name: "right".to_string(),
+                }),
+            };
+
+            expr::UntypedExpr::Fn {
+                arguments,
+                body: Box::new(body),
+                return_annotation: Some(ast::Annotation::boolean(location)),
+                fn_style: expr::FnStyle::BinOp(name),
+                location,
+            }
+        });
+
         let when_clause_parser = pattern_parser()
             .then(
                 just(Token::Vbar)
@@ -1083,6 +1134,7 @@ pub fn expr_parser(
             bytearray,
             list_parser,
             anon_fn_parser,
+            anon_binop_parser,
             block_parser,
             when_parser,
             let_parser,
