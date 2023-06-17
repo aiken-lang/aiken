@@ -941,7 +941,12 @@ pub fn expr_parser(
             );
 
         let anon_binop_parser = select! {
+            Token::EqualEqual => BinOp::Eq,
+            Token::NotEqual => BinOp::NotEq,
+            Token::Less => BinOp::LtInt,
+            Token::LessEqual => BinOp::LtEqInt,
             Token::Greater => BinOp::GtInt,
+            Token::GreaterEqual => BinOp::GtEqInt,
         }
         .map_with_span(|name, location| {
             let arguments = vec![
