@@ -1369,7 +1369,7 @@ fn anonymous_function() {
                         location: Span::new((), 25..67),
                         value: Box::new(expr::UntypedExpr::Fn {
                             location: Span::new((), 39..67),
-                            is_capture: false,
+                            fn_style: expr::FnStyle::Plain,
                             arguments: vec![ast::Arg {
                                 arg_name: ast::ArgName::Named {
                                     label: "a".to_string(),
@@ -1547,7 +1547,7 @@ fn call() {
                         location: Span::new((), 37..82),
                         value: Box::new(expr::UntypedExpr::Fn {
                             location: Span::new((), 53..82),
-                            is_capture: true,
+                            fn_style: expr::FnStyle::Capture,
                             arguments: vec![ast::Arg {
                                 arg_name: ast::ArgName::Named {
                                     label: "_capture__0".to_string(),
@@ -1574,7 +1574,7 @@ fn call() {
                                         location: Span::new((), 65..81),
                                         value: expr::UntypedExpr::Fn {
                                             location: Span::new((), 65..81),
-                                            is_capture: false,
+                                            fn_style: expr::FnStyle::Plain,
                                             arguments: vec![ast::Arg {
                                                 arg_name: ast::ArgName::Named {
                                                     label: "y".to_string(),

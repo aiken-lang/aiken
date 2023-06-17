@@ -12,7 +12,7 @@ use crate::{
         UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
-    expr::{TypedExpr, UntypedExpr},
+    expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     tipo::fields::FieldMap,
 };
@@ -220,12 +220,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             UntypedExpr::Fn {
                 location,
-                is_capture,
+                fn_style,
                 arguments: args,
                 body,
                 return_annotation,
                 ..
-            } => self.infer_fn(args, &[], *body, is_capture, return_annotation, location),
+            } => self.infer_fn(
+                args,
+                &[],
+                *body,
+                fn_style == FnStyle::Capture,
+                return_annotation,
+                location,
+            ),
 
             UntypedExpr::If {
                 location,
@@ -1011,17 +1018,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     body,
                     return_annotation,
                     location,
-                    is_capture: false,
+                    fn_style,
                     ..
                 },
-            ) if expected_arguments.len() == arguments.len() => self.infer_fn(
-                arguments,
-                expected_arguments,
-                *body,
-                false,
-                return_annotation,
-                location,
-            ),
+            ) if fn_style != FnStyle::Capture && expected_arguments.len() == arguments.len() => {
+                self.infer_fn(
+                    arguments,
+                    expected_arguments,
+                    *body,
+                    false,
+                    return_annotation,
+                    location,
+                )
+            }
 
             // Otherwise just perform normal type inference.
             (_, value) => self.infer(value),

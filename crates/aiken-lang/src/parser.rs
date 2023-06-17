@@ -935,7 +935,7 @@ pub fn expr_parser(
                     arguments,
                     body: Box::new(body),
                     location: span,
-                    is_capture: false,
+                    fn_style: expr::FnStyle::Plain,
                     return_annotation,
                 },
             );
@@ -1205,7 +1205,7 @@ pub fn expr_parser(
                     } else {
                         expr::UntypedExpr::Fn {
                             location: call.location(),
-                            is_capture: true,
+                            fn_style: expr::FnStyle::Capture,
                             arguments: holes,
                             body: Box::new(call),
                             return_annotation: None,

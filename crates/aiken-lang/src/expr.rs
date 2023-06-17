@@ -399,6 +399,13 @@ impl TypedExpr {
     }
 }
 
+// Represent how a function was written so that we can format it back.
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum FnStyle {
+    Plain,
+    Capture,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum UntypedExpr {
     Int {
@@ -424,7 +431,7 @@ pub enum UntypedExpr {
 
     Fn {
         location: Span,
-        is_capture: bool,
+        fn_style: FnStyle,
         arguments: Vec<Arg<()>>,
         body: Box<Self>,
         return_annotation: Option<Annotation>,
