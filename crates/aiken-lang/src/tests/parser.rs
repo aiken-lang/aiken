@@ -3681,6 +3681,13 @@ fn first_class_binop() {
           compare_with(a, <=, b)
           compare_with(a, ==, b)
           compare_with(a, !=, b)
+          combine_with(a, &&, b)
+          combine_with(a, ||, b)
+          compute_with(a, +, b)
+          compute_with(a, -, b)
+          compute_with(a, /, b)
+          compute_with(a, *, b)
+          compute_with(a, %, b)
         }
     "#};
 
@@ -3689,7 +3696,7 @@ fn first_class_binop() {
         vec![ast::Definition::Fn(Function {
             arguments: vec![],
             body: Sequence {
-                location: Span::new((), 13..158),
+                location: Span::new((), 13..328),
                 expressions: vec![
                     Call {
                         arguments: vec![
@@ -3719,7 +3726,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 29..30),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3735,7 +3742,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 29..30),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3804,7 +3811,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 53..55),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3820,7 +3827,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 53..55),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3889,7 +3896,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 78..79),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3905,7 +3912,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 78..79),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3974,7 +3981,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 102..104),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -3990,7 +3997,7 @@ fn first_class_binop() {
                                             annotation: Some(ast::Annotation::Constructor {
                                                 location: Span::new((), 102..104),
                                                 module: None,
-                                                name: "Bool".to_string(),
+                                                name: "Int".to_string(),
                                                 arguments: vec![],
                                             }),
                                             tipo: (),
@@ -4056,12 +4063,7 @@ fn first_class_binop() {
                                                 is_validator_param: false,
                                             },
                                             location: Span::new((), 127..129),
-                                            annotation: Some(ast::Annotation::Constructor {
-                                                location: Span::new((), 127..129),
-                                                module: None,
-                                                name: "Bool".to_string(),
-                                                arguments: vec![],
-                                            }),
+                                            annotation: None,
                                             tipo: (),
                                         },
                                         Arg {
@@ -4072,12 +4074,7 @@ fn first_class_binop() {
                                                 is_validator_param: false,
                                             },
                                             location: Span::new((), 127..129),
-                                            annotation: Some(ast::Annotation::Constructor {
-                                                location: Span::new((), 127..129),
-                                                module: None,
-                                                name: "Bool".to_string(),
-                                                arguments: vec![],
-                                            }),
+                                            annotation: None,
                                             tipo: (),
                                         },
                                     ],
@@ -4141,12 +4138,7 @@ fn first_class_binop() {
                                                 is_validator_param: false,
                                             },
                                             location: Span::new((), 152..154),
-                                            annotation: Some(ast::Annotation::Constructor {
-                                                location: Span::new((), 152..154),
-                                                module: None,
-                                                name: "Bool".to_string(),
-                                                arguments: vec![],
-                                            }),
+                                            annotation: None,
                                             tipo: (),
                                         },
                                         Arg {
@@ -4157,12 +4149,7 @@ fn first_class_binop() {
                                                 is_validator_param: false,
                                             },
                                             location: Span::new((), 152..154),
-                                            annotation: Some(ast::Annotation::Constructor {
-                                                location: Span::new((), 152..154),
-                                                module: None,
-                                                name: "Bool".to_string(),
-                                                arguments: vec![],
-                                            }),
+                                            annotation: None,
                                             tipo: (),
                                         },
                                     ],
@@ -4201,6 +4188,601 @@ fn first_class_binop() {
                         }),
                         location: Span::new((), 136..158),
                     },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 174..175),
+                                value: Var {
+                                    location: Span::new((), 174..175),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 177..179),
+                                value: Fn {
+                                    location: Span::new((), 177..179),
+                                    fn_style: expr::FnStyle::BinOp(And),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 177..179),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 177..179),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 177..179),
+                                                module: None,
+                                                name: "Bool".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 177..179),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 177..179),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 177..179),
+                                                module: None,
+                                                name: "Bool".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 177..179),
+                                        name: And,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 177..179),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 177..179),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 177..179),
+                                        module: None,
+                                        name: "Bool".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 181..182),
+                                value: Var {
+                                    location: Span::new((), 181..182),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 161..173),
+                            name: "combine_with".to_string(),
+                        }),
+                        location: Span::new((), 161..183),
+                    },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 199..200),
+                                value: Var {
+                                    location: Span::new((), 199..200),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 202..204),
+                                value: Fn {
+                                    location: Span::new((), 202..204),
+                                    fn_style: expr::FnStyle::BinOp(Or),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 202..204),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 202..204),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 202..204),
+                                                module: None,
+                                                name: "Bool".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 202..204),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 202..204),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 202..204),
+                                                module: None,
+                                                name: "Bool".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 202..204),
+                                        name: Or,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 202..204),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 202..204),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 202..204),
+                                        module: None,
+                                        name: "Bool".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 206..207),
+                                value: Var {
+                                    location: Span::new((), 206..207),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 186..198),
+                            name: "combine_with".to_string(),
+                        }),
+                        location: Span::new((), 186..208),
+                    },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 224..225),
+                                value: Var {
+                                    location: Span::new((), 224..225),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 227..228),
+                                value: Fn {
+                                    location: Span::new((), 227..228),
+                                    fn_style: expr::FnStyle::BinOp(AddInt),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 227..228),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 227..228),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 227..228),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 227..228),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 227..228),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 227..228),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 227..228),
+                                        name: AddInt,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 227..228),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 227..228),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 227..228),
+                                        module: None,
+                                        name: "Int".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 230..231),
+                                value: Var {
+                                    location: Span::new((), 230..231),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 211..223),
+                            name: "compute_with".to_string(),
+                        }),
+                        location: Span::new((), 211..232),
+                    },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 248..249),
+                                value: Var {
+                                    location: Span::new((), 248..249),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 251..252),
+                                value: Fn {
+                                    location: Span::new((), 251..252),
+                                    fn_style: expr::FnStyle::BinOp(SubInt),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 251..252),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 251..252),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 251..252),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 251..252),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 251..252),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 251..252),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 251..252),
+                                        name: SubInt,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 251..252),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 251..252),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 251..252),
+                                        module: None,
+                                        name: "Int".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 254..255),
+                                value: Var {
+                                    location: Span::new((), 254..255),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 235..247),
+                            name: "compute_with".to_string(),
+                        }),
+                        location: Span::new((), 235..256),
+                    },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 272..273),
+                                value: Var {
+                                    location: Span::new((), 272..273),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 275..276),
+                                value: Fn {
+                                    location: Span::new((), 275..276),
+                                    fn_style: expr::FnStyle::BinOp(DivInt),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 275..276),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 275..276),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 275..276),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 275..276),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 275..276),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 275..276),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 275..276),
+                                        name: DivInt,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 275..276),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 275..276),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 275..276),
+                                        module: None,
+                                        name: "Int".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 278..279),
+                                value: Var {
+                                    location: Span::new((), 278..279),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 259..271),
+                            name: "compute_with".to_string(),
+                        }),
+                        location: Span::new((), 259..280),
+                    },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 296..297),
+                                value: Var {
+                                    location: Span::new((), 296..297),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 299..300),
+                                value: Fn {
+                                    location: Span::new((), 299..300),
+                                    fn_style: expr::FnStyle::BinOp(MultInt),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 299..300),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 299..300),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 299..300),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 299..300),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 299..300),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 299..300),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 299..300),
+                                        name: MultInt,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 299..300),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 299..300),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 299..300),
+                                        module: None,
+                                        name: "Int".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 302..303),
+                                value: Var {
+                                    location: Span::new((), 302..303),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 283..295),
+                            name: "compute_with".to_string(),
+                        }),
+                        location: Span::new((), 283..304),
+                    },
+                    Call {
+                        arguments: vec![
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 320..321),
+                                value: Var {
+                                    location: Span::new((), 320..321),
+                                    name: "a".to_string(),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 323..324),
+                                value: Fn {
+                                    location: Span::new((), 323..324),
+                                    fn_style: expr::FnStyle::BinOp(ModInt),
+                                    arguments: vec![
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "left".to_string(),
+                                                label: "left".to_string(),
+                                                location: Span::new((), 323..324),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 323..324),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 323..324),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                        Arg {
+                                            arg_name: Named {
+                                                name: "right".to_string(),
+                                                label: "right".to_string(),
+                                                location: Span::new((), 323..324),
+                                                is_validator_param: false,
+                                            },
+                                            location: Span::new((), 323..324),
+                                            annotation: Some(ast::Annotation::Constructor {
+                                                location: Span::new((), 323..324),
+                                                module: None,
+                                                name: "Int".to_string(),
+                                                arguments: vec![],
+                                            }),
+                                            tipo: (),
+                                        },
+                                    ],
+                                    body: Box::new(BinOp {
+                                        location: Span::new((), 323..324),
+                                        name: ModInt,
+                                        left: Box::new(Var {
+                                            location: Span::new((), 323..324),
+                                            name: "left".to_string(),
+                                        }),
+                                        right: Box::new(Var {
+                                            location: Span::new((), 323..324),
+                                            name: "right".to_string(),
+                                        }),
+                                    }),
+                                    return_annotation: Some(ast::Annotation::Constructor {
+                                        location: Span::new((), 323..324),
+                                        module: None,
+                                        name: "Int".to_string(),
+                                        arguments: vec![],
+                                    }),
+                                },
+                            },
+                            CallArg {
+                                label: None,
+                                location: Span::new((), 326..327),
+                                value: Var {
+                                    location: Span::new((), 326..327),
+                                    name: "b".to_string(),
+                                },
+                            },
+                        ],
+                        fun: Box::new(Var {
+                            location: Span::new((), 307..319),
+                            name: "compute_with".to_string(),
+                        }),
+                        location: Span::new((), 307..328),
+                    },
                 ],
             },
             doc: None,
@@ -4209,7 +4791,7 @@ fn first_class_binop() {
             public: false,
             return_annotation: None,
             return_type: (),
-            end_position: 159,
+            end_position: 329,
             can_error: true,
         })],
     );

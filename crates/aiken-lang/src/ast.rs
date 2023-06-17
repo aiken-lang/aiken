@@ -656,6 +656,15 @@ impl Annotation {
         }
     }
 
+    pub fn int(location: Span) -> Self {
+        Annotation::Constructor {
+            name: "Int".to_string(),
+            module: None,
+            arguments: vec![],
+            location,
+        }
+    }
+
     pub fn is_logically_equal(&self, other: &Annotation) -> bool {
         match self {
             Annotation::Constructor {
