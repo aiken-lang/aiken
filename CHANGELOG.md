@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.11-alpha - unreleased
+
+### Added
+
+- **aiken-lang**: Binary operator are now treated like first-class citizen in
+  expressions. In particular, they can be used as function arguments directly:
+
+  ```
+  compare_with(a, >=, b) == compare_with(a, fn(l, r) { l >= r }, b)
+  ```
+
 ## v1.0.10-alpha - 2023-06-13
 
 ### Added

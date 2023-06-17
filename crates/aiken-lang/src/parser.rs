@@ -935,10 +935,90 @@ pub fn expr_parser(
                     arguments,
                     body: Box::new(body),
                     location: span,
-                    is_capture: false,
+                    fn_style: expr::FnStyle::Plain,
                     return_annotation,
                 },
             );
+
+        let anon_binop_parser = select! {
+            Token::EqualEqual => BinOp::Eq,
+            Token::NotEqual => BinOp::NotEq,
+            Token::Less => BinOp::LtInt,
+            Token::LessEqual => BinOp::LtEqInt,
+            Token::Greater => BinOp::GtInt,
+            Token::GreaterEqual => BinOp::GtEqInt,
+            Token::VbarVbar => BinOp::Or,
+            Token::AmperAmper => BinOp::And,
+            Token::Plus => BinOp::AddInt,
+            Token::Minus => BinOp::SubInt,
+            Token::Slash => BinOp::DivInt,
+            Token::Star => BinOp::MultInt,
+            Token::Percent => BinOp::ModInt,
+        }
+        .map_with_span(|name, location| {
+            use BinOp::*;
+
+            let arg_annotation = match name {
+                Or | And => Some(ast::Annotation::boolean(location)),
+                Eq | NotEq => None,
+                LtInt | LtEqInt | GtInt | GtEqInt | AddInt | SubInt | MultInt | DivInt | ModInt => {
+                    Some(ast::Annotation::int(location))
+                }
+            };
+
+            let return_annotation = match name {
+                Or | And | Eq | NotEq | LtInt | LtEqInt | GtInt | GtEqInt => {
+                    Some(ast::Annotation::boolean(location))
+                }
+                AddInt | SubInt | MultInt | DivInt | ModInt => Some(ast::Annotation::int(location)),
+            };
+
+            let arguments = vec![
+                ast::Arg {
+                    arg_name: ast::ArgName::Named {
+                        name: "left".to_string(),
+                        label: "left".to_string(),
+                        location,
+                        is_validator_param: false,
+                    },
+                    annotation: arg_annotation.clone(),
+                    location,
+                    tipo: (),
+                },
+                ast::Arg {
+                    arg_name: ast::ArgName::Named {
+                        name: "right".to_string(),
+                        label: "right".to_string(),
+                        location,
+                        is_validator_param: false,
+                    },
+                    annotation: arg_annotation,
+                    location,
+                    tipo: (),
+                },
+            ];
+
+            let body = expr::UntypedExpr::BinOp {
+                location,
+                name,
+                left: Box::new(expr::UntypedExpr::Var {
+                    location,
+                    name: "left".to_string(),
+                }),
+                right: Box::new(expr::UntypedExpr::Var {
+                    location,
+                    name: "right".to_string(),
+                }),
+            };
+
+            expr::UntypedExpr::Fn {
+                arguments,
+                body: Box::new(body),
+                return_annotation,
+                fn_style: expr::FnStyle::BinOp(name),
+                location,
+            }
+        });
 
         let when_clause_parser = pattern_parser()
             .then(
@@ -1083,6 +1163,7 @@ pub fn expr_parser(
             bytearray,
             list_parser,
             anon_fn_parser,
+            anon_binop_parser,
             block_parser,
             when_parser,
             let_parser,
@@ -1205,7 +1286,7 @@ pub fn expr_parser(
                     } else {
                         expr::UntypedExpr::Fn {
                             location: call.location(),
-                            is_capture: true,
+                            fn_style: expr::FnStyle::Capture,
                             arguments: holes,
                             body: Box::new(call),
                             return_annotation: None,
@@ -1239,7 +1320,20 @@ pub fn expr_parser(
         // Negate
         let op = choice((
             just(Token::Bang).to(UnOp::Not),
-            just(Token::Minus).to(UnOp::Negate),
+            just(Token::Minus)
+                // NOTE: Prevent conflict with usage for '-' as a standalone binary op.
+                // This will make '-' parse when used as standalone binop in a function call.
+                // For example:
+                //
+                //    foo(a, -, b)
+                //
+                // but it'll fail in a let-binding:
+                //
+                //    let foo = -
+                //
+                // which seems acceptable.
+                .then_ignore(just(Token::Comma).not().rewind())
+                .to(UnOp::Negate),
         ));
 
         let unary = op

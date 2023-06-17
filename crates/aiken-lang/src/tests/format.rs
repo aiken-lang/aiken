@@ -864,3 +864,26 @@ fn hex_and_numeric_underscore() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn first_class_binop() {
+    let src = indoc! { r#"
+        fn foo() {
+          compare_with(a, >, b)
+          compare_with(a, >=, b)
+          compare_with(a, <, b)
+          compare_with(a, <=, b)
+          compare_with(a, ==, b)
+          compare_with(a, !=, b)
+          combine_with(a, &&, b)
+          combine_with(a, ||, b)
+          compute_with(a, +, b)
+          compute_with(a, -, b)
+          compute_with(a, /, b)
+          compute_with(a, *, b)
+          compute_with(a, %, b)
+        }
+    "#};
+
+    assert_fmt(src, src);
+}

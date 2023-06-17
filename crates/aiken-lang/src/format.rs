@@ -8,7 +8,7 @@ use crate::{
         Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
-    expr::{UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
+    expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
     parser::{
         extra::{Comment, ModuleExtra},
         token::Base,
@@ -768,12 +768,18 @@ impl<'comments> Formatter<'comments> {
             UntypedExpr::UnOp { value, op, .. } => self.un_op(value, op),
 
             UntypedExpr::Fn {
-                is_capture: true,
+                fn_style: FnStyle::Capture,
                 body,
                 ..
             } => self.fn_capture(body),
 
             UntypedExpr::Fn {
+                fn_style: FnStyle::BinOp(op),
+                ..
+            } => op.to_doc(),
+
+            UntypedExpr::Fn {
+                fn_style: FnStyle::Plain,
                 return_annotation,
                 arguments: args,
                 body,
@@ -1061,7 +1067,9 @@ impl<'comments> Formatter<'comments> {
         let right = self.expr(right);
 
         self.operator_side(left, precedence, left_precedence)
+            .append(" ")
             .append(name)
+            .append(" ")
             .append(self.operator_side(right, precedence, right_precedence - 1))
     }
 
@@ -1093,7 +1101,7 @@ impl<'comments> Formatter<'comments> {
             let comments = self.pop_comments(expr.location().start);
             let doc = match expr {
                 UntypedExpr::Fn {
-                    is_capture: true,
+                    fn_style: FnStyle::Capture,
                     body,
                     ..
                 } => self.pipe_capture_right_hand_side(body),
@@ -1717,19 +1725,19 @@ impl<'a> Documentable<'a> for &'a UnqualifiedImport {
 impl<'a> Documentable<'a> for &'a BinOp {
     fn to_doc(self) -> Document<'a> {
         match self {
-            BinOp::And => " && ",
-            BinOp::Or => " || ",
-            BinOp::LtInt => " < ",
-            BinOp::LtEqInt => " <= ",
-            BinOp::Eq => " == ",
-            BinOp::NotEq => " != ",
-            BinOp::GtEqInt => " >= ",
-            BinOp::GtInt => " > ",
-            BinOp::AddInt => " + ",
-            BinOp::SubInt => " - ",
-            BinOp::MultInt => " * ",
-            BinOp::DivInt => " / ",
-            BinOp::ModInt => " % ",
+            BinOp::And => "&&",
+            BinOp::Or => "||",
+            BinOp::LtInt => "<",
+            BinOp::LtEqInt => "<=",
+            BinOp::Eq => "==",
+            BinOp::NotEq => "!=",
+            BinOp::GtEqInt => ">=",
+            BinOp::GtInt => ">",
+            BinOp::AddInt => "+",
+            BinOp::SubInt => "-",
+            BinOp::MultInt => "*",
+            BinOp::DivInt => "/",
+            BinOp::ModInt => "%",
         }
         .to_doc()
     }
