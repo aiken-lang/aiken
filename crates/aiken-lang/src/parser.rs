@@ -1,13 +1,13 @@
+pub mod definitions;
 pub mod error;
 pub mod extra;
 pub mod lexer;
+mod module;
 pub mod token;
+mod utils;
 
 use crate::{
-    ast::{
-        self, BinOp, ByteArrayFormatPreference, Span, TraceKind, UnOp, UntypedDefinition,
-        CAPTURE_VARIABLE,
-    },
+    ast::{self, BinOp, ByteArrayFormatPreference, Span, TraceKind, UnOp, CAPTURE_VARIABLE},
     expr,
 };
 use chumsky::{chain::Chain, prelude::*};
@@ -79,7 +79,7 @@ pub fn module(
     });
 
     let definitions =
-        module_parser().parse(chumsky::Stream::from_iter(span(tokens.len(), 1), tokens))?;
+        module::parser().parse(chumsky::Stream::from_iter(span(tokens.len()), tokens))?;
 
     let module = ast::UntypedModule {
         kind,
@@ -90,306 +90,6 @@ pub fn module(
     };
 
     Ok((module, extra))
-}
-
-fn module_parser() -> impl Parser<Token, Vec<UntypedDefinition>, Error = ParseError> {
-    choice((
-        import_parser(),
-        data_parser(),
-        type_alias_parser(),
-        validator_parser(),
-        fn_parser(),
-        test_parser(),
-        constant_parser(),
-    ))
-    .repeated()
-    .then_ignore(end())
-}
-
-pub fn import_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    let unqualified_import = choice((
-        select! {Token::Name { name } => name}.then(
-            just(Token::As)
-                .ignore_then(select! {Token::Name { name } => name})
-                .or_not(),
-        ),
-        select! {Token::UpName { name } => name}.then(
-            just(Token::As)
-                .ignore_then(select! {Token::UpName { name } => name})
-                .or_not(),
-        ),
-    ))
-    .map_with_span(|(name, as_name), span| ast::UnqualifiedImport {
-        name,
-        location: span,
-        as_name,
-        layer: Default::default(),
-    });
-
-    let unqualified_imports = just(Token::Dot)
-        .ignore_then(
-            unqualified_import
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-        )
-        .or_not();
-
-    let as_name = just(Token::As)
-        .ignore_then(select! {Token::Name { name } => name})
-        .or_not();
-
-    let module_path = select! {Token::Name { name } => name}
-        .separated_by(just(Token::Slash))
-        .then(unqualified_imports)
-        .then(as_name);
-
-    just(Token::Use).ignore_then(module_path).map_with_span(
-        |((module, unqualified), as_name), span| {
-            ast::UntypedDefinition::Use(ast::Use {
-                module,
-                as_name,
-                unqualified: unqualified.unwrap_or_default(),
-                package: (),
-                location: span,
-            })
-        },
-    )
-}
-
-pub fn data_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    let unlabeled_constructor_type_args = type_parser()
-        .map_with_span(|annotation, span| ast::RecordConstructorArg {
-            label: None,
-            annotation,
-            tipo: (),
-            doc: None,
-            location: span,
-        })
-        .separated_by(just(Token::Comma))
-        .allow_trailing()
-        .delimited_by(just(Token::LeftParen), just(Token::RightParen));
-
-    let constructors = select! {Token::UpName { name } => name}
-        .then(
-            choice((
-                labeled_constructor_type_args(),
-                unlabeled_constructor_type_args,
-            ))
-            .or_not(),
-        )
-        .map_with_span(|(name, arguments), span| ast::RecordConstructor {
-            location: span,
-            arguments: arguments.unwrap_or_default(),
-            name,
-            doc: None,
-            sugar: false,
-        })
-        .repeated()
-        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
-
-    let record_sugar = labeled_constructor_type_args().map_with_span(|arguments, span| {
-        vec![ast::RecordConstructor {
-            location: span,
-            arguments,
-            doc: None,
-            name: String::from("_replace"),
-            sugar: true,
-        }]
-    });
-
-    pub_parser()
-        .then(just(Token::Opaque).ignored().or_not())
-        .or_not()
-        .then(type_name_with_args())
-        .then(choice((constructors, record_sugar)))
-        .map_with_span(|((pub_opaque, (name, parameters)), constructors), span| {
-            ast::UntypedDefinition::DataType(ast::DataType {
-                location: span,
-                constructors: constructors
-                    .into_iter()
-                    .map(|mut constructor| {
-                        if constructor.sugar {
-                            constructor.name = name.clone();
-                        }
-
-                        constructor
-                    })
-                    .collect(),
-                doc: None,
-                name,
-                opaque: pub_opaque
-                    .map(|(_, opt_opaque)| opt_opaque.is_some())
-                    .unwrap_or(false),
-                parameters: parameters.unwrap_or_default(),
-                public: pub_opaque.is_some(),
-                typed_parameters: vec![],
-            })
-        })
-}
-
-pub fn type_alias_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    pub_parser()
-        .or_not()
-        .then(type_name_with_args())
-        .then_ignore(just(Token::Equal))
-        .then(type_parser())
-        .map_with_span(|((opt_pub, (alias, parameters)), annotation), span| {
-            ast::UntypedDefinition::TypeAlias(ast::TypeAlias {
-                alias,
-                annotation,
-                doc: None,
-                location: span,
-                parameters: parameters.unwrap_or_default(),
-                public: opt_pub.is_some(),
-                tipo: (),
-            })
-        })
-}
-
-pub fn validator_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    just(Token::Validator)
-        .ignore_then(
-            fn_param_parser(true)
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                .map_with_span(|arguments, span| (arguments, span))
-                .or_not(),
-        )
-        .then(
-            fn_parser()
-                .repeated()
-                .at_least(1)
-                .at_most(2)
-                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
-                .map(|defs| {
-                    defs.into_iter().map(|def| {
-                        let ast::UntypedDefinition::Fn(fun) = def else {
-                            unreachable!("It should be a fn definition");
-                        };
-
-                        fun
-                    })
-                }),
-        )
-        .map_with_span(|(opt_extra_params, mut functions), span| {
-            let (params, params_span) = opt_extra_params.unwrap_or((
-                vec![],
-                Span {
-                    start: 0,
-                    end: span.start + "validator".len(),
-                },
-            ));
-
-            ast::UntypedDefinition::Validator(ast::Validator {
-                doc: None,
-                fun: functions
-                    .next()
-                    .expect("unwrapping safe because there's 'at_least(1)' function"),
-                other_fun: functions.next(),
-                location: Span {
-                    start: span.start,
-                    // capture the span from the optional params
-                    end: params_span.end,
-                },
-                params,
-                end_position: span.end - 1,
-            })
-        })
-}
-
-pub fn fn_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    pub_parser()
-        .or_not()
-        .then_ignore(just(Token::Fn))
-        .then(select! {Token::Name {name} => name})
-        .then(
-            fn_param_parser(false)
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .delimited_by(just(Token::LeftParen), just(Token::RightParen))
-                .map_with_span(|arguments, span| (arguments, span)),
-        )
-        .then(just(Token::RArrow).ignore_then(type_parser()).or_not())
-        .then(
-            expr_seq_parser()
-                .or_not()
-                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-        )
-        .map_with_span(
-            |((((opt_pub, name), (arguments, args_span)), return_annotation), body), span| {
-                ast::UntypedDefinition::Fn(ast::Function {
-                    arguments,
-                    body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
-                    doc: None,
-                    location: Span {
-                        start: span.start,
-                        end: return_annotation
-                            .as_ref()
-                            .map(|l| l.location().end)
-                            .unwrap_or_else(|| args_span.end),
-                    },
-                    end_position: span.end - 1,
-                    name,
-                    public: opt_pub.is_some(),
-                    return_annotation,
-                    return_type: (),
-                    can_error: true,
-                })
-            },
-        )
-}
-
-pub fn test_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    just(Token::Bang)
-        .ignored()
-        .or_not()
-        .then_ignore(just(Token::Test))
-        .then(select! {Token::Name {name} => name})
-        .then_ignore(just(Token::LeftParen))
-        .then_ignore(just(Token::RightParen))
-        .map_with_span(|name, span| (name, span))
-        .then(
-            expr_seq_parser()
-                .or_not()
-                .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-        )
-        .map_with_span(|(((fail, name), span_end), body), span| {
-            ast::UntypedDefinition::Test(ast::Function {
-                arguments: vec![],
-                body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
-                doc: None,
-                location: span_end,
-                end_position: span.end - 1,
-                name,
-                public: false,
-                return_annotation: None,
-                return_type: (),
-                can_error: fail.is_some(),
-            })
-        })
-}
-
-fn constant_parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    pub_parser()
-        .or_not()
-        .then_ignore(just(Token::Const))
-        .then(select! {Token::Name{name} => name})
-        .then(just(Token::Colon).ignore_then(type_parser()).or_not())
-        .then_ignore(just(Token::Equal))
-        .then(constant_value_parser())
-        .map_with_span(|(((public, name), annotation), value), span| {
-            ast::UntypedDefinition::ModuleConstant(ast::ModuleConstant {
-                doc: None,
-                location: span,
-                public: public.is_some(),
-                name,
-                annotation,
-                value: Box::new(value),
-                tipo: (),
-            })
-        })
 }
 
 fn constant_value_parser() -> impl Parser<Token, ast::Constant, Error = ParseError> {
@@ -1695,10 +1395,6 @@ pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>)
                 .or_not(),
         ),
     )
-}
-
-pub fn pub_parser() -> impl Parser<Token, (), Error = ParseError> {
-    just(Token::Pub).ignored()
 }
 
 pub fn pattern_parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
