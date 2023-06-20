@@ -11,6 +11,13 @@
   compare_with(a, >=, b) == compare_with(a, fn(l, r) { l >= r }, b)
   ```
 
+### Fixed
+
+- **aiken-lang**: Fix for the final clause of a when expecting another clause
+  afterwards in nested list cases.
+- **aiken-lang**: Fix for all elements were being destructured in tuple clauses
+  even if not used.
+
 ## v1.0.10-alpha - 2023-06-13
 
 ### Added

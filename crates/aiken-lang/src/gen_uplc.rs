@@ -1163,6 +1163,11 @@ impl<'a> CodeGenerator<'a> {
                 pattern_stack.merge_child(value_stack);
             }
         }
+
+        // final clause can not be complex
+        if *(clause_properties.is_final_clause()) {
+            *clause_properties.is_complex_clause() = false;
+        }
     }
 
     fn expose_elements(
@@ -1375,20 +1380,24 @@ impl<'a> CodeGenerator<'a> {
                 pattern_stack.merge_child(nested_pattern);
             }
             Pattern::Tuple { elems, .. } => {
-                let mut names = vec![];
                 let mut nested_pattern = pattern_stack.empty_with_scope();
                 let items_type = &tipo.get_inner_types();
 
-                for (index, element) in elems.iter().enumerate() {
-                    let name = self.nested_pattern_ir_and_label(
-                        element,
-                        &mut nested_pattern,
-                        &items_type[index],
-                        *clause_properties.is_final_clause(),
-                    );
+                let names = elems
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, element)| {
+                        let name = self.nested_pattern_ir_and_label(
+                            element,
+                            &mut nested_pattern,
+                            &items_type[index],
+                            *clause_properties.is_final_clause(),
+                        );
 
-                    names.push((name.unwrap_or_else(|| "_".to_string()), index))
-                }
+                        name.map(|name| (name, index))
+                    })
+                    .collect_vec();
+
                 let mut defined_indices = match clause_properties.clone() {
                     ClauseProperties::TupleClause {
                         defined_tuple_indices,
@@ -1456,6 +1465,11 @@ impl<'a> CodeGenerator<'a> {
                 let new_tail_name = "__tail".to_string();
 
                 if elements.is_empty() {
+                    assert!(
+                        !final_clause,
+                        "Why do you have a last clause with [] in it?"
+                    );
+
                     let mut void_stack = pattern_stack.empty_with_scope();
 
                     void_stack.void();
@@ -1498,13 +1512,17 @@ impl<'a> CodeGenerator<'a> {
                                     &mut clause_properties,
                                 );
 
-                                pattern_stack.list_clause_guard(
-                                    pattern_type.clone().into(),
-                                    prev_tail_name,
-                                    None,
-                                    true,
-                                    elements_stack,
-                                );
+                                if !final_clause {
+                                    pattern_stack.list_clause_guard(
+                                        pattern_type.clone().into(),
+                                        prev_tail_name,
+                                        None,
+                                        true,
+                                        elements_stack,
+                                    );
+                                } else {
+                                    pattern_stack.finally(elements_stack)
+                                }
                             } else {
                                 let mut elements_stack = pattern_stack.empty_with_scope();
 
@@ -1520,23 +1538,27 @@ impl<'a> CodeGenerator<'a> {
                                     &mut clause_properties,
                                 );
 
-                                void_stack.list_clause_guard(
-                                    pattern_type.clone().into(),
-                                    &tail_name,
-                                    None,
-                                    false,
-                                    elements_stack,
-                                );
+                                if !final_clause {
+                                    void_stack.list_clause_guard(
+                                        pattern_type.clone().into(),
+                                        &tail_name,
+                                        None,
+                                        false,
+                                        elements_stack,
+                                    );
 
-                                pattern_stack.list_clause_guard(
-                                    pattern_type.clone().into(),
-                                    prev_tail_name,
-                                    Some(tail_name),
-                                    true,
-                                    void_stack,
-                                );
+                                    pattern_stack.list_clause_guard(
+                                        pattern_type.clone().into(),
+                                        prev_tail_name,
+                                        Some(tail_name),
+                                        true,
+                                        void_stack,
+                                    );
+                                } else {
+                                    pattern_stack.finally(elements_stack);
+                                }
                             }
-                        } else {
+                        } else if !final_clause {
                             let mut void_stack = pattern_stack.empty_with_scope();
 
                             void_stack.void();
