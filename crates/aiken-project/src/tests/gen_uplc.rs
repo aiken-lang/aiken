@@ -2119,6 +2119,429 @@ fn acceptance_test_24_map2() {
 }
 
 #[test]
+fn acceptance_test_25_void_equal() {
+    let src = r#"
+      test nil_1() {
+        Void == Void
+      }      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::unit().choose_unit(Term::unit().choose_unit(Term::bool(true))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_26_foldr() {
+    let src = r#"
+      pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
+        when xs is {
+          [] ->
+            zero
+          [x, ..rest] ->
+            f(x, foldr(rest, f, zero))
+        }
+      }
+      
+      pub fn concat(left: List<a>, right: List<a>) -> List<a> {
+        foldr(left, fn(x, xs) { [x, ..xs] }, right)
+      }
+      
+      pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            concat(f(x), flat_map(rest, f))
+        }
+      }
+      
+      test flat_map_2() {
+        flat_map([1, 2, 3], fn(a) { [a, a] }) == [1, 1, 2, 2, 3, 3]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("flat_map")
+                        .lambda("flat_map")
+                        .apply(Term::var("flat_map").apply(Term::var("flat_map")))
+                        .lambda("flat_map")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::var("concat")
+                                        .apply(Term::var("f").apply(Term::var("x")))
+                                        .apply(
+                                            Term::var("flat_map")
+                                                .apply(Term::var("flat_map"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("flat_map"),
+                        )
+                        .lambda("concat")
+                        .apply(
+                            Term::var("foldr")
+                                .apply(Term::var("left"))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::var("x")))
+                                        .apply(Term::var("xs"))
+                                        .lambda("xs")
+                                        .lambda("x"),
+                                )
+                                .apply(Term::var("right"))
+                                .lambda("right")
+                                .lambda("left"),
+                        )
+                        .lambda("foldr")
+                        .apply(Term::var("foldr").apply(Term::var("foldr")))
+                        .lambda("foldr")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::var("zero"),
+                                    Term::var("f")
+                                        .apply(Term::var("x"))
+                                        .apply(
+                                            Term::var("foldr")
+                                                .apply(Term::var("foldr"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f"))
+                                                .apply(Term::var("zero")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("zero")
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("foldr"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
+                        ]))
+                        .apply(
+                            Term::mk_cons()
+                                .apply(Term::i_data().apply(Term::var("a")))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::var("a")))
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+                Constant::Data(Data::integer(3.into())),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_27() {
+    let src = r#"
+      pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
+        when xs is {
+          [] ->
+            zero
+          [x, ..rest] ->
+            f(x, foldr(rest, f, zero))
+        }
+      }
+      
+      pub fn concat(left: List<a>, right: List<a>) -> List<a> {
+        foldr(left, fn(x, xs) { [x, ..xs] }, right)
+      }
+      
+      pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            concat(f(x), flat_map(rest, f))
+        }
+      }
+      
+      test flat_map_2() {
+        flat_map([1, 2, 3], fn(a) { [a, a] }) == [1, 1, 2, 2, 3, 3]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("flat_map")
+                        .lambda("flat_map")
+                        .apply(Term::var("flat_map").apply(Term::var("flat_map")))
+                        .lambda("flat_map")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::var("concat")
+                                        .apply(Term::var("f").apply(Term::var("x")))
+                                        .apply(
+                                            Term::var("flat_map")
+                                                .apply(Term::var("flat_map"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("flat_map"),
+                        )
+                        .lambda("concat")
+                        .apply(
+                            Term::var("foldr")
+                                .apply(Term::var("left"))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::var("x")))
+                                        .apply(Term::var("xs"))
+                                        .lambda("xs")
+                                        .lambda("x"),
+                                )
+                                .apply(Term::var("right"))
+                                .lambda("right")
+                                .lambda("left"),
+                        )
+                        .lambda("foldr")
+                        .apply(Term::var("foldr").apply(Term::var("foldr")))
+                        .lambda("foldr")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::var("zero"),
+                                    Term::var("f")
+                                        .apply(Term::var("x"))
+                                        .apply(
+                                            Term::var("foldr")
+                                                .apply(Term::var("foldr"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f"))
+                                                .apply(Term::var("zero")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("zero")
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("foldr"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
+                        ]))
+                        .apply(
+                            Term::mk_cons()
+                                .apply(Term::i_data().apply(Term::var("a")))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::var("a")))
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+                Constant::Data(Data::integer(3.into())),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_30() {
+    let src = r#"
+      pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
+        when xs is {
+          [] ->
+            zero
+          [x, ..rest] ->
+            f(x, foldr(rest, f, zero))
+        }
+      }
+      
+      pub fn concat(left: List<a>, right: List<a>) -> List<a> {
+        foldr(left, fn(x, xs) { [x, ..xs] }, right)
+      }
+      
+      pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            concat(f(x), flat_map(rest, f))
+        }
+      }
+      
+      test flat_map_2() {
+        flat_map([1, 2, 3], fn(a) { [a, a] }) == [1, 1, 2, 2, 3, 3]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("flat_map")
+                        .lambda("flat_map")
+                        .apply(Term::var("flat_map").apply(Term::var("flat_map")))
+                        .lambda("flat_map")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::var("concat")
+                                        .apply(Term::var("f").apply(Term::var("x")))
+                                        .apply(
+                                            Term::var("flat_map")
+                                                .apply(Term::var("flat_map"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("flat_map"),
+                        )
+                        .lambda("concat")
+                        .apply(
+                            Term::var("foldr")
+                                .apply(Term::var("left"))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::var("x")))
+                                        .apply(Term::var("xs"))
+                                        .lambda("xs")
+                                        .lambda("x"),
+                                )
+                                .apply(Term::var("right"))
+                                .lambda("right")
+                                .lambda("left"),
+                        )
+                        .lambda("foldr")
+                        .apply(Term::var("foldr").apply(Term::var("foldr")))
+                        .lambda("foldr")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::var("zero"),
+                                    Term::var("f")
+                                        .apply(Term::var("x"))
+                                        .apply(
+                                            Term::var("foldr")
+                                                .apply(Term::var("foldr"))
+                                                .apply(Term::var("rest"))
+                                                .apply(Term::var("f"))
+                                                .apply(Term::var("zero")),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("zero")
+                                .lambda("f")
+                                .lambda("xs")
+                                .lambda("foldr"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
+                        ]))
+                        .apply(
+                            Term::mk_cons()
+                                .apply(Term::i_data().apply(Term::var("a")))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(Term::i_data().apply(Term::var("a")))
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a"),
+                        ),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+                Constant::Data(Data::integer(3.into())),
+            ]))),
+        false,
+    );
+}
+
+#[test]
 fn expect_empty_list_on_filled_list() {
     let src = r#"  
       test empty_list1() {
@@ -2497,6 +2920,80 @@ fn when_tuple_deconstruction() {
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
             ),
+        false,
+    );
+}
+
+#[test]
+fn when_tuple_empty_lists() {
+    let src = r#"
+    test hi() {
+        let bucket1 = [1, 2, 3]
+        let bucket2 = [1, 5, 6]
+        let bye =
+          when (bucket1, bucket2) is {
+            ([], _) -> False
+            (_, []) -> False
+            ([a, ..], [b, ..]) -> a == b
+          }
+        bye
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::var("bucket_tuple_fst")
+            .choose_list(Term::bool(false).delay(), Term::var("delayed_clause"))
+            .force()
+            .lambda("delayed_clause")
+            .apply(
+                Term::var("bucket_tuple_snd")
+                    .choose_list(Term::bool(false).delay(), Term::var("delayed_clause"))
+                    .force()
+                    .lambda("delayed_clause")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::var("a"))
+                            .apply(Term::var("b"))
+                            .lambda("b")
+                            .apply(
+                                Term::un_i_data()
+                                    .apply(Term::head_list().apply(Term::var("bucket_tuple_snd"))),
+                            )
+                            .lambda("a")
+                            .apply(
+                                Term::un_i_data()
+                                    .apply(Term::head_list().apply(Term::var("bucket_tuple_fst"))),
+                            )
+                            .delay(),
+                    )
+                    .lambda("bucket_tuple_snd")
+                    .apply(
+                        Term::unlist_data()
+                            .apply(Term::snd_pair().apply(Term::var("bucket_tuple"))),
+                    )
+                    .delay(),
+            )
+            .lambda("bucket_tuple_fst")
+            .apply(Term::unlist_data().apply(Term::fst_pair().apply(Term::var("bucket_tuple"))))
+            .lambda("bucket_tuple")
+            .apply(
+                Term::mk_pair_data()
+                    .apply(Term::list_data().apply(Term::var("bucket1")))
+                    .apply(Term::list_data().apply(Term::var("bucket2"))),
+            )
+            .lambda("bucket2")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(5.into())),
+                Constant::Data(Data::integer(6.into())),
+            ]))
+            .lambda("bucket1")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ])),
         false,
     );
 }
@@ -3373,6 +3870,116 @@ fn expect_head_no_tail() {
                 Constant::Data(Data::integer(3.into())),
             ])),
         true,
+    );
+}
+
+#[test]
+fn expect_head3_no_tail() {
+    let src = r#"
+      test hi() {
+        let a = [1, 2, 3]
+        expect [h, i, j] = a
+        h == h && i == i && j == j
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::tail_list()
+            .apply(Term::var("tail_2"))
+            .delayed_choose_list(
+                Term::equals_integer()
+                    .apply(Term::var("h"))
+                    .apply(Term::var("h"))
+                    .delayed_if_else(
+                        Term::equals_integer()
+                            .apply(Term::var("i"))
+                            .apply(Term::var("i")),
+                        Term::bool(false),
+                    )
+                    .delayed_if_else(
+                        Term::equals_integer()
+                            .apply(Term::var("j"))
+                            .apply(Term::var("j")),
+                        Term::bool(false),
+                    ),
+                Term::Error.trace(Term::string(
+                    "List/Tuple/Constr contains more items than expected",
+                )),
+            )
+            .lambda("j")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_2"))))
+            .lambda("tail_2")
+            .apply(Term::tail_list().apply(Term::var("tail_1")))
+            .lambda("i")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_1"))))
+            .lambda("tail_1")
+            .apply(Term::tail_list().apply(Term::var("a")))
+            .lambda("h")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("a"))))
+            .lambda("a")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ])),
+        false,
+    );
+}
+
+#[test]
+fn expect_head3_cast_data_no_tail() {
+    let src = r#"
+      test hi() {
+        let a: Data = [1, 2, 3]
+        expect [h, i, j]: List<Int> = a
+        h == h && i ==i && j == j
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::tail_list()
+            .apply(Term::var("tail_2"))
+            .delayed_choose_list(
+                Term::equals_integer()
+                    .apply(Term::var("h"))
+                    .apply(Term::var("h"))
+                    .delayed_if_else(
+                        Term::equals_integer()
+                            .apply(Term::var("i"))
+                            .apply(Term::var("i")),
+                        Term::bool(false),
+                    )
+                    .delayed_if_else(
+                        Term::equals_integer()
+                            .apply(Term::var("j"))
+                            .apply(Term::var("j")),
+                        Term::bool(false),
+                    ),
+                Term::Error.trace(Term::string(
+                    "List/Tuple/Constr contains more items than expected",
+                )),
+            )
+            .lambda("j")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_2"))))
+            .lambda("tail_2")
+            .apply(Term::tail_list().apply(Term::var("tail_1")))
+            .lambda("i")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_1"))))
+            .lambda("tail_1")
+            .apply(Term::tail_list().apply(Term::var("unwrap_a")))
+            .lambda("h")
+            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
+            .lambda("unwrap_a")
+            .apply(Term::unlist_data().apply(Term::var("a")))
+            .lambda("a")
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ]))),
+        false,
     );
 }
 
