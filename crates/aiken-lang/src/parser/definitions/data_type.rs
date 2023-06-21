@@ -2,11 +2,11 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{error::ParseError, token::Token, utils},
+    parser::{annotation, error::ParseError, token::Token, utils},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    let unlabeled_constructor_type_args = type_parser()
+    let unlabeled_constructor_type_args = annotation()
         .map_with_span(|annotation, span| ast::RecordConstructorArg {
             label: None,
             annotation,
@@ -49,7 +49,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
     utils::public()
         .then(just(Token::Opaque).ignored().or_not())
         .or_not()
-        .then(type_name_with_args())
+        .then(utils::type_name_with_args())
         .then(choice((constructors, record_sugar)))
         .map_with_span(|((pub_opaque, (name, parameters)), constructors), span| {
             ast::UntypedDefinition::DataType(ast::DataType {
@@ -74,4 +74,21 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 typed_parameters: vec![],
             })
         })
+}
+
+fn labeled_constructor_type_args(
+) -> impl Parser<Token, Vec<ast::RecordConstructorArg<()>>, Error = ParseError> {
+    select! {Token::Name {name} => name}
+        .then_ignore(just(Token::Colon))
+        .then(annotation())
+        .map_with_span(|(name, annotation), span| ast::RecordConstructorArg {
+            label: Some(name),
+            annotation,
+            tipo: (),
+            doc: None,
+            location: span,
+        })
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
 }

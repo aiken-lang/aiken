@@ -5,10 +5,12 @@ use crate::{
     parser::{error::ParseError, token::Token},
 };
 
+use super::function;
+
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     just(Token::Validator)
         .ignore_then(
-            fn_param_parser(true)
+            function::param(true)
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
@@ -16,7 +18,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .or_not(),
         )
         .then(
-            super::function()
+            function()
                 .repeated()
                 .at_least(1)
                 .at_most(2)

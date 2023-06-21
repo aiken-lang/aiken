@@ -2,15 +2,15 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{error::ParseError, token::Token, utils},
+    parser::{annotation, error::ParseError, token::Token, utils},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     utils::public()
         .or_not()
-        .then(type_name_with_args())
+        .then(utils::type_name_with_args())
         .then_ignore(just(Token::Equal))
-        .then(type_parser())
+        .then(annotation())
         .map_with_span(|((opt_pub, (alias, parameters)), annotation), span| {
             ast::UntypedDefinition::TypeAlias(ast::TypeAlias {
                 alias,

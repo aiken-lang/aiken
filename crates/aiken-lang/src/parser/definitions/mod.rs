@@ -1,4 +1,4 @@
-mod constant;
+pub mod constant;
 mod data_type;
 mod function;
 mod import;

@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{error::ParseError, token::Token, utils},
+    parser::{annotation, error::ParseError, token::Token, utils},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -10,9 +10,13 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .or_not()
         .then_ignore(just(Token::Const))
         .then(select! {Token::Name{name} => name})
-        .then(just(Token::Colon).ignore_then(type_parser()).or_not())
+        .then(
+            just(Token::Colon)
+                .ignore_then(annotation::parser())
+                .or_not(),
+        )
         .then_ignore(just(Token::Equal))
-        .then(constant_value_parser())
+        .then(value())
         .map_with_span(|(((public, name), annotation), value), span| {
             ast::UntypedDefinition::ModuleConstant(ast::ModuleConstant {
                 doc: None,
@@ -24,4 +28,38 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 tipo: (),
             })
         })
+}
+
+pub fn value() -> impl Parser<Token, ast::Constant, Error = ParseError> {
+    let constant_string_parser =
+        select! {Token::String {value} => value}.map_with_span(|value, span| {
+            ast::Constant::String {
+                location: span,
+                value,
+            }
+        });
+
+    let constant_int_parser =
+        select! {Token::Int {value, base} => (value, base)}.map_with_span(|(value, base), span| {
+            ast::Constant::Int {
+                location: span,
+                value,
+                base,
+            }
+        });
+
+    let constant_bytearray_parser =
+        utils::bytearray().map_with_span(|(preferred_format, bytes), span| {
+            ast::Constant::ByteArray {
+                location: span,
+                bytes,
+                preferred_format,
+            }
+        });
+
+    choice((
+        constant_string_parser,
+        constant_int_parser,
+        constant_bytearray_parser,
+    ))
 }

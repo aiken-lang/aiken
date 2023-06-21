@@ -1,8 +1,9 @@
 use chumsky::prelude::*;
 
 use crate::{
-    ast, expr,
-    parser::{error::ParseError, token::Token},
+    ast,
+    expr::UntypedExpr,
+    parser::{error::ParseError, expr, token::Token},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -15,14 +16,14 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .then_ignore(just(Token::RightParen))
         .map_with_span(|name, span| (name, span))
         .then(
-            expr_seq_parser()
+            expr::sequence()
                 .or_not()
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(|(((fail, name), span_end), body), span| {
             ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
-                body: body.unwrap_or_else(|| expr::UntypedExpr::todo(span, None)),
+                body: body.unwrap_or_else(|| UntypedExpr::todo(span, None)),
                 doc: None,
                 location: span_end,
                 end_position: span.end - 1,
