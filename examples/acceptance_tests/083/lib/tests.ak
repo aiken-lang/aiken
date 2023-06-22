@@ -55,58 +55,58 @@ test dict_test1() {
   )
 }
 
-// test dict_test2() {
-//   let offer_input_ref = OutputReference(TransactionId("00"), 0)
-//   let ask_input_ref = OutputReference(TransactionId("00"), 1)
-//   let pairings =
-//     [(ask_input_ref, offer_input_ref)]
+test dict_test2() {
+  let offer_input_ref = OutputReference(TransactionId("00"), 0)
+  let ask_input_ref = OutputReference(TransactionId("00"), 1)
+  let pairings =
+    [(ask_input_ref, offer_input_ref)]
 
-//   let foo =
-//     fn(pair: (OutputReference, OutputReference), acc: Dict<Value, Address>) {
-//       let new_pay_map =
-//         dict.insert(
-//           acc,
-//           value.zero(),
-//           Address(VerificationKeyCredential("00"), None),
-//           compare_value("", "", _, _),
-//         )
+  let foo =
+    fn(pair: (OutputReference, OutputReference), acc: Dict<Value, Address>) {
+      let new_pay_map =
+        dict.insert(
+          acc,
+          value.zero(),
+          Address(VerificationKeyCredential("00"), None),
+          compare_value("", "", _, _),
+        )
 
-//       new_pay_map
-//     }
+      new_pay_map
+    }
 
-//   let pay_map = list.foldl(pairings, dict.new(), foo)
+  let pay_map = list.foldl(pairings, dict.new(), foo)
 
-//   pay_map == dict.new()
-// }
+  pay_map != dict.new()
+}
 
-// test dict_test3() {
-//   let offer_input_ref = OutputReference(TransactionId("00"), 0)
-//   let ask_input_ref = OutputReference(TransactionId("00"), 1)
-//   let pairings =
-//     [(ask_input_ref, offer_input_ref)]
+test dict_test3() {
+  let offer_input_ref = OutputReference(TransactionId("00"), 0)
+  let ask_input_ref = OutputReference(TransactionId("00"), 1)
+  let pairings =
+    [(ask_input_ref, offer_input_ref)]
 
-//   let (ask_map, asize, offer_map, osize) =
-//     (
-//       dict.from_list([(ask_input_ref, transaction.NoDatum)], compare_out_ref),
-//       1,
-//       dict.from_list([(offer_input_ref, transaction.NoDatum)], compare_out_ref),
-//       1,
-//     )
+  let (ask_map, asize, offer_map, osize) =
+    (
+      dict.from_list([(ask_input_ref, transaction.NoDatum)], compare_out_ref),
+      1,
+      dict.from_list([(offer_input_ref, transaction.NoDatum)], compare_out_ref),
+      1,
+    )
 
-//   let foo =
-//     fn(pair: (OutputReference, OutputReference), acc: Dict<Value, Address>) {
-//       let new_pay_map =
-//         dict.insert(
-//           acc,
-//           value.zero(),
-//           Address(VerificationKeyCredential("00"), None),
-//           compare_value("", "", _, _),
-//         )
+  let foo =
+    fn(pair: (OutputReference, OutputReference), acc: Dict<Value, Address>) {
+      let new_pay_map =
+        dict.insert(
+          acc,
+          value.zero(),
+          Address(VerificationKeyCredential("00"), None),
+          compare_value("", "", _, _),
+        )
 
-//       new_pay_map
-//     }
+      new_pay_map
+    }
 
-//   let pay_map = list.foldl(pairings, dict.new(), foo)
+  let pay_map = list.foldl(pairings, dict.new(), foo)
 
-//   pay_map == dict.new()
-// }
+  pay_map != dict.new()
+}
