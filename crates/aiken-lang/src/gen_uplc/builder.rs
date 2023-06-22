@@ -929,17 +929,12 @@ pub fn get_variant_name(new_name: &mut String, t: &Arc<Type>) {
     } else if t.is_unbound() {
         "_unbound".to_string()
     } else {
-        let mut full_type = "_data".to_string();
+        let full_type = "_data".to_string();
 
         if t.is_generic() {
             panic!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE");
         }
 
-        let inner_types = t.get_inner_types();
-
-        for arg_type in inner_types {
-            get_variant_name(&mut full_type, &arg_type);
-        }
         full_type
     });
 }
@@ -1061,6 +1056,7 @@ pub fn monomorphize(
     ir: Vec<Air>,
     mono_types: IndexMap<u64, Arc<Type>>,
     full_type: &Arc<Type>,
+    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) -> (String, Vec<Air>) {
     let mut new_air = ir.clone();
     let mut new_name = String::new();
@@ -1084,14 +1080,19 @@ pub fn monomorphize(
                     let mut constructor = constructor.clone();
                     constructor.tipo = tipo;
 
-                    if let Type::Fn { args, .. } = &*constructor.tipo {
+                    if let Type::Fn { args, ret } = &*constructor.tipo {
                         if matches!(
                             constructor.variant,
                             ValueConstructorVariant::ModuleFn { .. }
                         ) {
                             for arg in args {
-                                get_variant_name(&mut variant, arg);
+                                let mut arg = arg.clone();
+                                replace_opaque_type(&mut arg, data_types);
+                                get_variant_name(&mut variant, &arg);
                             }
+                            let mut ret = ret.clone();
+                            replace_opaque_type(&mut ret, data_types);
+                            get_variant_name(&mut variant, &ret);
                         }
                     }
                     new_air[index] = Air::Var {
@@ -1500,11 +1501,16 @@ pub fn monomorphize(
         }
     }
 
-    if let Type::Fn { args, .. } = &**full_type {
+    if let Type::Fn { args, ret } = &**full_type {
         if needs_variant {
             for arg in args {
-                get_variant_name(&mut new_name, arg);
+                let mut arg = arg.clone();
+                replace_opaque_type(&mut arg, data_types);
+                get_variant_name(&mut new_name, &arg);
             }
+            let mut ret = ret.clone();
+            replace_opaque_type(&mut ret, data_types);
+            get_variant_name(&mut new_name, &ret)
         }
     }
 

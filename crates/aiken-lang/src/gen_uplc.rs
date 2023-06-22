@@ -2519,7 +2519,8 @@ impl<'a> CodeGenerator<'a> {
             let mut data_type_variant = String::new();
 
             if let Some(types) = tipo.arg_types() {
-                for tipo in types {
+                for mut tipo in types {
+                    replace_opaque_type(&mut tipo, &self.data_types);
                     get_variant_name(&mut data_type_variant, &tipo);
                 }
             }
@@ -3178,7 +3179,7 @@ impl<'a> CodeGenerator<'a> {
                 mono_types = map.into_iter().collect();
 
                 let (variant_name, func_ir) =
-                    builder::monomorphize(func_ir, mono_types, &constructor.tipo);
+                    builder::monomorphize(func_ir, mono_types, &constructor.tipo, &self.data_types);
 
                 let function_key = FunctionAccessKey {
                     module_name: module.clone(),
@@ -3264,8 +3265,12 @@ impl<'a> CodeGenerator<'a> {
 
                             let temp_ir = func_stack.complete();
 
-                            let (variant_name, _) =
-                                builder::monomorphize(temp_ir, mono_types, &constructor.tipo);
+                            let (variant_name, _) = builder::monomorphize(
+                                temp_ir,
+                                mono_types,
+                                &constructor.tipo,
+                                &self.data_types,
+                            );
 
                             func_calls.insert(
                                 FunctionAccessKey {
