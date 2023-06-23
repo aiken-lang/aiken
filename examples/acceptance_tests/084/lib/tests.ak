@@ -1,3 +1,5 @@
+use aiken/builtin.{snd_pair}
+use aiken/cbor
 use aiken/list
 
 test tuple_when() {
@@ -19,4 +21,9 @@ test tuple_when() {
       },
     )
   list.length(filtered) > 0
+}
+
+test t() {
+  trace cbor.diagnostic(list.map([(#"", 20)], snd_pair))
+  True
 }
