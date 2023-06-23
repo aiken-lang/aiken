@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- **aiken-lang**: Explain discards and expect a bit better in the unused var warning
 - **aiken-lang**: Fix expect \_ = ... not including the cast from data logic if the type is data and right hand has a type annotation
 - **aiken-lang**: Fix for the final clause of a when expecting another clause
   afterwards in nested list cases.
