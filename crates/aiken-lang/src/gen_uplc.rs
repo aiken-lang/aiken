@@ -969,7 +969,8 @@ impl<'a> CodeGenerator<'a> {
                         subject_name,
                         indices_to_define,
                         prev_defined_tuple_indices,
-                        *clause_properties.is_complex_clause(),
+                        *clause_properties.is_complex_clause()
+                            || (!*clause_properties.is_final_clause()),
                         clause_pattern_stack,
                     );
                 }

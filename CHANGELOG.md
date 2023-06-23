@@ -17,6 +17,9 @@
   afterwards in nested list cases.
 - **aiken-lang**: Fix for all elements were being destructured in tuple clauses
   even if not used.
+- **aiken-lang**: Fix for tuple clause not consuming the next case causing
+  incomplete contracts. Now tuple clause will always consume the next case
+  unless it is the final clause
 
 ## v1.0.10-alpha - 2023-06-13
 
