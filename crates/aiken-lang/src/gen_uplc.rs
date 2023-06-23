@@ -4168,6 +4168,11 @@ impl<'a> CodeGenerator<'a> {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
+                let tipo = match tipo.as_ref() {
+                    Type::Fn { ret, .. } => ret,
+                    _ => &tipo,
+                };
+
                 let term = match &func {
                     DefaultFunction::IfThenElse
                     | DefaultFunction::ChooseUnit
@@ -4181,11 +4186,11 @@ impl<'a> CodeGenerator<'a> {
                     DefaultFunction::FstPair
                     | DefaultFunction::SndPair
                     | DefaultFunction::HeadList => {
-                        builder::undata_builtin(&func, count, &tipo, arg_vec)
+                        builder::undata_builtin(&func, count, tipo, arg_vec)
                     }
 
                     DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                        builder::to_data_builtin(&func, count, &tipo, arg_vec)
+                        builder::to_data_builtin(&func, count, tipo, arg_vec)
                     }
                     _ => {
                         let mut term: Term<Name> = func.into();
