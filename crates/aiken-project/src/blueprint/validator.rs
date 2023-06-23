@@ -205,6 +205,7 @@ mod test {
             &project.functions,
             &project.data_types,
             &project.module_types,
+            true,
         );
 
         let (validator, def) = modules

@@ -31,6 +31,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
         &project.functions,
         &project.data_types,
         &project.module_types,
+        true,
     );
 
     let Some(checked_module) = modules.values().next()

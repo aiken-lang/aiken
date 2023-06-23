@@ -3,9 +3,7 @@ use std::{rc::Rc, sync::Arc};
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
-    ast::{
-        Constant as UplcConstant, DeBruijn, Name, NamedDeBruijn, Program, Term, Type as UplcType,
-    },
+    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
@@ -59,7 +57,7 @@ pub struct CodeGenerator<'a> {
     needs_field_access: bool,
     code_gen_functions: IndexMap<String, CodeGenFunction>,
     zero_arg_functions: IndexMap<FunctionAccessKey, Vec<Air>>,
-    uplc_to_function: IndexMap<Program<DeBruijn>, FunctionAccessKey>,
+    tracing: bool,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -67,6 +65,7 @@ impl<'a> CodeGenerator<'a> {
         functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
         data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
         module_types: IndexMap<&'a String, &'a TypeInfo>,
+        tracing: bool,
     ) -> Self {
         CodeGenerator {
             defined_functions: IndexMap::new(),
@@ -77,7 +76,7 @@ impl<'a> CodeGenerator<'a> {
             id_gen: IdGenerator::new().into(),
             code_gen_functions: IndexMap::new(),
             zero_arg_functions: IndexMap::new(),
-            uplc_to_function: IndexMap::new(),
+            tracing,
         }
     }
 
@@ -87,7 +86,6 @@ impl<'a> CodeGenerator<'a> {
         self.id_gen = IdGenerator::new().into();
         self.needs_field_access = false;
         self.defined_functions = IndexMap::new();
-        self.uplc_to_function = IndexMap::new();
     }
 
     pub fn generate(
@@ -2624,9 +2622,11 @@ impl<'a> CodeGenerator<'a> {
                     );
                 }
 
-                trace_stack.trace(tipo.clone());
+                if self.tracing {
+                    trace_stack.trace(tipo.clone());
 
-                trace_stack.string("Constr index did not match any type variant");
+                    trace_stack.string("Constr index did not match any type variant");
+                }
 
                 trace_stack.error(tipo.clone());
 
@@ -4054,6 +4054,7 @@ impl<'a> CodeGenerator<'a> {
                     inner_types,
                     check_last_item,
                     true,
+                    self.tracing,
                 )
                 .apply(value);
 
@@ -4406,13 +4407,16 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = arg_stack.pop().unwrap();
 
-                let error_term =
-                    Term::Error.trace(Term::string("Expected on incorrect constructor variant."));
+                let trace_term = if self.tracing {
+                    Term::Error.trace(Term::string("Expected on incorrect constructor variant."))
+                } else {
+                    Term::Error
+                };
 
                 term = Term::equals_integer()
                     .apply(Term::integer(constr_index.into()))
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(constr))
-                    .delayed_if_else(term, error_term);
+                    .delayed_if_else(term, trace_term);
 
                 arg_stack.push(term);
             }
@@ -4420,13 +4424,16 @@ impl<'a> CodeGenerator<'a> {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                let error_term =
-                    Term::Error.trace(Term::string("Expected on incorrect boolean variant"));
+                let trace_term = if self.tracing {
+                    Term::Error.trace(Term::string("Expected on incorrect boolean variant"))
+                } else {
+                    Term::Error
+                };
 
                 if is_true {
-                    term = value.delayed_if_else(term, error_term)
+                    term = value.delayed_if_else(term, trace_term)
                 } else {
-                    term = value.delayed_if_else(error_term, term)
+                    term = value.delayed_if_else(trace_term, term)
                 }
                 arg_stack.push(term);
             }
@@ -4747,6 +4754,7 @@ impl<'a> CodeGenerator<'a> {
                         inner_types,
                         check_last_item,
                         false,
+                        self.tracing,
                     )
                 } else {
                     term
@@ -4762,12 +4770,15 @@ impl<'a> CodeGenerator<'a> {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
+                let trace_term = if self.tracing {
+                    Term::Error.trace(Term::string("Expected no fields for Constr"))
+                } else {
+                    Term::Error
+                };
+
                 term = Term::var(CONSTR_FIELDS_EXPOSER)
                     .apply(value)
-                    .delayed_choose_list(
-                        term,
-                        Term::Error.trace(Term::string("Expected no fields for Constr")),
-                    );
+                    .delayed_choose_list(term, trace_term);
 
                 arg_stack.push(term);
             }
@@ -4775,10 +4786,13 @@ impl<'a> CodeGenerator<'a> {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                term = value.delayed_choose_list(
-                    term,
-                    Term::Error.trace(Term::string("Expected no items for List")),
-                );
+                let trace_term = if self.tracing {
+                    Term::Error.trace(Term::string("Expected no items for List"))
+                } else {
+                    Term::Error
+                };
+
+                term = value.delayed_choose_list(term, trace_term);
 
                 arg_stack.push(term);
             }
@@ -5026,6 +5040,7 @@ impl<'a> CodeGenerator<'a> {
                         tipo.get_inner_types(),
                         check_last_item,
                         false,
+                        self.tracing,
                     )
                     .apply(value);
                 }
