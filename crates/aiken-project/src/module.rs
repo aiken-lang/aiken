@@ -297,6 +297,7 @@ impl CheckedModules {
         builtin_functions: &'a IndexMap<FunctionAccessKey, TypedFunction>,
         builtin_data_types: &'a IndexMap<DataTypeKey, TypedDataType>,
         module_types: &'a HashMap<String, TypeInfo>,
+        tracing: bool,
     ) -> CodeGenerator<'a> {
         let mut functions = IndexMap::new();
         for (k, v) in builtin_functions {
@@ -343,7 +344,7 @@ impl CheckedModules {
         let mut module_types_index = IndexMap::new();
         module_types_index.extend(module_types);
 
-        CodeGenerator::new(functions, data_types, module_types_index)
+        CodeGenerator::new(functions, data_types, module_types_index, tracing)
     }
 }
 

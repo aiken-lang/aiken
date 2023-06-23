@@ -1139,6 +1139,15 @@ impl From<bool> for Tracing {
     }
 }
 
+impl From<Tracing> for bool {
+    fn from(value: Tracing) -> Self {
+        match value {
+            Tracing::NoTraces => false,
+            Tracing::KeepTraces => true,
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,

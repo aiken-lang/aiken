@@ -508,7 +508,16 @@ pub fn list_access_to_uplc(
     tipos: Vec<Arc<Type>>,
     check_last_item: bool,
     is_list_accessor: bool,
+    tracing: bool,
 ) -> Term<Name> {
+    let trace_term = if tracing {
+        Term::Error.trace(Term::string(
+            "List/Tuple/Constr contains more items than expected",
+        ))
+    } else {
+        Term::Error
+    };
+
     if let Some((first, names)) = names.split_first() {
         let (current_tipo, tipos) = tipos.split_first().unwrap();
 
@@ -567,12 +576,7 @@ pub fn list_access_to_uplc(
                             "tail_index_{}_{}",
                             current_index, id_list[current_index]
                         )))
-                        .delayed_choose_list(
-                            term,
-                            Term::Error.trace(Term::string(
-                                "List/Tuple/Constr contains more items than expected",
-                            )),
-                        )
+                        .delayed_choose_list(term, trace_term)
                 } else {
                     term
                 }
@@ -588,12 +592,7 @@ pub fn list_access_to_uplc(
                             "tail_index_{}_{}",
                             current_index, id_list[current_index]
                         )))
-                        .delayed_choose_list(
-                            term,
-                            Term::Error.trace(Term::string(
-                                "List/Tuple/Constr contains more items than expected",
-                            )),
-                        )
+                        .delayed_choose_list(term, trace_term)
                 } else {
                     term
                 }
@@ -614,6 +613,7 @@ pub fn list_access_to_uplc(
                 tipos.to_owned(),
                 check_last_item,
                 is_list_accessor,
+                tracing,
             );
 
             list_access_inner = match &list_access_inner {
@@ -652,6 +652,7 @@ pub fn list_access_to_uplc(
                 tipos.to_owned(),
                 check_last_item,
                 is_list_accessor,
+                tracing,
             );
 
             list_access_inner = match &list_access_inner {

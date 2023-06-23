@@ -267,6 +267,7 @@ where
                     &self.functions,
                     &self.data_types,
                     &self.module_types,
+                    options.tracing.into(),
                 );
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
@@ -295,7 +296,8 @@ where
                 verbose,
                 exact_match,
             } => {
-                let tests = self.collect_tests(verbose, match_tests, exact_match)?;
+                let tests =
+                    self.collect_tests(verbose, match_tests, exact_match, options.tracing.into())?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -598,6 +600,7 @@ where
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
+        tracing: bool,
     ) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
 
@@ -690,6 +693,7 @@ where
                 &self.functions,
                 &self.data_types,
                 &self.module_types,
+                tracing,
             );
 
             let evaluation_hint = func_def.test_hint().map(|(bin_op, left_src, right_src)| {

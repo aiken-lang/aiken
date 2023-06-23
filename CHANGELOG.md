@@ -10,6 +10,8 @@
   ```
   compare_with(a, >=, b) == compare_with(a, fn(l, r) { l >= r }, b)
   ```
+- **aiken-lang**: Make traces produced by expect dependent on the value of the
+  tracing flag.
 
 ### Fixed
 
