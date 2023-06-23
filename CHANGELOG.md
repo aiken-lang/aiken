@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken**: enhance `aiken new`
 - **aiken-lang**: Binary operator are now treated like first-class citizen in
   expressions. In particular, they can be used as function arguments directly:
 

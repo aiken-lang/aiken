@@ -19,8 +19,11 @@ pub struct Args {
     /// Project name
     name: String,
     /// Library only
-    #[clap(long)]
+    #[clap(long, short)]
     lib: bool,
+    /// Empty project
+    #[clap(long, short)]
+    empty: bool,
 }
 
 pub fn exec(args: Args) -> miette::Result<()> {
@@ -39,10 +42,10 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
         })?;
     }
 
-    create_lib_folder(&root, package_name)?;
+    create_lib(&root, package_name, args.empty)?;
 
     if !args.lib {
-        create_validators_folder(&root)?;
+        create_validators(&root, package_name, args.empty)?;
     }
 
     readme(&root, &package_name.repo)?;
@@ -67,6 +70,9 @@ fn print_success_message(package_name: &PackageName) {
 
                    {cd} {folder}
                    {aiken} check
+                   {aiken} build
+
+               {hint} You may want to update the {stdlib} version in {toml}. 
             "#,
             s = "successfully"
                 .if_supports_color(Stderr, |s| s.bright_green())
@@ -80,25 +86,73 @@ fn print_success_message(package_name: &PackageName) {
                 .if_supports_color(Stderr, |s| s.bright_blue()),
             aiken = "aiken"
                 .if_supports_color(Stderr, |s| s.purple())
-                .if_supports_color(Stderr, |s| s.bold())
+                .if_supports_color(Stderr, |s| s.bold()),
+            hint = "hint:"
+                .if_supports_color(Stderr, |s| s.cyan())
+                .if_supports_color(Stderr, |s| s.bold()),
+            stdlib = "stdlib"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold()),
+            toml = "aiken.toml"
+                .if_supports_color(Stderr, |s| s.bold()),
         }
     )
 }
 
-fn create_lib_folder(root: &Path, package_name: &PackageName) -> miette::Result<()> {
-    let nested_path = root.join("lib").join(&package_name.repo);
+fn create_lib(root: &Path, package_name: &PackageName, empty: bool) -> miette::Result<()> {
+    let lib = root.join("lib").join(&package_name.repo);
 
-    fs::create_dir_all(nested_path).into_diagnostic()?;
+    fs::create_dir_all(&lib).into_diagnostic()?;
 
-    Ok(())
+    if empty {
+        return Ok(());
+    }
+
+    fs::write(
+        lib.join("types.ak"),
+        formatdoc! {
+            r#"
+            /// Custom type
+            pub type Datum {{
+              /// A utf8 encoded message
+              message: ByteArray,
+            }}
+
+            test sum() {{
+              1 + 1 == 2
+            }}
+            "#,
+        },
+    )
+    .into_diagnostic()
 }
 
-fn create_validators_folder(root: &Path) -> miette::Result<()> {
+fn create_validators(root: &Path, package_name: &PackageName, empty: bool) -> miette::Result<()> {
     let validators = root.join("validators");
 
-    fs::create_dir_all(validators).into_diagnostic()?;
+    fs::create_dir_all(&validators).into_diagnostic()?;
 
-    Ok(())
+    if empty {
+        return Ok(());
+    }
+
+    fs::write(
+        validators.join("hello.ak"),
+        formatdoc! {
+            r#"
+            use aiken/transaction.{{ScriptContext}}
+            use {name}/types
+
+            validator {{
+              fn spend(datum: types.Datum, _redeemer: Data, _ctx: ScriptContext) -> Bool {{
+                datum.message == "Hello World!"
+              }}
+            }}
+            "#,
+            name = package_name.repo
+        },
+    )
+    .into_diagnostic()
 }
 
 fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
