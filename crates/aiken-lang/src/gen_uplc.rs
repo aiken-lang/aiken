@@ -1701,7 +1701,7 @@ impl<'a> CodeGenerator<'a> {
     ) {
         let mut value_stack = if assignment_properties.value_type.is_data()
             && !tipo.is_data()
-            && !pattern.is_discard()
+            && matches!(assignment_properties.kind, AssignmentKind::Expect)
         {
             let mut wrap_stack = pattern_stack.empty_with_scope();
             wrap_stack.un_wrap_data(tipo.clone().into());
@@ -1765,7 +1765,17 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
             Pattern::Discard { .. } => {
-                pattern_stack.let_assignment("_", value_stack);
+                if matches!(assignment_properties.kind, AssignmentKind::Let) {
+                    pattern_stack.let_assignment("_", value_stack);
+                } else {
+                    self.expect_pattern(
+                        pattern,
+                        pattern_stack,
+                        value_stack,
+                        tipo,
+                        assignment_properties,
+                    )
+                }
             }
             list @ Pattern::List { .. } => {
                 if matches!(assignment_properties.kind, AssignmentKind::Expect)
@@ -2097,7 +2107,12 @@ impl<'a> CodeGenerator<'a> {
                 self.expect_type(tipo, expect_stack, name, &mut IndexMap::new());
             }
             Pattern::Assign { .. } => todo!("Expect Assign not supported yet"),
-            Pattern::Discard { .. } => unreachable!(),
+            Pattern::Discard { .. } => {
+                let name = "__expect_discard";
+
+                expect_stack.let_assignment(name, value_stack);
+                self.expect_type(tipo, expect_stack, name, &mut IndexMap::new());
+            }
             Pattern::List { elements, tail, .. } => {
                 let inner_list_type = &tipo.get_inner_types()[0];
                 let mut names = vec![];

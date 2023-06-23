@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- **aiken-lang**: Fix expect _ = ... not including the cast from data logic if the type is data and right hand has a type annotation
 - **aiken-lang**: Fix for the final clause of a when expecting another clause
   afterwards in nested list cases.
 - **aiken-lang**: Fix for all elements were being destructured in tuple clauses
@@ -22,7 +23,8 @@
 - **aiken-lang**: Fix for tuple clause not consuming the next case causing
   incomplete contracts. Now tuple clause will always consume the next case
   unless it is the final clause
-  - **aiken-lang**: Fix for builtins using the incorrect data to type conversion when used as a function param.
+  - **aiken-lang**: Fix for builtins using the incorrect data to type conversion
+    when used as a function param.
 
 ## v1.0.10-alpha - 2023-06-13
 
