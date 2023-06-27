@@ -7,11 +7,11 @@ use itertools::Itertools;
 use uplc::ast::{Name, Program, Term};
 
 use crate::{
-    ast::{TypedDataType, TypedFunction, TypedValidator},
+    ast::{AssignmentKind, Span, TypedDataType, TypedFunction, TypedValidator},
     expr::TypedExpr,
     gen_uplc::{
         air::Air,
-        builder::{self as build, DataTypeKey, FunctionAccessKey},
+        builder::{self as build, AssignmentProperties, DataTypeKey, FunctionAccessKey},
         tree::AirTree,
         CodeGenFunction,
     },
@@ -82,12 +82,16 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::String { value, .. } => AirTree::string(value),
             TypedExpr::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
             TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
-                AirTree::sequence(
-                    expressions
-                        .iter()
-                        .map(|expression| self.build(expression))
-                        .collect_vec(),
-                )
+                let mut expressions = expressions.clone();
+
+                let mut last_exp = self.build(&expressions.pop().unwrap());
+
+                while let Some(expression) = expressions.pop() {
+                    let exp_tree = self.build(&expression);
+
+                    last_exp = AirTree::hoist_let(exp_tree, last_exp);
+                }
+                last_exp
             }
 
             TypedExpr::Var {
@@ -236,7 +240,7 @@ impl<'a> CodeGenerator<'a> {
                     pattern,
                     air_value,
                     tipo,
-                    build::AssignmentProperties {
+                    AssignmentProperties {
                         value_type: value.tipo(),
                         kind: *kind,
                     },
@@ -247,7 +251,46 @@ impl<'a> CodeGenerator<'a> {
                 tipo, then, text, ..
             } => AirTree::trace(self.build(text), tipo.clone(), self.build(then)),
 
-            TypedExpr::When { .. } => todo!(),
+            TypedExpr::When {
+                tipo,
+                subject,
+                clauses,
+                ..
+            } => {
+                let mut clauses = clauses.clone();
+
+                if clauses.is_empty() {
+                    panic!("We should have one clause at least")
+                } else if clauses.len() == 1 {
+                    let last_clause = clauses.pop().unwrap();
+
+                    let clause_then = self.build(&last_clause.then);
+
+                    let subject_val = self.build(subject);
+
+                    let assignment = builder::assignment_air_tree(
+                        &last_clause.pattern,
+                        subject_val,
+                        tipo,
+                        AssignmentProperties {
+                            value_type: subject.tipo(),
+                            kind: AssignmentKind::Let,
+                        },
+                    );
+
+                    AirTree::hoist_let(assignment, clause_then)
+                } else {
+                    clauses = if subject.tipo().is_list() {
+                        build::rearrange_clauses(clauses.clone())
+                    } else {
+                        clauses
+                    };
+
+                    let last_clause = clauses.pop().unwrap();
+
+                    todo!()
+                }
+            }
 
             TypedExpr::If {
                 branches,
@@ -270,7 +313,63 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => AirTree::record_access(*index, tipo.clone(), self.build(record)),
 
-            TypedExpr::ModuleSelect { .. } => todo!(),
+            TypedExpr::ModuleSelect {
+                tipo,
+                module_name,
+                constructor,
+                ..
+            } => match constructor {
+                ModuleValueConstructor::Record {
+                    name,
+                    arity,
+                    tipo,
+                    field_map,
+                    ..
+                } => {
+                    let data_type = build::lookup_data_type_by_tipo(&self.data_types, tipo);
+
+                    let val_constructor = ValueConstructor::public(
+                        tipo.clone(),
+                        ValueConstructorVariant::Record {
+                            name: name.clone(),
+                            arity: *arity,
+                            field_map: field_map.clone(),
+                            location: Span::empty(),
+                            module: module_name.clone(),
+                            constructors_count: data_type.unwrap().constructors.len() as u16,
+                        },
+                    );
+
+                    AirTree::var(val_constructor, name, "")
+                }
+                ModuleValueConstructor::Fn { name, module, .. } => {
+                    let func = self.functions.get(&FunctionAccessKey {
+                        module_name: module_name.clone(),
+                        function_name: name.clone(),
+                        variant_name: String::new(),
+                    });
+
+                    let type_info = self.module_types.get(module_name).unwrap();
+                    let value = type_info.values.get(name).unwrap();
+
+                    if let Some(_func) = func {
+                        AirTree::var(
+                            ValueConstructor::public(tipo.clone(), value.variant.clone()),
+                            format!("{module}_{name}"),
+                            "",
+                        )
+                    } else {
+                        let ValueConstructorVariant::ModuleFn {
+                            builtin: Some(builtin), ..
+                        } = &value.variant else {
+                            unreachable!("Didn't find the function definition.")
+                        };
+
+                        AirTree::builtin(*builtin, tipo.clone(), vec![])
+                    }
+                }
+                ModuleValueConstructor::Constant { literal, .. } => builder::constants_ir(literal),
+            },
 
             TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
                 elems.iter().map(|elem| self.build(elem)).collect_vec(),
