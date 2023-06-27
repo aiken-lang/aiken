@@ -8,6 +8,7 @@ pub mod builtins;
 pub mod expr;
 pub mod format;
 pub mod gen_uplc;
+pub mod gen_uplc2;
 pub mod levenshtein;
 pub mod parser;
 pub mod pretty;
