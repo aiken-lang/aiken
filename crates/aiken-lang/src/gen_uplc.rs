@@ -33,6 +33,7 @@ pub mod air;
 pub mod builder;
 pub mod scope;
 pub mod stack;
+pub mod tree;
 
 use air::Air;
 use builder::{
