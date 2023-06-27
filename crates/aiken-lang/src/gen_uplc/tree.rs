@@ -78,7 +78,7 @@ pub enum AirTree {
     Let {
         name: String,
         value: Box<AirTree>,
-        hoisted_over: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
     },
     UnWrapData {
         tipo: Arc<Type>,
@@ -217,9 +217,6 @@ pub enum AirTree {
         then: Box<AirTree>,
     },
     NoOp,
-    Sequence {
-        expressions: Vec<AirTree>,
-    },
     FieldsEmpty {
         constr: Box<AirTree>,
     },
@@ -328,11 +325,11 @@ impl AirTree {
             arg: arg.into(),
         }
     }
-    pub fn let_assignment(name: impl ToString, value: AirTree, hoisting_over: AirTree) -> AirTree {
+    pub fn let_assignment(name: impl ToString, value: AirTree) -> AirTree {
         AirTree::Let {
             name: name.to_string(),
             value: value.into(),
-            hoisted_over: hoisting_over.into(),
+            hoisted_over: None.into(),
         }
     }
     pub fn unwrap_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
@@ -473,7 +470,7 @@ impl AirTree {
         tipo: Arc<Type>,
         otherwise: AirTree,
     ) -> AirTree {
-        assert!(branches.len() > 0);
+        assert!(!branches.is_empty());
         let last_if = branches.pop().unwrap();
 
         let mut final_if = AirTree::If {
@@ -593,9 +590,6 @@ impl AirTree {
     pub fn no_op() -> AirTree {
         AirTree::NoOp
     }
-    pub fn sequence(expressions: Vec<AirTree>) -> AirTree {
-        AirTree::Sequence { expressions }
-    }
     pub fn fields_empty(constr: AirTree) -> AirTree {
         AirTree::FieldsEmpty {
             constr: constr.into(),
@@ -603,6 +597,16 @@ impl AirTree {
     }
     pub fn list_empty(list: AirTree) -> AirTree {
         AirTree::ListEmpty { list: list.into() }
+    }
+    pub fn hoist_let(assignment: AirTree, next_exp: AirTree) -> AirTree {
+        match assignment {
+            AirTree::Let { name, value, .. } => AirTree::Let {
+                name,
+                value,
+                hoisted_over: Some(next_exp).into(),
+            },
+            _ => unimplemented!("IS THIS REACHABLE?"),
+        }
     }
 
     pub fn to_air_vec(tree: AirTree) -> Vec<Air> {
@@ -748,7 +752,6 @@ impl AirTree {
             AirTree::ErrorTerm { tipo } => todo!(),
             AirTree::Trace { tipo, msg, then } => todo!(),
             AirTree::NoOp => todo!(),
-            AirTree::Sequence { .. } => todo!(),
             AirTree::FieldsEmpty { constr } => todo!(),
             AirTree::ListEmpty { list } => todo!(),
         }
