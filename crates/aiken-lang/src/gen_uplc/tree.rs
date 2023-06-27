@@ -153,6 +153,7 @@ pub enum AirTree {
     // If
     If {
         tipo: Arc<Type>,
+        pattern: Box<AirTree>,
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
     },
@@ -216,6 +217,9 @@ pub enum AirTree {
         then: Box<AirTree>,
     },
     NoOp,
+    Sequence {
+        expressions: Vec<AirTree>,
+    },
     FieldsEmpty {
         constr: Box<AirTree>,
     },
@@ -241,8 +245,22 @@ impl AirTree {
     pub fn bool(value: bool) -> AirTree {
         AirTree::Bool { value }
     }
-    pub fn list(items: Vec<AirTree>, tipo: Arc<Type>, tail: bool) -> AirTree {
-        AirTree::List { tipo, tail, items }
+    pub fn list(mut items: Vec<AirTree>, tipo: Arc<Type>, tail: Option<AirTree>) -> AirTree {
+        if let Some(tail) = tail {
+            items.push(tail);
+
+            AirTree::List {
+                tipo,
+                tail: true,
+                items,
+            }
+        } else {
+            AirTree::List {
+                tipo,
+                tail: false,
+                items,
+            }
+        }
     }
     pub fn tuple(items: Vec<AirTree>, tipo: Arc<Type>) -> AirTree {
         AirTree::Tuple { tipo, items }
@@ -450,20 +468,26 @@ impl AirTree {
             then: then.into(),
         }
     }
-    pub fn if_branches(mut branches: Vec<AirTree>, tipo: Arc<Type>, otherwise: AirTree) -> AirTree {
+    pub fn if_branches(
+        mut branches: Vec<(AirTree, AirTree)>,
+        tipo: Arc<Type>,
+        otherwise: AirTree,
+    ) -> AirTree {
         assert!(branches.len() > 0);
         let last_if = branches.pop().unwrap();
 
         let mut final_if = AirTree::If {
             tipo: tipo.clone(),
-            then: last_if.into(),
+            pattern: last_if.0.into(),
+            then: last_if.1.into(),
             otherwise: otherwise.into(),
         };
 
         while let Some(branch) = branches.pop() {
             final_if = AirTree::If {
                 tipo: tipo.clone(),
-                then: branch.into(),
+                pattern: branch.0.into(),
+                then: branch.1.into(),
                 otherwise: final_if.into(),
             };
         }
@@ -569,6 +593,9 @@ impl AirTree {
     pub fn no_op() -> AirTree {
         AirTree::NoOp
     }
+    pub fn sequence(expressions: Vec<AirTree>) -> AirTree {
+        AirTree::Sequence { expressions }
+    }
     pub fn fields_empty(constr: AirTree) -> AirTree {
         AirTree::FieldsEmpty {
             constr: constr.into(),
@@ -672,6 +699,7 @@ impl AirTree {
             AirTree::Finally { pattern, then } => todo!(),
             AirTree::If {
                 tipo,
+                pattern,
                 then,
                 otherwise,
             } => todo!(),
@@ -720,6 +748,7 @@ impl AirTree {
             AirTree::ErrorTerm { tipo } => todo!(),
             AirTree::Trace { tipo, msg, then } => todo!(),
             AirTree::NoOp => todo!(),
+            AirTree::Sequence { .. } => todo!(),
             AirTree::FieldsEmpty { constr } => todo!(),
             AirTree::ListEmpty { list } => todo!(),
         }
