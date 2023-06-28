@@ -18,13 +18,10 @@ jobs:
           ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v20
+        uses: DeterminateSystems/nix-installer-action@v4
 
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v12
-        with:
-          name: aiken-lang
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Run the Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v1
 
       - name: Run cargo2nix
         shell: bash
