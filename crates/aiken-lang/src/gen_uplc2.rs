@@ -389,7 +389,6 @@ impl<'a> CodeGenerator<'a> {
                 let mut update_args = vec![];
 
                 let mut highest_index = 0;
-                let record = self.build(spread);
 
                 for arg in args
                     .iter()
@@ -409,7 +408,7 @@ impl<'a> CodeGenerator<'a> {
                     index_types,
                     highest_index,
                     tipo.clone(),
-                    record,
+                    self.build(spread),
                     update_args,
                 )
             }
