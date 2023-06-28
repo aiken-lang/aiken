@@ -1765,16 +1765,19 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
             Pattern::Discard { .. } => {
-                if matches!(assignment_properties.kind, AssignmentKind::Let) {
-                    pattern_stack.let_assignment("_", value_stack);
-                } else {
+                if matches!(assignment_properties.kind, AssignmentKind::Expect)
+                    && assignment_properties.value_type.is_data()
+                    && !tipo.is_data()
+                {
                     self.expect_pattern(
                         pattern,
                         pattern_stack,
                         value_stack,
                         tipo,
                         assignment_properties,
-                    )
+                    );
+                } else {
+                    pattern_stack.let_assignment("_", value_stack);
                 }
             }
             list @ Pattern::List { .. } => {
