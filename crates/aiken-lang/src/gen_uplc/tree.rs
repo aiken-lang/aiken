@@ -3,8 +3,8 @@ use std::sync::Arc;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{BinOp, UnOp},
-    tipo::{Type, ValueConstructor},
+    ast::{BinOp, Span, UnOp},
+    tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 
 use super::air::Air;
@@ -91,10 +91,12 @@ pub enum AirTree {
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
     },
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
     },
     // When
     When {
@@ -216,7 +218,9 @@ pub enum AirTree {
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
-    NoOp,
+    NoOp {
+        hoisted_over: Box<Option<AirTree>>,
+    },
     FieldsEmpty {
         constr: Box<AirTree>,
     },
@@ -274,6 +278,18 @@ impl AirTree {
             constructor,
             name: name.to_string(),
             variant_name: variant_name.to_string(),
+        }
+    }
+    pub fn local_var(name: impl ToString, tipo: Arc<Type>) -> AirTree {
+        AirTree::Var {
+            constructor: ValueConstructor::public(
+                tipo,
+                ValueConstructorVariant::LocalVariable {
+                    location: Span::empty(),
+                },
+            ),
+            name: name.to_string(),
+            variant_name: "".to_string(),
         }
     }
     pub fn call(func: AirTree, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
@@ -348,12 +364,14 @@ impl AirTree {
         AirTree::AssertConstr {
             constr_index,
             constr: constr.into(),
+            hoisted_over: None.into(),
         }
     }
     pub fn assert_bool(is_true: bool, value: AirTree) -> AirTree {
         AirTree::AssertBool {
             is_true,
             value: value.into(),
+            hoisted_over: None.into(),
         }
     }
     pub fn when(
@@ -588,7 +606,9 @@ impl AirTree {
         }
     }
     pub fn no_op() -> AirTree {
-        AirTree::NoOp
+        AirTree::NoOp {
+            hoisted_over: None.into(),
+        }
     }
     pub fn fields_empty(constr: AirTree) -> AirTree {
         AirTree::FieldsEmpty {
@@ -605,13 +625,30 @@ impl AirTree {
                 value,
                 hoisted_over: Some(next_exp).into(),
             },
+            AirTree::AssertBool { is_true, value, .. } => AirTree::AssertBool {
+                is_true,
+                value,
+                hoisted_over: Some(next_exp).into(),
+            },
+            AirTree::AssertConstr {
+                constr_index,
+                constr,
+                ..
+            } => AirTree::AssertConstr {
+                constr_index,
+                constr,
+                hoisted_over: Some(next_exp).into(),
+            },
+            AirTree::NoOp { .. } => AirTree::NoOp {
+                hoisted_over: Some(next_exp).into(),
+            },
             _ => unimplemented!("IS THIS REACHABLE?"),
         }
     }
 
-    pub fn to_air_vec(tree: AirTree) -> Vec<Air> {
+    pub fn to_air_vec(air_vec: &mut Vec<Air>, tree: AirTree) {
         match tree {
-            AirTree::Int { value } => todo!(),
+            AirTree::Int { value } => air_vec.push(todo!()),
             AirTree::String { value } => todo!(),
             AirTree::ByteArray { bytes } => todo!(),
             AirTree::Bool { value } => todo!(),
@@ -649,11 +686,8 @@ impl AirTree {
             } => todo!(),
             AirTree::UnWrapData { tipo, value } => todo!(),
             AirTree::WrapData { tipo, value } => todo!(),
-            AirTree::AssertConstr {
-                constr_index,
-                constr,
-            } => todo!(),
-            AirTree::AssertBool { is_true, value } => todo!(),
+            AirTree::AssertConstr { .. } => todo!(),
+            AirTree::AssertBool { .. } => todo!(),
             AirTree::When {
                 tipo,
                 subject_name,
@@ -751,7 +785,7 @@ impl AirTree {
             } => todo!(),
             AirTree::ErrorTerm { tipo } => todo!(),
             AirTree::Trace { tipo, msg, then } => todo!(),
-            AirTree::NoOp => todo!(),
+            AirTree::NoOp { .. } => todo!(),
             AirTree::FieldsEmpty { constr } => todo!(),
             AirTree::ListEmpty { list } => todo!(),
         }
