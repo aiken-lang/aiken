@@ -11,6 +11,78 @@ use super::air::Air;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AirTree {
+    Statement(AirStatement),
+    Expression(AirExpression),
+    IncompleteSequence(Vec<AirTree>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AirStatement {
+    // Assignment
+    Let {
+        name: String,
+        value: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    DefineFunc {
+        func_name: String,
+        module_name: String,
+        params: Vec<String>,
+        recursive: bool,
+        variant_name: String,
+        func_body: Box<AirTree>,
+        hoisted_over: Box<AirTree>,
+    },
+    // Assertions
+    AssertConstr {
+        constr_index: usize,
+        constr: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    AssertBool {
+        is_true: bool,
+        value: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    // Field Access
+    FieldsExpose {
+        indices: Vec<(usize, String, Arc<Type>)>,
+        check_last_item: bool,
+        record: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    // List Access
+    ListAccessor {
+        tipo: Arc<Type>,
+        names: Vec<String>,
+        tail: bool,
+        check_last_item: bool,
+        list: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    ListExpose {
+        tipo: Arc<Type>,
+        tail_head_names: Vec<(String, String)>,
+        tail: Option<(String, String)>,
+        list: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    // Tuple Access
+    TupleAccessor {
+        names: Vec<String>,
+        tipo: Arc<Type>,
+        check_last_item: bool,
+        tuple: Box<AirTree>,
+        hoisted_over: Box<Option<AirTree>>,
+    },
+    // Misc.
+    NoOp {
+        hoisted_over: Box<Option<AirTree>>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AirExpression {
     // Primitives
     Int {
         value: String,
@@ -45,15 +117,7 @@ pub enum AirTree {
         func: Box<AirTree>,
         args: Vec<AirTree>,
     },
-    DefineFunc {
-        func_name: String,
-        module_name: String,
-        params: Vec<String>,
-        recursive: bool,
-        variant_name: String,
-        func_body: Box<AirTree>,
-        hoisted_over: Box<AirTree>,
-    },
+
     Fn {
         params: Vec<String>,
         func_body: Box<AirTree>,
@@ -74,12 +138,7 @@ pub enum AirTree {
         op: UnOp,
         arg: Box<AirTree>,
     },
-    // Assignment
-    Let {
-        name: String,
-        value: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
-    },
+
     UnWrapData {
         tipo: Arc<Type>,
         value: Box<AirTree>,
@@ -88,16 +147,7 @@ pub enum AirTree {
         tipo: Arc<Type>,
         value: Box<AirTree>,
     },
-    AssertConstr {
-        constr_index: usize,
-        constr: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
-    },
-    AssertBool {
-        is_true: bool,
-        value: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
-    },
+
     // When
     When {
         tipo: Arc<Type>,
@@ -178,32 +228,7 @@ pub enum AirTree {
         tipo: Arc<Type>,
         record: Box<AirTree>,
     },
-    FieldsExpose {
-        indices: Vec<(usize, String, Arc<Type>)>,
-        check_last_item: bool,
-        record: Box<AirTree>,
-    },
-    // ListAccess
-    ListAccessor {
-        tipo: Arc<Type>,
-        names: Vec<String>,
-        tail: bool,
-        check_last_item: bool,
-        list: Box<AirTree>,
-    },
-    ListExpose {
-        tipo: Arc<Type>,
-        tail_head_names: Vec<(String, String)>,
-        tail: Option<(String, String)>,
-        list: Box<AirTree>,
-    },
     // Tuple Access
-    TupleAccessor {
-        names: Vec<String>,
-        tipo: Arc<Type>,
-        check_last_item: bool,
-        tuple: Box<AirTree>,
-    },
     TupleIndex {
         tipo: Arc<Type>,
         tuple_index: usize,
@@ -218,9 +243,6 @@ pub enum AirTree {
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
-    NoOp {
-        hoisted_over: Box<Option<AirTree>>,
-    },
     FieldsEmpty {
         constr: Box<AirTree>,
     },
@@ -231,57 +253,57 @@ pub enum AirTree {
 
 impl AirTree {
     pub fn int(value: impl ToString) -> AirTree {
-        AirTree::Int {
+        AirTree::Expression(AirExpression::Int {
             value: value.to_string(),
-        }
+        })
     }
     pub fn string(value: impl ToString) -> AirTree {
-        AirTree::String {
+        AirTree::Expression(AirExpression::String {
             value: value.to_string(),
-        }
+        })
     }
     pub fn byte_array(bytes: Vec<u8>) -> AirTree {
-        AirTree::ByteArray { bytes }
+        AirTree::Expression(AirExpression::ByteArray { bytes })
     }
     pub fn bool(value: bool) -> AirTree {
-        AirTree::Bool { value }
+        AirTree::Expression(AirExpression::Bool { value })
     }
     pub fn list(mut items: Vec<AirTree>, tipo: Arc<Type>, tail: Option<AirTree>) -> AirTree {
         if let Some(tail) = tail {
             items.push(tail);
 
-            AirTree::List {
+            AirTree::Expression(AirExpression::List {
                 tipo,
                 tail: true,
                 items,
-            }
+            })
         } else {
-            AirTree::List {
+            AirTree::Expression(AirExpression::List {
                 tipo,
                 tail: false,
                 items,
-            }
+            })
         }
     }
     pub fn tuple(items: Vec<AirTree>, tipo: Arc<Type>) -> AirTree {
-        AirTree::Tuple { tipo, items }
+        AirTree::Expression(AirExpression::Tuple { tipo, items })
     }
     pub fn void() -> AirTree {
-        AirTree::Void
+        AirTree::Expression(AirExpression::Void)
     }
     pub fn var(
         constructor: ValueConstructor,
         name: impl ToString,
         variant_name: impl ToString,
     ) -> AirTree {
-        AirTree::Var {
+        AirTree::Expression(AirExpression::Var {
             constructor,
             name: name.to_string(),
             variant_name: variant_name.to_string(),
-        }
+        })
     }
     pub fn local_var(name: impl ToString, tipo: Arc<Type>) -> AirTree {
-        AirTree::Var {
+        AirTree::Expression(AirExpression::Var {
             constructor: ValueConstructor::public(
                 tipo,
                 ValueConstructorVariant::LocalVariable {
@@ -290,14 +312,14 @@ impl AirTree {
             ),
             name: name.to_string(),
             variant_name: "".to_string(),
-        }
+        })
     }
     pub fn call(func: AirTree, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
-        AirTree::Call {
+        AirTree::Expression(AirExpression::Call {
             tipo,
             func: func.into(),
             args,
-        }
+        })
     }
     pub fn define_func(
         func_name: impl ToString,
@@ -308,7 +330,7 @@ impl AirTree {
         func_body: AirTree,
         hoisting_over: AirTree,
     ) -> AirTree {
-        AirTree::DefineFunc {
+        AirTree::Statement(AirStatement::DefineFunc {
             func_name: func_name.to_string(),
             module_name: module_name.to_string(),
             params,
@@ -316,63 +338,63 @@ impl AirTree {
             variant_name: variant_name.to_string(),
             func_body: func_body.into(),
             hoisted_over: hoisting_over.into(),
-        }
+        })
     }
     pub fn anon_func(params: Vec<String>, func_body: AirTree) -> AirTree {
-        AirTree::Fn {
+        AirTree::Expression(AirExpression::Fn {
             params,
             func_body: func_body.into(),
-        }
+        })
     }
     pub fn builtin(func: DefaultFunction, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
-        AirTree::Builtin { func, tipo, args }
+        AirTree::Expression(AirExpression::Builtin { func, tipo, args })
     }
     pub fn binop(op: BinOp, tipo: Arc<Type>, left: AirTree, right: AirTree) -> AirTree {
-        AirTree::BinOp {
+        AirTree::Expression(AirExpression::BinOp {
             name: op,
             tipo,
             left: left.into(),
             right: right.into(),
-        }
+        })
     }
     pub fn unop(op: UnOp, arg: AirTree) -> AirTree {
-        AirTree::UnOp {
+        AirTree::Expression(AirExpression::UnOp {
             op,
             arg: arg.into(),
-        }
+        })
     }
     pub fn let_assignment(name: impl ToString, value: AirTree) -> AirTree {
-        AirTree::Let {
+        AirTree::Statement(AirStatement::Let {
             name: name.to_string(),
             value: value.into(),
             hoisted_over: None.into(),
-        }
+        })
     }
     pub fn unwrap_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
-        AirTree::UnWrapData {
+        AirTree::Expression(AirExpression::UnWrapData {
             tipo,
             value: value.into(),
-        }
+        })
     }
     pub fn wrap_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
-        AirTree::WrapData {
+        AirTree::Expression(AirExpression::WrapData {
             tipo,
             value: value.into(),
-        }
+        })
     }
     pub fn assert_constr_index(constr_index: usize, constr: AirTree) -> AirTree {
-        AirTree::AssertConstr {
+        AirTree::Statement(AirStatement::AssertConstr {
             constr_index,
             constr: constr.into(),
             hoisted_over: None.into(),
-        }
+        })
     }
     pub fn assert_bool(is_true: bool, value: AirTree) -> AirTree {
-        AirTree::AssertBool {
+        AirTree::Statement(AirStatement::AssertBool {
             is_true,
             value: value.into(),
             hoisted_over: None.into(),
-        }
+        })
     }
     pub fn when(
         subject_name: impl ToString,
@@ -380,12 +402,12 @@ impl AirTree {
         clauses: Vec<AirTree>,
         final_clause: AirTree,
     ) -> AirTree {
-        AirTree::When {
+        AirTree::Expression(AirExpression::When {
             tipo,
             subject_name: subject_name.to_string(),
             clauses,
             final_clause: final_clause.into(),
-        }
+        })
     }
     pub fn clause(
         subject_name: impl ToString,
@@ -395,14 +417,14 @@ impl AirTree {
         otherwise: AirTree,
         complex_clause: bool,
     ) -> AirTree {
-        AirTree::Clause {
+        AirTree::Expression(AirExpression::Clause {
             tipo,
             subject_name: subject_name.to_string(),
             complex_clause,
             pattern: pattern.into(),
             then: then.into(),
             otherwise: otherwise.into(),
-        }
+        })
     }
     pub fn list_clause(
         tail_name: impl ToString,
@@ -412,14 +434,14 @@ impl AirTree {
         next_tail_name: Option<String>,
         complex_clause: bool,
     ) -> AirTree {
-        AirTree::ListClause {
+        AirTree::Expression(AirExpression::ListClause {
             tipo,
             tail_name: tail_name.to_string(),
             next_tail_name,
             complex_clause,
             then: then.into(),
             otherwise: otherwise.into(),
-        }
+        })
     }
     pub fn tuple_clause(
         subject_name: impl ToString,
@@ -432,7 +454,7 @@ impl AirTree {
     ) -> AirTree {
         let type_count = tipo.get_inner_types().len();
 
-        AirTree::TupleClause {
+        AirTree::Expression(AirExpression::TupleClause {
             tipo,
             indices,
             predefined_indices,
@@ -441,13 +463,13 @@ impl AirTree {
             complex_clause,
             then: then.into(),
             otherwise: otherwise.into(),
-        }
+        })
     }
     pub fn wrap_clause(then: AirTree, otherwise: AirTree) -> AirTree {
-        AirTree::WrapClause {
+        AirTree::Expression(AirExpression::WrapClause {
             then: then.into(),
             otherwise: otherwise.into(),
-        }
+        })
     }
     pub fn clause_guard(
         subject_name: impl ToString,
@@ -455,12 +477,12 @@ impl AirTree {
         tipo: Arc<Type>,
         then: AirTree,
     ) -> AirTree {
-        AirTree::ClauseGuard {
+        AirTree::Expression(AirExpression::ClauseGuard {
             subject_name: subject_name.to_string(),
             tipo,
             pattern: pattern.into(),
             then: then.into(),
-        }
+        })
     }
     pub fn list_clause_guard(
         tail_name: impl ToString,
@@ -469,19 +491,19 @@ impl AirTree {
         then: AirTree,
         next_tail_name: Option<String>,
     ) -> AirTree {
-        AirTree::ListClauseGuard {
+        AirTree::Expression(AirExpression::ListClauseGuard {
             tipo,
             tail_name: tail_name.to_string(),
             next_tail_name,
             inverse,
             then: then.into(),
-        }
+        })
     }
     pub fn finally(pattern: AirTree, then: AirTree) -> AirTree {
-        AirTree::Finally {
+        AirTree::Expression(AirExpression::Finally {
             pattern: pattern.into(),
             then: then.into(),
-        }
+        })
     }
     pub fn if_branches(
         mut branches: Vec<(AirTree, AirTree)>,
@@ -491,26 +513,26 @@ impl AirTree {
         assert!(!branches.is_empty());
         let last_if = branches.pop().unwrap();
 
-        let mut final_if = AirTree::If {
+        let mut final_if = AirTree::Expression(AirExpression::If {
             tipo: tipo.clone(),
             pattern: last_if.0.into(),
             then: last_if.1.into(),
             otherwise: otherwise.into(),
-        };
+        });
 
         while let Some(branch) = branches.pop() {
-            final_if = AirTree::If {
+            final_if = AirTree::Expression(AirExpression::If {
                 tipo: tipo.clone(),
                 pattern: branch.0.into(),
                 then: branch.1.into(),
                 otherwise: final_if.into(),
-            };
+            });
         }
 
         final_if
     }
     pub fn create_constr(tag: usize, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
-        AirTree::Constr { tag, tipo, args }
+        AirTree::Expression(AirExpression::Constr { tag, tipo, args })
     }
 
     pub fn record_update(
@@ -520,20 +542,20 @@ impl AirTree {
         record: AirTree,
         args: Vec<AirTree>,
     ) -> AirTree {
-        AirTree::RecordUpdate {
+        AirTree::Expression(AirExpression::RecordUpdate {
             highest_index,
             indices,
             tipo,
             record: record.into(),
             args,
-        }
+        })
     }
     pub fn record_access(field_index: u64, tipo: Arc<Type>, record: AirTree) -> AirTree {
-        AirTree::RecordAccess {
+        AirTree::Expression(AirExpression::RecordAccess {
             field_index,
             tipo,
             record: record.into(),
-        }
+        })
     }
 
     pub fn fields_expose(
@@ -541,11 +563,12 @@ impl AirTree {
         check_last_item: bool,
         record: AirTree,
     ) -> AirTree {
-        AirTree::FieldsExpose {
+        AirTree::Statement(AirStatement::FieldsExpose {
             indices,
             check_last_item,
             record: record.into(),
-        }
+            hoisted_over: None.into(),
+        })
     }
     pub fn list_access(
         names: Vec<String>,
@@ -554,13 +577,14 @@ impl AirTree {
         check_last_item: bool,
         list: AirTree,
     ) -> AirTree {
-        AirTree::ListAccessor {
+        AirTree::Statement(AirStatement::ListAccessor {
             tipo,
             names,
             tail,
             check_last_item,
             list: list.into(),
-        }
+            hoisted_over: None.into(),
+        })
     }
     pub fn list_expose(
         tail_head_names: Vec<(String, String)>,
@@ -568,12 +592,13 @@ impl AirTree {
         tipo: Arc<Type>,
         list: AirTree,
     ) -> AirTree {
-        AirTree::ListExpose {
+        AirTree::Statement(AirStatement::ListExpose {
             tipo,
             tail_head_names,
             tail,
             list: list.into(),
-        }
+            hoisted_over: None.into(),
+        })
     }
     pub fn tuple_access(
         names: Vec<String>,
@@ -581,213 +606,80 @@ impl AirTree {
         check_last_item: bool,
         tuple: AirTree,
     ) -> AirTree {
-        AirTree::TupleAccessor {
+        AirTree::Statement(AirStatement::TupleAccessor {
             names,
             tipo,
             check_last_item,
             tuple: tuple.into(),
-        }
+            hoisted_over: None.into(),
+        })
     }
     pub fn tuple_index(tuple_index: usize, tipo: Arc<Type>, tuple: AirTree) -> AirTree {
-        AirTree::TupleIndex {
+        AirTree::Expression(AirExpression::TupleIndex {
             tipo,
             tuple_index,
             tuple: tuple.into(),
-        }
+        })
     }
     pub fn error(tipo: Arc<Type>) -> AirTree {
-        AirTree::ErrorTerm { tipo }
+        AirTree::Expression(AirExpression::ErrorTerm { tipo })
     }
     pub fn trace(msg: AirTree, tipo: Arc<Type>, then: AirTree) -> AirTree {
-        AirTree::Trace {
+        AirTree::Expression(AirExpression::Trace {
             tipo,
             msg: msg.into(),
             then: then.into(),
-        }
+        })
     }
     pub fn no_op() -> AirTree {
-        AirTree::NoOp {
+        AirTree::Statement(AirStatement::NoOp {
             hoisted_over: None.into(),
-        }
+        })
     }
     pub fn fields_empty(constr: AirTree) -> AirTree {
-        AirTree::FieldsEmpty {
+        AirTree::Expression(AirExpression::FieldsEmpty {
             constr: constr.into(),
-        }
+        })
     }
     pub fn list_empty(list: AirTree) -> AirTree {
-        AirTree::ListEmpty { list: list.into() }
+        AirTree::Expression(AirExpression::ListEmpty { list: list.into() })
     }
-    pub fn hoist_let(assignment: AirTree, next_exp: AirTree) -> AirTree {
-        match assignment {
-            AirTree::Let { name, value, .. } => AirTree::Let {
-                name,
-                value,
-                hoisted_over: Some(next_exp).into(),
+    pub fn hoist_over(mut assignment: AirTree, next_exp: AirTree) -> AirTree {
+        match &mut assignment {
+            AirTree::Statement(st) => match st {
+                AirStatement::Let { hoisted_over, .. }
+                | AirStatement::AssertConstr { hoisted_over, .. }
+                | AirStatement::AssertBool { hoisted_over, .. }
+                | AirStatement::FieldsExpose { hoisted_over, .. }
+                | AirStatement::ListAccessor { hoisted_over, .. }
+                | AirStatement::NoOp { hoisted_over }
+                | AirStatement::ListExpose { hoisted_over, .. }
+                | AirStatement::TupleAccessor { hoisted_over, .. } => {
+                    *hoisted_over = Some(next_exp).into();
+                    assignment
+                }
+                AirStatement::DefineFunc { .. } => {
+                    unreachable!("Should not use this function to hoist defined functions.")
+                }
             },
-            AirTree::AssertBool { is_true, value, .. } => AirTree::AssertBool {
-                is_true,
-                value,
-                hoisted_over: Some(next_exp).into(),
-            },
-            AirTree::AssertConstr {
-                constr_index,
-                constr,
-                ..
-            } => AirTree::AssertConstr {
-                constr_index,
-                constr,
-                hoisted_over: Some(next_exp).into(),
-            },
-            AirTree::NoOp { .. } => AirTree::NoOp {
-                hoisted_over: Some(next_exp).into(),
-            },
-            _ => unimplemented!("IS THIS REACHABLE?"),
+            AirTree::Expression(_) => {
+                unreachable!("Trying to hoist an expression onto an expression.")
+            }
+            AirTree::IncompleteSequence(seq) => {
+                let mut final_exp = next_exp;
+                while let Some(assign) = seq.pop() {
+                    final_exp = Self::hoist_over(assign, final_exp);
+                }
+                final_exp
+            }
         }
     }
 
-    pub fn to_air_vec(air_vec: &mut Vec<Air>, tree: AirTree) {
+    pub fn to_air_vec(_air_vec: &mut Vec<Air>, tree: AirTree) {
         match tree {
-            AirTree::Int { value } => air_vec.push(todo!()),
-            AirTree::String { value } => todo!(),
-            AirTree::ByteArray { bytes } => todo!(),
-            AirTree::Bool { value } => todo!(),
-            AirTree::List { tipo, tail, items } => todo!(),
-            AirTree::Tuple { tipo, items } => todo!(),
-            AirTree::Void => todo!(),
-            AirTree::Var {
-                constructor,
-                name,
-                variant_name,
-            } => todo!(),
-            AirTree::Call { tipo, func, args } => todo!(),
-            AirTree::DefineFunc {
-                func_name,
-                module_name,
-                params,
-                recursive,
-                variant_name,
-                func_body,
-                hoisted_over,
-            } => todo!(),
-            AirTree::Fn { params, func_body } => todo!(),
-            AirTree::Builtin { func, tipo, args } => todo!(),
-            AirTree::BinOp {
-                name,
-                tipo,
-                left,
-                right,
-            } => todo!(),
-            AirTree::UnOp { op, arg } => todo!(),
-            AirTree::Let {
-                name,
-                value,
-                hoisted_over,
-            } => todo!(),
-            AirTree::UnWrapData { tipo, value } => todo!(),
-            AirTree::WrapData { tipo, value } => todo!(),
-            AirTree::AssertConstr { .. } => todo!(),
-            AirTree::AssertBool { .. } => todo!(),
-            AirTree::When {
-                tipo,
-                subject_name,
-                clauses,
-                final_clause,
-            } => todo!(),
-            AirTree::Clause {
-                tipo,
-                subject_name,
-                complex_clause,
-                pattern,
-                then,
-                otherwise,
-            } => todo!(),
-            AirTree::ListClause {
-                tipo,
-                tail_name,
-                next_tail_name,
-                complex_clause,
-                then,
-                otherwise,
-            } => todo!(),
-            AirTree::WrapClause { then, otherwise } => todo!(),
-            AirTree::TupleClause {
-                tipo,
-                indices,
-                predefined_indices,
-                subject_name,
-                type_count,
-                complex_clause,
-                then,
-                otherwise,
-            } => todo!(),
-            AirTree::ClauseGuard {
-                subject_name,
-                tipo,
-                pattern,
-                then,
-            } => todo!(),
-            AirTree::ListClauseGuard {
-                tipo,
-                tail_name,
-                next_tail_name,
-                inverse,
-                then,
-            } => todo!(),
-            AirTree::Finally { pattern, then } => todo!(),
-            AirTree::If {
-                tipo,
-                pattern,
-                then,
-                otherwise,
-            } => todo!(),
-            AirTree::Constr { tag, tipo, args } => todo!(),
-            AirTree::RecordUpdate {
-                highest_index,
-                indices,
-                tipo,
-                record,
-                args,
-            } => todo!(),
-            AirTree::RecordAccess {
-                field_index,
-                tipo,
-                record,
-            } => todo!(),
-            AirTree::FieldsExpose {
-                indices,
-                check_last_item,
-                record,
-            } => todo!(),
-            AirTree::ListAccessor {
-                tipo,
-                names,
-                tail,
-                check_last_item,
-                list,
-            } => todo!(),
-            AirTree::ListExpose {
-                tipo,
-                tail_head_names,
-                tail,
-                list,
-            } => todo!(),
-            AirTree::TupleAccessor {
-                names,
-                tipo,
-                check_last_item,
-                tuple,
-            } => todo!(),
-            AirTree::TupleIndex {
-                tipo,
-                tuple_index,
-                tuple,
-            } => todo!(),
-            AirTree::ErrorTerm { tipo } => todo!(),
-            AirTree::Trace { tipo, msg, then } => todo!(),
-            AirTree::NoOp { .. } => todo!(),
-            AirTree::FieldsEmpty { constr } => todo!(),
-            AirTree::ListEmpty { list } => todo!(),
+            AirTree::Statement(_) => todo!(),
+            AirTree::Expression(_) => todo!(),
+            AirTree::IncompleteSequence(_) => todo!(),
         }
     }
 }

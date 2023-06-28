@@ -1,8 +1,6 @@
 mod builder;
 
-use std::{rc::Rc, sync::Arc};
-
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use uplc::ast::{Name, Program, Term};
 
@@ -84,12 +82,16 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
                 let mut expressions = expressions.clone();
 
-                let mut last_exp = self.build(&expressions.pop().unwrap());
+                let mut last_exp = self.build(&expressions.pop().unwrap_or_else(|| {
+                    unreachable!("Sequence or Pipeline should have at least one expression")
+                }));
+
+                assert!(matches!(last_exp, AirTree::Expression(_)));
 
                 while let Some(expression) = expressions.pop() {
                     let exp_tree = self.build(&expression);
 
-                    last_exp = AirTree::hoist_let(exp_tree, last_exp);
+                    last_exp = AirTree::hoist_over(exp_tree, last_exp);
                 }
                 last_exp
             }
@@ -243,6 +245,7 @@ impl<'a> CodeGenerator<'a> {
                     AssignmentProperties {
                         value_type: value.tipo(),
                         kind: *kind,
+                        remove_unused: true,
                     },
                 )
             }
@@ -260,7 +263,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut clauses = clauses.clone();
 
                 if clauses.is_empty() {
-                    panic!("We should have one clause at least")
+                    unreachable!("We should have one clause at least")
                 } else if clauses.len() == 1 {
                     let last_clause = clauses.pop().unwrap();
 
@@ -275,10 +278,11 @@ impl<'a> CodeGenerator<'a> {
                         AssignmentProperties {
                             value_type: subject.tipo(),
                             kind: AssignmentKind::Let,
+                            remove_unused: false,
                         },
                     );
 
-                    AirTree::hoist_let(assignment, clause_then)
+                    AirTree::hoist_over(assignment, clause_then)
                 } else {
                     clauses = if subject.tipo().is_list() {
                         build::rearrange_clauses(clauses.clone())
@@ -336,7 +340,12 @@ impl<'a> CodeGenerator<'a> {
                             field_map: field_map.clone(),
                             location: Span::empty(),
                             module: module_name.clone(),
-                            constructors_count: data_type.unwrap().constructors.len() as u16,
+                            constructors_count: data_type
+                                .unwrap_or_else(|| {
+                                    unreachable!("Created a module type without a definition?")
+                                })
+                                .constructors
+                                .len() as u16,
                         },
                     );
 

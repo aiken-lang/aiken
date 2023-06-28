@@ -60,6 +60,7 @@ pub struct FunctionAccessKey {
 pub struct AssignmentProperties {
     pub value_type: Arc<Type>,
     pub kind: AssignmentKind,
+    pub remove_unused: bool,
 }
 
 #[derive(Clone, Debug)]
