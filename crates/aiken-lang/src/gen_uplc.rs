@@ -501,6 +501,7 @@ impl<'a> CodeGenerator<'a> {
                     AssignmentProperties {
                         value_type: value.tipo(),
                         kind: *kind,
+                        remove_unused: true,
                     },
                 );
 
@@ -531,6 +532,7 @@ impl<'a> CodeGenerator<'a> {
                         AssignmentProperties {
                             value_type: clauses[0].then.tipo(),
                             kind: AssignmentKind::Let,
+                            remove_unused: false,
                         },
                     );
 
@@ -5182,6 +5184,7 @@ impl<'a> CodeGenerator<'a> {
                     AssignmentProperties {
                         value_type: data(),
                         kind: AssignmentKind::Expect,
+                        remove_unused: true,
                     },
                 );
                 value_stack.local_var(actual_type, &arg_name);
