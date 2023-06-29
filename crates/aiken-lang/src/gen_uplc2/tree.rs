@@ -23,7 +23,7 @@ pub enum AirStatement {
     Let {
         name: String,
         value: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     DefineFunc {
         func_name: String,
@@ -38,19 +38,19 @@ pub enum AirStatement {
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     // Field Access
     FieldsExpose {
         indices: Vec<(usize, String, Arc<Type>)>,
         check_last_item: bool,
         record: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     // List Access
     ListAccessor {
@@ -59,14 +59,14 @@ pub enum AirStatement {
         tail: bool,
         check_last_item: bool,
         list: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     ListExpose {
         tipo: Arc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
         list: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     // Tuple Access
     TupleAccessor {
@@ -74,11 +74,11 @@ pub enum AirStatement {
         tipo: Arc<Type>,
         check_last_item: bool,
         tuple: Box<AirTree>,
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     // Misc.
     NoOp {
-        hoisted_over: Box<Option<AirTree>>,
+        hoisted_over: Option<Box<AirTree>>,
     },
 }
 
@@ -368,7 +368,7 @@ impl AirTree {
         AirTree::Statement(AirStatement::Let {
             name: name.to_string(),
             value: value.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn unwrap_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
@@ -387,14 +387,14 @@ impl AirTree {
         AirTree::Statement(AirStatement::AssertConstr {
             constr_index,
             constr: constr.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn assert_bool(is_true: bool, value: AirTree) -> AirTree {
         AirTree::Statement(AirStatement::AssertBool {
             is_true,
             value: value.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn when(
@@ -568,7 +568,7 @@ impl AirTree {
             indices,
             check_last_item,
             record: record.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn list_access(
@@ -584,7 +584,7 @@ impl AirTree {
             tail,
             check_last_item,
             list: list.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn list_expose(
@@ -598,7 +598,7 @@ impl AirTree {
             tail_head_names,
             tail,
             list: list.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn tuple_access(
@@ -612,7 +612,7 @@ impl AirTree {
             tipo,
             check_last_item,
             tuple: tuple.into(),
-            hoisted_over: None.into(),
+            hoisted_over: None,
         })
     }
     pub fn tuple_index(tuple_index: usize, tipo: Arc<Type>, tuple: AirTree) -> AirTree {
@@ -633,9 +633,7 @@ impl AirTree {
         })
     }
     pub fn no_op() -> AirTree {
-        AirTree::Statement(AirStatement::NoOp {
-            hoisted_over: None.into(),
-        })
+        AirTree::Statement(AirStatement::NoOp { hoisted_over: None })
     }
     pub fn fields_empty(constr: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::FieldsEmpty {
@@ -657,7 +655,7 @@ impl AirTree {
                 | AirStatement::ListExpose { hoisted_over, .. }
                 | AirStatement::TupleAccessor { hoisted_over, .. } => {
                     assert!(hoisted_over.is_none());
-                    *hoisted_over = Some(next_exp).into();
+                    *hoisted_over = Some(next_exp.into());
                     assignment
                 }
                 AirStatement::DefineFunc { .. } => {
@@ -691,7 +689,7 @@ impl AirTree {
 
         let head_list = AirTree::builtin(DefaultFunction::HeadList, data(), vec![list_var]);
 
-        let expect_on_head = AirTree::call(
+        let _expect_on_head = AirTree::call(
             AirTree::local_var("__check_with", void()),
             void(),
             vec![head_list],
@@ -727,11 +725,150 @@ impl AirTree {
         // self.call(void(), expect_stack, vec![tail_stack, arg_stack2])
     }
 
-    pub fn to_air_vec(_air_vec: &mut Vec<Air>, tree: AirTree) {
-        match tree {
-            AirTree::Statement(_) => todo!(),
-            AirTree::Expression(_) => todo!(),
-            AirTree::UnhoistedSequence(_) => todo!(),
+    pub fn to_air_vec(&self, air_vec: &mut Vec<Air>) {
+        match self {
+            AirTree::Statement(st) => match st {
+                AirStatement::Let {
+                    name,
+                    value,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::Let { name: name.clone() });
+                    value.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::DefineFunc { .. } => todo!(),
+                AirStatement::AssertConstr {
+                    constr_index,
+                    constr,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::AssertConstr {
+                        constr_index: *constr_index,
+                    });
+                    constr.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::AssertBool {
+                    is_true,
+                    value,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::AssertBool { is_true: *is_true });
+                    value.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::FieldsExpose {
+                    indices,
+                    check_last_item,
+                    record,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::FieldsExpose {
+                        indices: indices.clone(),
+                        check_last_item: *check_last_item,
+                    });
+                    record.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::ListAccessor {
+                    tipo,
+                    names,
+                    tail,
+                    check_last_item,
+                    list,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::ListAccessor {
+                        tipo: tipo.clone(),
+                        names: names.clone(),
+                        tail: *tail,
+                        check_last_item: *check_last_item,
+                    });
+                    list.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::ListExpose {
+                    tipo,
+                    tail_head_names,
+                    tail,
+                    list,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::ListExpose {
+                        tipo: tipo.clone(),
+                        tail_head_names: tail_head_names.clone(),
+                        tail: tail.clone(),
+                    });
+                    list.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::TupleAccessor {
+                    names,
+                    tipo,
+                    check_last_item,
+                    tuple,
+                    hoisted_over: Some(exp),
+                } => {
+                    air_vec.push(Air::TupleAccessor {
+                        names: names.clone(),
+                        tipo: tipo.clone(),
+                        check_last_item: *check_last_item,
+                    });
+                    tuple.to_air_vec(air_vec);
+                    exp.to_air_vec(air_vec);
+                }
+                AirStatement::NoOp {
+                    hoisted_over: Some(exp),
+                } => {
+                    // No need to push NoOp. It does nothing.
+                    exp.to_air_vec(air_vec);
+                }
+                _ => unreachable!("SHOULD NOT HAVE A HOISTED OVER RESOLVING TO NONE"),
+            },
+            AirTree::Expression(exp) => match exp {
+                AirExpression::Int { value } => air_vec.push(Air::Int {
+                    value: value.clone(),
+                }),
+                AirExpression::String { value } => air_vec.push(Air::String {
+                    value: value.clone(),
+                }),
+                AirExpression::ByteArray { bytes } => air_vec.push(Air::ByteArray {
+                    bytes: bytes.clone(),
+                }),
+                AirExpression::Bool { value } => air_vec.push(Air::Bool { value: *value }),
+                AirExpression::List { .. } => todo!(),
+                AirExpression::Tuple { .. } => todo!(),
+                AirExpression::Void => todo!(),
+                AirExpression::Var { .. } => todo!(),
+                AirExpression::Call { .. } => todo!(),
+                AirExpression::Fn { .. } => todo!(),
+                AirExpression::Builtin { .. } => todo!(),
+                AirExpression::BinOp { .. } => todo!(),
+                AirExpression::UnOp { .. } => todo!(),
+                AirExpression::UnWrapData { .. } => todo!(),
+                AirExpression::WrapData { .. } => todo!(),
+                AirExpression::When { .. } => todo!(),
+                AirExpression::Clause { .. } => todo!(),
+                AirExpression::ListClause { .. } => todo!(),
+                AirExpression::WrapClause { .. } => todo!(),
+                AirExpression::TupleClause { .. } => todo!(),
+                AirExpression::ClauseGuard { .. } => todo!(),
+                AirExpression::ListClauseGuard { .. } => todo!(),
+                AirExpression::Finally { .. } => todo!(),
+                AirExpression::If { .. } => todo!(),
+                AirExpression::Constr { .. } => todo!(),
+                AirExpression::RecordUpdate { .. } => todo!(),
+                AirExpression::RecordAccess { .. } => todo!(),
+                AirExpression::TupleIndex { .. } => todo!(),
+                AirExpression::ErrorTerm { .. } => todo!(),
+                AirExpression::Trace { .. } => todo!(),
+                AirExpression::FieldsEmpty { .. } => todo!(),
+                AirExpression::ListEmpty { .. } => todo!(),
+            },
+            AirTree::UnhoistedSequence(_) => {
+                unreachable!("SHOULD FIRST RESOLVE ALL UNHOISTED SEQUENCES")
+            }
         }
     }
 }
