@@ -61,6 +61,7 @@ pub struct AssignmentProperties {
     pub value_type: Arc<Type>,
     pub kind: AssignmentKind,
     pub remove_unused: bool,
+    pub full_check: bool,
 }
 
 #[derive(Clone, Debug)]

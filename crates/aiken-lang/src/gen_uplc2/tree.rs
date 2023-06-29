@@ -1,6 +1,6 @@
 use indexmap::IndexSet;
 use std::{collections::VecDeque, sync::Arc};
-use uplc::builtins::DefaultFunction;
+use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
     ast::{BinOp, Span, UnOp},
@@ -68,7 +68,7 @@ pub enum AirStatement {
         recursive: bool,
         variant_name: String,
         func_body: Box<AirTree>,
-        hoisted_over: Box<AirTree>,
+        hoisted_over: Option<Box<AirTree>>,
     },
     // Assertions
     AssertConstr {
@@ -364,7 +364,6 @@ impl AirTree {
         params: Vec<String>,
         recursive: bool,
         func_body: AirTree,
-        hoisting_over: AirTree,
     ) -> AirTree {
         AirTree::Statement(AirStatement::DefineFunc {
             func_name: func_name.to_string(),
@@ -373,7 +372,7 @@ impl AirTree {
             recursive,
             variant_name: variant_name.to_string(),
             func_body: func_body.into(),
-            hoisted_over: hoisting_over.into(),
+            hoisted_over: None,
         })
     }
     pub fn anon_func(params: Vec<String>, func_body: AirTree) -> AirTree {
@@ -682,13 +681,11 @@ impl AirTree {
                 | AirStatement::ListAccessor { hoisted_over, .. }
                 | AirStatement::NoOp { hoisted_over }
                 | AirStatement::ListExpose { hoisted_over, .. }
-                | AirStatement::TupleAccessor { hoisted_over, .. } => {
+                | AirStatement::TupleAccessor { hoisted_over, .. }
+                | AirStatement::DefineFunc { hoisted_over, .. } => {
                     assert!(hoisted_over.is_none());
                     *hoisted_over = Some(next_exp.into());
                     assignment
-                }
-                AirStatement::DefineFunc { .. } => {
-                    unreachable!("Should not use this function to hoist defined functions.")
                 }
             },
             AirTree::Expression(_) => {
@@ -705,6 +702,49 @@ impl AirTree {
     }
 
     pub fn expect_on_list() -> AirTree {
+        let list_var = AirTree::local_var("__list_to_check", list(data()));
+
+        let head_list = AirTree::builtin(DefaultFunction::HeadList, data(), vec![list_var]);
+
+        let expect_on_head = AirTree::call(
+            AirTree::local_var("__check_with", void()),
+            void(),
+            vec![head_list],
+        );
+
+        let assign = AirTree::let_assignment("_", expect_on_head);
+
+        let next_call = AirTree::call(
+            AirTree::local_var(EXPECT_ON_LIST, void()),
+            void(),
+            vec![
+                AirTree::builtin(
+                    DefaultFunction::TailList,
+                    list(data()),
+                    vec![AirTree::local_var("__list_to_check", list(data()))],
+                ),
+                AirTree::local_var("__check_with", void()),
+            ],
+        );
+
+        let list_clause = AirTree::list_clause(
+            "__list_to_check",
+            void(),
+            AirTree::void(),
+            next_call,
+            None,
+            false,
+        );
+
+        AirTree::define_func(
+            EXPECT_ON_LIST,
+            "",
+            "",
+            vec!["__list_to_check".to_string(), "__check_with".to_string()],
+            true,
+            list_clause,
+        )
+
         // self.air.push(Air::DefineFunc {
         //     scope: self.scope.clone(),
         //     func_name: EXPECT_ON_LIST.to_string(),
@@ -713,45 +753,6 @@ impl AirTree {
         //     recursive: true,
         //     variant_name: "".to_string(),
         // });
-
-        let list_var = AirTree::local_var("__list_to_check", list(data()));
-
-        let head_list = AirTree::builtin(DefaultFunction::HeadList, data(), vec![list_var]);
-
-        let _expect_on_head = AirTree::call(
-            AirTree::local_var("__check_with", void()),
-            void(),
-            vec![head_list],
-        );
-        todo!()
-
-        // self.list_clause(void(), "__list_to_check", None, false, void_stack);
-
-        // self.choose_unit(check_with_stack);
-
-        // expect_stack.var(
-        //     ValueConstructor::public(
-        //         void(),
-        //         ValueConstructorVariant::ModuleFn {
-        //             name: EXPECT_ON_LIST.to_string(),
-        //             field_map: None,
-        //             module: "".to_string(),
-        //             arity: 2,
-        //             location: Span::empty(),
-        //             builtin: None,
-        //         },
-        //     ),
-        //     EXPECT_ON_LIST,
-        //     "",
-        // );
-
-        // arg_stack1.local_var(list(data()), "__list_to_check");
-
-        // arg_stack2.local_var(void(), "__check_with");
-
-        // tail_stack.builtin(DefaultFunction::TailList, list(data()), vec![arg_stack1]);
-
-        // self.call(void(), expect_stack, vec![tail_stack, arg_stack2])
     }
 
     pub fn iter(&self) -> AirTreeIterator {
