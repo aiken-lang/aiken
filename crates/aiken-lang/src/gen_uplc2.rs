@@ -86,8 +86,6 @@ impl<'a> CodeGenerator<'a> {
                     unreachable!("Sequence or Pipeline should have at least one expression")
                 }));
 
-                assert!(matches!(last_exp, AirTree::Expression(_)));
-
                 while let Some(expression) = expressions.pop() {
                     let exp_tree = self.build(&expression);
 
@@ -242,10 +240,11 @@ impl<'a> CodeGenerator<'a> {
                     pattern,
                     air_value,
                     tipo,
+                    &self.data_types,
                     AssignmentProperties {
                         value_type: value.tipo(),
                         kind: *kind,
-                        remove_unused: true,
+                        remove_unused: kind.is_let(),
                     },
                 )
             }
@@ -275,6 +274,7 @@ impl<'a> CodeGenerator<'a> {
                         &last_clause.pattern,
                         subject_val,
                         tipo,
+                        &self.data_types,
                         AssignmentProperties {
                             value_type: subject.tipo(),
                             kind: AssignmentKind::Let,
