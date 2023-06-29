@@ -89,6 +89,15 @@ impl Type {
         }
     }
 
+    pub fn is_primitive(&self) -> bool {
+        self.is_bool()
+            || self.is_bytearray()
+            || self.is_int()
+            || self.is_string()
+            || self.is_void()
+            || self.is_data()
+    }
+
     pub fn is_void(&self) -> bool {
         match self {
             Self::App { module, name, .. } if "Void" == name && module.is_empty() => true,
