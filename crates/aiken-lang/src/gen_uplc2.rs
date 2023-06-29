@@ -91,6 +91,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
         let mut air_tree = self.build(test_body);
         air_tree = AirTree::hoist_over(AirTree::no_op(), air_tree);
+        println!("{:#?}", air_tree);
 
         todo!()
     }
@@ -261,7 +262,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let air_value = self.build(value);
 
-                self.assignment_air_tree(
+                self.assignment(
                     pattern,
                     air_value,
                     tipo,
@@ -269,6 +270,7 @@ impl<'a> CodeGenerator<'a> {
                         value_type: value.tipo(),
                         kind: *kind,
                         remove_unused: kind.is_let(),
+                        full_check: false,
                     },
                 )
             }
@@ -294,7 +296,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let subject_val = self.build(subject);
 
-                    let assignment = self.assignment_air_tree(
+                    let assignment = self.assignment(
                         &last_clause.pattern,
                         subject_val,
                         tipo,
@@ -302,6 +304,7 @@ impl<'a> CodeGenerator<'a> {
                             value_type: subject.tipo(),
                             kind: AssignmentKind::Let,
                             remove_unused: false,
+                            full_check: false,
                         },
                     );
 
@@ -475,7 +478,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn assignment_air_tree(
+    pub fn assignment(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
         mut value: AirTree,
@@ -515,7 +518,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Var { name, .. } => {
                 if props.kind.is_expect() && props.value_type.is_data() && !tipo.is_data() {
                     let mut index_map = IndexMap::new();
-                    let tipo = builder::convert_opaque_type();
+                    // let tipo = builder::convert_opaque_type();
                     let assignment = AirTree::let_assignment(name, value);
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -537,12 +540,8 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             Pattern::Assign { name, pattern, .. } => {
-                let inner_pattern = self.assignment_air_tree(
-                    pattern,
-                    AirTree::local_var(name, tipo.clone()),
-                    tipo,
-                    props,
-                );
+                let inner_pattern =
+                    self.assignment(pattern, AirTree::local_var(name, tipo.clone()), tipo, props);
                 let assign = AirTree::let_assignment(name, value);
 
                 AirTree::UnhoistedSequence(vec![assign, inner_pattern])
@@ -550,18 +549,14 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Discard { name, .. } => {
                 if props.kind.is_expect() && props.value_type.is_data() && !tipo.is_data() {
                     let mut index_map = IndexMap::new();
-                    let tipo = builder::convert_opaque_type();
+                    // let tipo = builder::convert_opaque_type();
                     let assignment = AirTree::let_assignment(name, value);
                     let val = AirTree::local_var(name, tipo.clone());
                     if tipo.is_primitive() {
                         AirTree::let_assignment(name, AirTree::hoist_over(assignment, val))
                     } else {
-                        let expect = self.expect_type(
-                            &tipo,
-                            val.clone(),
-                            &mut index_map,
-                            pattern.location(),
-                        );
+                        let expect =
+                            self.expect_type(tipo, val.clone(), &mut index_map, pattern.location());
                         let assign =
                             AirTree::let_assignment("_", AirTree::hoist_over(assignment, expect));
                         AirTree::let_assignment(name, AirTree::hoist_over(assign, val))
@@ -610,14 +605,15 @@ impl<'a> CodeGenerator<'a> {
 
                         (
                             elem_name,
-                            self.assignment_air_tree(
+                            self.assignment(
                                 elem,
                                 val,
                                 list_elem_type,
                                 AssignmentProperties {
-                                    value_type: props.value_type.clone(),
+                                    value_type: list_elem_type.clone(),
                                     kind: props.kind,
                                     remove_unused: true,
+                                    full_check: false,
                                 },
                             ),
                         )
@@ -650,7 +646,7 @@ impl<'a> CodeGenerator<'a> {
 
                     elems.push((
                         tail_name,
-                        self.assignment_air_tree(
+                        self.assignment(
                             tail,
                             val,
                             tipo,
@@ -658,9 +654,11 @@ impl<'a> CodeGenerator<'a> {
                                 value_type: props.value_type.clone(),
                                 kind: props.kind,
                                 remove_unused: true,
+                                full_check: false,
                             },
                         ),
                     ));
+                    println!("ELEMS IS {:#?}", elems);
                 });
 
                 let names = elems.iter().map(|(name, _)| name.to_string()).collect_vec();
@@ -688,11 +686,9 @@ impl<'a> CodeGenerator<'a> {
                 if tipo.is_bool() {
                     assert!(props.kind.is_expect());
 
-                    sequence.push(AirTree::assert_bool(name == "True", value));
-
-                    AirTree::UnhoistedSequence(sequence)
+                    AirTree::assert_bool(name == "True", value)
                 } else if tipo.is_void() {
-                    todo!()
+                    AirTree::let_assignment("_", value)
                 } else {
                     if props.kind.is_expect() {
                         let data_type = build::lookup_data_type_by_tipo(&self.data_types, tipo)
@@ -793,7 +789,7 @@ impl<'a> CodeGenerator<'a> {
                                 field_index,
                                 field_name,
                                 arg_type.clone(),
-                                self.assignment_air_tree(
+                                self.assignment(
                                     &arg.value,
                                     val,
                                     arg_type,
@@ -801,6 +797,7 @@ impl<'a> CodeGenerator<'a> {
                                         value_type: props.value_type.clone(),
                                         kind: props.kind,
                                         remove_unused: true,
+                                        full_check: false,
                                     },
                                 ),
                             )
@@ -874,7 +871,7 @@ impl<'a> CodeGenerator<'a> {
 
                         (
                             tuple_name,
-                            self.assignment_air_tree(
+                            self.assignment(
                                 arg,
                                 val,
                                 arg_type,
@@ -882,6 +879,7 @@ impl<'a> CodeGenerator<'a> {
                                     value_type: props.value_type.clone(),
                                     kind: props.kind,
                                     remove_unused: true,
+                                    full_check: false,
                                 },
                             ),
                         )
@@ -979,6 +977,50 @@ impl<'a> CodeGenerator<'a> {
             );
 
             AirTree::hoist_over(assign, func_call)
+        } else if tipo.is_list() {
+            assert!(!tipo.get_inner_types().is_empty());
+            let inner_list_type = &tipo.get_inner_types()[0];
+
+            let list_name = format!("__list_span_{}_{}", location.start, location.end);
+            let item_name = format!("__item_span_{}_{}", location.start, location.end);
+
+            let assign = AirTree::let_assignment(&list_name, value);
+
+            let expect_item = self.expect_type(
+                inner_list_type,
+                AirTree::local_var(&item_name, inner_list_type.clone()),
+                defined_data_types,
+                location,
+            );
+
+            let anon_func_body =
+                AirTree::hoist_over(AirTree::let_assignment("_", expect_item), AirTree::void());
+
+            let unwrap_function = AirTree::anon_func(vec![item_name], anon_func_body);
+
+            let function = self.code_gen_functions.get(EXPECT_ON_LIST);
+
+            if function.is_none() {
+                let expect_list_func = AirTree::expect_on_list();
+                self.code_gen_functions.insert(
+                    EXPECT_ON_LIST.to_string(),
+                    CodeGenFunction::Function(expect_list_func, vec![]),
+                );
+            }
+
+            if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
+                *counter += 1
+            } else {
+                defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
+            }
+
+            let func_call = AirTree::call(
+                AirTree::local_var(EXPECT_ON_LIST, void()),
+                void(),
+                vec![AirTree::local_var(list_name, tipo.clone()), unwrap_function],
+            );
+
+            AirTree::hoist_over(assign, func_call)
         } else {
             todo!()
         }
@@ -998,18 +1040,60 @@ impl<'a> CodeGenerator<'a> {
             todo!()
         } else {
             // handle final_clause
-
             *props.is_final_clause() = true;
             assert!(final_clause.guard.is_none());
             let clause_then = self.build(&final_clause.then);
-            self.clause_pattern(&final_clause.pattern, clause_then)
+            let (_, assignments) = self.clause_pattern(&final_clause.pattern, subject_tipo, props);
+
+            AirTree::hoist_over(assignments, clause_then)
         }
     }
 
     pub fn clause_pattern(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
-        clause_then: AirTree,
+        subject_tipo: &Arc<Type>,
+        props: &mut ClauseProperties,
+        // We return condition and then assignments sequence
+    ) -> (AirTree, AirTree) {
+        match pattern {
+            Pattern::Int { value, .. } => {
+                assert!(!*props.is_final_clause());
+                (AirTree::int(value), AirTree::no_op())
+            }
+            Pattern::Var { name, .. } => (
+                AirTree::void(),
+                AirTree::let_assignment(
+                    name,
+                    AirTree::local_var(props.clause_var_name(), subject_tipo.clone()),
+                ),
+            ),
+            Pattern::Assign { name, pattern, .. } => {
+                let (inner_condition, inner_assignment) =
+                    self.clause_pattern(pattern, subject_tipo, props);
+
+                let sequence = vec![
+                    AirTree::let_assignment(
+                        name,
+                        AirTree::local_var(props.clause_var_name(), subject_tipo.clone()),
+                    ),
+                    inner_assignment,
+                ];
+
+                (inner_condition, AirTree::UnhoistedSequence(sequence))
+            }
+            Pattern::Discard { .. } => (AirTree::void(), AirTree::no_op()),
+            Pattern::List { .. } => todo!(),
+            Pattern::Constructor { .. } => todo!(),
+            Pattern::Tuple { .. } => todo!(),
+        }
+    }
+
+    fn nested_clause_condition(
+        &mut self,
+        pattern: &Pattern<PatternConstructor, Arc<Type>>,
+        subject_tipo: &Arc<Type>,
+        props: &mut ClauseProperties,
     ) -> AirTree {
         todo!()
     }

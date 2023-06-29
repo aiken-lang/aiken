@@ -501,6 +501,7 @@ impl<'a> CodeGenerator<'a> {
                         value_type: value.tipo(),
                         kind: *kind,
                         remove_unused: true,
+                        full_check: false,
                     },
                 );
 
@@ -532,6 +533,7 @@ impl<'a> CodeGenerator<'a> {
                             value_type: clauses[0].then.tipo(),
                             kind: AssignmentKind::Let,
                             remove_unused: false,
+                            full_check: false,
                         },
                     );
 
@@ -5184,6 +5186,7 @@ impl<'a> CodeGenerator<'a> {
                         value_type: data(),
                         kind: AssignmentKind::Expect,
                         remove_unused: true,
+                        full_check: false,
                     },
                 );
                 value_stack.local_var(actual_type, &arg_name);
