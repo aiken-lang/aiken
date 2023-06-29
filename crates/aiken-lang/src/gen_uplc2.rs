@@ -1,4 +1,6 @@
+pub mod air;
 mod builder;
+pub mod tree;
 
 use std::sync::Arc;
 
@@ -10,22 +12,20 @@ use uplc::{
 };
 
 use crate::{
-    ast::{
-        AssignmentKind, BinOp, DataType, Pattern, Span, TypedDataType, TypedFunction,
-        TypedValidator,
-    },
+    ast::{AssignmentKind, BinOp, Pattern, Span, TypedDataType, TypedFunction, TypedValidator},
     builtins::{int, void},
     expr::TypedExpr,
     gen_uplc::{
         air::Air,
         builder::{self as build, AssignmentProperties, DataTypeKey, FunctionAccessKey},
-        tree::AirTree,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
     },
 };
+
+use self::tree::AirTree;
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {

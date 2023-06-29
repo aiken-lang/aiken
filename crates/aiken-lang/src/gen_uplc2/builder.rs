@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use crate::{
     ast::{Constant, Pattern},
-    gen_uplc::{builder::AssignmentProperties, tree::AirTree},
+    gen_uplc::builder::AssignmentProperties,
     tipo::{PatternConstructor, Type},
 };
+
+use super::tree::AirTree;
 
 pub fn convert_opaque_type() -> Arc<Type> {
     todo!()
