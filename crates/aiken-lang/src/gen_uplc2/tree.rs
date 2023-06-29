@@ -1,5 +1,5 @@
 use indexmap::IndexSet;
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 use uplc::builtins::DefaultFunction;
 
 use crate::{
@@ -15,6 +15,42 @@ pub enum AirTree {
     Statement(AirStatement),
     Expression(AirExpression),
     UnhoistedSequence(Vec<AirTree>),
+}
+
+pub struct AirIterator<'a> {
+    deque_pointer: VecDeque<&'a AirTree>,
+}
+
+impl Iterator for AirIterator<'_> {
+    type Item = Air;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+impl DoubleEndedIterator for AirIterator<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+pub struct AirTreeIterator<'a> {
+    deque_pointer: VecDeque<&'a AirTree>,
+}
+
+impl<'a> Iterator for AirTreeIterator<'a> {
+    fn next(&mut self) -> Option<Self::Item> {
+        self.deque_pointer.pop_front()
+    }
+
+    type Item = &'a AirTree;
+}
+
+impl DoubleEndedIterator for AirTreeIterator<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.deque_pointer.pop_back()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -153,8 +189,7 @@ pub enum AirExpression {
     When {
         tipo: Arc<Type>,
         subject_name: String,
-        clauses: Vec<AirTree>,
-        final_clause: Box<AirTree>,
+        clauses: Box<AirTree>,
     },
     Clause {
         tipo: Arc<Type>,
@@ -397,17 +432,11 @@ impl AirTree {
             hoisted_over: None,
         })
     }
-    pub fn when(
-        subject_name: impl ToString,
-        tipo: Arc<Type>,
-        clauses: Vec<AirTree>,
-        final_clause: AirTree,
-    ) -> AirTree {
+    pub fn when(subject_name: impl ToString, tipo: Arc<Type>, clauses: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::When {
             tipo,
             subject_name: subject_name.to_string(),
-            clauses,
-            final_clause: final_clause.into(),
+            clauses: clauses.into(),
         })
     }
     pub fn clause(
@@ -725,52 +754,89 @@ impl AirTree {
         // self.call(void(), expect_stack, vec![tail_stack, arg_stack2])
     }
 
-    pub fn to_air_vec(&self, air_vec: &mut Vec<Air>) {
+    pub fn iter(&self) -> AirTreeIterator {
+        let mut new_vec = vec![];
+        self.create_iter(&mut new_vec);
+        AirTreeIterator {
+            deque_pointer: new_vec.into(),
+        }
+    }
+
+    pub fn air_iter(&self) -> AirIterator {
+        let mut new_vec = vec![];
+        self.create_iter(&mut new_vec);
+        AirIterator {
+            deque_pointer: new_vec.into(),
+        }
+    }
+
+    fn create_iter<'a>(&'a self, pointer_vec: &mut Vec<&'a AirTree>) {
+        match self {
+            AirTree::Statement(st) => match st {
+                AirStatement::Let {
+                    value,
+                    hoisted_over: Some(exp),
+                    ..
+                } => {
+                    pointer_vec.push(self);
+                    value.create_iter(pointer_vec);
+                    exp.create_iter(pointer_vec);
+                }
+                AirStatement::DefineFunc { .. } => todo!(),
+                AirStatement::AssertConstr {
+                    constr,
+                    hoisted_over: Some(exp),
+                    ..
+                } => {
+                    pointer_vec.push(self);
+                    constr.create_iter(pointer_vec);
+                    exp.create_iter(pointer_vec);
+                }
+                AirStatement::AssertBool { .. } => todo!(),
+                AirStatement::FieldsExpose { .. } => todo!(),
+                AirStatement::ListAccessor { .. } => todo!(),
+                AirStatement::ListExpose { .. } => todo!(),
+                AirStatement::TupleAccessor { .. } => todo!(),
+                AirStatement::NoOp { .. } => todo!(),
+                _ => unreachable!("FOUND UNHOISTED STATEMENT"),
+            },
+            AirTree::Expression(_) => todo!(),
+            AirTree::UnhoistedSequence(_) => {
+                unreachable!("SHOULD FIRST RESOLVE ALL UNHOISTED SEQUENCES")
+            }
+        }
+    }
+
+    pub fn convert_to_air(&self) -> Air {
         match self {
             AirTree::Statement(st) => match st {
                 AirStatement::Let {
                     name,
                     value,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::Let { name: name.clone() });
-                    value.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::Let { name: name.clone() },
                 AirStatement::DefineFunc { .. } => todo!(),
                 AirStatement::AssertConstr {
                     constr_index,
                     constr,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::AssertConstr {
-                        constr_index: *constr_index,
-                    });
-                    constr.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::AssertConstr {
+                    constr_index: *constr_index,
+                },
                 AirStatement::AssertBool {
                     is_true,
                     value,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::AssertBool { is_true: *is_true });
-                    value.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::AssertBool { is_true: *is_true },
                 AirStatement::FieldsExpose {
                     indices,
                     check_last_item,
                     record,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::FieldsExpose {
-                        indices: indices.clone(),
-                        check_last_item: *check_last_item,
-                    });
-                    record.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::FieldsExpose {
+                    indices: indices.clone(),
+                    check_last_item: *check_last_item,
+                },
                 AirStatement::ListAccessor {
                     tipo,
                     names,
@@ -778,65 +844,50 @@ impl AirTree {
                     check_last_item,
                     list,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::ListAccessor {
-                        tipo: tipo.clone(),
-                        names: names.clone(),
-                        tail: *tail,
-                        check_last_item: *check_last_item,
-                    });
-                    list.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::ListAccessor {
+                    tipo: tipo.clone(),
+                    names: names.clone(),
+                    tail: *tail,
+                    check_last_item: *check_last_item,
+                },
                 AirStatement::ListExpose {
                     tipo,
                     tail_head_names,
                     tail,
                     list,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::ListExpose {
-                        tipo: tipo.clone(),
-                        tail_head_names: tail_head_names.clone(),
-                        tail: tail.clone(),
-                    });
-                    list.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::ListExpose {
+                    tipo: tipo.clone(),
+                    tail_head_names: tail_head_names.clone(),
+                    tail: tail.clone(),
+                },
                 AirStatement::TupleAccessor {
                     names,
                     tipo,
                     check_last_item,
                     tuple,
                     hoisted_over: Some(exp),
-                } => {
-                    air_vec.push(Air::TupleAccessor {
-                        names: names.clone(),
-                        tipo: tipo.clone(),
-                        check_last_item: *check_last_item,
-                    });
-                    tuple.to_air_vec(air_vec);
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::TupleAccessor {
+                    names: names.clone(),
+                    tipo: tipo.clone(),
+                    check_last_item: *check_last_item,
+                },
                 AirStatement::NoOp {
                     hoisted_over: Some(exp),
-                } => {
-                    // No need to push NoOp. It does nothing.
-                    exp.to_air_vec(air_vec);
-                }
+                } => Air::NoOp,
                 _ => unreachable!("SHOULD NOT HAVE A HOISTED OVER RESOLVING TO NONE"),
             },
             AirTree::Expression(exp) => match exp {
-                AirExpression::Int { value } => air_vec.push(Air::Int {
+                AirExpression::Int { value } => Air::Int {
                     value: value.clone(),
-                }),
-                AirExpression::String { value } => air_vec.push(Air::String {
+                },
+                AirExpression::String { value } => Air::String {
                     value: value.clone(),
-                }),
-                AirExpression::ByteArray { bytes } => air_vec.push(Air::ByteArray {
+                },
+                AirExpression::ByteArray { bytes } => Air::ByteArray {
                     bytes: bytes.clone(),
-                }),
-                AirExpression::Bool { value } => air_vec.push(Air::Bool { value: *value }),
+                },
+                AirExpression::Bool { value } => Air::Bool { value: *value },
                 AirExpression::List { .. } => todo!(),
                 AirExpression::Tuple { .. } => todo!(),
                 AirExpression::Void => todo!(),
