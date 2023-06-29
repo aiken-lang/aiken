@@ -1,23 +1,14 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::{Constant, Pattern},
-    gen_uplc::builder::AssignmentProperties,
+    ast::{Constant, Pattern, TypedClause},
+    gen_uplc::builder::{AssignmentProperties, ClauseProperties},
     tipo::{PatternConstructor, Type},
 };
 
 use super::tree::AirTree;
 
 pub fn convert_opaque_type() -> Arc<Type> {
-    todo!()
-}
-
-pub fn handle_each_clause(
-    pattern: &Pattern<PatternConstructor, Arc<Type>>,
-    value: AirTree,
-    tipo: &Arc<Type>,
-    props: AssignmentProperties,
-) -> AirTree {
     todo!()
 }
 

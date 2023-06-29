@@ -12,12 +12,17 @@ use uplc::{
 };
 
 use crate::{
-    ast::{AssignmentKind, BinOp, Pattern, Span, TypedDataType, TypedFunction, TypedValidator},
+    ast::{
+        AssignmentKind, BinOp, Pattern, Span, TypedClause, TypedDataType, TypedFunction,
+        TypedValidator,
+    },
     builtins::{int, void},
     expr::TypedExpr,
     gen_uplc::{
         air::Air,
-        builder::{self as build, AssignmentProperties, DataTypeKey, FunctionAccessKey},
+        builder::{
+            self as build, AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey,
+        },
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -234,7 +239,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::call(self.build(fun.as_ref()), tipo.clone(), func_args)
                     }
                 }
-                _ => todo!("IS THIS REACHABLE?"),
+                _ => unreachable!("IS THIS REACHABLE? Well you reached it with {:#?}", body),
             },
             TypedExpr::BinOp {
                 name,
@@ -303,14 +308,40 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::hoist_over(assignment, clause_then)
                 } else {
                     clauses = if subject.tipo().is_list() {
-                        build::rearrange_clauses(clauses.clone())
+                        build::rearrange_clauses(clauses)
                     } else {
                         clauses
                     };
 
                     let last_clause = clauses.pop().unwrap();
 
-                    todo!()
+                    let constr_var = format!(
+                        "__when_var_span_{}_{}",
+                        subject.location().start,
+                        subject.location().end
+                    );
+
+                    let subject_name = format!(
+                        "__subject_var_span_{}_{}",
+                        subject.location().start,
+                        subject.location().end
+                    );
+
+                    let clauses = self.handle_each_clause(
+                        &clauses,
+                        last_clause,
+                        &subject.tipo(),
+                        &mut ClauseProperties::init(
+                            &subject.tipo(),
+                            constr_var.clone(),
+                            subject_name.clone(),
+                        ),
+                    );
+
+                    let constr_assign = AirTree::let_assignment(&constr_var, self.build(subject));
+                    let when_assign = AirTree::when(subject_name, subject.tipo(), clauses);
+
+                    AirTree::hoist_over(constr_assign, when_assign)
                 }
             }
 
@@ -951,5 +982,35 @@ impl<'a> CodeGenerator<'a> {
         } else {
             todo!()
         }
+    }
+
+    pub fn handle_each_clause(
+        &mut self,
+        clauses: &[TypedClause],
+        final_clause: TypedClause,
+        subject_tipo: &Arc<Type>,
+        props: &mut ClauseProperties,
+    ) -> AirTree {
+        assert!(!clauses.is_empty());
+        *props.is_complex_clause() = false;
+
+        if let Some((clause, rest_clauses)) = clauses.split_first() {
+            todo!()
+        } else {
+            // handle final_clause
+
+            *props.is_final_clause() = true;
+            assert!(final_clause.guard.is_none());
+            let clause_then = self.build(&final_clause.then);
+            self.clause_pattern(&final_clause.pattern, clause_then)
+        }
+    }
+
+    pub fn clause_pattern(
+        &mut self,
+        pattern: &Pattern<PatternConstructor, Arc<Type>>,
+        clause_then: AirTree,
+    ) -> AirTree {
+        todo!()
     }
 }

@@ -31,7 +31,7 @@ pub enum Air {
         tipo: Arc<Type>,
         count: usize,
     },
-    Void {},
+    Void,
     Var {
         constructor: ValueConstructor,
         name: String,
@@ -116,7 +116,7 @@ pub enum Air {
         next_tail_name: Option<String>,
         inverse: bool,
     },
-    Finally {},
+    Finally,
     // If
     If {
         tipo: Arc<Type>,
@@ -170,9 +170,9 @@ pub enum Air {
     Trace {
         tipo: Arc<Type>,
     },
-    NoOp {},
-    FieldsEmpty {},
-    ListEmpty {},
+    NoOp,
+    FieldsEmpty,
+    ListEmpty,
 }
 
 impl Air {
