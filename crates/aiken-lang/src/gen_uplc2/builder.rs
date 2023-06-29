@@ -4,11 +4,11 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 
 use crate::{
-    ast::{BinOp, Constant, Pattern},
+    ast::{BinOp, Constant, DataType, Pattern},
     builtins::int,
     gen_uplc::{
-        builder::AssignmentProperties,
-        tree::{AirStatement, AirTree},
+        builder::{self, AssignmentProperties, DataTypeKey},
+        tree::AirTree,
     },
     tipo::{PatternConstructor, Type},
 };
@@ -17,6 +17,7 @@ pub fn assignment_air_tree(
     pattern: &Pattern<PatternConstructor, Arc<Type>>,
     mut value: AirTree,
     tipo: &Arc<Type>,
+    data_types: &IndexMap<DataTypeKey, &DataType<Arc<Type>>>,
     props: AssignmentProperties,
 ) -> AirTree {
     if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
@@ -63,24 +64,33 @@ pub fn assignment_air_tree(
             }
         }
         Pattern::Assign { name, pattern, .. } => {
-            let inner_pattern =
-                assignment_air_tree(pattern, AirTree::local_var(name, tipo.clone()), tipo, props);
-            AirTree::let_assignment(name, inner_pattern)
+            let inner_pattern = assignment_air_tree(
+                pattern,
+                AirTree::local_var(name, tipo.clone()),
+                tipo,
+                data_types,
+                props,
+            );
+            let assign = AirTree::let_assignment(name, value);
+
+            AirTree::UnhoistedSequence(vec![assign, inner_pattern])
         }
         Pattern::Discard { name, .. } => {
-            if props.kind.is_expect() || !props.remove_unused {
+            if props.kind.is_expect() && props.value_type.is_data() && !tipo.is_data() {
+                let mut index_map = IndexMap::new();
+                let tipo = convert_opaque_type();
+                let assignment = AirTree::let_assignment(name, value);
+                let val = AirTree::local_var(name, tipo.clone());
+                let expect = expect_type(&tipo, val.clone(), &mut index_map);
+                let assign = AirTree::let_assignment("_", AirTree::hoist_over(assignment, expect));
+                AirTree::let_assignment(name, AirTree::hoist_over(assign, val))
+            } else if !props.remove_unused {
                 AirTree::let_assignment(name, value)
             } else {
                 AirTree::no_op()
             }
         }
-        Pattern::List {
-            elements,
-            tail,
-            location,
-            ..
-        } => {
-            let list_name = format!("__expect_list_span_{}_{}", location.start, location.end);
+        Pattern::List { elements, tail, .. } => {
             assert!(tipo.is_list());
             assert!(props.kind.is_expect());
             let list_elem_types = tipo.get_inner_types();
@@ -96,7 +106,16 @@ pub fn assignment_air_tree(
                     let elem_name = match elem {
                         Pattern::Var { name, .. } => name.to_string(),
                         Pattern::Assign { name, .. } => name.to_string(),
-                        Pattern::Discard { .. } => "_".to_string(),
+                        Pattern::Discard { name, .. } => {
+                            if props.kind.is_expect()
+                                && props.value_type.is_data()
+                                && !tipo.is_data()
+                            {
+                                format!("__discard_{}", name)
+                            } else {
+                                "_".to_string()
+                            }
+                        }
                         _ => format!(
                             "elem_{}_span_{}_{}",
                             index,
@@ -109,7 +128,17 @@ pub fn assignment_air_tree(
 
                     (
                         elem_name,
-                        assignment_air_tree(elem, val, list_elem_type, props.clone()),
+                        assignment_air_tree(
+                            elem,
+                            val,
+                            list_elem_type,
+                            data_types,
+                            AssignmentProperties {
+                                value_type: props.value_type.clone(),
+                                kind: props.kind,
+                                remove_unused: true,
+                            },
+                        ),
                     )
                 })
                 .collect_vec();
@@ -119,7 +148,13 @@ pub fn assignment_air_tree(
                 let tail_name = match tail.as_ref() {
                     Pattern::Var { name, .. } => name.to_string(),
                     Pattern::Assign { name, .. } => name.to_string(),
-                    Pattern::Discard { .. } => "_".to_string(),
+                    Pattern::Discard { name, .. } => {
+                        if props.kind.is_expect() && props.value_type.is_data() && !tipo.is_data() {
+                            format!("__discard_{}", name)
+                        } else {
+                            "_".to_string()
+                        }
+                    }
                     _ => format!(
                         "tail_span_{}_{}",
                         tail.location().start,
@@ -131,7 +166,17 @@ pub fn assignment_air_tree(
 
                 elems.push((
                     tail_name,
-                    assignment_air_tree(tail, val, tipo, props.clone()),
+                    assignment_air_tree(
+                        tail,
+                        val,
+                        tipo,
+                        data_types,
+                        AssignmentProperties {
+                            value_type: props.value_type.clone(),
+                            kind: props.kind,
+                            remove_unused: true,
+                        },
+                    ),
                 ));
             });
 
@@ -147,19 +192,64 @@ pub fn assignment_air_tree(
 
             sequence.append(&mut elems.into_iter().map(|(_, elem)| elem).collect_vec());
 
-            AirTree::IncompleteSequence(sequence)
+            AirTree::UnhoistedSequence(sequence)
         }
         Pattern::Constructor {
             arguments,
             constructor,
-            is_record,
             name,
             ..
         } => {
-            if props.kind.is_expect() {
+            let mut sequence = vec![];
+
+            if tipo.is_bool() {
+                assert!(props.kind.is_expect());
+
+                sequence.push(AirTree::assert_bool(name == "True", value));
+
+                AirTree::UnhoistedSequence(sequence)
+            } else if tipo.is_void() {
                 todo!()
             } else {
-                assert!(is_record);
+                if props.kind.is_expect() {
+                    let data_type = builder::lookup_data_type_by_tipo(data_types, tipo)
+                        .unwrap_or_else(|| panic!("Failed to find definition for {}", name));
+
+                    if data_type.constructors.len() > 1
+                        || (!tipo.is_data() && props.value_type.is_data())
+                    {
+                        let (index, _) = data_type
+                            .constructors
+                            .iter()
+                            .enumerate()
+                            .find(|(_, constr)| constr.name == *name)
+                            .unwrap_or_else(|| {
+                                panic!("Found constructor type {} with 0 constructors", name)
+                            });
+
+                        let constructor_name = format!(
+                            "__constructor_{}_span_{}_{}",
+                            name,
+                            pattern.location().start,
+                            pattern.location().end
+                        );
+
+                        // I'm moving `value` here
+                        let constructor_val = AirTree::let_assignment(&constructor_name, value);
+
+                        sequence.push(constructor_val);
+
+                        let assert_constr = AirTree::assert_constr_index(
+                            index,
+                            AirTree::local_var(&constructor_name, tipo.clone()),
+                        );
+
+                        sequence.push(assert_constr);
+
+                        //I'm reusing the `value` pointer
+                        value = AirTree::local_var(constructor_name, tipo.clone());
+                    }
+                }
 
                 let field_map = match constructor {
                     PatternConstructor::Record { field_map, .. } => field_map.clone(),
@@ -189,7 +279,16 @@ pub fn assignment_air_tree(
                         let field_name = match &arg.value {
                             Pattern::Var { name, .. } => name.to_string(),
                             Pattern::Assign { name, .. } => name.to_string(),
-                            Pattern::Discard { .. } => "_".to_string(),
+                            Pattern::Discard { name, .. } => {
+                                if props.kind.is_expect()
+                                    && props.value_type.is_data()
+                                    && !tipo.is_data()
+                                {
+                                    format!("__discard_{}", name)
+                                } else {
+                                    "_".to_string()
+                                }
+                            }
                             _ => format!(
                                 "field_{}_span_{}_{}",
                                 field_index,
@@ -211,7 +310,17 @@ pub fn assignment_air_tree(
                             field_index,
                             field_name,
                             arg_type.clone(),
-                            assignment_air_tree(&arg.value, val, arg_type, props.clone()),
+                            assignment_air_tree(
+                                &arg.value,
+                                val,
+                                arg_type,
+                                data_types,
+                                AssignmentProperties {
+                                    value_type: props.value_type.clone(),
+                                    kind: props.kind,
+                                    remove_unused: true,
+                                },
+                            ),
                         )
                     })
                     .collect_vec();
@@ -221,7 +330,9 @@ pub fn assignment_air_tree(
                     .map(|(index, name, tipo, _)| (*index, name.to_string(), tipo.clone()))
                     .collect_vec();
 
-                let mut sequence = vec![AirTree::fields_expose(indices, false, value)];
+                // This `value` is either value param that was passed in or
+                // local var
+                sequence.push(AirTree::fields_expose(indices, false, value));
 
                 sequence.append(
                     &mut fields
@@ -230,10 +341,12 @@ pub fn assignment_air_tree(
                         .collect_vec(),
                 );
 
-                AirTree::IncompleteSequence(sequence)
+                AirTree::UnhoistedSequence(sequence)
             }
         }
-        Pattern::Tuple { elems, .. } => todo!(),
+        Pattern::Tuple { elems, .. } => {
+            todo!()
+        }
     }
 }
 

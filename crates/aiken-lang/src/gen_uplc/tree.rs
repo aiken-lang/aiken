@@ -13,7 +13,7 @@ use super::air::Air;
 pub enum AirTree {
     Statement(AirStatement),
     Expression(AirExpression),
-    IncompleteSequence(Vec<AirTree>),
+    UnhoistedSequence(Vec<AirTree>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -665,7 +665,7 @@ impl AirTree {
             AirTree::Expression(_) => {
                 unreachable!("Trying to hoist an expression onto an expression.")
             }
-            AirTree::IncompleteSequence(seq) => {
+            AirTree::UnhoistedSequence(seq) => {
                 let mut final_exp = next_exp;
                 while let Some(assign) = seq.pop() {
                     final_exp = Self::hoist_over(assign, final_exp);
@@ -679,7 +679,7 @@ impl AirTree {
         match tree {
             AirTree::Statement(_) => todo!(),
             AirTree::Expression(_) => todo!(),
-            AirTree::IncompleteSequence(_) => todo!(),
+            AirTree::UnhoistedSequence(_) => todo!(),
         }
     }
 }
