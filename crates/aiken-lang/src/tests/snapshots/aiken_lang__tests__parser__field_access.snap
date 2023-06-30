@@ -1,0 +1,53 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n        fn name(user: User) {\n          user.name\n        }\n    "
+info: field_access
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [
+                    Arg {
+                        arg_name: Named {
+                            name: "user",
+                            label: "user",
+                            location: 8..12,
+                            is_validator_param: false,
+                        },
+                        location: 8..18,
+                        annotation: Some(
+                            Constructor {
+                                location: 14..18,
+                                module: None,
+                                name: "User",
+                                arguments: [],
+                            },
+                        ),
+                        tipo: (),
+                    },
+                ],
+                body: FieldAccess {
+                    location: 24..33,
+                    label: "name",
+                    container: Var {
+                        location: 24..28,
+                        name: "user",
+                    },
+                },
+                doc: None,
+                location: 0..19,
+                name: "name",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 34,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

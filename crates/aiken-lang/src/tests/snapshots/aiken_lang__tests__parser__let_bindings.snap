@@ -1,0 +1,137 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n        pub fn wow(a: Int) {\n          let x =\n            a + 2\n            |> add_one\n            |> add_one\n\n          let thing = [ 1, 2, a ]\n\n          let idk = thing\n\n          y\n        }\n    "
+info: let_bindings
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [
+                    Arg {
+                        arg_name: Named {
+                            name: "a",
+                            label: "a",
+                            location: 11..12,
+                            is_validator_param: false,
+                        },
+                        location: 11..17,
+                        annotation: Some(
+                            Constructor {
+                                location: 14..17,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                        tipo: (),
+                    },
+                ],
+                body: Sequence {
+                    location: 23..121,
+                    expressions: [
+                        Assignment {
+                            location: 23..70,
+                            value: PipeLine {
+                                expressions: [
+                                    BinOp {
+                                        location: 35..40,
+                                        name: AddInt,
+                                        left: Var {
+                                            location: 35..36,
+                                            name: "a",
+                                        },
+                                        right: Int {
+                                            location: 39..40,
+                                            value: "2",
+                                            base: Decimal {
+                                                numeric_underscore: false,
+                                            },
+                                        },
+                                    },
+                                    Var {
+                                        location: 48..55,
+                                        name: "add_one",
+                                    },
+                                    Var {
+                                        location: 63..70,
+                                        name: "add_one",
+                                    },
+                                ],
+                                one_liner: false,
+                            },
+                            pattern: Var {
+                                location: 27..28,
+                                name: "x",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Assignment {
+                            location: 74..97,
+                            value: List {
+                                location: 86..97,
+                                elements: [
+                                    Int {
+                                        location: 88..89,
+                                        value: "1",
+                                        base: Decimal {
+                                            numeric_underscore: false,
+                                        },
+                                    },
+                                    Int {
+                                        location: 91..92,
+                                        value: "2",
+                                        base: Decimal {
+                                            numeric_underscore: false,
+                                        },
+                                    },
+                                    Var {
+                                        location: 94..95,
+                                        name: "a",
+                                    },
+                                ],
+                                tail: None,
+                            },
+                            pattern: Var {
+                                location: 78..83,
+                                name: "thing",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Assignment {
+                            location: 101..116,
+                            value: Var {
+                                location: 111..116,
+                                name: "thing",
+                            },
+                            pattern: Var {
+                                location: 105..108,
+                                name: "idk",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Var {
+                            location: 120..121,
+                            name: "y",
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..18,
+                name: "wow",
+                public: true,
+                return_annotation: None,
+                return_type: (),
+                end_position: 122,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

@@ -1,0 +1,83 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n          fn foo() {\n            let i = 1_234_567\n            let j = 1_000_000\n            let k = -10_000\n        }\n    "
+info: test_parsing_numeric_underscore
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Sequence {
+                    location: 17..76,
+                    expressions: [
+                        Assignment {
+                            location: 17..34,
+                            value: Int {
+                                location: 25..34,
+                                value: "1234567",
+                                base: Decimal {
+                                    numeric_underscore: true,
+                                },
+                            },
+                            pattern: Var {
+                                location: 21..22,
+                                name: "i",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Assignment {
+                            location: 39..56,
+                            value: Int {
+                                location: 47..56,
+                                value: "1000000",
+                                base: Decimal {
+                                    numeric_underscore: true,
+                                },
+                            },
+                            pattern: Var {
+                                location: 43..44,
+                                name: "j",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Assignment {
+                            location: 61..76,
+                            value: UnOp {
+                                op: Negate,
+                                location: 69..76,
+                                value: Int {
+                                    location: 70..76,
+                                    value: "10000",
+                                    base: Decimal {
+                                        numeric_underscore: true,
+                                    },
+                                },
+                            },
+                            pattern: Var {
+                                location: 65..66,
+                                name: "k",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                    ],
+                },
+                doc: None,
+                location: 2..10,
+                name: "foo",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 77,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

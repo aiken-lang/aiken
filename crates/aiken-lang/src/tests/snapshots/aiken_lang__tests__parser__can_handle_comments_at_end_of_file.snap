@@ -1,0 +1,24 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n       use aiken\n\n       // some comment\n       // more comments"
+info: can_handle_comments_at_end_of_file
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Use(
+            Use {
+                as_name: None,
+                location: 0..9,
+                module: [
+                    "aiken",
+                ],
+                package: (),
+                unqualified: [],
+            },
+        ),
+    ],
+    kind: Validator,
+}

@@ -1,0 +1,109 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n        fn update_name(user: User, name: ByteArray) -> User {\n          User { ..user, name: \"Aiken\", age }\n        }\n    "
+info: record_update
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [
+                    Arg {
+                        arg_name: Named {
+                            name: "user",
+                            label: "user",
+                            location: 15..19,
+                            is_validator_param: false,
+                        },
+                        location: 15..25,
+                        annotation: Some(
+                            Constructor {
+                                location: 21..25,
+                                module: None,
+                                name: "User",
+                                arguments: [],
+                            },
+                        ),
+                        tipo: (),
+                    },
+                    Arg {
+                        arg_name: Named {
+                            name: "name",
+                            label: "name",
+                            location: 27..31,
+                            is_validator_param: false,
+                        },
+                        location: 27..42,
+                        annotation: Some(
+                            Constructor {
+                                location: 33..42,
+                                module: None,
+                                name: "ByteArray",
+                                arguments: [],
+                            },
+                        ),
+                        tipo: (),
+                    },
+                ],
+                body: RecordUpdate {
+                    location: 56..91,
+                    constructor: Var {
+                        location: 56..60,
+                        name: "User",
+                    },
+                    spread: RecordUpdateSpread {
+                        base: Var {
+                            location: 65..69,
+                            name: "user",
+                        },
+                        location: 63..69,
+                    },
+                    arguments: [
+                        UntypedRecordUpdateArg {
+                            label: "name",
+                            location: 71..84,
+                            value: ByteArray {
+                                location: 77..84,
+                                bytes: [
+                                    65,
+                                    105,
+                                    107,
+                                    101,
+                                    110,
+                                ],
+                                preferred_format: Utf8String,
+                            },
+                        },
+                        UntypedRecordUpdateArg {
+                            label: "age",
+                            location: 86..89,
+                            value: Var {
+                                location: 86..89,
+                                name: "age",
+                            },
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..51,
+                name: "update_name",
+                public: false,
+                return_annotation: Some(
+                    Constructor {
+                        location: 47..51,
+                        module: None,
+                        name: "User",
+                        arguments: [],
+                    },
+                ),
+                return_type: (),
+                end_position: 92,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

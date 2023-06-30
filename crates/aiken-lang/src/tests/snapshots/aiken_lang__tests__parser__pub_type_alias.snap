@@ -1,0 +1,36 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n        pub type Me = Option<String>\n    "
+info: pub_type_alias
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        TypeAlias(
+            TypeAlias {
+                alias: "Me",
+                annotation: Constructor {
+                    location: 14..28,
+                    module: None,
+                    name: "Option",
+                    arguments: [
+                        Constructor {
+                            location: 21..27,
+                            module: None,
+                            name: "String",
+                            arguments: [],
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..28,
+                parameters: [],
+                public: true,
+                tipo: (),
+            },
+        ),
+    ],
+    kind: Validator,
+}

@@ -1,0 +1,25 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "\n        use std/list\n    "
+info: import
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Use(
+            Use {
+                as_name: None,
+                location: 0..12,
+                module: [
+                    "std",
+                    "list",
+                ],
+                package: (),
+                unqualified: [],
+            },
+        ),
+    ],
+    kind: Validator,
+}
