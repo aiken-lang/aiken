@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    ast::{Constant, Pattern, TypedClause},
-    gen_uplc::builder::{AssignmentProperties, ClauseProperties},
-    tipo::{PatternConstructor, Type},
-};
+use crate::{ast::Constant, tipo::Type};
 
 use super::tree::AirTree;
 

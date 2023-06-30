@@ -39,7 +39,11 @@ use builder::{
     AssignmentProperties, ClauseProperties, DataTypeKey, FuncComponents, FunctionAccessKey,
 };
 
-use self::{builder::replace_opaque_type, scope::Scope, stack::AirStack};
+use self::{
+    builder::{replace_opaque_type, SpecificClause},
+    scope::Scope,
+    stack::AirStack,
+};
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
@@ -571,7 +575,7 @@ impl<'a> CodeGenerator<'a> {
 
                         self.build(&last_clause.then, &mut final_clause_stack);
 
-                        *clause_properties.is_final_clause() = true;
+                        clause_properties.final_clause = true;
 
                         self.when_pattern(
                             last_pattern,
@@ -587,7 +591,7 @@ impl<'a> CodeGenerator<'a> {
                             finally_stack.merge(final_pattern_stack);
                         }
 
-                        if *clause_properties.needs_constr_var() {
+                        if clause_properties.needs_constr_var {
                             let mut subject_stack = ir_stack.empty_with_scope();
 
                             self.build(subject, &mut subject_stack);
@@ -813,7 +817,7 @@ impl<'a> CodeGenerator<'a> {
             let mut clause_then_stack = ir_stack.empty_with_scope();
 
             // reset complex clause setting per clause back to default
-            *clause_properties.is_complex_clause() = false;
+            clause_properties.complex_clause = false;
 
             self.build(&clause.then, &mut clause_then_stack);
 
@@ -821,7 +825,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut clause_guard_stack = ir_stack.empty_with_scope();
                 let mut clause_guard_condition = ir_stack.empty_with_scope();
 
-                *clause_properties.is_complex_clause() = true;
+                clause_properties.complex_clause = true;
 
                 let clause_guard_name = format!("__clause_guard_{}", self.id_gen.next());
 
@@ -856,8 +860,9 @@ impl<'a> CodeGenerator<'a> {
             );
 
             match clause_properties {
-                ClauseProperties::ConstrClause {
+                ClauseProperties {
                     original_subject_name,
+                    specific_clause: SpecificClause::ConstrClause,
                     ..
                 } => {
                     let subject_name = original_subject_name.clone();
@@ -873,7 +878,7 @@ impl<'a> CodeGenerator<'a> {
                                 ir_stack.clause(
                                     subject_type.clone(),
                                     subject_name,
-                                    *clause_properties.is_complex_clause(),
+                                    clause_properties.complex_clause,
                                     clause_pattern_stack,
                                 );
                             } else {
@@ -886,7 +891,7 @@ impl<'a> CodeGenerator<'a> {
                                 ir_stack.clause(
                                     subject_type.clone(),
                                     subject_name,
-                                    *clause_properties.is_complex_clause(),
+                                    clause_properties.complex_clause,
                                     condition_stack,
                                 );
                             }
@@ -894,15 +899,15 @@ impl<'a> CodeGenerator<'a> {
                             ir_stack.clause(
                                 subject_type.clone(),
                                 subject_name,
-                                *clause_properties.is_complex_clause(),
+                                clause_properties.complex_clause,
                                 clause_pattern_stack,
                             );
                         }
                     }
                 }
-                ClauseProperties::ListClause {
+                ClauseProperties {
                     original_subject_name,
-                    current_index,
+                    specific_clause: SpecificClause::ListClause { current_index, .. },
                     ..
                 } => {
                     let original_subject_name = original_subject_name.clone();
@@ -958,7 +963,7 @@ impl<'a> CodeGenerator<'a> {
                                 subject_type.clone(),
                                 subject_name,
                                 next_tail,
-                                *clause_properties.is_complex_clause(),
+                                clause_properties.complex_clause,
                                 clause_pattern_stack,
                             );
                         }
@@ -966,12 +971,15 @@ impl<'a> CodeGenerator<'a> {
                         ir_stack.wrap_clause(clause_pattern_stack);
                     }
                 }
-                ClauseProperties::TupleClause {
+                ClauseProperties {
                     original_subject_name,
-                    defined_tuple_indices,
+                    specific_clause:
+                        SpecificClause::TupleClause {
+                            defined_tuple_indices,
+                        },
                     ..
                 } => {
-                    let ClauseProperties::TupleClause {  defined_tuple_indices: prev_defined_tuple_indices, .. } = prev_clause_properties
+                    let ClauseProperties { specific_clause: SpecificClause::TupleClause {  defined_tuple_indices: prev_defined_tuple_indices}, ..} = prev_clause_properties
                     else {
                         unreachable!()
                     };
@@ -988,8 +996,7 @@ impl<'a> CodeGenerator<'a> {
                         subject_name,
                         indices_to_define,
                         prev_defined_tuple_indices,
-                        *clause_properties.is_complex_clause()
-                            || (!*clause_properties.is_final_clause()),
+                        clause_properties.complex_clause || (!clause_properties.final_clause),
                         clause_pattern_stack,
                     );
                 }
@@ -1019,19 +1026,16 @@ impl<'a> CodeGenerator<'a> {
                 var_stack.local_var(
                     tipo.clone().into(),
                     match clause_properties {
-                        ClauseProperties::ConstrClause {
+                        ClauseProperties {
                             clause_var_name,
                             needs_constr_var,
+                            specific_clause: SpecificClause::ConstrClause,
                             ..
                         } => {
                             *needs_constr_var = true;
                             clause_var_name
                         }
-                        ClauseProperties::ListClause {
-                            original_subject_name,
-                            ..
-                        } => original_subject_name,
-                        ClauseProperties::TupleClause {
+                        ClauseProperties {
                             original_subject_name,
                             ..
                         } => original_subject_name,
@@ -1048,19 +1052,16 @@ impl<'a> CodeGenerator<'a> {
                 new_stack.local_var(
                     tipo.clone().into(),
                     match clause_properties {
-                        ClauseProperties::ConstrClause {
+                        ClauseProperties {
                             clause_var_name,
                             needs_constr_var,
+                            specific_clause: SpecificClause::ConstrClause,
                             ..
                         } => {
                             *needs_constr_var = true;
                             clause_var_name
                         }
-                        ClauseProperties::ListClause {
-                            original_subject_name,
-                            ..
-                        } => original_subject_name,
-                        ClauseProperties::TupleClause {
+                        ClauseProperties {
                             original_subject_name,
                             ..
                         } => original_subject_name,
@@ -1088,7 +1089,7 @@ impl<'a> CodeGenerator<'a> {
                     builder::check_when_pattern_needs(tail, clause_properties);
                 }
 
-                *clause_properties.needs_constr_var() = false;
+                clause_properties.needs_constr_var = false;
 
                 let mut void_stack = pattern_stack.empty_with_scope();
 
@@ -1104,7 +1105,7 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 let mut temp_clause_properties = clause_properties.clone();
-                *temp_clause_properties.needs_constr_var() = false;
+                temp_clause_properties.needs_constr_var = false;
 
                 if tipo.is_bool() {
                     pattern_stack.bool(constr_name == "True");
@@ -1126,20 +1127,18 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut new_stack = pattern_stack.empty_with_scope();
 
-                    new_stack.local_var(
-                        tipo.clone().into(),
-                        temp_clause_properties.clause_var_name(),
-                    );
+                    new_stack
+                        .local_var(tipo.clone().into(), temp_clause_properties.clause_var_name);
 
                     // if only one constructor, no need to check
-                    if data_type.constructors.len() > 1 || *clause_properties.is_final_clause() {
+                    if data_type.constructors.len() > 1 || clause_properties.final_clause {
                         // push constructor Index
                         let mut tag_stack = pattern_stack.empty_with_scope();
                         tag_stack.integer(index.to_string());
                         pattern_stack.merge_child(tag_stack);
                     }
 
-                    if *temp_clause_properties.needs_constr_var() {
+                    if temp_clause_properties.needs_constr_var {
                         self.expose_elements(
                             pattern,
                             pattern_stack,
@@ -1163,18 +1162,18 @@ impl<'a> CodeGenerator<'a> {
                 pattern_stack.merge_child(value_stack);
 
                 // unify clause properties
-                *clause_properties.is_complex_clause() = *clause_properties.is_complex_clause()
-                    || *temp_clause_properties.is_complex_clause();
+                clause_properties.complex_clause =
+                    clause_properties.complex_clause || temp_clause_properties.complex_clause;
 
-                *clause_properties.needs_constr_var() = *clause_properties.needs_constr_var()
-                    || *temp_clause_properties.needs_constr_var();
+                clause_properties.needs_constr_var =
+                    clause_properties.needs_constr_var || temp_clause_properties.needs_constr_var;
             }
             Pattern::Tuple { elems, .. } => {
                 for elem in elems {
                     builder::check_when_pattern_needs(elem, clause_properties);
                 }
 
-                *clause_properties.needs_constr_var() = false;
+                clause_properties.needs_constr_var = false;
 
                 let temp = pattern_stack.empty_with_scope();
 
@@ -1185,8 +1184,8 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // final clause can not be complex
-        if *(clause_properties.is_final_clause()) {
-            *clause_properties.is_complex_clause() = false;
+        if clause_properties.final_clause {
+            clause_properties.complex_clause = false;
         }
     }
 
@@ -1217,7 +1216,7 @@ impl<'a> CodeGenerator<'a> {
                         element,
                         &mut nested_pattern,
                         items_type,
-                        *clause_properties.is_final_clause(),
+                        clause_properties.final_clause,
                     );
 
                     names.push(name.unwrap_or_else(|| "_".to_string()))
@@ -1244,7 +1243,7 @@ impl<'a> CodeGenerator<'a> {
                     .map(|(index, name)| {
                         if index == 0 {
                             (
-                                clause_properties.original_subject_name().clone(),
+                                clause_properties.original_subject_name.clone(),
                                 name.clone(),
                             )
                         } else {
@@ -1254,7 +1253,7 @@ impl<'a> CodeGenerator<'a> {
                     .collect_vec();
 
                 let tail_var = if elements.len() == 1 || elements.is_empty() {
-                    clause_properties.original_subject_name().clone()
+                    clause_properties.original_subject_name.clone()
                 } else {
                     format!("__tail_{}", elements.len() - 2)
                 };
@@ -1331,7 +1330,7 @@ impl<'a> CodeGenerator<'a> {
                                     }
                                     .into(),
                                 ),
-                                *clause_properties.is_final_clause(),
+                                clause_properties.final_clause,
                             );
 
                             var_name.map_or(
@@ -1374,7 +1373,7 @@ impl<'a> CodeGenerator<'a> {
                                 &item.value,
                                 &mut nested_pattern,
                                 type_map.get(&index).unwrap(),
-                                *clause_properties.is_final_clause(),
+                                clause_properties.final_clause,
                             );
 
                             var_name.map_or(("_".to_string(), index), |var_name| (var_name, index))
@@ -1411,7 +1410,7 @@ impl<'a> CodeGenerator<'a> {
                             element,
                             &mut nested_pattern,
                             &items_type[index],
-                            *clause_properties.is_final_clause(),
+                            clause_properties.final_clause,
                         );
 
                         name.map(|name| (name, index))
@@ -1419,8 +1418,11 @@ impl<'a> CodeGenerator<'a> {
                     .collect_vec();
 
                 let mut defined_indices = match clause_properties.clone() {
-                    ClauseProperties::TupleClause {
-                        defined_tuple_indices,
+                    ClauseProperties {
+                        specific_clause:
+                            SpecificClause::TupleClause {
+                                defined_tuple_indices,
+                            },
                         ..
                     } => defined_tuple_indices,
                     _ => unreachable!(),
@@ -1455,8 +1457,11 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 match clause_properties {
-                    ClauseProperties::TupleClause {
-                        defined_tuple_indices,
+                    ClauseProperties {
+                        specific_clause:
+                            SpecificClause::TupleClause {
+                                defined_tuple_indices,
+                            },
                         ..
                     } => {
                         *defined_tuple_indices = defined_indices;
@@ -1509,12 +1514,15 @@ impl<'a> CodeGenerator<'a> {
                             format!("{}_{}", new_tail_name, index - 1)
                         };
 
-                        let mut clause_properties = ClauseProperties::ListClause {
+                        let mut clause_properties = ClauseProperties {
                             clause_var_name: item_name.clone(),
                             needs_constr_var: false,
-                            is_complex_clause: false,
+                            complex_clause: false,
                             original_subject_name: item_name.clone(),
-                            current_index: index as i64,
+                            specific_clause: SpecificClause::ListClause {
+                                current_index: index as i64,
+                                defined_tails: vec![],
+                            },
                             final_clause,
                         };
 
@@ -1606,12 +1614,13 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut when_stack = pattern_stack.empty_with_scope();
 
-                let mut clause_properties = ClauseProperties::ConstrClause {
+                let mut clause_properties = ClauseProperties {
                     clause_var_name: constr_var_name.clone(),
                     needs_constr_var: false,
-                    is_complex_clause: false,
+                    complex_clause: false,
                     original_subject_name: constr_var_name.clone(),
                     final_clause,
+                    specific_clause: SpecificClause::ConstrClause,
                 };
 
                 self.when_pattern(
@@ -1652,12 +1661,14 @@ impl<'a> CodeGenerator<'a> {
             a @ Pattern::Tuple { .. } => {
                 let item_name = format!("__tuple_item_id_{}", self.id_gen.next());
 
-                let mut clause_properties = ClauseProperties::TupleClause {
+                let mut clause_properties = ClauseProperties {
                     clause_var_name: item_name.clone(),
                     needs_constr_var: false,
-                    is_complex_clause: false,
+                    complex_clause: false,
                     original_subject_name: item_name.clone(),
-                    defined_tuple_indices: IndexSet::new(),
+                    specific_clause: SpecificClause::TupleClause {
+                        defined_tuple_indices: IndexSet::new(),
+                    },
                     final_clause,
                 };
 
@@ -1672,8 +1683,12 @@ impl<'a> CodeGenerator<'a> {
                 );
 
                 let defined_indices = match clause_properties.clone() {
-                    ClauseProperties::TupleClause {
-                        defined_tuple_indices,
+                    ClauseProperties {
+                        specific_clause:
+                            SpecificClause::TupleClause {
+                                defined_tuple_indices,
+                                ..
+                            },
                         ..
                     } => defined_tuple_indices,
                     _ => unreachable!(),
@@ -1681,7 +1696,7 @@ impl<'a> CodeGenerator<'a> {
 
                 pattern_stack.tuple_clause(
                     pattern_type.clone().into(),
-                    clause_properties.original_subject_name(),
+                    clause_properties.original_subject_name,
                     defined_indices,
                     IndexSet::new(),
                     false,
