@@ -1,4 +1,17 @@
-use crate::{ast, expr::UntypedExpr};
+use chumsky::prelude::*;
+
+use crate::{
+    ast,
+    expr::UntypedExpr,
+    parser::{error::ParseError, token::Token},
+};
+
+pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
+    select! {Token::String {value} => value}.map_with_span(|value, span| UntypedExpr::String {
+        location: span,
+        value,
+    })
+}
 
 /// Interpret bytearray string literals written as utf-8 strings, as strings.
 ///
