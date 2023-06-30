@@ -23,7 +23,7 @@ hex = "0.4.3"
 ignore = "0.4.20"
 indexmap = "1.9.2"
 itertools = "0.10.5"
-miette = { version = "5.5.0", features = ["fancy"] }
+miette = { version = "5.9.0", features = ["fancy"] }
 minicbor = "0.19.1"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 pallas = "0.18.0"
