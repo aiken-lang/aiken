@@ -23,16 +23,12 @@ pub struct Comment<'a> {
 
 impl<'a> From<(&Span, &'a str)> for Comment<'a> {
     fn from(src: (&Span, &'a str)) -> Comment<'a> {
-        fn char_indice(s: &str, i: usize) -> usize {
-            s.char_indices().nth(i).unwrap_or((i, ' ')).0
-        }
-
-        let start = char_indice(src.1, src.0.start);
-        let end = char_indice(src.1, src.0.end);
-
+        let start = src.0.start;
+        let end = src.0.end;
         Comment {
-            start: src.0.start,
-            content: src.1.get(start..end).expect("From span to comment"),
+            start,
+            content: std::str::from_utf8(src.1.as_bytes()[start..end].as_ref())
+                .expect("From span to comment"),
         }
     }
 }
