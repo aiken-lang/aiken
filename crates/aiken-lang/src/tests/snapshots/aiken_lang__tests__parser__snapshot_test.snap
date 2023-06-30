@@ -1,0 +1,24 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+expression: module
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Use(
+            Use {
+                as_name: None,
+                location: 0..14,
+                module: [
+                    "aiken",
+                    "list",
+                ],
+                package: (),
+                unqualified: [],
+            },
+        ),
+    ],
+    kind: Validator,
+}

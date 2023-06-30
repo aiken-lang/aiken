@@ -23,6 +23,17 @@ fn assert_definitions(code: &str, definitions: Vec<ast::UntypedDefinition>) {
     )
 }
 
+fn snapshot_test(code: &str) {
+    let (module, _) =
+        parser::module(code, ast::ModuleKind::Validator).expect("Failed to parse code");
+    insta::assert_debug_snapshot!(module);
+}
+
+#[test]
+fn snapshot_windows_newline() {
+    snapshot_test("use aiken/list\r\n")
+}
+
 #[test]
 fn windows_newline() {
     let code = "use aiken/list\r\n";
