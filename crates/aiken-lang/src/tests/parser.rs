@@ -1,28 +1,13 @@
-use crate::{ast, parser};
-
-macro_rules! assert_parse {
-    ($code:expr) => {
-        let (module, _) =
-            parser::module(indoc::indoc!{ $code }, ast::ModuleKind::Validator).expect("Failed to parse code");
-
-        insta::with_settings!({
-            description => concat!("Code:\n\n", indoc::indoc! { $code }),
-            prepend_module_to_snapshot => false,
-            omit_expression => true
-        }, {
-            insta::assert_debug_snapshot!(module);
-        });
-    };
-}
+use crate::{assert_module, ast, parser};
 
 #[test]
 fn windows_newline() {
-    assert_parse!("use aiken/list\r\n");
+    assert_module!("use aiken/list\r\n");
 }
 
 #[test]
 fn can_handle_comments_at_end_of_file() {
-    assert_parse!(
+    assert_module!(
         r#"
         use aiken
 
@@ -33,7 +18,7 @@ fn can_handle_comments_at_end_of_file() {
 
 #[test]
 fn type_annotation_with_module_prefix() {
-    assert_parse!(
+    assert_module!(
         r#"
         use aiken
 
@@ -46,7 +31,7 @@ fn type_annotation_with_module_prefix() {
 
 #[test]
 fn test_fail() {
-    assert_parse!(
+    assert_module!(
         r#"
         !test invalid_inputs() {
           expect True = False
@@ -59,7 +44,7 @@ fn test_fail() {
 
 #[test]
 fn validator() {
-    assert_parse!(
+    assert_module!(
         r#"
         validator {
           fn foo(datum, rdmr, ctx) {
@@ -72,7 +57,7 @@ fn validator() {
 
 #[test]
 fn double_validator() {
-    assert_parse!(
+    assert_module!(
         r#"
         validator {
           fn foo(datum, rdmr, ctx) {
@@ -89,7 +74,7 @@ fn double_validator() {
 
 #[test]
 fn import() {
-    assert_parse!(
+    assert_module!(
         r#"
         use std/list
         "#
@@ -98,7 +83,7 @@ fn import() {
 
 #[test]
 fn unqualified_imports() {
-    assert_parse!(
+    assert_module!(
         r#"
         use std/address.{Address as A, thing as w}
         "#
@@ -107,7 +92,7 @@ fn unqualified_imports() {
 
 #[test]
 fn import_alias() {
-    assert_parse!(
+    assert_module!(
         r#"
         use std/tx as t
         "#
@@ -116,7 +101,7 @@ fn import_alias() {
 
 #[test]
 fn custom_type() {
-    assert_parse!(
+    assert_module!(
         r#"
         type Option<a> {
           Some(a, Int)
@@ -129,7 +114,7 @@ fn custom_type() {
 
 #[test]
 fn opaque_type() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub opaque type User {
           name: _w
@@ -140,7 +125,7 @@ fn opaque_type() {
 
 #[test]
 fn type_alias() {
-    assert_parse!(
+    assert_module!(
         r#"
         type Thing = Option<Int>
         "#
@@ -149,7 +134,7 @@ fn type_alias() {
 
 #[test]
 fn pub_type_alias() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub type Me = Option<String>
         "#
@@ -158,7 +143,7 @@ fn pub_type_alias() {
 
 #[test]
 fn empty_function() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn run() {}
         "#
@@ -167,7 +152,7 @@ fn empty_function() {
 
 #[test]
 fn expect() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn run() {
             expect Some(x) = something.field
@@ -179,7 +164,7 @@ fn expect() {
 
 #[test]
 fn plus_binop() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn add_one(a) -> Int {
           a + 1
@@ -190,7 +175,7 @@ fn plus_binop() {
 
 #[test]
 fn pipeline() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn thing(thing a: Int) {
           a + 2
@@ -203,7 +188,7 @@ fn pipeline() {
 
 #[test]
 fn if_expression() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn ifs() {
           if True {
@@ -222,7 +207,7 @@ fn if_expression() {
 
 #[test]
 fn let_bindings() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn wow(a: Int) {
           let x =
@@ -242,7 +227,7 @@ fn let_bindings() {
 
 #[test]
 fn block() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn wow2(a: Int){
           let b = {
@@ -259,7 +244,7 @@ fn block() {
 
 #[test]
 fn when() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn wow2(a: Int){
           when a is {
@@ -278,7 +263,7 @@ fn when() {
 
 #[test]
 fn anonymous_function() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub fn such() -> Int {
           let add_one = fn (a: Int) -> Int { a + 1 }
@@ -291,7 +276,7 @@ fn anonymous_function() {
 
 #[test]
 fn field_access() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn name(user: User) {
           user.name
@@ -302,7 +287,7 @@ fn field_access() {
 
 #[test]
 fn call() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn calls() {
           let x = add_one(3)
@@ -317,7 +302,7 @@ fn call() {
 
 #[test]
 fn record_update() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn update_name(user: User, name: ByteArray) -> User {
           User { ..user, name: "Aiken", age }
@@ -328,7 +313,7 @@ fn record_update() {
 
 #[test]
 fn record_create_labeled() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn create() {
           User { name: "Aiken", age, thing: 2 }
@@ -339,7 +324,7 @@ fn record_create_labeled() {
 
 #[test]
 fn record_create_labeled_with_field_access() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn create() {
           some_module.User { name: "Aiken", age, thing: 2 }
@@ -350,7 +335,7 @@ fn record_create_labeled_with_field_access() {
 
 #[test]
 fn cargo_create_unlabeled() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn create() {
           some_module.Thing(1, a)
@@ -361,7 +346,7 @@ fn cargo_create_unlabeled() {
 
 #[test]
 fn parse_tuple() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {
           let tuple = (1, 2, 3, 4)
@@ -373,7 +358,7 @@ fn parse_tuple() {
 
 #[test]
 fn parse_tuple2() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {
           let a = foo(14)
@@ -385,7 +370,7 @@ fn parse_tuple2() {
 
 #[test]
 fn plain_bytearray_literals() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub const my_policy_id = #[0, 170, 255]
         "#
@@ -394,7 +379,7 @@ fn plain_bytearray_literals() {
 
 #[test]
 fn base16_bytearray_literals() {
-    assert_parse!(
+    assert_module!(
         r#"
         pub const my_policy_id = #"00aaff"
 
@@ -407,7 +392,7 @@ fn base16_bytearray_literals() {
 
 #[test]
 fn function_def() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {}
         "#
@@ -416,7 +401,7 @@ fn function_def() {
 
 #[test]
 fn function_invoke() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {
             let a = bar(42)
@@ -427,7 +412,7 @@ fn function_invoke() {
 
 #[test]
 fn function_ambiguous_sequence() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo_1() {
           let a = bar
@@ -453,7 +438,7 @@ fn function_ambiguous_sequence() {
 
 #[test]
 fn tuple_type_alias() {
-    assert_parse!(
+    assert_module!(
         r#"
         type RoyaltyToken = (PolicyId, AssetName)
         "#
@@ -462,7 +447,7 @@ fn tuple_type_alias() {
 
 #[test]
 fn int_parsing_hex_bytes() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {
           #[ 0x01, 0xa2, 0x03 ]
@@ -473,7 +458,7 @@ fn int_parsing_hex_bytes() {
 
 #[test]
 fn test_parsing_numeric_underscore() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {
           let i = 1_234_567
@@ -486,7 +471,7 @@ fn test_parsing_numeric_underscore() {
 
 #[test]
 fn first_class_binop() {
-    assert_parse!(
+    assert_module!(
         r#"
         fn foo() {
           compare_with(a, >, b)
