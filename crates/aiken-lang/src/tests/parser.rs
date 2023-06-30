@@ -23,16 +23,25 @@ fn assert_definitions(code: &str, definitions: Vec<ast::UntypedDefinition>) {
     )
 }
 
-fn snapshot_test(code: &str) {
-    let (module, _) =
-        parser::module(code, ast::ModuleKind::Validator).expect("Failed to parse code");
-    insta::assert_debug_snapshot!(module);
+macro_rules! snapshot_test {
+    ($name:ident, $code:expr) => {
+        #[test]
+        fn $name() {
+            let (module, _) =
+                parser::module($code, ast::ModuleKind::Validator).expect("Failed to parse code");
+
+            insta::with_settings!({
+                info => &stringify!($name),
+                description => $code,
+                omit_expression => true
+            }, {
+                insta::assert_debug_snapshot!(module);
+            });
+        }
+    };
 }
 
-#[test]
-fn snapshot_windows_newline() {
-    snapshot_test("use aiken/list\r\n")
-}
+snapshot_test!(snapshot_windows_newline, "use aiken/list\r\n");
 
 #[test]
 fn windows_newline() {
