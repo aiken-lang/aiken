@@ -4796,3 +4796,103 @@ fn first_class_binop() {
         })],
     );
 }
+
+#[test]
+fn parse_unicode_offset_1() {
+    use expr::UntypedExpr::*;
+
+    let code = indoc! {r#"
+      fn foo() {
+        let x = "★"
+        x
+      }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: Sequence {
+                location: Span::new((), 13..30),
+                expressions: vec![
+                    Assignment {
+                        location: Span::new((), 13..26),
+                        value: Box::new(ByteArray {
+                            location: Span::new((), 21..26),
+                            bytes: vec![226, 152, 133],
+                            preferred_format: ast::ByteArrayFormatPreference::Utf8String,
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..18),
+                            name: "x".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    Var {
+                        location: Span::new((), 29..30),
+                        name: "x".to_string(),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 31,
+            can_error: true,
+        })],
+    )
+}
+
+#[test]
+fn parse_unicode_offset_2() {
+    use expr::UntypedExpr::*;
+
+    let code = indoc! {r#"
+      fn foo() {
+        let x = "*"
+        x
+      }
+    "#};
+
+    assert_definitions(
+        code,
+        vec![ast::Definition::Fn(Function {
+            arguments: vec![],
+            body: Sequence {
+                location: Span::new((), 13..28),
+                expressions: vec![
+                    Assignment {
+                        location: Span::new((), 13..24),
+                        value: Box::new(ByteArray {
+                            location: Span::new((), 21..24),
+                            bytes: vec![42],
+                            preferred_format: ast::ByteArrayFormatPreference::Utf8String,
+                        }),
+                        pattern: ast::Pattern::Var {
+                            location: Span::new((), 17..18),
+                            name: "x".to_string(),
+                        },
+                        kind: ast::AssignmentKind::Let,
+                        annotation: None,
+                    },
+                    Var {
+                        location: Span::new((), 27..28),
+                        name: "x".to_string(),
+                    },
+                ],
+            },
+            doc: None,
+            location: Span::new((), 0..8),
+            name: "foo".to_string(),
+            public: false,
+            return_annotation: None,
+            return_type: (),
+            end_position: 29,
+            can_error: true,
+        })],
+    )
+}

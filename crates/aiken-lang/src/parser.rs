@@ -20,13 +20,18 @@ pub fn module(
     src: &str,
     kind: ast::ModuleKind,
 ) -> Result<(ast::UntypedModule, ModuleExtra), Vec<ParseError>> {
-    let len = src.chars().count();
+    let len = src.as_bytes().len();
 
-    let span = |i| Span::new((), i..i + 1);
+    let span = |i, n| Span::new((), i..i + n);
 
     let tokens = lexer::lexer().parse(chumsky::Stream::from_iter(
-        span(len),
-        src.chars().enumerate().map(|(i, c)| (c, span(i))),
+        span(len, 1),
+        src.chars().scan(0, |i, c| {
+            let start = *i;
+            let offset = c.len_utf8();
+            *i = start + offset;
+            Some((c, span(start, offset)))
+        }),
     ))?;
 
     let mut extra = ModuleExtra::new();
@@ -74,7 +79,7 @@ pub fn module(
     });
 
     let definitions =
-        module_parser().parse(chumsky::Stream::from_iter(span(tokens.len()), tokens))?;
+        module_parser().parse(chumsky::Stream::from_iter(span(tokens.len(), 1), tokens))?;
 
     let module = ast::UntypedModule {
         kind,
