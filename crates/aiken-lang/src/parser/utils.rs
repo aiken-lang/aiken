@@ -93,3 +93,26 @@ pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>)
         ),
     )
 }
+
+#[cfg(test)]
+#[macro_use]
+mod macros {
+    #[macro_export]
+    macro_rules! assert_expr {
+        ($code:expr) => {
+            let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run($code).unwrap();
+
+            let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len()), tokens.into_iter());
+
+            let result = $crate::parser::expr::sequence().parse(stream).unwrap();
+
+            insta::with_settings!({
+                description => concat!("Code:\n\n", $code),
+                prepend_module_to_snapshot => false,
+                omit_expression => true
+            }, {
+                insta::assert_debug_snapshot!(result);
+            });
+        };
+    }
+}

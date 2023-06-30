@@ -1033,7 +1033,7 @@ Here's the types I followed and that led me to this problem:
 }
 
 #[cfg(test)]
-pub mod test {
+pub mod tests {
     use super::*;
     use proptest::prelude::*;
     use serde_json::{self, json, Value};

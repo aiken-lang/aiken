@@ -503,7 +503,7 @@ fn replace_identity_usage(term: &Term<Name>, original: Rc<Name>) -> Term<Name> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
 
     use pallas_primitives::babbage::{BigInt, PlutusData};
     use pretty_assertions::assert_eq;

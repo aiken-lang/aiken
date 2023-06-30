@@ -27,3 +27,16 @@ pub fn parser(
             tail,
         })
 }
+
+#[cfg(test)]
+mod tests {
+
+    use chumsky::Parser;
+
+    use crate::assert_expr;
+
+    #[test]
+    fn empty_list() {
+        assert_expr!("[]");
+    }
+}

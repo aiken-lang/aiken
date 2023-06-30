@@ -168,7 +168,7 @@ fn qualify_type_name(module: &String, typ_name: &str) -> Document<'static> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::cell::RefCell;
 
     use pretty_assertions::assert_eq;

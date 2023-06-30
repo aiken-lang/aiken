@@ -808,7 +808,7 @@ pub fn decode_constant_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::{Constant, Program, Term};
     use crate::{
         ast::{DeBruijn, Name, Type},

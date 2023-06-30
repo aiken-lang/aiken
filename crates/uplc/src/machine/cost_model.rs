@@ -3213,7 +3213,7 @@ impl TryFrom<u8> for StepKind {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 

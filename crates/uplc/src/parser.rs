@@ -282,7 +282,7 @@ peg::parser! {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use num_bigint::BigInt;
 
     use crate::ast::{Constant, Name, Program, Term, Type, Unique};
