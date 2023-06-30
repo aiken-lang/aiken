@@ -1,65 +1,79 @@
 use crate::{ast, parser};
 
 macro_rules! assert_parse {
-    ($name:ident, $code:expr) => {
-        #[test]
-        fn $name() {
-            let (module, _) =
-                parser::module(indoc::indoc!{ $code }, ast::ModuleKind::Validator).expect("Failed to parse code");
+    ($code:expr) => {
+        let (module, _) =
+            parser::module(indoc::indoc!{ $code }, ast::ModuleKind::Validator).expect("Failed to parse code");
 
-            insta::with_settings!({
-                info => &stringify!($name),
-                description => $code,
-                omit_expression => true
-            }, {
-                insta::assert_debug_snapshot!(module);
-            });
-        }
+        insta::with_settings!({
+            description => concat!("Code:\n\n", indoc::indoc! { $code }),
+            prepend_module_to_snapshot => false,
+            omit_expression => true
+        }, {
+            insta::assert_debug_snapshot!(module);
+        });
     };
 }
 
-assert_parse!(windows_newline, "use aiken/list\r\n");
-assert_parse!(
-    can_handle_comments_at_end_of_file,
-    r#"
-       use aiken
+#[test]
+fn windows_newline() {
+    assert_parse!("use aiken/list\r\n");
+}
 
-       // some comment
-       // more comments"#
-);
-assert_parse!(
-    type_annotation_with_module_prefix,
-    r#"
-       use aiken
+#[test]
+fn can_handle_comments_at_end_of_file() {
+    assert_parse!(
+        r#"
+        use aiken
 
-       pub fn go() -> aiken.Option<Int> {
-         False
-       }
-    "#
-);
-assert_parse!(
-    test_fail,
-    r#"
-       !test invalid_inputs() {
-         expect True = False
+        // some comment
+        // more comments"#
+    );
+}
 
-         False
-       }
-    "#
-);
-assert_parse!(
-    validator,
-    r#"
+#[test]
+fn type_annotation_with_module_prefix() {
+    assert_parse!(
+        r#"
+        use aiken
+
+        pub fn go() -> aiken.Option<Int> {
+          False
+        }
+        "#
+    );
+}
+
+#[test]
+fn test_fail() {
+    assert_parse!(
+        r#"
+        !test invalid_inputs() {
+          expect True = False
+
+          False
+        }
+        "#
+    );
+}
+
+#[test]
+fn validator() {
+    assert_parse!(
+        r#"
         validator {
           fn foo(datum, rdmr, ctx) {
             True
           }
         }
-    "#
-);
-assert_parse!(
-    double_validator,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn double_validator() {
+    assert_parse!(
+        r#"
         validator {
           fn foo(datum, rdmr, ctx) {
             True
@@ -69,92 +83,128 @@ assert_parse!(
             True
           }
         }
-    "#
-);
-assert_parse!(
-    import,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn import() {
+    assert_parse!(
+        r#"
         use std/list
-    "#
-);
-assert_parse!(
-    unqualified_imports,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn unqualified_imports() {
+    assert_parse!(
+        r#"
         use std/address.{Address as A, thing as w}
-    "#
-);
-assert_parse!(
-    import_alias,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn import_alias() {
+    assert_parse!(
+        r#"
         use std/tx as t
-    "#
-);
-assert_parse!(
-    custom_type,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn custom_type() {
+    assert_parse!(
+        r#"
         type Option<a> {
           Some(a, Int)
           None
           Wow { name: Int, age: Int }
         }
-    "#
-);
-assert_parse!(
-    opaque_type,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn opaque_type() {
+    assert_parse!(
+        r#"
         pub opaque type User {
           name: _w
         }
-    "#
-);
-assert_parse!(
-    type_alias,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn type_alias() {
+    assert_parse!(
+        r#"
         type Thing = Option<Int>
-    "#
-);
-assert_parse!(
-    pub_type_alias,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn pub_type_alias() {
+    assert_parse!(
+        r#"
         pub type Me = Option<String>
-    "#
-);
-assert_parse!(
-    empty_function,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn empty_function() {
+    assert_parse!(
+        r#"
         pub fn run() {}
-    "#
-);
-assert_parse!(
-    expect,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn expect() {
+    assert_parse!(
+        r#"
         pub fn run() {
             expect Some(x) = something.field
             x.other_field
         }
-    "#
-);
-assert_parse!(
-    plus_binop,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn plus_binop() {
+    assert_parse!(
+        r#"
         pub fn add_one(a) -> Int {
           a + 1
         }
-    "#
-);
-assert_parse!(
-    pipeline,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn pipeline() {
+    assert_parse!(
+        r#"
         pub fn thing(thing a: Int) {
           a + 2
           |> add_one
           |> add_one
         }
-    "#
-);
-assert_parse!(
-    if_expression,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn if_expression() {
+    assert_parse!(
+        r#"
         fn ifs() {
           if True {
             1 + 1
@@ -167,10 +217,13 @@ assert_parse!(
           }
         }
     "#
-);
-assert_parse!(
-    let_bindings,
-    r#"
+    );
+}
+
+#[test]
+fn let_bindings() {
+    assert_parse!(
+        r#"
         pub fn wow(a: Int) {
           let x =
             a + 2
@@ -183,11 +236,14 @@ assert_parse!(
 
           y
         }
-    "#
-);
-assert_parse!(
-    block,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn block() {
+    assert_parse!(
+        r#"
         pub fn wow2(a: Int){
           let b = {
             let x = 4
@@ -197,11 +253,14 @@ assert_parse!(
 
           b
         }
-    "#
-);
-assert_parse!(
-    when,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn when() {
+    assert_parse!(
+        r#"
         pub fn wow2(a: Int){
           when a is {
             2 -> 3
@@ -213,29 +272,38 @@ assert_parse!(
             _ -> 4
           }
         }
-    "#
-);
-assert_parse!(
-    anonymous_function,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn anonymous_function() {
+    assert_parse!(
+        r#"
         pub fn such() -> Int {
           let add_one = fn (a: Int) -> Int { a + 1 }
 
           2 |> add_one
         }
-    "#
-);
-assert_parse!(
-    field_access,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn field_access() {
+    assert_parse!(
+        r#"
         fn name(user: User) {
           user.name
         }
-    "#
-);
-assert_parse!(
-    call,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn call() {
+    assert_parse!(
+        r#"
         fn calls() {
           let x = add_one(3)
 
@@ -243,138 +311,183 @@ assert_parse!(
 
           map_add_x([ 1, 2, 3 ])
         }
-    "#
-);
-assert_parse!(
-    record_update,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn record_update() {
+    assert_parse!(
+        r#"
         fn update_name(user: User, name: ByteArray) -> User {
           User { ..user, name: "Aiken", age }
         }
-    "#
-);
-assert_parse!(
-    record_create_labeled,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn record_create_labeled() {
+    assert_parse!(
+        r#"
         fn create() {
           User { name: "Aiken", age, thing: 2 }
         }
-    "#
-);
-assert_parse!(
-    record_create_labeled_with_field_access,
-    r#"
+       "#
+    );
+}
+
+#[test]
+fn record_create_labeled_with_field_access() {
+    assert_parse!(
+        r#"
         fn create() {
           some_module.User { name: "Aiken", age, thing: 2 }
         }
-    "#
-);
-assert_parse!(
-    cargo_create_unlabeled,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn cargo_create_unlabeled() {
+    assert_parse!(
+        r#"
         fn create() {
           some_module.Thing(1, a)
         }
-    "#
-);
-assert_parse!(
-    parse_tuple,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn parse_tuple() {
+    assert_parse!(
+        r#"
         fn foo() {
           let tuple = (1, 2, 3, 4)
           tuple.1st + tuple.2nd + tuple.3rd + tuple.4th
         }
-    "#
-);
-assert_parse!(
-    parse_tuple2,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn parse_tuple2() {
+    assert_parse!(
+        r#"
         fn foo() {
           let a = foo(14)
           (a, 42)
         }
-    "#
-);
-assert_parse!(
-    plain_bytearray_literals,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn plain_bytearray_literals() {
+    assert_parse!(
+        r#"
         pub const my_policy_id = #[0, 170, 255]
-    "#
-);
-assert_parse!(
-    base16_bytearray_literals,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn base16_bytearray_literals() {
+    assert_parse!(
+        r#"
         pub const my_policy_id = #"00aaff"
 
         pub fn foo() {
             my_policy_id == #"00aaff"
         }
-    "#
-);
-assert_parse!(
-    function_def,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn function_def() {
+    assert_parse!(
+        r#"
         fn foo() {}
-    "#
-);
-assert_parse!(
-    function_invoke,
-    r#"
+        "#
+    );
+}
+
+#[test]
+fn function_invoke() {
+    assert_parse!(
+        r#"
         fn foo() {
             let a = bar(42)
         }
-    "#
-);
-assert_parse!(
-    function_ambiguous_sequence,
-    r#"
-  fn foo_1() {
-    let a = bar
-    (40)
-  }
+        "#
+    );
+}
 
-  fn foo_2() {
-    let a = bar
-    {40}
-  }
-
-  fn foo_3() {
-    let a = (40+2)
-  }
-
-  fn foo_4() {
-    let a = bar(42)
-    (a + 14) * 42
-  }
-    "#
-);
-assert_parse!(
-    tuple_type_alias,
-    r#"
-          type RoyaltyToken = (PolicyId, AssetName)
-    "#
-);
-assert_parse!(
-    int_parsing_hex_bytes,
-    r#"
-          fn foo() {
-            #[ 0x01, 0xa2, 0x03 ]
-          }
-    "#
-);
-assert_parse!(
-    test_parsing_numeric_underscore,
-    r#"
-          fn foo() {
-            let i = 1_234_567
-            let j = 1_000_000
-            let k = -10_000
+#[test]
+fn function_ambiguous_sequence() {
+    assert_parse!(
+        r#"
+        fn foo_1() {
+          let a = bar
+          (40)
         }
-    "#
-);
-assert_parse!(
-    first_class_binop,
-    r#"
+
+        fn foo_2() {
+          let a = bar
+          {40}
+        }
+
+        fn foo_3() {
+          let a = (40+2)
+        }
+
+        fn foo_4() {
+          let a = bar(42)
+          (a + 14) * 42
+        }
+        "#
+    );
+}
+
+#[test]
+fn tuple_type_alias() {
+    assert_parse!(
+        r#"
+        type RoyaltyToken = (PolicyId, AssetName)
+        "#
+    );
+}
+
+#[test]
+fn int_parsing_hex_bytes() {
+    assert_parse!(
+        r#"
+        fn foo() {
+          #[ 0x01, 0xa2, 0x03 ]
+        }
+        "#
+    );
+}
+
+#[test]
+fn test_parsing_numeric_underscore() {
+    assert_parse!(
+        r#"
+        fn foo() {
+          let i = 1_234_567
+          let j = 1_000_000
+          let k = -10_000
+        }
+        "#
+    );
+}
+
+#[test]
+fn first_class_binop() {
+    assert_parse!(
+        r#"
         fn foo() {
           compare_with(a, >, b)
           compare_with(a, >=, b)
@@ -391,7 +504,8 @@ assert_parse!(
           compute_with(a, %, b)
         }
     "#
-);
+    );
+}
 
 #[test]
 fn parse_unicode_offset_1() {

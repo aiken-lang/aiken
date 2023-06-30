@@ -1,0 +1,75 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nfn foo() {\n  let a = foo(14)\n  (a, 42)\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Sequence {
+                    location: 13..38,
+                    expressions: [
+                        Assignment {
+                            location: 13..28,
+                            value: Call {
+                                arguments: [
+                                    CallArg {
+                                        label: None,
+                                        location: 25..27,
+                                        value: Int {
+                                            location: 25..27,
+                                            value: "14",
+                                            base: Decimal {
+                                                numeric_underscore: false,
+                                            },
+                                        },
+                                    },
+                                ],
+                                fun: Var {
+                                    location: 21..24,
+                                    name: "foo",
+                                },
+                                location: 21..28,
+                            },
+                            pattern: Var {
+                                location: 17..18,
+                                name: "a",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Tuple {
+                            location: 31..38,
+                            elems: [
+                                Var {
+                                    location: 32..33,
+                                    name: "a",
+                                },
+                                Int {
+                                    location: 35..37,
+                                    value: "42",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..8,
+                name: "foo",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 39,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

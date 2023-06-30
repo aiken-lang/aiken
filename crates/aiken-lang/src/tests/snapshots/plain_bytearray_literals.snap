@@ -1,0 +1,35 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\npub const my_policy_id = #[0, 170, 255]\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        ModuleConstant(
+            ModuleConstant {
+                doc: None,
+                location: 0..39,
+                public: true,
+                name: "my_policy_id",
+                annotation: None,
+                value: ByteArray {
+                    location: 25..39,
+                    bytes: [
+                        0,
+                        170,
+                        255,
+                    ],
+                    preferred_format: ArrayOfBytes(
+                        Decimal {
+                            numeric_underscore: false,
+                        },
+                    ),
+                },
+                tipo: (),
+            },
+        ),
+    ],
+    kind: Validator,
+}

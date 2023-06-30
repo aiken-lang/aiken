@@ -1,0 +1,116 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nfn foo() {\n  let tuple = (1, 2, 3, 4)\n  tuple.1st + tuple.2nd + tuple.3rd + tuple.4th\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Sequence {
+                    location: 13..85,
+                    expressions: [
+                        Assignment {
+                            location: 13..37,
+                            value: Tuple {
+                                location: 25..37,
+                                elems: [
+                                    Int {
+                                        location: 26..27,
+                                        value: "1",
+                                        base: Decimal {
+                                            numeric_underscore: false,
+                                        },
+                                    },
+                                    Int {
+                                        location: 29..30,
+                                        value: "2",
+                                        base: Decimal {
+                                            numeric_underscore: false,
+                                        },
+                                    },
+                                    Int {
+                                        location: 32..33,
+                                        value: "3",
+                                        base: Decimal {
+                                            numeric_underscore: false,
+                                        },
+                                    },
+                                    Int {
+                                        location: 35..36,
+                                        value: "4",
+                                        base: Decimal {
+                                            numeric_underscore: false,
+                                        },
+                                    },
+                                ],
+                            },
+                            pattern: Var {
+                                location: 17..22,
+                                name: "tuple",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        BinOp {
+                            location: 40..85,
+                            name: AddInt,
+                            left: BinOp {
+                                location: 40..73,
+                                name: AddInt,
+                                left: BinOp {
+                                    location: 40..61,
+                                    name: AddInt,
+                                    left: TupleIndex {
+                                        location: 40..49,
+                                        index: 0,
+                                        tuple: Var {
+                                            location: 40..45,
+                                            name: "tuple",
+                                        },
+                                    },
+                                    right: TupleIndex {
+                                        location: 52..61,
+                                        index: 1,
+                                        tuple: Var {
+                                            location: 52..57,
+                                            name: "tuple",
+                                        },
+                                    },
+                                },
+                                right: TupleIndex {
+                                    location: 64..73,
+                                    index: 2,
+                                    tuple: Var {
+                                        location: 64..69,
+                                        name: "tuple",
+                                    },
+                                },
+                            },
+                            right: TupleIndex {
+                                location: 76..85,
+                                index: 3,
+                                tuple: Var {
+                                    location: 76..81,
+                                    name: "tuple",
+                                },
+                            },
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..8,
+                name: "foo",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 86,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

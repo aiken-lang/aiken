@@ -1,0 +1,162 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\npub fn wow2(a: Int){\n  when a is {\n    2 -> 3\n    1 | 4 | 5 -> {\n      let amazing = 5\n      amazing\n    }\n    3 -> 9\n    _ -> 4\n  }\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [
+                    Arg {
+                        arg_name: Named {
+                            name: "a",
+                            label: "a",
+                            location: 12..13,
+                            is_validator_param: false,
+                        },
+                        location: 12..18,
+                        annotation: Some(
+                            Constructor {
+                                location: 15..18,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                        tipo: (),
+                    },
+                ],
+                body: When {
+                    location: 23..132,
+                    subject: Var {
+                        location: 28..29,
+                        name: "a",
+                    },
+                    clauses: [
+                        UntypedClause {
+                            location: 39..45,
+                            patterns: [
+                                Int {
+                                    location: 39..40,
+                                    value: "2",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            ],
+                            guard: None,
+                            then: Int {
+                                location: 44..45,
+                                value: "3",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        },
+                        UntypedClause {
+                            location: 50..106,
+                            patterns: [
+                                Int {
+                                    location: 50..51,
+                                    value: "1",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                                Int {
+                                    location: 54..55,
+                                    value: "4",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                                Int {
+                                    location: 58..59,
+                                    value: "5",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            ],
+                            guard: None,
+                            then: Sequence {
+                                location: 71..100,
+                                expressions: [
+                                    Assignment {
+                                        location: 71..86,
+                                        value: Int {
+                                            location: 85..86,
+                                            value: "5",
+                                            base: Decimal {
+                                                numeric_underscore: false,
+                                            },
+                                        },
+                                        pattern: Var {
+                                            location: 75..82,
+                                            name: "amazing",
+                                        },
+                                        kind: Let,
+                                        annotation: None,
+                                    },
+                                    Var {
+                                        location: 93..100,
+                                        name: "amazing",
+                                    },
+                                ],
+                            },
+                        },
+                        UntypedClause {
+                            location: 111..117,
+                            patterns: [
+                                Int {
+                                    location: 111..112,
+                                    value: "3",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            ],
+                            guard: None,
+                            then: Int {
+                                location: 116..117,
+                                value: "9",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        },
+                        UntypedClause {
+                            location: 122..128,
+                            patterns: [
+                                Discard {
+                                    name: "_",
+                                    location: 122..123,
+                                },
+                            ],
+                            guard: None,
+                            then: Int {
+                                location: 127..128,
+                                value: "4",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..19,
+                name: "wow2",
+                public: true,
+                return_annotation: None,
+                return_type: (),
+                end_position: 133,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

@@ -1,0 +1,70 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\npub fn run() {\n    expect Some(x) = something.field\n    x.other_field\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Sequence {
+                    location: 19..69,
+                    expressions: [
+                        Assignment {
+                            location: 19..51,
+                            value: FieldAccess {
+                                location: 36..51,
+                                label: "field",
+                                container: Var {
+                                    location: 36..45,
+                                    name: "something",
+                                },
+                            },
+                            pattern: Constructor {
+                                is_record: false,
+                                location: 26..33,
+                                name: "Some",
+                                arguments: [
+                                    CallArg {
+                                        label: None,
+                                        location: 31..32,
+                                        value: Var {
+                                            location: 31..32,
+                                            name: "x",
+                                        },
+                                    },
+                                ],
+                                module: None,
+                                constructor: (),
+                                with_spread: false,
+                                tipo: (),
+                            },
+                            kind: Expect,
+                            annotation: None,
+                        },
+                        FieldAccess {
+                            location: 56..69,
+                            label: "other_field",
+                            container: Var {
+                                location: 56..57,
+                                name: "x",
+                            },
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..12,
+                name: "run",
+                public: true,
+                return_annotation: None,
+                return_type: (),
+                end_position: 70,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

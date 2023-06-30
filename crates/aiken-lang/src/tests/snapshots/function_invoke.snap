@@ -1,0 +1,54 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nfn foo() {\n    let a = bar(42)\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Assignment {
+                    location: 15..30,
+                    value: Call {
+                        arguments: [
+                            CallArg {
+                                label: None,
+                                location: 27..29,
+                                value: Int {
+                                    location: 27..29,
+                                    value: "42",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            },
+                        ],
+                        fun: Var {
+                            location: 23..26,
+                            name: "bar",
+                        },
+                        location: 23..30,
+                    },
+                    pattern: Var {
+                        location: 19..20,
+                        name: "a",
+                    },
+                    kind: Let,
+                    annotation: None,
+                },
+                doc: None,
+                location: 0..8,
+                name: "foo",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 31,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

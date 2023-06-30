@@ -1,0 +1,181 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nfn calls() {\n  let x = add_one(3)\n\n  let map_add_x = list.map(_, fn (y) { x + y })\n\n  map_add_x([ 1, 2, 3 ])\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Sequence {
+                    location: 15..108,
+                    expressions: [
+                        Assignment {
+                            location: 15..33,
+                            value: Call {
+                                arguments: [
+                                    CallArg {
+                                        label: None,
+                                        location: 31..32,
+                                        value: Int {
+                                            location: 31..32,
+                                            value: "3",
+                                            base: Decimal {
+                                                numeric_underscore: false,
+                                            },
+                                        },
+                                    },
+                                ],
+                                fun: Var {
+                                    location: 23..30,
+                                    name: "add_one",
+                                },
+                                location: 23..33,
+                            },
+                            pattern: Var {
+                                location: 19..20,
+                                name: "x",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Assignment {
+                            location: 37..82,
+                            value: Fn {
+                                location: 53..82,
+                                fn_style: Capture,
+                                arguments: [
+                                    Arg {
+                                        arg_name: Named {
+                                            name: "_capture__0",
+                                            label: "_capture__0",
+                                            location: 0..0,
+                                            is_validator_param: false,
+                                        },
+                                        location: 0..0,
+                                        annotation: None,
+                                        tipo: (),
+                                    },
+                                ],
+                                body: Call {
+                                    arguments: [
+                                        CallArg {
+                                            label: None,
+                                            location: 62..63,
+                                            value: Var {
+                                                location: 62..63,
+                                                name: "_capture__0",
+                                            },
+                                        },
+                                        CallArg {
+                                            label: None,
+                                            location: 65..81,
+                                            value: Fn {
+                                                location: 65..81,
+                                                fn_style: Plain,
+                                                arguments: [
+                                                    Arg {
+                                                        arg_name: Named {
+                                                            name: "y",
+                                                            label: "y",
+                                                            location: 69..70,
+                                                            is_validator_param: false,
+                                                        },
+                                                        location: 69..70,
+                                                        annotation: None,
+                                                        tipo: (),
+                                                    },
+                                                ],
+                                                body: BinOp {
+                                                    location: 74..79,
+                                                    name: AddInt,
+                                                    left: Var {
+                                                        location: 74..75,
+                                                        name: "x",
+                                                    },
+                                                    right: Var {
+                                                        location: 78..79,
+                                                        name: "y",
+                                                    },
+                                                },
+                                                return_annotation: None,
+                                            },
+                                        },
+                                    ],
+                                    fun: FieldAccess {
+                                        location: 53..61,
+                                        label: "map",
+                                        container: Var {
+                                            location: 53..57,
+                                            name: "list",
+                                        },
+                                    },
+                                    location: 53..82,
+                                },
+                                return_annotation: None,
+                            },
+                            pattern: Var {
+                                location: 41..50,
+                                name: "map_add_x",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Call {
+                            arguments: [
+                                CallArg {
+                                    label: None,
+                                    location: 96..107,
+                                    value: List {
+                                        location: 96..107,
+                                        elements: [
+                                            Int {
+                                                location: 98..99,
+                                                value: "1",
+                                                base: Decimal {
+                                                    numeric_underscore: false,
+                                                },
+                                            },
+                                            Int {
+                                                location: 101..102,
+                                                value: "2",
+                                                base: Decimal {
+                                                    numeric_underscore: false,
+                                                },
+                                            },
+                                            Int {
+                                                location: 104..105,
+                                                value: "3",
+                                                base: Decimal {
+                                                    numeric_underscore: false,
+                                                },
+                                            },
+                                        ],
+                                        tail: None,
+                                    },
+                                },
+                            ],
+                            fun: Var {
+                                location: 86..95,
+                                name: "map_add_x",
+                            },
+                            location: 86..108,
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..10,
+                name: "calls",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 109,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

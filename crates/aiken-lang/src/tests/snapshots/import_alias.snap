@@ -1,0 +1,26 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nuse std/tx as t\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Use(
+            Use {
+                as_name: Some(
+                    "t",
+                ),
+                location: 0..15,
+                module: [
+                    "std",
+                    "tx",
+                ],
+                package: (),
+                unqualified: [],
+            },
+        ),
+    ],
+    kind: Validator,
+}

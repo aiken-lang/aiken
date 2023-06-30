@@ -1,0 +1,98 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\npub fn wow2(a: Int){\n  let b = {\n    let x = 4\n\n    x + 5\n  }\n\n  b\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [
+                    Arg {
+                        arg_name: Named {
+                            name: "a",
+                            label: "a",
+                            location: 12..13,
+                            is_validator_param: false,
+                        },
+                        location: 12..18,
+                        annotation: Some(
+                            Constructor {
+                                location: 15..18,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                        tipo: (),
+                    },
+                ],
+                body: Sequence {
+                    location: 23..66,
+                    expressions: [
+                        Assignment {
+                            location: 23..61,
+                            value: Sequence {
+                                location: 37..57,
+                                expressions: [
+                                    Assignment {
+                                        location: 37..46,
+                                        value: Int {
+                                            location: 45..46,
+                                            value: "4",
+                                            base: Decimal {
+                                                numeric_underscore: false,
+                                            },
+                                        },
+                                        pattern: Var {
+                                            location: 41..42,
+                                            name: "x",
+                                        },
+                                        kind: Let,
+                                        annotation: None,
+                                    },
+                                    BinOp {
+                                        location: 52..57,
+                                        name: AddInt,
+                                        left: Var {
+                                            location: 52..53,
+                                            name: "x",
+                                        },
+                                        right: Int {
+                                            location: 56..57,
+                                            value: "5",
+                                            base: Decimal {
+                                                numeric_underscore: false,
+                                            },
+                                        },
+                                    },
+                                ],
+                            },
+                            pattern: Var {
+                                location: 27..28,
+                                name: "b",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Var {
+                            location: 65..66,
+                            name: "b",
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..19,
+                name: "wow2",
+                public: true,
+                return_annotation: None,
+                return_type: (),
+                end_position: 67,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}

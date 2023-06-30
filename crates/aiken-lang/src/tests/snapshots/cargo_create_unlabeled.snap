@@ -1,0 +1,57 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nfn create() {\n  some_module.Thing(1, a)\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Call {
+                    arguments: [
+                        CallArg {
+                            label: None,
+                            location: 34..35,
+                            value: Int {
+                                location: 34..35,
+                                value: "1",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        },
+                        CallArg {
+                            label: None,
+                            location: 37..38,
+                            value: Var {
+                                location: 37..38,
+                                name: "a",
+                            },
+                        },
+                    ],
+                    fun: FieldAccess {
+                        location: 16..33,
+                        label: "Thing",
+                        container: Var {
+                            location: 16..27,
+                            name: "some_module",
+                        },
+                    },
+                    location: 16..39,
+                },
+                doc: None,
+                location: 0..11,
+                name: "create",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 40,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}
