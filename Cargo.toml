@@ -8,6 +8,9 @@ strip = true
 shared-version = true
 tag-name = "v{{version}}"
 
+[workspace.dependencies]
+insta = { version = "1.30.0", features = ["yaml"] }
+
 [profile.dev.package.insta]
 opt-level = 3
 

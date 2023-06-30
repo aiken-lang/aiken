@@ -6,9 +6,9 @@ use crate::{
     parser::{annotation, error::ParseError, token::Token},
 };
 
-pub fn parser<'a>(
-    seq_r: Recursive<'a, Token, UntypedExpr, ParseError>,
-) -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
+pub fn parser(
+    seq_r: Recursive<'_, Token, UntypedExpr, ParseError>,
+) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     just(Token::Fn)
         .ignore_then(
             params()

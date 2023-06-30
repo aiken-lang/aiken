@@ -1,6 +1,7 @@
 use chumsky::prelude::*;
-use vec1::{vec1, Vec1};
+use vec1::Vec1;
 
+mod anonymous_binop;
 pub mod anonymous_function;
 pub mod assignment;
 mod block;
@@ -14,7 +15,9 @@ mod sequence;
 pub mod string;
 mod tuple;
 mod var;
+pub mod when;
 
+use anonymous_binop::parser as anonymous_binop;
 pub use anonymous_function::parser as anonymous_function;
 pub use block::parser as block;
 pub use bytearray::parser as bytearray;
@@ -27,10 +30,11 @@ pub use sequence::parser as sequence;
 pub use string::parser as string;
 pub use tuple::parser as tuple;
 pub use var::parser as var;
+pub use when::parser as when;
 
 use crate::{
     ast::{self, Span},
-    expr::UntypedExpr,
+    expr::{FnStyle, UntypedExpr},
 };
 
 use super::{error::ParseError, token::Token};
@@ -52,171 +56,23 @@ pub fn parser(
                 }),
             });
 
-        let anon_binop_parser = select! {
-            Token::EqualEqual => BinOp::Eq,
-            Token::NotEqual => BinOp::NotEq,
-            Token::Less => BinOp::LtInt,
-            Token::LessEqual => BinOp::LtEqInt,
-            Token::Greater => BinOp::GtInt,
-            Token::GreaterEqual => BinOp::GtEqInt,
-            Token::VbarVbar => BinOp::Or,
-            Token::AmperAmper => BinOp::And,
-            Token::Plus => BinOp::AddInt,
-            Token::Minus => BinOp::SubInt,
-            Token::Slash => BinOp::DivInt,
-            Token::Star => BinOp::MultInt,
-            Token::Percent => BinOp::ModInt,
-        }
-        .map_with_span(|name, location| {
-            use BinOp::*;
-
-            let arg_annotation = match name {
-                Or | And => Some(ast::Annotation::boolean(location)),
-                Eq | NotEq => None,
-                LtInt | LtEqInt | GtInt | GtEqInt | AddInt | SubInt | MultInt | DivInt | ModInt => {
-                    Some(ast::Annotation::int(location))
-                }
-            };
-
-            let return_annotation = match name {
-                Or | And | Eq | NotEq | LtInt | LtEqInt | GtInt | GtEqInt => {
-                    Some(ast::Annotation::boolean(location))
-                }
-                AddInt | SubInt | MultInt | DivInt | ModInt => Some(ast::Annotation::int(location)),
-            };
-
-            let arguments = vec![
-                ast::Arg {
-                    arg_name: ast::ArgName::Named {
-                        name: "left".to_string(),
-                        label: "left".to_string(),
-                        location,
-                        is_validator_param: false,
-                    },
-                    annotation: arg_annotation.clone(),
-                    location,
-                    tipo: (),
-                },
-                ast::Arg {
-                    arg_name: ast::ArgName::Named {
-                        name: "right".to_string(),
-                        label: "right".to_string(),
-                        location,
-                        is_validator_param: false,
-                    },
-                    annotation: arg_annotation,
-                    location,
-                    tipo: (),
-                },
-            ];
-
-            let body = UntypedExpr::BinOp {
-                location,
-                name,
-                left: Box::new(UntypedExpr::Var {
-                    location,
-                    name: "left".to_string(),
-                }),
-                right: Box::new(UntypedExpr::Var {
-                    location,
-                    name: "right".to_string(),
-                }),
-            };
-
-            UntypedExpr::Fn {
-                arguments,
-                body: Box::new(body),
-                return_annotation,
-                fn_style: FnStyle::BinOp(name),
-                location,
-            }
-        });
-
-        let when_clause_parser = pattern_parser()
-            .then(
-                just(Token::Vbar)
-                    .ignore_then(pattern_parser())
-                    .repeated()
-                    .or_not(),
-            )
-            .then(choice((
-                just(Token::If)
-                    .ignore_then(when_clause_guard_parser())
-                    .or_not()
-                    .then_ignore(just(Token::RArrow)),
-                just(Token::If)
-                    .ignore_then(take_until(just(Token::RArrow)))
-                    .validate(|_value, span, emit| {
-                        emit(ParseError::invalid_when_clause_guard(span));
-                        None
-                    }),
-            )))
-            // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
-            .then(choice((
-                r.clone(),
-                just(Token::Todo)
-                    .ignore_then(
-                        r.clone()
-                            .then_ignore(one_of(Token::RArrow).not().rewind())
-                            .or_not(),
-                    )
-                    .map_with_span(|reason, span| {
-                        UntypedExpr::todo(span, reason.map(flexible_string_literal))
-                    }),
-                just(Token::ErrorTerm)
-                    .ignore_then(
-                        r.clone()
-                            .then_ignore(just(Token::RArrow).not().rewind())
-                            .or_not(),
-                    )
-                    .map_with_span(|reason, span| {
-                        UntypedExpr::error(span, reason.map(flexible_string_literal))
-                    }),
-            )))
-            .map_with_span(
-                |(((pattern, alternative_patterns_opt), guard), then), span| {
-                    let mut patterns = vec1![pattern];
-                    patterns.append(&mut alternative_patterns_opt.unwrap_or_default());
-                    ast::UntypedClause {
-                        location: span,
-                        patterns,
-                        guard,
-                        then,
-                    }
-                },
-            );
-
-        let when_parser = just(Token::When)
-            // TODO: If subject is empty we should return ParseErrorType::ExpectedExpr,
-            .ignore_then(r.clone().map(Box::new))
-            .then_ignore(just(Token::Is))
-            .then_ignore(just(Token::LeftBrace))
-            // TODO: If clauses are empty we should return ParseErrorType::NoCaseClause
-            .then(when_clause_parser.repeated())
-            .then_ignore(just(Token::RightBrace))
-            .map_with_span(|(subject, clauses), span| UntypedExpr::When {
-                location: span,
-                subject,
-                clauses,
-            });
-
         let expr_unit_parser = choice((
             string(),
             int(),
-            record_update(r),
-            record(r),
+            record_update(r.clone()),
+            record(r.clone()),
             field_access_constructor,
             var(),
-            tuple(r),
+            tuple(r.clone()),
             bytearray(),
-            list(r),
-            anonymous_function(seq_r),
-            anon_binop_parser,
-            block(seq_r),
-            when_parser,
-            assignment::let_(r),
-            assignment::expect(r),
-            if_else(seq_r, r),
+            list(r.clone()),
+            anonymous_function(seq_r.clone()),
+            anonymous_binop(),
+            block(seq_r.clone()),
+            when(r.clone()),
+            assignment::let_(r.clone()),
+            assignment::expect(r.clone()),
+            if_else(seq_r, r.clone()),
         ));
 
         // Parsing a function call into the appropriate structure
@@ -262,7 +118,7 @@ pub fn parser(
             select! { Token::Name { name } => name }
                 .then_ignore(just(Token::Colon))
                 .or_not()
-                .then(r.clone())
+                .then(r)
                 .map_with_span(|(label, value), span| {
                     ParserArg::Arg(Box::new(ast::CallArg {
                         label,
@@ -298,7 +154,8 @@ pub fn parser(
                         .map(|(index, a)| match a {
                             ParserArg::Arg(arg) => *arg,
                             ParserArg::Hole { location, label } => {
-                                let name = format!("{CAPTURE_VARIABLE}__{index}");
+                                let name = format!("{}__{index}", ast::CAPTURE_VARIABLE);
+
                                 holes.push(ast::Arg {
                                     location: Span::empty(),
                                     annotation: None,
@@ -316,7 +173,7 @@ pub fn parser(
                                     location,
                                     value: UntypedExpr::Var {
                                         location,
-                                        name: format!("{CAPTURE_VARIABLE}__{index}"),
+                                        name: format!("{}__{index}", ast::CAPTURE_VARIABLE),
                                     },
                                 }
                             }
@@ -367,7 +224,7 @@ pub fn parser(
 
         // Negate
         let op = choice((
-            just(Token::Bang).to(UnOp::Not),
+            just(Token::Bang).to(ast::UnOp::Not),
             just(Token::Minus)
                 // NOTE: Prevent conflict with usage for '-' as a standalone binary op.
                 // This will make '-' parse when used as standalone binop in a function call.
@@ -381,7 +238,7 @@ pub fn parser(
                 //
                 // which seems acceptable.
                 .then_ignore(just(Token::Comma).not().rewind())
-                .to(UnOp::Negate),
+                .to(ast::UnOp::Negate),
         ));
 
         let unary = op
@@ -397,9 +254,9 @@ pub fn parser(
 
         // Product
         let op = choice((
-            just(Token::Star).to(BinOp::MultInt),
-            just(Token::Slash).to(BinOp::DivInt),
-            just(Token::Percent).to(BinOp::ModInt),
+            just(Token::Star).to(ast::BinOp::MultInt),
+            just(Token::Slash).to(ast::BinOp::DivInt),
+            just(Token::Percent).to(ast::BinOp::ModInt),
         ));
 
         let product = unary
@@ -415,8 +272,8 @@ pub fn parser(
 
         // Sum
         let op = choice((
-            just(Token::Plus).to(BinOp::AddInt),
-            just(Token::Minus).to(BinOp::SubInt),
+            just(Token::Plus).to(ast::BinOp::AddInt),
+            just(Token::Minus).to(ast::BinOp::SubInt),
         ));
 
         let sum = product
@@ -432,12 +289,12 @@ pub fn parser(
 
         // Comparison
         let op = choice((
-            just(Token::EqualEqual).to(BinOp::Eq),
-            just(Token::NotEqual).to(BinOp::NotEq),
-            just(Token::Less).to(BinOp::LtInt),
-            just(Token::Greater).to(BinOp::GtInt),
-            just(Token::LessEqual).to(BinOp::LtEqInt),
-            just(Token::GreaterEqual).to(BinOp::GtEqInt),
+            just(Token::EqualEqual).to(ast::BinOp::Eq),
+            just(Token::NotEqual).to(ast::BinOp::NotEq),
+            just(Token::Less).to(ast::BinOp::LtInt),
+            just(Token::Greater).to(ast::BinOp::GtInt),
+            just(Token::LessEqual).to(ast::BinOp::LtEqInt),
+            just(Token::GreaterEqual).to(ast::BinOp::GtEqInt),
         ));
 
         let comparison = sum
@@ -452,7 +309,7 @@ pub fn parser(
             .boxed();
 
         // Conjunction
-        let op = just(Token::AmperAmper).to(BinOp::And);
+        let op = just(Token::AmperAmper).to(ast::BinOp::And);
         let conjunction = comparison
             .clone()
             .then(op.then(comparison).repeated())
@@ -465,7 +322,7 @@ pub fn parser(
             .boxed();
 
         // Disjunction
-        let op = just(Token::VbarVbar).to(BinOp::Or);
+        let op = just(Token::VbarVbar).to(ast::BinOp::Or);
         let disjunction = conjunction
             .clone()
             .then(op.then(conjunction).repeated())
