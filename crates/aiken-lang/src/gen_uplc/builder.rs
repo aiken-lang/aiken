@@ -65,126 +65,58 @@ pub struct AssignmentProperties {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClauseProperties {
-    ConstrClause {
-        clause_var_name: String,
-        needs_constr_var: bool,
-        is_complex_clause: bool,
-        original_subject_name: String,
-        final_clause: bool,
-    },
+
+pub struct ClauseProperties {
+    pub clause_var_name: String,
+    pub complex_clause: bool,
+    pub needs_constr_var: bool,
+    pub original_subject_name: String,
+    pub final_clause: bool,
+    pub specific_clause: SpecificClause,
+}
+#[derive(Clone, Debug)]
+pub enum SpecificClause {
+    ConstrClause,
     ListClause {
-        clause_var_name: String,
-        needs_constr_var: bool,
-        is_complex_clause: bool,
-        original_subject_name: String,
         current_index: i64,
-        final_clause: bool,
+        defined_tails: Vec<String>,
     },
     TupleClause {
-        clause_var_name: String,
-        needs_constr_var: bool,
-        is_complex_clause: bool,
-        original_subject_name: String,
         defined_tuple_indices: IndexSet<(usize, String)>,
-        final_clause: bool,
     },
 }
 
 impl ClauseProperties {
     pub fn init(t: &Arc<Type>, constr_var: String, subject_name: String) -> Self {
         if t.is_list() {
-            ClauseProperties::ListClause {
+            ClauseProperties {
                 clause_var_name: constr_var,
-                needs_constr_var: false,
-                is_complex_clause: false,
+                complex_clause: false,
                 original_subject_name: subject_name,
-                current_index: -1,
                 final_clause: false,
+                needs_constr_var: false,
+                specific_clause: SpecificClause::ConstrClause,
             }
         } else if t.is_tuple() {
-            ClauseProperties::TupleClause {
+            ClauseProperties {
                 clause_var_name: constr_var,
-                needs_constr_var: false,
-                is_complex_clause: false,
+                complex_clause: false,
                 original_subject_name: subject_name,
-                defined_tuple_indices: IndexSet::new(),
+                needs_constr_var: false,
                 final_clause: false,
+                specific_clause: SpecificClause::TupleClause {
+                    defined_tuple_indices: IndexSet::new(),
+                },
             }
         } else {
-            ClauseProperties::ConstrClause {
+            ClauseProperties {
                 clause_var_name: constr_var,
-                needs_constr_var: false,
-                is_complex_clause: false,
+                complex_clause: false,
                 original_subject_name: subject_name,
+                needs_constr_var: false,
                 final_clause: false,
+                specific_clause: SpecificClause::ConstrClause,
             }
-        }
-    }
-
-    pub fn is_complex_clause(&mut self) -> &mut bool {
-        match self {
-            ClauseProperties::ConstrClause {
-                is_complex_clause, ..
-            }
-            | ClauseProperties::ListClause {
-                is_complex_clause, ..
-            }
-            | ClauseProperties::TupleClause {
-                is_complex_clause, ..
-            } => is_complex_clause,
-        }
-    }
-    pub fn needs_constr_var(&mut self) -> &mut bool {
-        match self {
-            ClauseProperties::ConstrClause {
-                needs_constr_var, ..
-            }
-            | ClauseProperties::ListClause {
-                needs_constr_var, ..
-            }
-            | ClauseProperties::TupleClause {
-                needs_constr_var, ..
-            } => needs_constr_var,
-        }
-    }
-
-    pub fn is_final_clause(&mut self) -> &mut bool {
-        match self {
-            ClauseProperties::ConstrClause { final_clause, .. }
-            | ClauseProperties::ListClause { final_clause, .. }
-            | ClauseProperties::TupleClause { final_clause, .. } => final_clause,
-        }
-    }
-
-    pub fn clause_var_name(&mut self) -> &mut String {
-        match self {
-            ClauseProperties::ConstrClause {
-                clause_var_name, ..
-            }
-            | ClauseProperties::ListClause {
-                clause_var_name, ..
-            }
-            | ClauseProperties::TupleClause {
-                clause_var_name, ..
-            } => clause_var_name,
-        }
-    }
-
-    pub fn original_subject_name(&mut self) -> &mut String {
-        match self {
-            ClauseProperties::ConstrClause {
-                original_subject_name,
-                ..
-            }
-            | ClauseProperties::ListClause {
-                original_subject_name,
-                ..
-            }
-            | ClauseProperties::TupleClause {
-                original_subject_name,
-                ..
-            } => original_subject_name,
         }
     }
 }
@@ -706,12 +638,12 @@ pub fn check_when_pattern_needs(
 ) {
     match pattern {
         Pattern::Var { .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
         }
         Pattern::List { elements, tail, .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
 
-            *clause_properties.is_complex_clause() = true;
+            clause_properties.complex_clause = true;
 
             for element in elements {
                 check_when_pattern_needs(element, clause_properties);
@@ -721,33 +653,33 @@ pub fn check_when_pattern_needs(
             }
         }
         Pattern::Tuple { elems, .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
 
-            *clause_properties.is_complex_clause() = true;
+            clause_properties.complex_clause = true;
 
             for element in elems {
                 check_when_pattern_needs(element, clause_properties);
             }
         }
         Pattern::Int { .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
 
-            *clause_properties.is_complex_clause() = true;
+            clause_properties.complex_clause = true;
         }
         Pattern::Constructor { arguments, .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
 
-            *clause_properties.is_complex_clause() = true;
+            clause_properties.complex_clause = true;
 
             for argument in arguments {
                 check_when_pattern_needs(&argument.value, clause_properties);
             }
         }
         Pattern::Discard { .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
         }
         Pattern::Assign { pattern, .. } => {
-            *clause_properties.needs_constr_var() = true;
+            clause_properties.needs_constr_var = true;
 
             check_when_pattern_needs(pattern, clause_properties)
         }

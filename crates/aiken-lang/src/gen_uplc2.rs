@@ -22,6 +22,7 @@ use crate::{
         air::Air,
         builder::{
             self as build, AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey,
+            SpecificClause,
         },
     },
     tipo::{
@@ -270,7 +271,7 @@ impl<'a> CodeGenerator<'a> {
                         value_type: value.tipo(),
                         kind: *kind,
                         remove_unused: kind.is_let(),
-                        full_check: false,
+                        full_check: !tipo.is_data() && value.tipo().is_data() && kind.is_expect(),
                     },
                 )
             }
@@ -516,7 +517,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             Pattern::Var { name, .. } => {
-                if props.kind.is_expect() && props.value_type.is_data() && !tipo.is_data() {
+                if props.full_check {
                     let mut index_map = IndexMap::new();
                     // let tipo = builder::convert_opaque_type();
                     let assignment = AirTree::let_assignment(name, value);
@@ -525,12 +526,8 @@ impl<'a> CodeGenerator<'a> {
                     if tipo.is_primitive() {
                         AirTree::let_assignment(name, AirTree::hoist_over(assignment, val))
                     } else {
-                        let expect = self.expect_type(
-                            &tipo,
-                            val.clone(),
-                            &mut index_map,
-                            pattern.location(),
-                        );
+                        let expect =
+                            self.expect_type(tipo, val.clone(), &mut index_map, pattern.location());
                         let assign =
                             AirTree::let_assignment("_", AirTree::hoist_over(assignment, expect));
                         AirTree::let_assignment(name, AirTree::hoist_over(assign, val))
@@ -547,7 +544,8 @@ impl<'a> CodeGenerator<'a> {
                 AirTree::UnhoistedSequence(vec![assign, inner_pattern])
             }
             Pattern::Discard { name, .. } => {
-                if props.kind.is_expect() && props.value_type.is_data() && !tipo.is_data() {
+                if props.full_check {
+                    let name = &format!("__discard_expect_{}", name);
                     let mut index_map = IndexMap::new();
                     // let tipo = builder::convert_opaque_type();
                     let assignment = AirTree::let_assignment(name, value);
@@ -584,10 +582,7 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Var { name, .. } => name.to_string(),
                             Pattern::Assign { name, .. } => name.to_string(),
                             Pattern::Discard { name, .. } => {
-                                if props.kind.is_expect()
-                                    && props.value_type.is_data()
-                                    && !tipo.is_data()
-                                {
+                                if props.full_check {
                                     format!("__discard_{}", name)
                                 } else {
                                     "_".to_string()
@@ -613,7 +608,7 @@ impl<'a> CodeGenerator<'a> {
                                     value_type: list_elem_type.clone(),
                                     kind: props.kind,
                                     remove_unused: true,
-                                    full_check: false,
+                                    full_check: props.full_check,
                                 },
                             ),
                         )
@@ -651,10 +646,10 @@ impl<'a> CodeGenerator<'a> {
                             val,
                             tipo,
                             AssignmentProperties {
-                                value_type: props.value_type.clone(),
+                                value_type: tipo.clone(),
                                 kind: props.kind,
                                 remove_unused: true,
-                                full_check: false,
+                                full_check: props.full_check,
                             },
                         ),
                     ));
@@ -694,9 +689,7 @@ impl<'a> CodeGenerator<'a> {
                         let data_type = build::lookup_data_type_by_tipo(&self.data_types, tipo)
                             .unwrap_or_else(|| panic!("Failed to find definition for {}", name));
 
-                        if data_type.constructors.len() > 1
-                            || (!tipo.is_data() && props.value_type.is_data())
-                        {
+                        if data_type.constructors.len() > 1 || props.full_check {
                             let (index, _) = data_type
                                 .constructors
                                 .iter()
@@ -759,10 +752,7 @@ impl<'a> CodeGenerator<'a> {
                                 Pattern::Var { name, .. } => name.to_string(),
                                 Pattern::Assign { name, .. } => name.to_string(),
                                 Pattern::Discard { name, .. } => {
-                                    if props.kind.is_expect()
-                                        && props.value_type.is_data()
-                                        && !tipo.is_data()
-                                    {
+                                    if props.full_check {
                                         format!("__discard_{}", name)
                                     } else {
                                         "_".to_string()
@@ -797,7 +787,7 @@ impl<'a> CodeGenerator<'a> {
                                         value_type: props.value_type.clone(),
                                         kind: props.kind,
                                         remove_unused: true,
-                                        full_check: false,
+                                        full_check: props.full_check,
                                     },
                                 ),
                             )
@@ -843,10 +833,7 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Var { name, .. } => name.to_string(),
                             Pattern::Assign { name, .. } => name.to_string(),
                             Pattern::Discard { name, .. } => {
-                                if props.kind.is_expect()
-                                    && props.value_type.is_data()
-                                    && !tipo.is_data()
-                                {
+                                if props.full_check {
                                     format!("__discard_{}", name)
                                 } else {
                                     "_".to_string()
@@ -879,7 +866,7 @@ impl<'a> CodeGenerator<'a> {
                                     value_type: props.value_type.clone(),
                                     kind: props.kind,
                                     remove_unused: true,
-                                    full_check: false,
+                                    full_check: props.full_check,
                                 },
                             ),
                         )
@@ -1034,13 +1021,13 @@ impl<'a> CodeGenerator<'a> {
         props: &mut ClauseProperties,
     ) -> AirTree {
         assert!(!clauses.is_empty());
-        *props.is_complex_clause() = false;
+        props.complex_clause = false;
 
         if let Some((clause, rest_clauses)) = clauses.split_first() {
             todo!()
         } else {
             // handle final_clause
-            *props.is_final_clause() = true;
+            props.final_clause = true;
             assert!(final_clause.guard.is_none());
             let clause_then = self.build(&final_clause.then);
             let (_, assignments) = self.clause_pattern(&final_clause.pattern, subject_tipo, props);
@@ -1058,14 +1045,14 @@ impl<'a> CodeGenerator<'a> {
     ) -> (AirTree, AirTree) {
         match pattern {
             Pattern::Int { value, .. } => {
-                assert!(!*props.is_final_clause());
+                assert!(!props.final_clause);
                 (AirTree::int(value), AirTree::no_op())
             }
             Pattern::Var { name, .. } => (
                 AirTree::void(),
                 AirTree::let_assignment(
                     name,
-                    AirTree::local_var(props.clause_var_name(), subject_tipo.clone()),
+                    AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
                 ),
             ),
             Pattern::Assign { name, pattern, .. } => {
@@ -1075,7 +1062,7 @@ impl<'a> CodeGenerator<'a> {
                 let sequence = vec![
                     AirTree::let_assignment(
                         name,
-                        AirTree::local_var(props.clause_var_name(), subject_tipo.clone()),
+                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
                     ),
                     inner_assignment,
                 ];
@@ -1083,7 +1070,119 @@ impl<'a> CodeGenerator<'a> {
                 (inner_condition, AirTree::UnhoistedSequence(sequence))
             }
             Pattern::Discard { .. } => (AirTree::void(), AirTree::no_op()),
-            Pattern::List { .. } => todo!(),
+            Pattern::List { elements, tail, .. } => {
+                let ClauseProperties {
+                    specific_clause:
+                        SpecificClause::ListClause {
+                            current_index: _,
+                            defined_tails,
+                        },
+                    clause_var_name: _,
+                    complex_clause: _,
+                    needs_constr_var: _,
+                    original_subject_name: _,
+                    final_clause: _,
+                } = props
+                else { unreachable!()};
+
+                let list_elem_types = subject_tipo.get_inner_types();
+
+                let list_elem_type = list_elem_types
+                    .get(0)
+                    .unwrap_or_else(|| unreachable!("No list element type?"));
+
+                let elems = elements
+                    .iter()
+                    .enumerate()
+                    .zip(defined_tails.clone())
+                    .map(|((index, elem), tail)| {
+                        let elem_name = match elem {
+                            Pattern::Var { name, .. } => name.to_string(),
+                            Pattern::Assign { name, .. } => name.to_string(),
+                            Pattern::Discard { .. } => "_".to_string(),
+                            _ => format!(
+                                "elem_{}_span_{}_{}",
+                                index,
+                                elem.location().start,
+                                elem.location().end
+                            ),
+                        };
+
+                        let mut elem_props = ClauseProperties::init(
+                            list_elem_type,
+                            elem_name.clone(),
+                            elem_name.clone(),
+                        );
+
+                        let statement =
+                            self.nested_clause_condition(elem, list_elem_type, &mut elem_props);
+                        props.complex_clause = props.complex_clause || elem_props.complex_clause;
+
+                        (tail, elem_name, statement)
+                    })
+                    .collect_vec();
+
+                let defined_tail_heads = elems
+                    .iter()
+                    .map(|(tail, head, _)| (tail.to_string(), head.to_string()))
+                    .collect_vec();
+
+                let mut air_elems = elems
+                    .into_iter()
+                    .map(|(_, _, statement)| statement)
+                    .collect_vec();
+
+                let mut list_tail = None;
+
+                tail.iter()
+                    .zip(
+                        defined_tails
+                            .clone()
+                            .get(defined_tails.clone().len() - 1)
+                            .iter(),
+                    )
+                    .for_each(|(elem, tail)| {
+                        let elem_name = match elem.as_ref() {
+                            Pattern::Var { name, .. } => name.to_string(),
+                            Pattern::Assign { name, .. } => name.to_string(),
+                            Pattern::Discard { .. } => "_".to_string(),
+                            _ => format!(
+                                "tail_span_{}_{}",
+                                elem.location().start,
+                                elem.location().end
+                            ),
+                        };
+
+                        let mut elem_props = ClauseProperties {
+                            clause_var_name: elem_name.clone(),
+                            complex_clause: false,
+                            needs_constr_var: false,
+                            original_subject_name: elem_name.clone(),
+                            final_clause: props.final_clause,
+                            specific_clause: props.specific_clause.clone(),
+                        };
+
+                        let statement =
+                            self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
+                        props.complex_clause = props.complex_clause || elem_props.complex_clause;
+
+                        air_elems.push(statement);
+                        list_tail = Some((tail.to_string(), elem_name));
+                    });
+
+                let list_assign = AirTree::list_expose(
+                    defined_tail_heads,
+                    list_tail,
+                    subject_tipo.clone(),
+                    AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                );
+
+                let mut sequence = vec![list_assign];
+
+                sequence.append(&mut air_elems);
+
+                (AirTree::void(), AirTree::UnhoistedSequence(sequence))
+            }
             Pattern::Constructor { .. } => todo!(),
             Pattern::Tuple { .. } => todo!(),
         }
