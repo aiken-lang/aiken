@@ -1,7 +1,7 @@
 ---
 source: crates/aiken-lang/src/tests/parser.rs
 description: "use aiken/list\r\n"
-info: snapshot_windows_newline
+info: windows_newline
 ---
 Module {
     name: "",

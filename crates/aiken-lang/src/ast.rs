@@ -1167,6 +1167,12 @@ impl Span {
         Self::new((), 0..0)
     }
 
+    pub fn create(i: usize, n: usize) -> Self {
+        use chumsky::Span;
+
+        Self::new((), i..i + n)
+    }
+
     pub fn range(&self) -> Range<usize> {
         use chumsky::Span;
 

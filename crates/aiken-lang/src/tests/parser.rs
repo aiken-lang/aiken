@@ -23,7 +23,7 @@ fn assert_definitions(code: &str, definitions: Vec<ast::UntypedDefinition>) {
     )
 }
 
-macro_rules! snapshot_test {
+macro_rules! assert_parse {
     ($name:ident, $code:expr) => {
         #[test]
         fn $name() {
@@ -41,23 +41,7 @@ macro_rules! snapshot_test {
     };
 }
 
-snapshot_test!(snapshot_windows_newline, "use aiken/list\r\n");
-
-#[test]
-fn windows_newline() {
-    let code = "use aiken/list\r\n";
-
-    assert_definitions(
-        code,
-        vec![ast::UntypedDefinition::Use(Use {
-            location: Span::new((), 0..14),
-            module: vec!["aiken".to_string(), "list".to_string()],
-            as_name: None,
-            unqualified: vec![],
-            package: (),
-        })],
-    )
-}
+assert_parse!(windows_newline, "use aiken/list\r\n");
 
 #[test]
 fn can_handle_comments_at_end_of_file() {
