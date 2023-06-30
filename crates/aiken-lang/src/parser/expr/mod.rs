@@ -1,6 +1,8 @@
 use chumsky::prelude::*;
 use vec1::{vec1, Vec1};
 
+pub mod anonymous_function;
+pub mod assignment;
 mod block;
 mod bytearray;
 mod if_else;
@@ -13,6 +15,7 @@ pub mod string;
 mod tuple;
 mod var;
 
+pub use anonymous_function::parser as anonymous_function;
 pub use block::parser as block;
 pub use bytearray::parser as bytearray;
 pub use if_else::parser as if_else;
@@ -48,25 +51,6 @@ pub fn parser(
                     name: module,
                 }),
             });
-
-        let anon_fn_parser = just(Token::Fn)
-            .ignore_then(
-                anon_fn_param_parser()
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-            )
-            .then(just(Token::RArrow).ignore_then(annotation()).or_not())
-            .then(seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
-            .map_with_span(
-                |((arguments, return_annotation), body), span| UntypedExpr::Fn {
-                    arguments,
-                    body: Box::new(body),
-                    location: span,
-                    fn_style: FnStyle::Plain,
-                    return_annotation,
-                },
-            );
 
         let anon_binop_parser = select! {
             Token::EqualEqual => BinOp::Eq,
@@ -216,36 +200,6 @@ pub fn parser(
                 clauses,
             });
 
-        let let_parser = just(Token::Let)
-            .ignore_then(pattern_parser())
-            .then(just(Token::Colon).ignore_then(annotation()).or_not())
-            .then_ignore(just(Token::Equal))
-            .then(r.clone())
-            .map_with_span(
-                |((pattern, annotation), value), span| UntypedExpr::Assignment {
-                    location: span,
-                    value: Box::new(value),
-                    pattern,
-                    kind: ast::AssignmentKind::Let,
-                    annotation,
-                },
-            );
-
-        let expect_parser = just(Token::Expect)
-            .ignore_then(pattern_parser())
-            .then(just(Token::Colon).ignore_then(annotation()).or_not())
-            .then_ignore(just(Token::Equal))
-            .then(r.clone())
-            .map_with_span(
-                |((pattern, annotation), value), span| UntypedExpr::Assignment {
-                    location: span,
-                    value: Box::new(value),
-                    pattern,
-                    kind: ast::AssignmentKind::Expect,
-                    annotation,
-                },
-            );
-
         let expr_unit_parser = choice((
             string(),
             int(),
@@ -256,12 +210,12 @@ pub fn parser(
             tuple(r),
             bytearray(),
             list(r),
-            anon_fn_parser,
+            anonymous_function(seq_r),
             anon_binop_parser,
             block(seq_r),
             when_parser,
-            let_parser,
-            expect_parser,
+            assignment::let_(r),
+            assignment::expect(r),
             if_else(seq_r, r),
         ));
 
