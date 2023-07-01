@@ -45,6 +45,20 @@ pub enum AirStatement {
         is_true: bool,
         value: Box<AirTree>,
     },
+    // Clause Guards
+    ClauseGuard {
+        subject_name: String,
+        tipo: Arc<Type>,
+        pattern: Box<AirTree>,
+        then: Box<AirTree>,
+    },
+    ListClauseGuard {
+        tipo: Arc<Type>,
+        tail_name: String,
+        next_tail_name: Option<String>,
+        inverse: bool,
+        then: Box<AirTree>,
+    },
     // Field Access
     FieldsExpose {
         indices: Vec<(usize, String, Arc<Type>)>,
@@ -180,19 +194,7 @@ pub enum AirExpression {
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
     },
-    ClauseGuard {
-        subject_name: String,
-        tipo: Arc<Type>,
-        pattern: Box<AirTree>,
-        then: Box<AirTree>,
-    },
-    ListClauseGuard {
-        tipo: Arc<Type>,
-        tail_name: String,
-        next_tail_name: Option<String>,
-        inverse: bool,
-        then: Box<AirTree>,
-    },
+
     Finally {
         pattern: Box<AirTree>,
         then: Box<AirTree>,
@@ -479,12 +481,15 @@ impl AirTree {
         tipo: Arc<Type>,
         then: AirTree,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::ClauseGuard {
-            subject_name: subject_name.to_string(),
-            tipo,
-            pattern: pattern.into(),
-            then: then.into(),
-        })
+        AirTree::Statement {
+            statement: AirStatement::ClauseGuard {
+                subject_name: subject_name.to_string(),
+                tipo,
+                pattern: pattern.into(),
+                then: then.into(),
+            },
+            hoisted_over: None,
+        }
     }
     pub fn list_clause_guard(
         tail_name: impl ToString,
@@ -493,13 +498,16 @@ impl AirTree {
         then: AirTree,
         next_tail_name: Option<String>,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::ListClauseGuard {
-            tipo,
-            tail_name: tail_name.to_string(),
-            next_tail_name,
-            inverse,
-            then: then.into(),
-        })
+        AirTree::Statement {
+            statement: AirStatement::ListClauseGuard {
+                tipo,
+                tail_name: tail_name.to_string(),
+                next_tail_name,
+                inverse,
+                then: then.into(),
+            },
+            hoisted_over: None,
+        }
     }
     pub fn finally(pattern: AirTree, then: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::Finally {
@@ -768,6 +776,36 @@ impl AirTree {
                         air_vec.push(Air::AssertBool { is_true: *is_true });
                         value.create_air_vec(air_vec);
                     }
+                    AirStatement::ClauseGuard {
+                        subject_name,
+                        tipo,
+                        pattern,
+                        then,
+                    } => {
+                        air_vec.push(Air::ClauseGuard {
+                            subject_name: subject_name.clone(),
+                            tipo: tipo.clone(),
+                        });
+
+                        pattern.create_air_vec(air_vec);
+                        then.create_air_vec(air_vec);
+                    }
+                    AirStatement::ListClauseGuard {
+                        tipo,
+                        tail_name,
+                        next_tail_name,
+                        inverse,
+                        then,
+                    } => {
+                        air_vec.push(Air::ListClauseGuard {
+                            tipo: tipo.clone(),
+                            tail_name: tail_name.clone(),
+                            next_tail_name: next_tail_name.clone(),
+                            inverse: *inverse,
+                        });
+
+                        then.create_air_vec(air_vec);
+                    }
                     AirStatement::FieldsExpose {
                         indices,
                         check_last_item,
@@ -990,36 +1028,6 @@ impl AirTree {
                     });
                     then.create_air_vec(air_vec);
                     otherwise.create_air_vec(air_vec);
-                }
-                AirExpression::ClauseGuard {
-                    subject_name,
-                    tipo,
-                    pattern,
-                    then,
-                } => {
-                    air_vec.push(Air::ClauseGuard {
-                        subject_name: subject_name.clone(),
-                        tipo: tipo.clone(),
-                    });
-
-                    pattern.create_air_vec(air_vec);
-                    then.create_air_vec(air_vec);
-                }
-                AirExpression::ListClauseGuard {
-                    tipo,
-                    tail_name,
-                    next_tail_name,
-                    inverse,
-                    then,
-                } => {
-                    air_vec.push(Air::ListClauseGuard {
-                        tipo: tipo.clone(),
-                        tail_name: tail_name.clone(),
-                        next_tail_name: next_tail_name.clone(),
-                        inverse: *inverse,
-                    });
-
-                    then.create_air_vec(air_vec);
                 }
                 AirExpression::Finally { pattern, then } => {
                     air_vec.push(Air::Finally);
