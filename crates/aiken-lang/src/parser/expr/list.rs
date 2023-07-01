@@ -39,4 +39,9 @@ mod tests {
     fn empty_list() {
         assert_expr!("[]");
     }
+
+    #[test]
+    fn int_list() {
+        assert_expr!("[1, 2, 3]");
+    }
 }

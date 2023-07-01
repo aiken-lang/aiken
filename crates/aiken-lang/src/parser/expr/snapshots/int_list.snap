@@ -1,0 +1,31 @@
+---
+source: crates/aiken-lang/src/parser/expr/list.rs
+description: "Code:\n\n[1, 2, 3]"
+---
+List {
+    location: 0..9,
+    elements: [
+        Int {
+            location: 1..2,
+            value: "1",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+        Int {
+            location: 4..5,
+            value: "2",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+        Int {
+            location: 7..8,
+            value: "3",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+    ],
+    tail: None,
+}
