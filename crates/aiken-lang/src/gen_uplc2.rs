@@ -16,7 +16,7 @@ use crate::{
         AssignmentKind, BinOp, Pattern, Span, TypedClause, TypedDataType, TypedFunction,
         TypedValidator,
     },
-    builtins::{int, void},
+    builtins::{bool, int, void},
     expr::TypedExpr,
     gen_uplc::{
         air::Air,
@@ -243,7 +243,24 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::call(self.build(fun.as_ref()), tipo.clone(), func_args)
                     }
                 }
-                _ => unreachable!("IS THIS REACHABLE? Well you reached it with {:#?}", body),
+                _ => {
+                    let Some(fun_arg_types) = fun.tipo().arg_types() else {unreachable!("Expected a function type with arguments")};
+
+                    let func_args = args
+                        .iter()
+                        .zip(fun_arg_types)
+                        .map(|(arg, arg_tipo)| {
+                            let mut arg_val = self.build(&arg.value);
+
+                            if arg_tipo.is_data() && !arg.value.tipo().is_data() {
+                                arg_val = AirTree::wrap_data(arg_val, arg.value.tipo())
+                            }
+                            arg_val
+                        })
+                        .collect_vec();
+
+                    AirTree::call(self.build(fun.as_ref()), tipo.clone(), func_args)
+                }
             },
             TypedExpr::BinOp {
                 name,
@@ -1120,10 +1137,17 @@ impl<'a> CodeGenerator<'a> {
                     clause.location.start, clause.location.end
                 );
 
-                let clause_guard_assign =
-                    AirTree::let_assignment(clause_guard_name, builder::handle_clause_guard(guard));
+                let clause_guard_assign = AirTree::let_assignment(
+                    &clause_guard_name,
+                    builder::handle_clause_guard(guard),
+                );
 
-                clause_then = clause_guard_assign.hoist_over(clause_then);
+                clause_then = clause_guard_assign.hoist_over(AirTree::clause_guard(
+                    clause_guard_name,
+                    AirTree::bool(true),
+                    bool(),
+                    clause_then,
+                ));
             }
 
             match &mut props.specific_clause {
@@ -1207,7 +1231,12 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     let next_tail_name = {
-                        let next_elements_len = match &rest_clauses[0].pattern {
+                        let next_clause = if rest_clauses.is_empty() {
+                            &final_clause
+                        } else {
+                            &rest_clauses[0]
+                        };
+                        let next_elements_len = match &next_clause.pattern {
                             Pattern::List { elements, .. } => elements.len(),
                             _ => 0,
                         };
@@ -1216,17 +1245,21 @@ impl<'a> CodeGenerator<'a> {
                             Some(format!(
                                 "tail_index_{}_span_{}_{}",
                                 *current_index,
-                                rest_clauses[0].pattern.location().start,
-                                rest_clauses[0].pattern.location().end
+                                next_clause.pattern.location().start,
+                                next_clause.pattern.location().end
                             ))
                         } else {
                             None
                         }
                     };
 
+                    let mut use_wrap_clause = false;
+
                     if elements.len() > *current_index as usize {
                         *current_index += 1;
                         defined_tails.push(tail_name.clone());
+                    } else if next_tail_name.is_none() {
+                        use_wrap_clause = true;
                     }
 
                     let mut next_clause_props = ClauseProperties {
@@ -1248,21 +1281,31 @@ impl<'a> CodeGenerator<'a> {
 
                     let complex_clause = props.complex_clause;
 
-                    AirTree::list_clause(
-                        tail_name,
-                        subject_tipo.clone(),
-                        clause_assign_hoisted,
-                        self.handle_each_clause(
-                            clauses,
-                            final_clause,
-                            subject_tipo,
-                            &mut next_clause_props,
-                        ),
-                        next_tail_name,
-                        complex_clause,
-                    );
-
-                    todo!();
+                    if use_wrap_clause {
+                        AirTree::wrap_clause(
+                            clause_assign_hoisted,
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                        )
+                    } else {
+                        AirTree::list_clause(
+                            tail_name,
+                            subject_tipo.clone(),
+                            clause_assign_hoisted,
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                            next_tail_name,
+                            complex_clause,
+                        )
+                    }
                 }
                 SpecificClause::TupleClause { .. } => todo!(),
             }
@@ -1328,10 +1371,12 @@ impl<'a> CodeGenerator<'a> {
                     .get(0)
                     .unwrap_or_else(|| unreachable!("No list element type?"));
 
+                let defined_tails = defined_tails.clone();
+
                 let elems = elements
                     .iter()
                     .enumerate()
-                    .zip(defined_tails.clone())
+                    .zip(defined_tails.iter())
                     .map(|((index, elem), tail)| {
                         let elem_name = match elem {
                             Pattern::Var { name, .. } => name.to_string(),
@@ -1371,41 +1416,37 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut list_tail = None;
 
-                tail.iter()
-                    .zip(
-                        defined_tails
-                            .clone()
-                            .get(defined_tails.clone().len() - 1)
-                            .iter(),
-                    )
-                    .for_each(|(elem, tail)| {
-                        let elem_name = match elem.as_ref() {
-                            Pattern::Var { name, .. } => name.to_string(),
-                            Pattern::Assign { name, .. } => name.to_string(),
-                            Pattern::Discard { .. } => "_".to_string(),
-                            _ => format!(
-                                "tail_span_{}_{}",
-                                elem.location().start,
-                                elem.location().end
-                            ),
-                        };
+                tail.iter().for_each(|elem| {
+                    let tail = defined_tails
+                        .last()
+                        .unwrap_or_else(|| panic!("WHERE IS ME TAIL???"));
+                    let elem_name = match elem.as_ref() {
+                        Pattern::Var { name, .. } => name.to_string(),
+                        Pattern::Assign { name, .. } => name.to_string(),
+                        Pattern::Discard { .. } => "_".to_string(),
+                        _ => format!(
+                            "tail_span_{}_{}",
+                            elem.location().start,
+                            elem.location().end
+                        ),
+                    };
 
-                        let mut elem_props = ClauseProperties {
-                            clause_var_name: elem_name.clone(),
-                            complex_clause: false,
-                            needs_constr_var: false,
-                            original_subject_name: elem_name.clone(),
-                            final_clause: props.final_clause,
-                            specific_clause: props.specific_clause.clone(),
-                        };
+                    let mut elem_props = ClauseProperties {
+                        clause_var_name: elem_name.clone(),
+                        complex_clause: false,
+                        needs_constr_var: false,
+                        original_subject_name: elem_name.clone(),
+                        final_clause: props.final_clause,
+                        specific_clause: props.specific_clause.clone(),
+                    };
 
-                        let statement =
-                            self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
-                        *complex_clause = *complex_clause || elem_props.complex_clause;
+                    let statement =
+                        self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
+                    *complex_clause = *complex_clause || elem_props.complex_clause;
 
-                        air_elems.push(statement);
-                        list_tail = Some((tail.to_string(), elem_name));
-                    });
+                    air_elems.push(statement);
+                    list_tail = Some((tail.to_string(), elem_name));
+                });
 
                 let list_assign = AirTree::list_expose(
                     defined_tail_heads,
