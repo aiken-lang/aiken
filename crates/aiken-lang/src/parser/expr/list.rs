@@ -44,4 +44,9 @@ mod tests {
     fn int_list() {
         assert_expr!("[1, 2, 3]");
     }
+
+    #[test]
+    fn list_spread() {
+        assert_expr!("[1, 2, ..[]]");
+    }
 }
