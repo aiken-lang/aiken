@@ -320,6 +320,6 @@ impl Encoder {
             self.buffer.push(chunk.len() as u8);
             self.buffer.extend(chunk);
         }
-        self.buffer.push(0);
+        self.buffer.push(0_u8);
     }
 }

@@ -676,6 +676,7 @@ impl<'b> Decode<'b> for NamedDeBruijn {
 impl<'b> Binder<'b> for NamedDeBruijn {
     fn binder_encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         self.text.encode(e)?;
+        self.index.encode(e)?;
 
         Ok(())
     }
@@ -683,7 +684,7 @@ impl<'b> Binder<'b> for NamedDeBruijn {
     fn binder_decode(d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(NamedDeBruijn {
             text: String::decode(d)?,
-            index: DeBruijn::new(0),
+            index: DeBruijn::decode(d)?,
         })
     }
 
@@ -778,7 +779,7 @@ fn decode_term_tag(d: &mut Decoder) -> Result<u8, de::Error> {
 }
 
 fn safe_encode_bits(num_bits: u32, byte: u8, e: &mut Encoder) -> Result<(), en::Error> {
-    if 2_u8.pow(num_bits) < byte {
+    if 2_u8.pow(num_bits) <= byte {
         Err(en::Error::Message(format!(
             "Overflow detected, cannot fit {byte} in {num_bits} bits."
         )))

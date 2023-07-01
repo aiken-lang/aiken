@@ -251,7 +251,7 @@ impl Converter {
         match term {
             Term::Var(name) => Term::Var(
                 NamedDeBruijn {
-                    text: format!("i_{name}"),
+                    text: "i".to_string(),
                     index: *name.as_ref(),
                 }
                 .into(),
