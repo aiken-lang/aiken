@@ -1217,7 +1217,34 @@ impl<'a> CodeGenerator<'a> {
                     defined_tails,
                 } => {
                     let Pattern::List { elements, .. } = &clause.pattern
-                    else { unreachable!() };
+                    else {
+                        let mut next_clause_props = ClauseProperties {
+                            clause_var_name: props.clause_var_name.clone(),
+                            complex_clause: false,
+                            needs_constr_var: false,
+                            original_subject_name: props.original_subject_name.clone(),
+                            final_clause: false,
+                            specific_clause: SpecificClause::ListClause {
+                                current_index: *current_index,
+                                defined_tails: defined_tails.clone(),
+                            },
+                        };
+
+                        let (_, clause_assign) =
+                            self.clause_pattern(&clause.pattern, subject_tipo, props);
+
+                        let clause_assign_hoisted = clause_assign.hoist_over(clause_then);
+
+                        return AirTree::wrap_clause(
+                            clause_assign_hoisted,
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                        );
+                    };
 
                     let tail_name = if *current_index == 0 {
                         props.original_subject_name.clone()
@@ -1255,7 +1282,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut use_wrap_clause = false;
 
-                    if elements.len() > *current_index as usize {
+                    if elements.len() >= *current_index as usize {
                         *current_index += 1;
                         defined_tails.push(tail_name.clone());
                     } else if next_tail_name.is_none() {
@@ -1396,8 +1423,13 @@ impl<'a> CodeGenerator<'a> {
                             elem_name.clone(),
                         );
 
-                        let statement =
-                            self.nested_clause_condition(elem, list_elem_type, &mut elem_props);
+                        let statement = self.nested_clause_condition(
+                            elem,
+                            AirTree::local_var(&elem_name, list_elem_type.clone()),
+                            list_elem_type,
+                            &mut elem_props,
+                        );
+
                         *complex_clause = *complex_clause || elem_props.complex_clause;
 
                         (tail, elem_name, statement)
@@ -1419,7 +1451,7 @@ impl<'a> CodeGenerator<'a> {
                 tail.iter().for_each(|elem| {
                     let tail = defined_tails
                         .last()
-                        .unwrap_or_else(|| panic!("WHERE IS ME TAIL???"));
+                        .unwrap_or_else(|| panic!("WHERE IS THE TAIL???"));
                     let elem_name = match elem.as_ref() {
                         Pattern::Var { name, .. } => name.to_string(),
                         Pattern::Assign { name, .. } => name.to_string(),
@@ -1440,8 +1472,12 @@ impl<'a> CodeGenerator<'a> {
                         specific_clause: props.specific_clause.clone(),
                     };
 
-                    let statement =
-                        self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
+                    let statement = self.nested_clause_condition(
+                        elem,
+                        AirTree::local_var(&elem_name, subject_tipo.clone()),
+                        subject_tipo,
+                        &mut elem_props,
+                    );
                     *complex_clause = *complex_clause || elem_props.complex_clause;
 
                     air_elems.push(statement);
@@ -1542,6 +1578,7 @@ impl<'a> CodeGenerator<'a> {
 
                             let statement = self.nested_clause_condition(
                                 &arg.value,
+                                AirTree::local_var(&field_name, arg_type.clone()),
                                 arg_type,
                                 &mut field_props,
                             );
@@ -1585,9 +1622,37 @@ impl<'a> CodeGenerator<'a> {
     fn nested_clause_condition(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
+        value: AirTree,
         subject_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
     ) -> AirTree {
-        todo!()
+        match pattern {
+            Pattern::Int { value, .. } => {
+                todo!();
+            }
+            Pattern::Var { location, name } => todo!(),
+            Pattern::Assign {
+                name,
+                location,
+                pattern,
+            } => todo!(),
+            Pattern::Discard { name, location } => todo!(),
+            Pattern::List {
+                location,
+                elements,
+                tail,
+            } => todo!(),
+            Pattern::Constructor {
+                is_record,
+                location,
+                name,
+                arguments,
+                module,
+                constructor,
+                with_spread,
+                tipo,
+            } => todo!(),
+            Pattern::Tuple { location, elems } => todo!(),
+        }
     }
 }

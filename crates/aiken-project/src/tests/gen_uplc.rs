@@ -420,6 +420,103 @@ fn acceptance_test_4_concat_no_anon_func() {
 }
 
 #[test]
+fn acceptance_test_5_direct_head() {
+    let src = r#"
+        use aiken/builtin.{head_list}
+        
+        test head_1() {
+          let head = fn(xs){
+              when xs is {
+                [] -> None
+                _ -> Some(head_list(xs))
+              }
+            }
+        
+          head([1, 2, 3]) == Some(1)
+        }     
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("head")
+                    .lambda("head")
+                    .apply(
+                        Term::var("xs")
+                            .delayed_choose_list(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::constr_data().apply(Term::integer(0.into())).apply(
+                                    Term::mk_cons()
+                                        .apply(Term::head_list().apply(Term::var("xs")))
+                                        .apply(Term::empty_list()),
+                                ),
+                            )
+                            .lambda("xs"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
+                    ])),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+            )),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_5_direct_2_heads() {
+    let src = r#"
+        use aiken/builtin.{head_list}
+        
+        test head_2() {
+          let head = fn(xs: List<Int>){
+              when xs is {
+                [] -> None
+                [a] -> Some(xs)
+                [a, b, ..c] -> Some([a,b])
+              }
+            }
+        
+          head([1, 2, 3]) == Some([1, 2])
+        }     
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("head")
+                    .lambda("head")
+                    .apply(
+                        Term::var("xs")
+                            .delayed_choose_list(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::constr_data().apply(Term::integer(0.into())).apply(
+                                    Term::mk_cons()
+                                        .apply(Term::head_list().apply(Term::var("xs")))
+                                        .apply(Term::empty_list()),
+                                ),
+                            )
+                            .lambda("xs"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
+                    ])),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+            )),
+        false,
+    );
+}
+
+#[test]
 fn acceptance_test_5_head_not_empty() {
     let src = r#"
         use aiken/builtin.{head_list}
