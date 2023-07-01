@@ -5,6 +5,7 @@ use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 use crate::{
     ast::{BinOp, Span, UnOp},
     builtins::{data, list, void},
+    gen_uplc::air,
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 
@@ -146,6 +147,7 @@ pub enum AirExpression {
     When {
         tipo: Arc<Type>,
         subject_name: String,
+        subject: Box<AirTree>,
         clauses: Box<AirTree>,
     },
     Clause {
@@ -396,10 +398,16 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn when(subject_name: impl ToString, tipo: Arc<Type>, clauses: AirTree) -> AirTree {
+    pub fn when(
+        subject_name: impl ToString,
+        tipo: Arc<Type>,
+        subject: AirTree,
+        clauses: AirTree,
+    ) -> AirTree {
         AirTree::Expression(AirExpression::When {
             tipo,
             subject_name: subject_name.to_string(),
+            subject: subject.into(),
             clauses: clauses.into(),
         })
     }
@@ -647,12 +655,12 @@ impl AirTree {
     pub fn list_empty(list: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::ListEmpty { list: list.into() })
     }
-    pub fn hoist_over(mut assignment: AirTree, next_exp: AirTree) -> AirTree {
-        match &mut assignment {
+    pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
+        match &mut self {
             AirTree::Statement { hoisted_over, .. } => {
                 assert!(hoisted_over.is_none());
                 *hoisted_over = Some(next_exp.into());
-                assignment
+                self
             }
 
             AirTree::Expression(_) => {
@@ -661,7 +669,7 @@ impl AirTree {
             AirTree::UnhoistedSequence(seq) => {
                 let mut final_exp = next_exp;
                 while let Some(assign) = seq.pop() {
-                    final_exp = Self::hoist_over(assign, final_exp);
+                    final_exp = assign.hoist_over(final_exp);
                 }
                 final_exp
             }
@@ -698,7 +706,7 @@ impl AirTree {
             "__list_to_check",
             void(),
             AirTree::void(),
-            AirTree::hoist_over(assign, next_call),
+            assign.hoist_over(next_call),
             None,
             false,
         );
@@ -713,7 +721,13 @@ impl AirTree {
         )
     }
 
-    fn to_vec(&self, air_vec: &mut Vec<Air>) {
+    pub fn to_vec(&self) -> Vec<Air> {
+        let mut air_vec = vec![];
+        self.create_air_vec(&mut air_vec);
+        air_vec
+    }
+
+    fn create_air_vec(&self, air_vec: &mut Vec<Air>) {
         match self {
             AirTree::Statement {
                 statement,
@@ -722,7 +736,7 @@ impl AirTree {
                 match statement {
                     AirStatement::Let { value, name } => {
                         air_vec.push(Air::Let { name: name.clone() });
-                        value.to_vec(air_vec);
+                        value.create_air_vec(air_vec);
                     }
                     AirStatement::DefineFunc {
                         func_name,
@@ -739,7 +753,7 @@ impl AirTree {
                             recursive: *recursive,
                             variant_name: variant_name.clone(),
                         });
-                        func_body.to_vec(air_vec);
+                        func_body.create_air_vec(air_vec);
                     }
                     AirStatement::AssertConstr {
                         constr,
@@ -748,18 +762,347 @@ impl AirTree {
                         air_vec.push(Air::AssertConstr {
                             constr_index: *constr_index,
                         });
-                        constr.to_vec(air_vec);
+                        constr.create_air_vec(air_vec);
                     }
-                    AirStatement::AssertBool { .. } => todo!(),
-                    AirStatement::FieldsExpose { .. } => todo!(),
-                    AirStatement::ListAccessor { .. } => todo!(),
-                    AirStatement::ListExpose { .. } => todo!(),
-                    AirStatement::TupleAccessor { .. } => todo!(),
-                    AirStatement::NoOp { .. } => todo!(),
+                    AirStatement::AssertBool { is_true, value } => {
+                        air_vec.push(Air::AssertBool { is_true: *is_true });
+                        value.create_air_vec(air_vec);
+                    }
+                    AirStatement::FieldsExpose {
+                        indices,
+                        check_last_item,
+                        record,
+                    } => {
+                        air_vec.push(Air::FieldsExpose {
+                            indices: indices.clone(),
+                            check_last_item: *check_last_item,
+                        });
+                        record.create_air_vec(air_vec);
+                    }
+                    AirStatement::ListAccessor {
+                        tipo,
+                        names,
+                        tail,
+                        check_last_item,
+                        list,
+                    } => {
+                        air_vec.push(Air::ListAccessor {
+                            tipo: tipo.clone(),
+                            names: names.clone(),
+                            tail: *tail,
+                            check_last_item: *check_last_item,
+                        });
+                        list.create_air_vec(air_vec);
+                    }
+                    AirStatement::ListExpose {
+                        tipo,
+                        tail_head_names,
+                        tail,
+                        list,
+                    } => {
+                        air_vec.push(Air::ListExpose {
+                            tipo: tipo.clone(),
+                            tail_head_names: tail_head_names.clone(),
+                            tail: tail.clone(),
+                        });
+                        list.create_air_vec(air_vec);
+                    }
+                    AirStatement::TupleAccessor {
+                        names,
+                        tipo,
+                        check_last_item,
+                        tuple,
+                    } => {
+                        air_vec.push(Air::TupleAccessor {
+                            names: names.clone(),
+                            tipo: tipo.clone(),
+                            check_last_item: *check_last_item,
+                        });
+                        tuple.create_air_vec(air_vec);
+                    }
+                    AirStatement::NoOp => {
+                        air_vec.push(Air::NoOp);
+                    }
                 };
-                exp.to_vec(air_vec);
+                exp.create_air_vec(air_vec);
             }
-            AirTree::Expression(_) => todo!(),
+            AirTree::Expression(exp) => match exp {
+                AirExpression::Int { value } => air_vec.push(Air::Int {
+                    value: value.clone(),
+                }),
+                AirExpression::String { value } => air_vec.push(Air::String {
+                    value: value.clone(),
+                }),
+                AirExpression::ByteArray { bytes } => air_vec.push(Air::ByteArray {
+                    bytes: bytes.clone(),
+                }),
+                AirExpression::Bool { value } => air_vec.push(Air::Bool { value: *value }),
+                AirExpression::List { tipo, tail, items } => {
+                    air_vec.push(Air::List {
+                        count: items.len(),
+                        tipo: tipo.clone(),
+                        tail: *tail,
+                    });
+                    for item in items {
+                        item.create_air_vec(air_vec);
+                    }
+                }
+                AirExpression::Tuple { tipo, items } => {
+                    air_vec.push(Air::Tuple {
+                        tipo: tipo.clone(),
+                        count: items.len(),
+                    });
+                    for item in items {
+                        item.create_air_vec(air_vec);
+                    }
+                }
+                AirExpression::Void => air_vec.push(Air::Void),
+                AirExpression::Var {
+                    constructor,
+                    name,
+                    variant_name,
+                } => air_vec.push(Air::Var {
+                    constructor: constructor.clone(),
+                    name: name.clone(),
+                    variant_name: variant_name.clone(),
+                }),
+                AirExpression::Call { tipo, func, args } => {
+                    air_vec.push(Air::Call {
+                        count: args.len(),
+                        tipo: tipo.clone(),
+                    });
+                    func.create_air_vec(air_vec);
+                    for arg in args {
+                        arg.create_air_vec(air_vec);
+                    }
+                }
+                AirExpression::Fn { params, func_body } => {
+                    air_vec.push(Air::Fn {
+                        params: params.clone(),
+                    });
+                    func_body.create_air_vec(air_vec);
+                }
+                AirExpression::Builtin { func, tipo, args } => {
+                    air_vec.push(Air::Builtin {
+                        count: args.len(),
+                        func: *func,
+                        tipo: tipo.clone(),
+                    });
+
+                    for arg in args {
+                        arg.create_air_vec(air_vec);
+                    }
+                }
+                AirExpression::BinOp {
+                    name,
+                    tipo,
+                    left,
+                    right,
+                } => {
+                    air_vec.push(Air::BinOp {
+                        name: name.clone(),
+                        tipo: tipo.clone(),
+                    });
+                    left.create_air_vec(air_vec);
+                    right.create_air_vec(air_vec);
+                }
+                AirExpression::UnOp { op, arg } => {
+                    air_vec.push(Air::UnOp { op: *op });
+                    arg.create_air_vec(air_vec);
+                }
+                AirExpression::UnWrapData { tipo, value } => {
+                    air_vec.push(Air::UnWrapData { tipo: tipo.clone() });
+                    value.create_air_vec(air_vec);
+                }
+                AirExpression::WrapData { tipo, value } => {
+                    air_vec.push(Air::WrapData { tipo: tipo.clone() });
+                    value.create_air_vec(air_vec);
+                }
+                AirExpression::When {
+                    tipo,
+                    subject_name,
+                    subject,
+                    clauses,
+                } => {
+                    air_vec.push(Air::When {
+                        tipo: tipo.clone(),
+                        subject_name: subject_name.clone(),
+                    });
+                    subject.create_air_vec(air_vec);
+                    clauses.create_air_vec(air_vec);
+                }
+                AirExpression::Clause {
+                    tipo,
+                    subject_name,
+                    complex_clause,
+                    pattern,
+                    then,
+                    otherwise,
+                } => {
+                    air_vec.push(Air::Clause {
+                        tipo: tipo.clone(),
+                        subject_name: subject_name.clone(),
+                        complex_clause: *complex_clause,
+                    });
+                    pattern.create_air_vec(air_vec);
+                    then.create_air_vec(air_vec);
+                    otherwise.create_air_vec(air_vec);
+                }
+                AirExpression::ListClause {
+                    tipo,
+                    tail_name,
+                    next_tail_name,
+                    complex_clause,
+                    then,
+                    otherwise,
+                } => {
+                    air_vec.push(Air::ListClause {
+                        tipo: tipo.clone(),
+                        tail_name: tail_name.clone(),
+                        next_tail_name: next_tail_name.clone(),
+                        complex_clause: *complex_clause,
+                    });
+                    then.create_air_vec(air_vec);
+                    otherwise.create_air_vec(air_vec);
+                }
+                AirExpression::WrapClause { then, otherwise } => {
+                    air_vec.push(Air::WrapClause);
+                    then.create_air_vec(air_vec);
+                    otherwise.create_air_vec(air_vec);
+                }
+                AirExpression::TupleClause {
+                    tipo,
+                    indices,
+                    predefined_indices,
+                    subject_name,
+                    type_count,
+                    complex_clause,
+                    then,
+                    otherwise,
+                } => {
+                    air_vec.push(Air::TupleClause {
+                        tipo: tipo.clone(),
+                        indices: indices.clone(),
+                        predefined_indices: predefined_indices.clone(),
+                        subject_name: subject_name.clone(),
+                        count: *type_count,
+                        complex_clause: *complex_clause,
+                    });
+                    then.create_air_vec(air_vec);
+                    otherwise.create_air_vec(air_vec);
+                }
+                AirExpression::ClauseGuard {
+                    subject_name,
+                    tipo,
+                    pattern,
+                    then,
+                } => {
+                    air_vec.push(Air::ClauseGuard {
+                        subject_name: subject_name.clone(),
+                        tipo: tipo.clone(),
+                    });
+
+                    pattern.create_air_vec(air_vec);
+                    then.create_air_vec(air_vec);
+                }
+                AirExpression::ListClauseGuard {
+                    tipo,
+                    tail_name,
+                    next_tail_name,
+                    inverse,
+                    then,
+                } => {
+                    air_vec.push(Air::ListClauseGuard {
+                        tipo: tipo.clone(),
+                        tail_name: tail_name.clone(),
+                        next_tail_name: next_tail_name.clone(),
+                        inverse: *inverse,
+                    });
+
+                    then.create_air_vec(air_vec);
+                }
+                AirExpression::Finally { pattern, then } => {
+                    air_vec.push(Air::Finally);
+                    pattern.create_air_vec(air_vec);
+                    then.create_air_vec(air_vec);
+                }
+                AirExpression::If {
+                    tipo,
+                    pattern,
+                    then,
+                    otherwise,
+                } => {
+                    air_vec.push(Air::If { tipo: tipo.clone() });
+                    pattern.create_air_vec(air_vec);
+                    then.create_air_vec(air_vec);
+                    otherwise.create_air_vec(air_vec);
+                }
+                AirExpression::Constr { tag, tipo, args } => {
+                    air_vec.push(Air::Constr {
+                        tag: *tag,
+                        tipo: tipo.clone(),
+                        count: args.len(),
+                    });
+                    for arg in args {
+                        arg.create_air_vec(air_vec);
+                    }
+                }
+                AirExpression::RecordUpdate {
+                    highest_index,
+                    indices,
+                    tipo,
+                    record,
+                    args,
+                } => {
+                    air_vec.push(Air::RecordUpdate {
+                        highest_index: *highest_index,
+                        indices: indices.clone(),
+                        tipo: tipo.clone(),
+                    });
+                    record.create_air_vec(air_vec);
+                    for arg in args {
+                        arg.create_air_vec(air_vec);
+                    }
+                }
+                AirExpression::RecordAccess {
+                    field_index,
+                    tipo,
+                    record,
+                } => {
+                    air_vec.push(Air::RecordAccess {
+                        record_index: *field_index,
+                        tipo: tipo.clone(),
+                    });
+                    record.create_air_vec(air_vec);
+                }
+                AirExpression::TupleIndex {
+                    tipo,
+                    tuple_index,
+                    tuple,
+                } => {
+                    air_vec.push(Air::TupleIndex {
+                        tipo: tipo.clone(),
+                        tuple_index: *tuple_index,
+                    });
+                    tuple.create_air_vec(air_vec);
+                }
+                AirExpression::ErrorTerm { tipo } => {
+                    air_vec.push(Air::ErrorTerm { tipo: tipo.clone() })
+                }
+                AirExpression::Trace { tipo, msg, then } => {
+                    air_vec.push(Air::Trace { tipo: tipo.clone() });
+                    msg.create_air_vec(air_vec);
+                    then.create_air_vec(air_vec);
+                }
+                AirExpression::FieldsEmpty { constr } => {
+                    air_vec.push(Air::FieldsEmpty);
+                    constr.create_air_vec(air_vec);
+                }
+                AirExpression::ListEmpty { list } => {
+                    air_vec.push(Air::ListEmpty);
+                    list.create_air_vec(air_vec);
+                }
+            },
             AirTree::UnhoistedSequence(_) => {
                 unreachable!("FIRST RESOLVE ALL UNHOISTED SEQUENCES")
             }

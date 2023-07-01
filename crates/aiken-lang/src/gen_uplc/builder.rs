@@ -95,7 +95,10 @@ impl ClauseProperties {
                 original_subject_name: subject_name,
                 final_clause: false,
                 needs_constr_var: false,
-                specific_clause: SpecificClause::ConstrClause,
+                specific_clause: SpecificClause::ListClause {
+                    current_index: 0,
+                    defined_tails: vec![],
+                },
             }
         } else if t.is_tuple() {
             ClauseProperties {
