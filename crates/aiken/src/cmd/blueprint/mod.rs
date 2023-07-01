@@ -1,4 +1,5 @@
 pub mod address;
+pub mod policy;
 pub mod apply;
 pub mod convert;
 
@@ -8,6 +9,7 @@ use clap::Subcommand;
 #[derive(Subcommand)]
 pub enum Cmd {
     Address(address::Args),
+    Policy(policy::Args),
     Apply(apply::Args),
     Convert(convert::Args),
 }
@@ -15,6 +17,7 @@ pub enum Cmd {
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
     match cmd {
         Cmd::Address(args) => address::exec(args),
+        Cmd::Policy(args) => policy::exec(args),
         Cmd::Apply(args) => apply::exec(args),
         Cmd::Convert(args) => convert::exec(args),
     }

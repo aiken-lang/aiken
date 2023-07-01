@@ -27,9 +27,10 @@ use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
-use pallas::ledger::addresses::{
+use pallas::ledger::{addresses::{
     Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload,
-};
+}, primitives::babbage::{self as cardano, PolicyId}};
+use pallas_traverse::ComputeHash;
 use script::{EvalHint, EvalInfo, Script};
 use std::{
     collections::HashMap,
@@ -369,6 +370,11 @@ where
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
 
         blueprint.with_validator(title, when_too_many, when_missing, |validator| {
+            // Make sure we're not calculating the address for a minting validator
+            if validator.datum.is_none() {
+                return Err(blueprint::error::Error::UnexpectedMintingValidator.into());
+            }
+
             let n = validator.parameters.len();
             if n > 0 {
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
@@ -376,6 +382,37 @@ where
                 Ok(validator
                     .program
                     .address(Network::Testnet, delegation_part.to_owned()))
+            }
+        })
+    }
+
+    pub fn policy(
+        &self,
+        title: Option<&String>
+    ) -> Result<PolicyId, Error> {
+        // Read blueprint
+        let blueprint = File::open(self.blueprint_path())
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
+
+        // Error handlers for ambiguous / missing validators
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+
+        blueprint.with_validator(title, when_too_many, when_missing, |validator| {
+            // Make sure we're not calculating the policy for a spending validator
+            if validator.datum.is_some() {
+                return Err(blueprint::error::Error::UnexpectedSpendingValidator.into());
+            }
+
+            let n = validator.parameters.len();
+            if n > 0 {
+                Err(blueprint::error::Error::ParameterizedValidator { n }.into())
+            } else {
+                let cbor = validator.program.to_cbor().unwrap();
+                let validator_hash = cardano::PlutusV2Script(cbor.into()).compute_hash();
+                Ok(validator_hash)
             }
         })
     }
