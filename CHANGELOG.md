@@ -1,5 +1,15 @@
 # Changelog
 
+## [next] - YYY-MM-DD
+
+### Added
+
+ - **aiken**: added a `blueprint policy` command to compute the policy ID of a minting script
+
+### Changed
+
+### Removed
+
 ## v1.0.11-alpha - 2023-06-23
 
 ### Added
