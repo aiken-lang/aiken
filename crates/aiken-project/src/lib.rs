@@ -27,9 +27,10 @@ use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
-use pallas::ledger::{addresses::{
-    Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload,
-}, primitives::babbage::{self as cardano, PolicyId}};
+use pallas::ledger::{
+    addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload},
+    primitives::babbage::{self as cardano, PolicyId},
+};
 use pallas_traverse::ComputeHash;
 use script::{EvalHint, EvalInfo, Script};
 use std::{
@@ -386,10 +387,7 @@ where
         })
     }
 
-    pub fn policy(
-        &self,
-        title: Option<&String>
-    ) -> Result<PolicyId, Error> {
+    pub fn policy(&self, title: Option<&String>) -> Result<PolicyId, Error> {
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
