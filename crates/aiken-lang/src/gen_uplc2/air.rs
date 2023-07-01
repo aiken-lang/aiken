@@ -97,7 +97,7 @@ pub enum Air {
         next_tail_name: Option<String>,
         complex_clause: bool,
     },
-    WrapClause {},
+    WrapClause,
     TupleClause {
         tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
@@ -122,7 +122,7 @@ pub enum Air {
         tipo: Arc<Type>,
     },
     // Record Creation
-    Record {
+    Constr {
         tag: usize,
         tipo: Arc<Type>,
         count: usize,
@@ -246,7 +246,7 @@ impl Air {
             | Air::ClauseGuard { tipo, .. }
             | Air::If { tipo, .. }
             | Air::ListClauseGuard { tipo, .. }
-            | Air::Record { tipo, .. }
+            | Air::Constr { tipo, .. }
             | Air::RecordUpdate { tipo, .. }
             | Air::RecordAccess { tipo, .. }
             | Air::ListAccessor { tipo, .. }

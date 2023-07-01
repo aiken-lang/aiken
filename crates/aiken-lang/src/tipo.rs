@@ -180,6 +180,14 @@ impl Type {
         }
     }
 
+    pub fn is_2_tuple(&self) -> bool {
+        match self {
+            Type::Var { tipo } => tipo.borrow().is_2_tuple(),
+            Type::Tuple { elems } => elems.len() == 2,
+            _ => false,
+        }
+    }
+
     pub fn is_data(&self) -> bool {
         match self {
             Self::App { module, name, .. } => "Data" == name && module.is_empty(),
@@ -479,6 +487,13 @@ impl TypeVar {
     pub fn is_tuple(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_tuple(),
+            _ => false,
+        }
+    }
+
+    pub fn is_2_tuple(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_2_tuple(),
             _ => false,
         }
     }
