@@ -1,7 +1,7 @@
 pub mod address;
-pub mod policy;
 pub mod apply;
 pub mod convert;
+pub mod policy;
 
 use clap::Subcommand;
 
