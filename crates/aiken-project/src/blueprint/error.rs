@@ -49,6 +49,26 @@ pub enum Error {
     ))]
     ParameterizedValidator { n: usize },
 
+    #[error(
+        "I couldn't compute the address of the given validator because it's actually a minting policy!",
+    )]
+    #[diagnostic(code("aiken::blueprint::address::minting_validator"))]
+    #[diagnostic(help(
+        "I can only compute addresses for spending validators. Did you mean to call {blueprint_policy_command} instead?",
+        blueprint_policy_command = "blueprint policy".if_supports_color(Stdout, |s| s.purple()),
+    ))]
+    UnexpectedMintingValidator,
+
+    #[error(
+        "I couldn't compute the policyId of the given validator because it's actually a spending policy!",
+    )]
+    #[diagnostic(code("aiken::blueprint::address::spending_validator"))]
+    #[diagnostic(help(
+        "I can only compute policyIds for minting validators. Did you mean to call {blueprint_address_command} instead?",
+        blueprint_address_command = "blueprint address".if_supports_color(Stdout, |s| s.purple()),
+    ))]
+    UnexpectedSpendingValidator,
+
     #[error("I stumble upon something else than a constant when I expected one.")]
     #[diagnostic(code("aiken:blueprint::apply::malformed::argument"))]
     #[diagnostic(help(
