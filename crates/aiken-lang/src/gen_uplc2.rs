@@ -1142,12 +1142,10 @@ impl<'a> CodeGenerator<'a> {
                     builder::handle_clause_guard(guard),
                 );
 
-                clause_then = clause_guard_assign.hoist_over(AirTree::clause_guard(
-                    clause_guard_name,
-                    AirTree::bool(true),
-                    bool(),
-                    clause_then,
-                ));
+                clause_then = clause_guard_assign.hoist_over(
+                    AirTree::clause_guard(clause_guard_name, AirTree::bool(true), bool())
+                        .hoist_over(clause_then),
+                );
             }
 
             match &mut props.specific_clause {
@@ -1423,12 +1421,8 @@ impl<'a> CodeGenerator<'a> {
                             elem_name.clone(),
                         );
 
-                        let statement = self.nested_clause_condition(
-                            elem,
-                            AirTree::local_var(&elem_name, list_elem_type.clone()),
-                            list_elem_type,
-                            &mut elem_props,
-                        );
+                        let statement =
+                            self.nested_clause_condition(elem, list_elem_type, &mut elem_props);
 
                         *complex_clause = *complex_clause || elem_props.complex_clause;
 
@@ -1472,12 +1466,8 @@ impl<'a> CodeGenerator<'a> {
                         specific_clause: props.specific_clause.clone(),
                     };
 
-                    let statement = self.nested_clause_condition(
-                        elem,
-                        AirTree::local_var(&elem_name, subject_tipo.clone()),
-                        subject_tipo,
-                        &mut elem_props,
-                    );
+                    let statement =
+                        self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
                     *complex_clause = *complex_clause || elem_props.complex_clause;
 
                     air_elems.push(statement);
@@ -1578,7 +1568,6 @@ impl<'a> CodeGenerator<'a> {
 
                             let statement = self.nested_clause_condition(
                                 &arg.value,
-                                AirTree::local_var(&field_name, arg_type.clone()),
                                 arg_type,
                                 &mut field_props,
                             );
@@ -1622,20 +1611,24 @@ impl<'a> CodeGenerator<'a> {
     fn nested_clause_condition(
         &mut self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
-        value: AirTree,
         subject_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
     ) -> AirTree {
         match pattern {
             Pattern::Int { value, .. } => {
-                todo!();
+                AirTree::clause_guard(&props.original_subject_name, AirTree::int(value), int())
             }
-            Pattern::Var { location, name } => todo!(),
+            Pattern::Var { name, .. } => AirTree::let_assignment(
+                name,
+                AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
+            ),
             Pattern::Assign {
                 name,
                 location,
                 pattern,
-            } => todo!(),
+            } => {
+                todo!();
+            }
             Pattern::Discard { name, location } => todo!(),
             Pattern::List {
                 location,

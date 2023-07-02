@@ -50,14 +50,12 @@ pub enum AirStatement {
         subject_name: String,
         tipo: Arc<Type>,
         pattern: Box<AirTree>,
-        then: Box<AirTree>,
     },
     ListClauseGuard {
         tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
-        then: Box<AirTree>,
     },
     // Field Access
     FieldsExpose {
@@ -475,18 +473,12 @@ impl AirTree {
             otherwise: otherwise.into(),
         })
     }
-    pub fn clause_guard(
-        subject_name: impl ToString,
-        pattern: AirTree,
-        tipo: Arc<Type>,
-        then: AirTree,
-    ) -> AirTree {
+    pub fn clause_guard(subject_name: impl ToString, pattern: AirTree, tipo: Arc<Type>) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ClauseGuard {
                 subject_name: subject_name.to_string(),
                 tipo,
                 pattern: pattern.into(),
-                then: then.into(),
             },
             hoisted_over: None,
         }
@@ -495,7 +487,6 @@ impl AirTree {
         tail_name: impl ToString,
         tipo: Arc<Type>,
         inverse: bool,
-        then: AirTree,
         next_tail_name: Option<String>,
     ) -> AirTree {
         AirTree::Statement {
@@ -504,7 +495,6 @@ impl AirTree {
                 tail_name: tail_name.to_string(),
                 next_tail_name,
                 inverse,
-                then: then.into(),
             },
             hoisted_over: None,
         }
@@ -780,7 +770,6 @@ impl AirTree {
                         subject_name,
                         tipo,
                         pattern,
-                        then,
                     } => {
                         air_vec.push(Air::ClauseGuard {
                             subject_name: subject_name.clone(),
@@ -788,14 +777,12 @@ impl AirTree {
                         });
 
                         pattern.create_air_vec(air_vec);
-                        then.create_air_vec(air_vec);
                     }
                     AirStatement::ListClauseGuard {
                         tipo,
                         tail_name,
                         next_tail_name,
                         inverse,
-                        then,
                     } => {
                         air_vec.push(Air::ListClauseGuard {
                             tipo: tipo.clone(),
@@ -803,8 +790,6 @@ impl AirTree {
                             next_tail_name: next_tail_name.clone(),
                             inverse: *inverse,
                         });
-
-                        then.create_air_vec(air_vec);
                     }
                     AirStatement::FieldsExpose {
                         indices,
