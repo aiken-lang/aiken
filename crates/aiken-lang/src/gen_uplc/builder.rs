@@ -122,6 +122,47 @@ impl ClauseProperties {
             }
         }
     }
+
+    pub fn init_inner(
+        t: &Arc<Type>,
+        constr_var: String,
+        subject_name: String,
+        final_clause: bool,
+    ) -> Self {
+        if t.is_list() {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                final_clause,
+                needs_constr_var: false,
+                specific_clause: SpecificClause::ListClause {
+                    current_index: 0,
+                    defined_tails: vec![],
+                },
+            }
+        } else if t.is_tuple() {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                needs_constr_var: false,
+                final_clause,
+                specific_clause: SpecificClause::TupleClause {
+                    defined_tuple_indices: IndexSet::new(),
+                },
+            }
+        } else {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                needs_constr_var: false,
+                final_clause,
+                specific_clause: SpecificClause::ConstrClause,
+            }
+        }
+    }
 }
 
 pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {

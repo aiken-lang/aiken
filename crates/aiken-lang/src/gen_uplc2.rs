@@ -1256,25 +1256,25 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     let next_tail_name = {
-                        let next_clause = if rest_clauses.is_empty() {
-                            &final_clause
-                        } else {
-                            &rest_clauses[0]
-                        };
-                        let next_elements_len = match &next_clause.pattern {
-                            Pattern::List { elements, .. } => elements.len(),
-                            _ => 0,
-                        };
-
-                        if (*current_index as usize) < next_elements_len {
-                            Some(format!(
-                                "tail_index_{}_span_{}_{}",
-                                *current_index,
-                                next_clause.pattern.location().start,
-                                next_clause.pattern.location().end
-                            ))
-                        } else {
+                        if rest_clauses.is_empty() {
                             None
+                        } else {
+                            let next_clause = &rest_clauses[0];
+                            let next_elements_len = match &next_clause.pattern {
+                                Pattern::List { elements, .. } => elements.len(),
+                                _ => 0,
+                            };
+
+                            if (*current_index as usize) < next_elements_len {
+                                Some(format!(
+                                    "tail_index_{}_span_{}_{}",
+                                    *current_index + 1,
+                                    next_clause.pattern.location().start,
+                                    next_clause.pattern.location().end
+                                ))
+                            } else {
+                                None
+                            }
                         }
                     };
 
@@ -1384,8 +1384,6 @@ impl<'a> CodeGenerator<'a> {
                 let ClauseProperties {
                     specific_clause: SpecificClause::ListClause { defined_tails, .. },
                     complex_clause,
-                    original_subject_name: _,
-                    final_clause: _,
                     ..
                 } = props
                 else { unreachable!() };
@@ -1415,10 +1413,11 @@ impl<'a> CodeGenerator<'a> {
                             ),
                         };
 
-                        let mut elem_props = ClauseProperties::init(
+                        let mut elem_props = ClauseProperties::init_inner(
                             list_elem_type,
                             elem_name.clone(),
                             elem_name.clone(),
+                            props.final_clause,
                         );
 
                         let statement =
@@ -1457,14 +1456,12 @@ impl<'a> CodeGenerator<'a> {
                         ),
                     };
 
-                    let mut elem_props = ClauseProperties {
-                        clause_var_name: elem_name.clone(),
-                        complex_clause: false,
-                        needs_constr_var: false,
-                        original_subject_name: elem_name.clone(),
-                        final_clause: props.final_clause,
-                        specific_clause: props.specific_clause.clone(),
-                    };
+                    let mut elem_props = ClauseProperties::init_inner(
+                        subject_tipo,
+                        elem_name.clone(),
+                        elem_name.clone(),
+                        props.final_clause,
+                    );
 
                     let statement =
                         self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
@@ -1557,14 +1554,12 @@ impl<'a> CodeGenerator<'a> {
                                 )
                             });
 
-                            let mut field_props = ClauseProperties {
-                                clause_var_name: field_name.clone(),
-                                complex_clause: false,
-                                needs_constr_var: false,
-                                original_subject_name: field_name.clone(),
-                                final_clause: props.final_clause,
-                                specific_clause: props.specific_clause.clone(),
-                            };
+                            let mut field_props = ClauseProperties::init_inner(
+                                arg_type,
+                                field_name.clone(),
+                                field_name.clone(),
+                                props.final_clause,
+                            );
 
                             let statement = self.nested_clause_condition(
                                 &arg.value,
@@ -1614,38 +1609,62 @@ impl<'a> CodeGenerator<'a> {
         subject_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
     ) -> AirTree {
-        match pattern {
-            Pattern::Int { value, .. } => {
-                AirTree::clause_guard(&props.original_subject_name, AirTree::int(value), int())
+        if props.final_clause {
+            props.complex_clause = false;
+            let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
+            assign
+        } else {
+            match pattern {
+                Pattern::Int { value, .. } => {
+                    props.complex_clause = true;
+                    AirTree::clause_guard(&props.original_subject_name, AirTree::int(value), int())
+                }
+                Pattern::Var { name, .. } => AirTree::let_assignment(
+                    name,
+                    AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
+                ),
+                Pattern::Assign { name, pattern, .. } => AirTree::UnhoistedSequence(vec![
+                    AirTree::let_assignment(
+                        name,
+                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
+                    ),
+                    self.nested_clause_condition(pattern, subject_tipo, props),
+                ]),
+                Pattern::Discard { .. } => AirTree::no_op(),
+                Pattern::List {
+                    location,
+                    elements,
+                    tail,
+                } => {
+                    todo!();
+                }
+                Pattern::Constructor {
+                    name: constr_name, ..
+                } => {
+                    props.complex_clause = true;
+                    if subject_tipo.is_bool() {
+                        AirTree::clause_guard(
+                            &props.original_subject_name,
+                            AirTree::bool(constr_name == "True"),
+                            bool(),
+                        )
+                    } else if subject_tipo.is_void() {
+                        todo!()
+                    } else {
+                        let (cond, assign) = self.clause_pattern(pattern, subject_tipo, props);
+
+                        AirTree::UnhoistedSequence(vec![
+                            AirTree::clause_guard(
+                                &props.original_subject_name,
+                                cond,
+                                subject_tipo.clone(),
+                            ),
+                            assign,
+                        ])
+                    }
+                }
+                Pattern::Tuple { location, elems } => todo!(),
             }
-            Pattern::Var { name, .. } => AirTree::let_assignment(
-                name,
-                AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-            ),
-            Pattern::Assign {
-                name,
-                location,
-                pattern,
-            } => {
-                todo!();
-            }
-            Pattern::Discard { name, location } => todo!(),
-            Pattern::List {
-                location,
-                elements,
-                tail,
-            } => todo!(),
-            Pattern::Constructor {
-                is_record,
-                location,
-                name,
-                arguments,
-                module,
-                constructor,
-                with_spread,
-                tipo,
-            } => todo!(),
-            Pattern::Tuple { location, elems } => todo!(),
         }
     }
 }
