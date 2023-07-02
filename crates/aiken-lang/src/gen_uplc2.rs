@@ -550,8 +550,12 @@ impl<'a> CodeGenerator<'a> {
                     if tipo.is_primitive() {
                         AirTree::let_assignment(name, assignment.hoist_over(val))
                     } else {
-                        let expect =
-                            self.expect_type(tipo, val.clone(), &mut index_map, pattern.location());
+                        let expect = self.expect_type_assign(
+                            tipo,
+                            val.clone(),
+                            &mut index_map,
+                            pattern.location(),
+                        );
                         let assign = AirTree::let_assignment("_", assignment.hoist_over(expect));
                         AirTree::let_assignment(name, assign.hoist_over(val))
                     }
@@ -576,8 +580,12 @@ impl<'a> CodeGenerator<'a> {
                     if tipo.is_primitive() {
                         AirTree::let_assignment(name, assignment.hoist_over(val))
                     } else {
-                        let expect =
-                            self.expect_type(tipo, val.clone(), &mut index_map, pattern.location());
+                        let expect = self.expect_type_assign(
+                            tipo,
+                            val.clone(),
+                            &mut index_map,
+                            pattern.location(),
+                        );
                         let assign = AirTree::let_assignment("_", assignment.hoist_over(expect));
                         AirTree::let_assignment(name, assign.hoist_over(val))
                     }
@@ -912,7 +920,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn expect_type(
+    pub fn expect_type_assign(
         &mut self,
         tipo: &Arc<Type>,
         value: AirTree,
@@ -942,14 +950,14 @@ impl<'a> CodeGenerator<'a> {
                 AirTree::local_var(&pair_name, inner_list_type.clone()),
             );
 
-            let expect_fst = self.expect_type(
+            let expect_fst = self.expect_type_assign(
                 &inner_pair_types[0],
                 AirTree::local_var(fst_name, inner_pair_types[0].clone()),
                 defined_data_types,
                 location,
             );
 
-            let expect_snd = self.expect_type(
+            let expect_snd = self.expect_type_assign(
                 &inner_pair_types[1],
                 AirTree::local_var(snd_name, inner_pair_types[1].clone()),
                 defined_data_types,
@@ -997,7 +1005,7 @@ impl<'a> CodeGenerator<'a> {
 
             let assign = AirTree::let_assignment(&list_name, value);
 
-            let expect_item = self.expect_type(
+            let expect_item = self.expect_type_assign(
                 inner_list_type,
                 AirTree::local_var(&item_name, inner_list_type.clone()),
                 defined_data_types,
@@ -1048,14 +1056,14 @@ impl<'a> CodeGenerator<'a> {
                 AirTree::local_var(pair_name, tipo.clone()),
             );
 
-            let expect_fst = self.expect_type(
+            let expect_fst = self.expect_type_assign(
                 &tuple_inner_types[0],
                 AirTree::local_var(fst_name, tuple_inner_types[0].clone()),
                 defined_data_types,
                 location,
             );
 
-            let expect_snd = self.expect_type(
+            let expect_snd = self.expect_type_assign(
                 &tuple_inner_types[1],
                 AirTree::local_var(snd_name, tuple_inner_types[1].clone()),
                 defined_data_types,
