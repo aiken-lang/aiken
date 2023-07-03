@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntype Foo =\n  Int\n\n//"
+---
+type Foo =
+  Int
+//
+

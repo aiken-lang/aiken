@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  when bar is {\n    Bar { a, b, c } -> Void\n    Bar { a, .. } -> Void\n    Bar { .. } -> Void\n    Bar(a, b, c) -> Void\n    Bar(..) -> Void\n  }\n}\n"
+---
+fn foo() {
+  when bar is {
+    Bar { a, b, c } -> Void
+    Bar { a, .. } -> Void
+    Bar { .. } -> Void
+    Bar(a, b, c) -> Void
+    Bar(..) -> Void
+  }
+}
+

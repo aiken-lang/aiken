@@ -1,0 +1,12 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  my_expression?\n}\n\nfn bar() {\n  (True && False)? || foo()?\n}\n"
+---
+fn foo() {
+  my_expression?
+}
+
+fn bar() {
+  (True && False)? || foo()?
+}
+

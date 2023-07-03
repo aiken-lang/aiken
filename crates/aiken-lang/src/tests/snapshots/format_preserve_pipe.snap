@@ -1,0 +1,25 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  a |> b |> c |> d\n}\n\nfn foo() {\n  a\n    // Foo\n    |> b// Some comments\n    |> c\n    |> d\n}\n\nfn baz() {\n  // Commented\n  however |> it_automatically_breaks |> into_multiple_lines |> anytime_when |> it_is_too_long // What?\n}\n"
+---
+fn foo() {
+  a |> b |> c |> d
+}
+
+fn foo() {
+  a // Foo
+    |> b // Some comments
+    |> c
+    |> d
+}
+
+fn baz() {
+  // Commented
+  however
+    |> it_automatically_breaks
+    |> into_multiple_lines
+    |> anytime_when
+    |> it_is_too_long
+  // What?
+}
+

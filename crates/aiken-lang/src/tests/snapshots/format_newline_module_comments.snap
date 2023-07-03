@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n//// My module comment\n////\n//// has a newline.\n\nfn foo() {\n  True\n}\n\n//// My module comments\n\n//// cannot be separated\n"
+---
+//// My module comment
+////
+//// has a newline.
+//// My module comments
+//// cannot be separated
+
+fn foo() {
+  True
+}
+

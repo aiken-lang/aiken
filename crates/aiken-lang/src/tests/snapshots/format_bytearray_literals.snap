@@ -1,0 +1,18 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nconst foo_const_array = #[102, 111, 111]\n\nconst foo_const_hex = #\"666f6f\"\n\nconst foo_const_utf8 = \"foo\"\n\nfn foo() {\n  let foo_const_array = #[102, 111, 111]\n\n  let foo_const_hex = #\"666f6f\"\n\n  let foo_const_utf8 = \"foo\"\n}\n"
+---
+const foo_const_array = #[102, 111, 111]
+
+const foo_const_hex = #"666f6f"
+
+const foo_const_utf8 = "foo"
+
+fn foo() {
+  let foo_const_array = #[102, 111, 111]
+
+  let foo_const_hex = #"666f6f"
+
+  let foo_const_utf8 = "foo"
+}
+

@@ -1,0 +1,20 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  compare_with(a, >, b)\n  compare_with(a, >=, b)\n  compare_with(a, <, b)\n  compare_with(a, <=, b)\n  compare_with(a, ==, b)\n  compare_with(a, !=, b)\n  combine_with(a, &&, b)\n  combine_with(a, ||, b)\n  compute_with(a, +, b)\n  compute_with(a, -, b)\n  compute_with(a, /, b)\n  compute_with(a, *, b)\n  compute_with(a, %, b)\n}\n"
+---
+fn foo() {
+  compare_with(a, >, b)
+  compare_with(a, >=, b)
+  compare_with(a, <, b)
+  compare_with(a, <=, b)
+  compare_with(a, ==, b)
+  compare_with(a, !=, b)
+  combine_with(a, &&, b)
+  combine_with(a, ||, b)
+  compute_with(a, +, b)
+  compute_with(a, -, b)
+  compute_with(a, /, b)
+  compute_with(a, *, b)
+  compute_with(a, %, b)
+}
+

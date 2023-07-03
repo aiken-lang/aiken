@@ -1,0 +1,20 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n// A\n\n/// B\n\n/// C\nfn foo() {\n  todo\n}\n\n// E\n\n/// F\n\n// G\nfn bar() {\n  todo\n}\n"
+---
+// A
+
+/// B
+/// C
+fn foo() {
+  todo
+}
+
+// E
+
+// G
+/// F
+fn bar() {
+  todo
+}
+

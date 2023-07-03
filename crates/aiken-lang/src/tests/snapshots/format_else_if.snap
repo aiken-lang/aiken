@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(xs: List<a>, n: Int) -> List<a> {\n  if n <= 0 {\n    xs\n  } else if n <= 10 {\n    xs\n  } else {\n    xs\n  }\n}\n"
+---
+pub fn foo(xs: List<a>, n: Int) -> List<a> {
+  if n <= 0 {
+    xs
+  } else if n <= 10 {
+    xs
+  } else {
+    xs
+  }
+}
+

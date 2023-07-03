@@ -1,0 +1,12 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nuse aiken/list\n// foo\nuse aiken/bytearray\nuse aiken/transaction/certificate\n// bar\nuse aiken/transaction\nuse aiken/transaction/value\n"
+---
+// foo
+use aiken/bytearray
+use aiken/list
+// bar
+use aiken/transaction
+use aiken/transaction/certificate
+use aiken/transaction/value
+

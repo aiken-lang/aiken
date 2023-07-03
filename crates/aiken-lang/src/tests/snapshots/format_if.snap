@@ -1,0 +1,25 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(a) {\n  if a { 14 } else { 42 }\n  }\n\npub fn bar(xs) {\n    list.map(xs, fn (x) { if x > 0 { \"foo\" } else { \"bar\" } })\n}\n"
+---
+pub fn foo(a) {
+  if a {
+    14
+  } else {
+    42
+  }
+}
+
+pub fn bar(xs) {
+  list.map(
+    xs,
+    fn(x) {
+      if x > 0 {
+        "foo"
+      } else {
+        "bar"
+      }
+    },
+  )
+}
+

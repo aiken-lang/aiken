@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nconst foo_const: String = @\"foo\"\n\nfn foo() {\n  let foo_var: String = @\"foo\"\n}\n"
+---
+const foo_const: String = @"foo"
+
+fn foo() {
+  let foo_var: String = @"foo"
+}
+

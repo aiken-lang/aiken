@@ -1,0 +1,24 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(n) {\n  if n > 0 {\n    if n > 1 { if n > 2 { \"foo\" } else { \"foo\" } } else { \"bar\" }\n  } else {\n    if n < -1 { \"baz\" } else { \"biz\" }\n  }\n}\n"
+---
+pub fn foo(n) {
+  if n > 0 {
+    if n > 1 {
+      if n > 2 {
+        "foo"
+      } else {
+        "foo"
+      }
+    } else {
+      "bar"
+    }
+  } else {
+    if n < -1 {
+      "baz"
+    } else {
+      "biz"
+    }
+  }
+}
+

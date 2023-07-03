@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n    validator ( param1 : ByteArray ) {\n    fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {\n    True\n    }\n    /// This is bar\nfn bar(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }\n    }\n"
+---
+validator(param1: ByteArray) {
+  fn foo(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+    True
+  }
+
+  /// This is bar
+  fn bar(r: Redeemer, ctx: ScriptContext) -> Bool {
+    True
+  }
+}
+

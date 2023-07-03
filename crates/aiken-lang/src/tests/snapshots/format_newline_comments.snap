@@ -1,0 +1,18 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n// My comment\n//\n// has a newline.\nfn foo() {\n  True\n}\n\n// My comments\n\n// can live apart\nfn bar() {\n  True\n}\n"
+---
+// My comment
+//
+// has a newline.
+fn foo() {
+  True
+}
+
+// My comments
+
+// can live apart
+fn bar() {
+  True
+}
+

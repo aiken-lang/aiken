@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  list.any([], fn (e) { trace @\"foo\"\n    e\n  })\n}\n"
+---
+fn foo() {
+  list.any(
+    [],
+    fn(e) {
+      trace @"foo"
+      e
+    },
+  )
+}
+

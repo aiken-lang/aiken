@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n/// ∞ ★ ♩ ♫ ✓\nfn foo() {\n  trace @\"∀💩\"\n  Void\n}\n"
+---
+/// ∞ ★ ♩ ♫ ✓
+fn foo() {
+  trace @"∀💩"
+  Void
+}
+

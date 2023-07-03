@@ -1,0 +1,11 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  let a = 1_000_000 + 1_423 + 10393841\n  let b = 0xa4 - 0xcd\n  let c = #[0xfd, 0x12, 0x00, 0x1b, 0x0a, 0x90]\n  let d = -100_000\n}\n"
+---
+fn foo() {
+  let a = 1_000_000 + 1_423 + 10393841
+  let b = 0xa4 - 0xcd
+  let c = #[0xfd, 0x12, 0x00, 0x1b, 0x0a, 0x90]
+  let d = -100_000
+}
+
