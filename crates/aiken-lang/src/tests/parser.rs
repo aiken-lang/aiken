@@ -123,39 +123,6 @@ fn call() {
 }
 
 #[test]
-fn record_create_labeled() {
-    assert_module!(
-        r#"
-        fn create() {
-          User { name: "Aiken", age, thing: 2 }
-        }
-       "#
-    );
-}
-
-#[test]
-fn record_create_labeled_with_field_access() {
-    assert_module!(
-        r#"
-        fn create() {
-          some_module.User { name: "Aiken", age, thing: 2 }
-        }
-        "#
-    );
-}
-
-#[test]
-fn cargo_create_unlabeled() {
-    assert_module!(
-        r#"
-        fn create() {
-          some_module.Thing(1, a)
-        }
-        "#
-    );
-}
-
-#[test]
 fn parse_tuple() {
     assert_module!(
         r#"

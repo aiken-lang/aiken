@@ -1,0 +1,36 @@
+---
+source: crates/aiken-lang/src/parser/expr/record.rs
+description: "Code:\n\nsome_module.Thing(1, a)"
+---
+Call {
+    arguments: [
+        CallArg {
+            label: None,
+            location: 18..19,
+            value: Int {
+                location: 18..19,
+                value: "1",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+        CallArg {
+            label: None,
+            location: 21..22,
+            value: Var {
+                location: 21..22,
+                name: "a",
+            },
+        },
+    ],
+    fun: FieldAccess {
+        location: 0..17,
+        label: "Thing",
+        container: Var {
+            location: 0..11,
+            name: "some_module",
+        },
+    },
+    location: 0..23,
+}

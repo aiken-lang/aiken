@@ -150,3 +150,23 @@ pub fn parser(
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn record_create_labeled() {
+        assert_expr!(r#"User { name: "Aiken", age, thing: 2 }"#);
+    }
+
+    #[test]
+    fn record_create_labeled_with_field_access() {
+        assert_expr!(r#"some_module.User { name: "Aiken", age, thing: 2 }"#);
+    }
+
+    #[test]
+    fn record_create_unlabeled() {
+        assert_expr!(r#"some_module.Thing(1, a)"#);
+    }
+}

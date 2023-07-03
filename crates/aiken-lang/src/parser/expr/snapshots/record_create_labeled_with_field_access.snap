@@ -1,0 +1,57 @@
+---
+source: crates/aiken-lang/src/parser/expr/record.rs
+description: "Code:\n\nsome_module.User { name: \"Aiken\", age, thing: 2 }"
+---
+Call {
+    arguments: [
+        CallArg {
+            label: Some(
+                "name",
+            ),
+            location: 19..32,
+            value: ByteArray {
+                location: 25..32,
+                bytes: [
+                    65,
+                    105,
+                    107,
+                    101,
+                    110,
+                ],
+                preferred_format: Utf8String,
+            },
+        },
+        CallArg {
+            label: Some(
+                "age",
+            ),
+            location: 34..37,
+            value: Var {
+                location: 34..37,
+                name: "age",
+            },
+        },
+        CallArg {
+            label: Some(
+                "thing",
+            ),
+            location: 39..47,
+            value: Int {
+                location: 46..47,
+                value: "2",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+    ],
+    fun: FieldAccess {
+        location: 0..16,
+        label: "User",
+        container: Var {
+            location: 0..11,
+            name: "some_module",
+        },
+    },
+    location: 0..49,
+}
