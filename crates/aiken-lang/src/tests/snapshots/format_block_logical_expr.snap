@@ -1,0 +1,16 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  !(a && b)\n}\n\nfn bar() {\n  (a || b) && (c || d)\n}\n\nfn baz() {\n  a || (b && c) || d\n}\n"
+---
+fn foo() {
+  !(a && b)
+}
+
+fn bar() {
+  ( a || b ) && ( c || d )
+}
+
+fn baz() {
+  a || b && c || d
+}
+

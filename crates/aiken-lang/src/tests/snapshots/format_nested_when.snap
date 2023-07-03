@@ -1,0 +1,19 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  when a is {\n    None -> \"foo\"\n    Some(b) -> when b is {\n      None -> \"foo\"\n      Some(c) -> when c is {\n        None -> \"foo\"\n        Some(_) -> \"foo\"\n      }\n    }\n  }\n}\n"
+---
+fn foo() {
+  when a is {
+    None -> "foo"
+    Some(b) ->
+      when b is {
+        None -> "foo"
+        Some(c) ->
+          when c is {
+            None -> "foo"
+            Some(_) -> "foo"
+          }
+      }
+  }
+}
+

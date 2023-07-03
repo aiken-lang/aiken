@@ -1,0 +1,16 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo( a) {\n  when  a   is{\n    True  -> {\n\n      bar()\n\n      14\n\n    }\n    False ->\n\n     42\n\n     }\n }\n"
+---
+pub fn foo(a) {
+  when a is {
+    True -> {
+      bar()
+
+      14
+    }
+
+    False -> 42
+  }
+}
+

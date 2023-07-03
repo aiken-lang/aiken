@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    - 42\n}\n"
+---
+fn foo() {
+  -42
+}
+

@@ -1,0 +1,21 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo(output) {\n  [\n    output.address.stake_credential == Some(\n    Inline(\n    VerificationKeyCredential(\n      #\"66666666666666666666666666666666666666666666666666666666\",\n    ))\n    )\n    ,\n    when output.datum is {\n      InlineDatum(_) -> True\n      _ -> error \"expected inline datum\"\n    },\n  ]\n  |> list.and\n}\n"
+---
+fn foo(output) {
+  [
+    output.address.stake_credential == Some(
+      Inline(
+        VerificationKeyCredential(
+          #"66666666666666666666666666666666666666666666666666666666",
+        ),
+      ),
+    ),
+    when output.datum is {
+      InlineDatum(_) -> True
+      _ -> error @"expected inline datum"
+    },
+  ]
+    |> list.and
+}
+

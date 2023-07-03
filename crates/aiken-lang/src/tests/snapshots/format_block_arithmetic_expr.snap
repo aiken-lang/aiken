@@ -1,0 +1,12 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  ( 14 + 42 ) * 1337\n}\n\nfn bar() {\n  { 14 + 42 } * 1337\n}\n"
+---
+fn foo() {
+  ( 14 + 42 ) * 1337
+}
+
+fn bar() {
+  ( 14 + 42 ) * 1337
+}
+

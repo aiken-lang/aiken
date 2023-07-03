@@ -1,0 +1,17 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n/// My doc comment\n///\n/// has a newline.\nfn foo() {\n  True\n}\n\n/// My doc comments\n\n/// cannot be separated\nfn bar() {\n  True\n}\n"
+---
+/// My doc comment
+///
+/// has a newline.
+fn foo() {
+  True
+}
+
+/// My doc comments
+/// cannot be separated
+fn bar() {
+  True
+}
+

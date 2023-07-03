@@ -97,3 +97,24 @@ macro_rules! assert_definition {
         });
     };
 }
+
+#[macro_export]
+macro_rules! assert_format {
+    ($code:expr) => {
+        let src = indoc::indoc! { $code };
+
+        let (module, extra) =
+            $crate::parser::module(src, $crate::ast::ModuleKind::Lib).expect("Failed to parse code");
+
+        let mut out = String::new();
+        $crate::format::pretty(&mut out, module, extra, &src);
+
+        insta::with_settings!({
+            description => concat!("Code:\n\n", indoc::indoc! { $code }),
+            prepend_module_to_snapshot => false,
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(out);
+        });
+    };
+}

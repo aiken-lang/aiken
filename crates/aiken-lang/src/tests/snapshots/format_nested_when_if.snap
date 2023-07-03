@@ -1,0 +1,16 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn drop(xs: List<a>, n: Int) -> List<a> {\n  if n <= 0 {\n    xs\n  } else {\n    when xs is {\n    [] ->\n      []\n    [_x, ..rest] ->\n      drop(rest, n - 1)\n  }\n  }\n}\n"
+---
+pub fn drop(xs: List<a>, n: Int) -> List<a> {
+  if n <= 0 {
+    xs
+  } else {
+    when xs is {
+      [] ->
+        []
+      [_x, ..rest] -> drop(rest, n - 1)
+    }
+  }
+}
+
