@@ -46,3 +46,25 @@ pub fn parser<'a>(
             }
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use chumsky::Parser;
+
+    use crate::assert_expr;
+
+    #[test]
+    fn if_else_basic() {
+        assert_expr!(
+            r#"
+            if True {
+              1 + 1
+            } else if a < 1 {
+              3
+            } else {
+              4
+            }
+            "#
+        );
+    }
+}

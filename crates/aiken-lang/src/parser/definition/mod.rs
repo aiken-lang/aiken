@@ -19,7 +19,7 @@ pub use validator::parser as validator;
 use super::{error::ParseError, token::Token};
 use crate::ast;
 
-pub fn parser() -> impl Parser<Token, Vec<ast::UntypedDefinition>, Error = ParseError> {
+pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     choice((
         import(),
         data_type(),
@@ -29,6 +29,4 @@ pub fn parser() -> impl Parser<Token, Vec<ast::UntypedDefinition>, Error = Parse
         test(),
         constant(),
     ))
-    .repeated()
-    .then_ignore(end())
 }

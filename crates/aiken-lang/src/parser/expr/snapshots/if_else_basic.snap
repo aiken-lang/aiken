@@ -1,0 +1,66 @@
+---
+source: crates/aiken-lang/src/parser/expr/if_else.rs
+description: "Code:\n\nif True {\n  1 + 1\n} else if a < 1 {\n  3\n} else {\n  4\n}\n"
+---
+If {
+    location: 0..54,
+    branches: [
+        IfBranch {
+            condition: Var {
+                location: 3..7,
+                name: "True",
+            },
+            body: BinOp {
+                location: 12..17,
+                name: AddInt,
+                left: Int {
+                    location: 12..13,
+                    value: "1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                right: Int {
+                    location: 16..17,
+                    value: "1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            },
+            location: 3..19,
+        },
+        IfBranch {
+            condition: BinOp {
+                location: 28..33,
+                name: LtInt,
+                left: Var {
+                    location: 28..29,
+                    name: "a",
+                },
+                right: Int {
+                    location: 32..33,
+                    value: "1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            },
+            body: Int {
+                location: 38..39,
+                value: "3",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+            location: 28..41,
+        },
+    ],
+    final_else: Int {
+        location: 51..52,
+        value: "4",
+        base: Decimal {
+            numeric_underscore: false,
+        },
+    },
+}

@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/parser/expr/int.rs
+description: "Code:\n\n-1"
+---
+UnOp {
+    op: Negate,
+    location: 0..2,
+    value: Int {
+        location: 1..2,
+        value: "1",
+        base: Decimal {
+            numeric_underscore: false,
+        },
+    },
+}

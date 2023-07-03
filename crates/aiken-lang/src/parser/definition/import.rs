@@ -55,3 +55,29 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         },
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use chumsky::Parser;
+
+    use crate::assert_definition;
+
+    #[test]
+    fn import_basic() {
+        assert_definition!("use aiken/list");
+    }
+
+    #[test]
+    fn import_unqualified() {
+        assert_definition!(
+            r#"
+            use std/address.{Address as A, thing as w}
+            "#
+        );
+    }
+
+    #[test]
+    fn import_alias() {
+        assert_definition!("use aiken/list as foo");
+    }
+}

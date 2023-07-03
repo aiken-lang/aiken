@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{definitions, error::ParseError, token::Token},
+    parser::{definition, error::ParseError, token::Token},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseError> {
@@ -17,7 +17,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
             location: span,
         });
 
-        let constant_parser = definitions::constant::value().map(ast::ClauseGuard::Constant);
+        let constant_parser = definition::constant::value().map(ast::ClauseGuard::Constant);
 
         let block_parser = r
             .clone()

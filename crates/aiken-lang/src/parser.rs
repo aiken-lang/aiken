@@ -1,5 +1,5 @@
 mod annotation;
-pub mod definitions;
+pub mod definition;
 pub mod error;
 pub mod expr;
 pub mod extra;
@@ -9,7 +9,7 @@ pub mod token;
 mod utils;
 
 pub use annotation::parser as annotation;
-pub use definitions::parser as definitions;
+pub use definition::parser as definition;
 pub use expr::parser as expression;
 pub use pattern::parser as pattern;
 
@@ -26,7 +26,7 @@ pub fn module(
 
     let stream = chumsky::Stream::from_iter(ast::Span::create(tokens.len()), tokens.into_iter());
 
-    let definitions = definitions().parse(stream)?;
+    let definitions = definition().repeated().then_ignore(end()).parse(stream)?;
 
     let module = ast::UntypedModule {
         kind,

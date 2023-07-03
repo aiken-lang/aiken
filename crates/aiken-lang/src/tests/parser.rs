@@ -73,24 +73,6 @@ fn double_validator() {
 }
 
 #[test]
-fn import() {
-    assert_module!(
-        r#"
-        use std/list
-        "#
-    );
-}
-
-#[test]
-fn unqualified_imports() {
-    assert_module!(
-        r#"
-        use std/address.{Address as A, thing as w}
-        "#
-    );
-}
-
-#[test]
 fn import_alias() {
     assert_module!(
         r#"
@@ -183,25 +165,6 @@ fn pipeline() {
           |> add_one
         }
         "#
-    );
-}
-
-#[test]
-fn if_expression() {
-    assert_module!(
-        r#"
-        fn ifs() {
-          if True {
-            1 + 1
-          } else if a < 4 {
-            5
-          } else if a || b {
-            6
-          } else {
-            3
-          }
-        }
-    "#
     );
 }
 
@@ -441,30 +404,6 @@ fn tuple_type_alias() {
     assert_module!(
         r#"
         type RoyaltyToken = (PolicyId, AssetName)
-        "#
-    );
-}
-
-#[test]
-fn int_parsing_hex_bytes() {
-    assert_module!(
-        r#"
-        fn foo() {
-          #[ 0x01, 0xa2, 0x03 ]
-        }
-        "#
-    );
-}
-
-#[test]
-fn test_parsing_numeric_underscore() {
-    assert_module!(
-        r#"
-        fn foo() {
-          let i = 1_234_567
-          let j = 1_000_000
-          let k = -10_000
-        }
         "#
     );
 }
