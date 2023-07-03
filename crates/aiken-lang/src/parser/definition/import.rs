@@ -58,8 +58,6 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
 
 #[cfg(test)]
 mod tests {
-    use chumsky::Parser;
-
     use crate::assert_definition;
 
     #[test]

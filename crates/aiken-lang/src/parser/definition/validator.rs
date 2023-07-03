@@ -58,3 +58,38 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
             })
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_definition;
+
+    #[test]
+    fn validator() {
+        assert_definition!(
+            r#"
+            validator {
+              fn foo(datum, rdmr, ctx) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn double_validator() {
+        assert_definition!(
+            r#"
+            validator {
+              fn foo(datum, rdmr, ctx) {
+                True
+              }
+
+              fn bar(rdmr, ctx) {
+                True
+              }
+            }
+            "#
+        );
+    }
+}

@@ -1,20 +1,4 @@
-use crate::{assert_module, ast, parser};
-
-#[test]
-fn windows_newline() {
-    assert_module!("use aiken/list\r\n");
-}
-
-#[test]
-fn can_handle_comments_at_end_of_file() {
-    assert_module!(
-        r#"
-        use aiken
-
-        // some comment
-        // more comments"#
-    );
-}
+use crate::assert_module;
 
 #[test]
 fn type_annotation_with_module_prefix() {
@@ -38,45 +22,6 @@ fn test_fail() {
 
           False
         }
-        "#
-    );
-}
-
-#[test]
-fn validator() {
-    assert_module!(
-        r#"
-        validator {
-          fn foo(datum, rdmr, ctx) {
-            True
-          }
-        }
-        "#
-    );
-}
-
-#[test]
-fn double_validator() {
-    assert_module!(
-        r#"
-        validator {
-          fn foo(datum, rdmr, ctx) {
-            True
-          }
-
-          fn bar(rdmr, ctx) {
-            True
-          }
-        }
-        "#
-    );
-}
-
-#[test]
-fn import_alias() {
-    assert_module!(
-        r#"
-        use std/tx as t
         "#
     );
 }

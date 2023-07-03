@@ -30,8 +30,6 @@ pub fn parser(
 
 #[cfg(test)]
 mod tests {
-    use chumsky::Parser;
-
     use crate::assert_expr;
 
     #[test]

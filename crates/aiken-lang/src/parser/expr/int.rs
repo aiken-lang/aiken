@@ -17,8 +17,6 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
 
 #[cfg(test)]
 mod tests {
-    use chumsky::Parser;
-
     use crate::assert_expr;
 
     #[test]

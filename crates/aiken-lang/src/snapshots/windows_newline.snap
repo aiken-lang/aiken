@@ -1,5 +1,5 @@
 ---
-source: crates/aiken-lang/src/tests/parser.rs
+source: crates/aiken-lang/src/parser.rs
 description: "Code:\n\nuse aiken/list\r\n"
 ---
 Module {

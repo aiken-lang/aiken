@@ -1,6 +1,6 @@
 ---
-source: crates/aiken-lang/src/tests/parser.rs
-description: "Code:\n\nuse std/tx as t\n"
+source: crates/aiken-lang/src/parser.rs
+description: "Code:\n\nuse aiken\n\n// some comment\n// more comments"
 ---
 Module {
     name: "",
@@ -9,13 +9,10 @@ Module {
     definitions: [
         Use(
             Use {
-                as_name: Some(
-                    "t",
-                ),
-                location: 0..15,
+                as_name: None,
+                location: 0..9,
                 module: [
-                    "std",
-                    "tx",
+                    "aiken",
                 ],
                 package: (),
                 unqualified: [],

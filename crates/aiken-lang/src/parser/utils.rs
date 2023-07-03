@@ -97,6 +97,8 @@ pub fn type_name_with_args() -> impl Parser<Token, (String, Option<Vec<String>>)
 #[macro_export]
 macro_rules! assert_expr {
     ($code:expr) => {
+        use chumsky::Parser;
+
         let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
 
         let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len()), tokens.into_iter());
@@ -117,7 +119,7 @@ macro_rules! assert_expr {
 macro_rules! assert_module {
     ($code:expr) => {
         let (module, _) =
-            parser::module(indoc::indoc!{ $code }, ast::ModuleKind::Validator).expect("Failed to parse code");
+            $crate::parser::module(indoc::indoc!{ $code }, $crate::ast::ModuleKind::Validator).expect("Failed to parse code");
 
         insta::with_settings!({
             description => concat!("Code:\n\n", indoc::indoc! { $code }),
@@ -132,6 +134,8 @@ macro_rules! assert_module {
 #[macro_export]
 macro_rules! assert_definition {
     ($code:expr) => {
+        use chumsky::Parser;
+
         let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
 
         let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len()), tokens.into_iter());
