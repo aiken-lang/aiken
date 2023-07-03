@@ -169,15 +169,6 @@ fn base16_bytearray_literals() {
 }
 
 #[test]
-fn function_def() {
-    assert_module!(
-        r#"
-        fn foo() {}
-        "#
-    );
-}
-
-#[test]
 fn function_invoke() {
     assert_module!(
         r#"
@@ -185,55 +176,6 @@ fn function_invoke() {
             let a = bar(42)
         }
         "#
-    );
-}
-
-#[test]
-fn function_ambiguous_sequence() {
-    assert_module!(
-        r#"
-        fn foo_1() {
-          let a = bar
-          (40)
-        }
-
-        fn foo_2() {
-          let a = bar
-          {40}
-        }
-
-        fn foo_3() {
-          let a = (40+2)
-        }
-
-        fn foo_4() {
-          let a = bar(42)
-          (a + 14) * 42
-        }
-        "#
-    );
-}
-
-#[test]
-fn first_class_binop() {
-    assert_module!(
-        r#"
-        fn foo() {
-          compare_with(a, >, b)
-          compare_with(a, >=, b)
-          compare_with(a, <, b)
-          compare_with(a, <=, b)
-          compare_with(a, ==, b)
-          compare_with(a, !=, b)
-          combine_with(a, &&, b)
-          combine_with(a, ||, b)
-          compute_with(a, +, b)
-          compute_with(a, -, b)
-          compute_with(a, /, b)
-          compute_with(a, *, b)
-          compute_with(a, %, b)
-        }
-    "#
     );
 }
 

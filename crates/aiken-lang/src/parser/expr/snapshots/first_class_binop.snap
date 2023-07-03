@@ -1,0 +1,1190 @@
+---
+source: crates/aiken-lang/src/parser/expr/anonymous_binop.rs
+description: "Code:\n\ncompare_with(a, >, b)\ncompare_with(a, >=, b)\ncompare_with(a, <, b)\ncompare_with(a, <=, b)\ncompare_with(a, ==, b)\ncompare_with(a, !=, b)\ncombine_with(a, &&, b)\ncombine_with(a, ||, b)\ncompute_with(a, +, b)\ncompute_with(a, -, b)\ncompute_with(a, /, b)\ncompute_with(a, *, b)\ncompute_with(a, %, b)"
+---
+Sequence {
+    location: 0..291,
+    expressions: [
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 13..14,
+                    value: Var {
+                        location: 13..14,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 16..17,
+                    value: Fn {
+                        location: 16..17,
+                        fn_style: BinOp(
+                            GtInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 16..17,
+                                    is_validator_param: false,
+                                },
+                                location: 16..17,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 16..17,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 16..17,
+                                    is_validator_param: false,
+                                },
+                                location: 16..17,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 16..17,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 16..17,
+                            name: GtInt,
+                            left: Var {
+                                location: 16..17,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 16..17,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 16..17,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 19..20,
+                    value: Var {
+                        location: 19..20,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 0..12,
+                name: "compare_with",
+            },
+            location: 0..21,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 35..36,
+                    value: Var {
+                        location: 35..36,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 38..40,
+                    value: Fn {
+                        location: 38..40,
+                        fn_style: BinOp(
+                            GtEqInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 38..40,
+                                    is_validator_param: false,
+                                },
+                                location: 38..40,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 38..40,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 38..40,
+                                    is_validator_param: false,
+                                },
+                                location: 38..40,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 38..40,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 38..40,
+                            name: GtEqInt,
+                            left: Var {
+                                location: 38..40,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 38..40,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 38..40,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 42..43,
+                    value: Var {
+                        location: 42..43,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 22..34,
+                name: "compare_with",
+            },
+            location: 22..44,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 58..59,
+                    value: Var {
+                        location: 58..59,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 61..62,
+                    value: Fn {
+                        location: 61..62,
+                        fn_style: BinOp(
+                            LtInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 61..62,
+                                    is_validator_param: false,
+                                },
+                                location: 61..62,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 61..62,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 61..62,
+                                    is_validator_param: false,
+                                },
+                                location: 61..62,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 61..62,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 61..62,
+                            name: LtInt,
+                            left: Var {
+                                location: 61..62,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 61..62,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 61..62,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 64..65,
+                    value: Var {
+                        location: 64..65,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 45..57,
+                name: "compare_with",
+            },
+            location: 45..66,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 80..81,
+                    value: Var {
+                        location: 80..81,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 83..85,
+                    value: Fn {
+                        location: 83..85,
+                        fn_style: BinOp(
+                            LtEqInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 83..85,
+                                    is_validator_param: false,
+                                },
+                                location: 83..85,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 83..85,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 83..85,
+                                    is_validator_param: false,
+                                },
+                                location: 83..85,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 83..85,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 83..85,
+                            name: LtEqInt,
+                            left: Var {
+                                location: 83..85,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 83..85,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 83..85,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 87..88,
+                    value: Var {
+                        location: 87..88,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 67..79,
+                name: "compare_with",
+            },
+            location: 67..89,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 103..104,
+                    value: Var {
+                        location: 103..104,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 106..108,
+                    value: Fn {
+                        location: 106..108,
+                        fn_style: BinOp(
+                            Eq,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 106..108,
+                                    is_validator_param: false,
+                                },
+                                location: 106..108,
+                                annotation: None,
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 106..108,
+                                    is_validator_param: false,
+                                },
+                                location: 106..108,
+                                annotation: None,
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 106..108,
+                            name: Eq,
+                            left: Var {
+                                location: 106..108,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 106..108,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 106..108,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 110..111,
+                    value: Var {
+                        location: 110..111,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 90..102,
+                name: "compare_with",
+            },
+            location: 90..112,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 126..127,
+                    value: Var {
+                        location: 126..127,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 129..131,
+                    value: Fn {
+                        location: 129..131,
+                        fn_style: BinOp(
+                            NotEq,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 129..131,
+                                    is_validator_param: false,
+                                },
+                                location: 129..131,
+                                annotation: None,
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 129..131,
+                                    is_validator_param: false,
+                                },
+                                location: 129..131,
+                                annotation: None,
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 129..131,
+                            name: NotEq,
+                            left: Var {
+                                location: 129..131,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 129..131,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 129..131,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 133..134,
+                    value: Var {
+                        location: 133..134,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 113..125,
+                name: "compare_with",
+            },
+            location: 113..135,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 149..150,
+                    value: Var {
+                        location: 149..150,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 152..154,
+                    value: Fn {
+                        location: 152..154,
+                        fn_style: BinOp(
+                            And,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 152..154,
+                                    is_validator_param: false,
+                                },
+                                location: 152..154,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 152..154,
+                                        module: None,
+                                        name: "Bool",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 152..154,
+                                    is_validator_param: false,
+                                },
+                                location: 152..154,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 152..154,
+                                        module: None,
+                                        name: "Bool",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 152..154,
+                            name: And,
+                            left: Var {
+                                location: 152..154,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 152..154,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 152..154,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 156..157,
+                    value: Var {
+                        location: 156..157,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 136..148,
+                name: "combine_with",
+            },
+            location: 136..158,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 172..173,
+                    value: Var {
+                        location: 172..173,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 175..177,
+                    value: Fn {
+                        location: 175..177,
+                        fn_style: BinOp(
+                            Or,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 175..177,
+                                    is_validator_param: false,
+                                },
+                                location: 175..177,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 175..177,
+                                        module: None,
+                                        name: "Bool",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 175..177,
+                                    is_validator_param: false,
+                                },
+                                location: 175..177,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 175..177,
+                                        module: None,
+                                        name: "Bool",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 175..177,
+                            name: Or,
+                            left: Var {
+                                location: 175..177,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 175..177,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 175..177,
+                                module: None,
+                                name: "Bool",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 179..180,
+                    value: Var {
+                        location: 179..180,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 159..171,
+                name: "combine_with",
+            },
+            location: 159..181,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 195..196,
+                    value: Var {
+                        location: 195..196,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 198..199,
+                    value: Fn {
+                        location: 198..199,
+                        fn_style: BinOp(
+                            AddInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 198..199,
+                                    is_validator_param: false,
+                                },
+                                location: 198..199,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 198..199,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 198..199,
+                                    is_validator_param: false,
+                                },
+                                location: 198..199,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 198..199,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 198..199,
+                            name: AddInt,
+                            left: Var {
+                                location: 198..199,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 198..199,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 198..199,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 201..202,
+                    value: Var {
+                        location: 201..202,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 182..194,
+                name: "compute_with",
+            },
+            location: 182..203,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 217..218,
+                    value: Var {
+                        location: 217..218,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 220..221,
+                    value: Fn {
+                        location: 220..221,
+                        fn_style: BinOp(
+                            SubInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 220..221,
+                                    is_validator_param: false,
+                                },
+                                location: 220..221,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 220..221,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 220..221,
+                                    is_validator_param: false,
+                                },
+                                location: 220..221,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 220..221,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 220..221,
+                            name: SubInt,
+                            left: Var {
+                                location: 220..221,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 220..221,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 220..221,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 223..224,
+                    value: Var {
+                        location: 223..224,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 204..216,
+                name: "compute_with",
+            },
+            location: 204..225,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 239..240,
+                    value: Var {
+                        location: 239..240,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 242..243,
+                    value: Fn {
+                        location: 242..243,
+                        fn_style: BinOp(
+                            DivInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 242..243,
+                                    is_validator_param: false,
+                                },
+                                location: 242..243,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 242..243,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 242..243,
+                                    is_validator_param: false,
+                                },
+                                location: 242..243,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 242..243,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 242..243,
+                            name: DivInt,
+                            left: Var {
+                                location: 242..243,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 242..243,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 242..243,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 245..246,
+                    value: Var {
+                        location: 245..246,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 226..238,
+                name: "compute_with",
+            },
+            location: 226..247,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 261..262,
+                    value: Var {
+                        location: 261..262,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 264..265,
+                    value: Fn {
+                        location: 264..265,
+                        fn_style: BinOp(
+                            MultInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 264..265,
+                                    is_validator_param: false,
+                                },
+                                location: 264..265,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 264..265,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 264..265,
+                                    is_validator_param: false,
+                                },
+                                location: 264..265,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 264..265,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 264..265,
+                            name: MultInt,
+                            left: Var {
+                                location: 264..265,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 264..265,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 264..265,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 267..268,
+                    value: Var {
+                        location: 267..268,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 248..260,
+                name: "compute_with",
+            },
+            location: 248..269,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 283..284,
+                    value: Var {
+                        location: 283..284,
+                        name: "a",
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 286..287,
+                    value: Fn {
+                        location: 286..287,
+                        fn_style: BinOp(
+                            ModInt,
+                        ),
+                        arguments: [
+                            Arg {
+                                arg_name: Named {
+                                    name: "left",
+                                    label: "left",
+                                    location: 286..287,
+                                    is_validator_param: false,
+                                },
+                                location: 286..287,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 286..287,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                            Arg {
+                                arg_name: Named {
+                                    name: "right",
+                                    label: "right",
+                                    location: 286..287,
+                                    is_validator_param: false,
+                                },
+                                location: 286..287,
+                                annotation: Some(
+                                    Constructor {
+                                        location: 286..287,
+                                        module: None,
+                                        name: "Int",
+                                        arguments: [],
+                                    },
+                                ),
+                                tipo: (),
+                            },
+                        ],
+                        body: BinOp {
+                            location: 286..287,
+                            name: ModInt,
+                            left: Var {
+                                location: 286..287,
+                                name: "left",
+                            },
+                            right: Var {
+                                location: 286..287,
+                                name: "right",
+                            },
+                        },
+                        return_annotation: Some(
+                            Constructor {
+                                location: 286..287,
+                                module: None,
+                                name: "Int",
+                                arguments: [],
+                            },
+                        ),
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 289..290,
+                    value: Var {
+                        location: 289..290,
+                        name: "b",
+                    },
+                },
+            ],
+            fun: Var {
+                location: 270..282,
+                name: "compute_with",
+            },
+            location: 270..291,
+        },
+    ],
+}

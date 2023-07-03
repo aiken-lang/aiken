@@ -87,3 +87,28 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn first_class_binop() {
+        assert_expr!(
+            r#"
+            compare_with(a, >, b)
+            compare_with(a, >=, b)
+            compare_with(a, <, b)
+            compare_with(a, <=, b)
+            compare_with(a, ==, b)
+            compare_with(a, !=, b)
+            combine_with(a, &&, b)
+            combine_with(a, ||, b)
+            compute_with(a, +, b)
+            compute_with(a, -, b)
+            compute_with(a, /, b)
+            compute_with(a, *, b)
+            compute_with(a, %, b)"#
+        );
+    }
+}

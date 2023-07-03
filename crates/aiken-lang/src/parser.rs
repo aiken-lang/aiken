@@ -58,4 +58,30 @@ mod tests {
             // more comments"#
         );
     }
+
+    #[test]
+    fn function_ambiguous_sequence() {
+        assert_module!(
+            r#"
+            fn foo_1() {
+              let a = bar
+              (40)
+            }
+
+            fn foo_2() {
+              let a = bar
+              {40}
+            }
+
+            fn foo_3() {
+              let a = (40+2)
+            }
+
+            fn foo_4() {
+              let a = bar(42)
+              (a + 14) * 42
+            }
+            "#
+        );
+    }
 }

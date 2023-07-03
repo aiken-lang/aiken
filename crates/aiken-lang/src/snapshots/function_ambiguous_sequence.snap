@@ -1,5 +1,5 @@
 ---
-source: crates/aiken-lang/src/tests/parser.rs
+source: crates/aiken-lang/src/parser.rs
 description: "Code:\n\nfn foo_1() {\n  let a = bar\n  (40)\n}\n\nfn foo_2() {\n  let a = bar\n  {40}\n}\n\nfn foo_3() {\n  let a = (40+2)\n}\n\nfn foo_4() {\n  let a = bar(42)\n  (a + 14) * 42\n}\n"
 ---
 Module {
