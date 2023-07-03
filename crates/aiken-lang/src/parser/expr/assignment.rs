@@ -43,3 +43,13 @@ fn assignment(
             },
         )
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn let_bindings() {
+        assert_expr!(r#"let thing = [ 1, 2, a ]"#);
+    }
+}

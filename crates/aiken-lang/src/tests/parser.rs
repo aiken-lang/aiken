@@ -1,32 +1,6 @@
 use crate::assert_module;
 
 #[test]
-fn type_annotation_with_module_prefix() {
-    assert_module!(
-        r#"
-        use aiken
-
-        pub fn go() -> aiken.Option<Int> {
-          False
-        }
-        "#
-    );
-}
-
-#[test]
-fn test_fail() {
-    assert_module!(
-        r#"
-        !test invalid_inputs() {
-          expect True = False
-
-          False
-        }
-        "#
-    );
-}
-
-#[test]
 fn custom_type() {
     assert_module!(
         r#"
@@ -46,33 +20,6 @@ fn opaque_type() {
         pub opaque type User {
           name: _w
         }
-        "#
-    );
-}
-
-#[test]
-fn type_alias() {
-    assert_module!(
-        r#"
-        type Thing = Option<Int>
-        "#
-    );
-}
-
-#[test]
-fn pub_type_alias() {
-    assert_module!(
-        r#"
-        pub type Me = Option<String>
-        "#
-    );
-}
-
-#[test]
-fn empty_function() {
-    assert_module!(
-        r#"
-        pub fn run() {}
         "#
     );
 }
@@ -108,26 +55,6 @@ fn pipeline() {
           a + 2
           |> add_one
           |> add_one
-        }
-        "#
-    );
-}
-
-#[test]
-fn let_bindings() {
-    assert_module!(
-        r#"
-        pub fn wow(a: Int) {
-          let x =
-            a + 2
-            |> add_one
-            |> add_one
-
-          let thing = [ 1, 2, a ]
-
-          let idk = thing
-
-          y
         }
         "#
     );
@@ -170,19 +97,6 @@ fn when() {
 }
 
 #[test]
-fn anonymous_function() {
-    assert_module!(
-        r#"
-        pub fn such() -> Int {
-          let add_one = fn (a: Int) -> Int { a + 1 }
-
-          2 |> add_one
-        }
-        "#
-    );
-}
-
-#[test]
 fn field_access() {
     assert_module!(
         r#"
@@ -203,17 +117,6 @@ fn call() {
           let map_add_x = list.map(_, fn (y) { x + y })
 
           map_add_x([ 1, 2, 3 ])
-        }
-        "#
-    );
-}
-
-#[test]
-fn record_update() {
-    assert_module!(
-        r#"
-        fn update_name(user: User, name: ByteArray) -> User {
-          User { ..user, name: "Aiken", age }
         }
         "#
     );
@@ -340,15 +243,6 @@ fn function_ambiguous_sequence() {
           let a = bar(42)
           (a + 14) * 42
         }
-        "#
-    );
-}
-
-#[test]
-fn tuple_type_alias() {
-    assert_module!(
-        r#"
-        type RoyaltyToken = (PolicyId, AssetName)
         "#
     );
 }

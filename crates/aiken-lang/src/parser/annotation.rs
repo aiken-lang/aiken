@@ -89,3 +89,13 @@ pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
         ))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_annotation;
+
+    #[test]
+    fn type_annotation_with_module_prefix() {
+        assert_annotation!("aiken.Option<Int>");
+    }
+}

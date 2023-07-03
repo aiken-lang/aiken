@@ -54,3 +54,13 @@ pub fn params() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
         arg_name,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn anonymous_function_basic() {
+        assert_expr!(r#"fn (a: Int) -> Int { a + 1 }"#);
+    }
+}

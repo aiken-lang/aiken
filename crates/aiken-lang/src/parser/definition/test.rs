@@ -35,3 +35,21 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
             })
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_definition;
+
+    #[test]
+    fn test_fail() {
+        assert_definition!(
+            r#"
+            !test invalid_inputs() {
+              expect True = False
+
+              False
+            }
+            "#
+        );
+    }
+}

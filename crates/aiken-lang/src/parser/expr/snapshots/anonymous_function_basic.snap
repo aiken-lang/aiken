@@ -1,0 +1,51 @@
+---
+source: crates/aiken-lang/src/parser/expr/anonymous_function.rs
+description: "Code:\n\nfn (a: Int) -> Int { a + 1 }"
+---
+Fn {
+    location: 0..28,
+    fn_style: Plain,
+    arguments: [
+        Arg {
+            arg_name: Named {
+                name: "a",
+                label: "a",
+                location: 4..5,
+                is_validator_param: false,
+            },
+            location: 4..10,
+            annotation: Some(
+                Constructor {
+                    location: 7..10,
+                    module: None,
+                    name: "Int",
+                    arguments: [],
+                },
+            ),
+            tipo: (),
+        },
+    ],
+    body: BinOp {
+        location: 21..26,
+        name: AddInt,
+        left: Var {
+            location: 21..22,
+            name: "a",
+        },
+        right: Int {
+            location: 25..26,
+            value: "1",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+    },
+    return_annotation: Some(
+        Constructor {
+            location: 15..18,
+            module: None,
+            name: "Int",
+            arguments: [],
+        },
+    ),
+}

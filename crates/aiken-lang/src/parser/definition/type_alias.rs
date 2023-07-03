@@ -23,3 +23,32 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
             })
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_definition;
+
+    #[test]
+    fn type_alias_tuple() {
+        assert_definition!(
+            r#"
+            type RoyaltyToken = (PolicyId, AssetName)"#
+        );
+    }
+
+    #[test]
+    fn type_alias_basic() {
+        assert_definition!(
+            r#"
+            type Thing = Int"#
+        );
+    }
+
+    #[test]
+    fn type_alias_pub() {
+        assert_definition!(
+            r#"
+            pub type Me = String"#
+        );
+    }
+}

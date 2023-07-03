@@ -84,3 +84,13 @@ pub fn parser(
             }
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn record_update_basic() {
+        assert_expr!(r#"User { ..user, name: "Aiken", age }"#);
+    }
+}

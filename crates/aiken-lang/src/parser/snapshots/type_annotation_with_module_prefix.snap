@@ -1,0 +1,19 @@
+---
+source: crates/aiken-lang/src/parser/annotation.rs
+description: "Code:\n\naiken.Option<Int>"
+---
+Constructor {
+    location: 0..17,
+    module: Some(
+        "aiken",
+    ),
+    name: "Option",
+    arguments: [
+        Constructor {
+            location: 13..16,
+            module: None,
+            name: "Int",
+            arguments: [],
+        },
+    ],
+}

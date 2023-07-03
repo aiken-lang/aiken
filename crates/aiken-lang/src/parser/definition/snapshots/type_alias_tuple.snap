@@ -1,0 +1,31 @@
+---
+source: crates/aiken-lang/src/parser/definition/type_alias.rs
+description: "Code:\n\ntype RoyaltyToken = (PolicyId, AssetName)"
+---
+TypeAlias(
+    TypeAlias {
+        alias: "RoyaltyToken",
+        annotation: Tuple {
+            location: 20..41,
+            elems: [
+                Constructor {
+                    location: 21..29,
+                    module: None,
+                    name: "PolicyId",
+                    arguments: [],
+                },
+                Constructor {
+                    location: 31..40,
+                    module: None,
+                    name: "AssetName",
+                    arguments: [],
+                },
+            ],
+        },
+        doc: None,
+        location: 0..41,
+        parameters: [],
+        public: false,
+        tipo: (),
+    },
+)

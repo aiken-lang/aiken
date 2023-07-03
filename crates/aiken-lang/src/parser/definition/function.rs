@@ -87,3 +87,26 @@ pub fn param(is_validator_param: bool) -> impl Parser<Token, ast::UntypedArg, Er
         arg_name,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_definition;
+
+    #[test]
+    fn function_empty() {
+        assert_definition!(
+            r#"
+            pub fn run() {}
+            "#
+        );
+    }
+
+    #[test]
+    fn function_non_public() {
+        assert_definition!(
+            r#"
+            fn run() {}
+            "#
+        );
+    }
+}
