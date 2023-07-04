@@ -1,12 +1,10 @@
 use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
-    plutus_data_to_bytes,
 };
-use pallas_codec::utils::KeyValuePairs;
-use pallas_primitives::babbage::{PlutusData, Constr};
+use pallas_primitives::babbage::{Constr, PlutusData};
 use pretty::RcDoc;
-use std::{ascii::escape_default, io::Read};
+use std::ascii::escape_default;
 
 impl<'a, T> Program<T>
 where
@@ -255,14 +253,14 @@ impl Constant {
 
             Constant::Data(data) => RcDoc::text("(")
                 .append(Self::to_doc_list_plutus_data(&data))
-                .append(RcDoc::text(")"))
+                .append(RcDoc::text(")")),
         }
     }
 
     // This feels a little awkward here; not sure if it should be upstreamed to pallas
     fn to_doc_list_plutus_data(data: &PlutusData) -> RcDoc<()> {
         match data {
-            PlutusData::Constr(Constr{ tag, fields, ..}) => RcDoc::text("Constr")
+            PlutusData::Constr(Constr { tag, fields, .. }) => RcDoc::text("Constr")
                 .append(RcDoc::space())
                 .append(RcDoc::as_string(tag))
                 .append(RcDoc::space())
@@ -276,22 +274,21 @@ impl Constant {
                 .append(RcDoc::space())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
-                    kvp.iter().map(|(key, value)| RcDoc::text("(")
-                        .append(Self::to_doc_list_plutus_data(key))
-                        .append(RcDoc::text(", "))
-                        .append(Self::to_doc_list_plutus_data(value))
-                        .append(RcDoc::text(")")),
-                    ),
+                    kvp.iter().map(|(key, value)| {
+                        RcDoc::text("(")
+                            .append(Self::to_doc_list_plutus_data(key))
+                            .append(RcDoc::text(", "))
+                            .append(Self::to_doc_list_plutus_data(value))
+                            .append(RcDoc::text(")"))
+                    }),
                     RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
-            PlutusData::BigInt(bi) => RcDoc::text("I")
-                .append(RcDoc::space())
-                .append(match bi {
-                    pallas_primitives::babbage::BigInt::Int(v) => RcDoc::text(v.to_string()),
-                    pallas_primitives::babbage::BigInt::BigUInt(v) => RcDoc::text(v.to_string()),
-                    pallas_primitives::babbage::BigInt::BigNInt(v) => RcDoc::text(v.to_string()),
-                }),
+            PlutusData::BigInt(bi) => RcDoc::text("I").append(RcDoc::space()).append(match bi {
+                pallas_primitives::babbage::BigInt::Int(v) => RcDoc::text(v.to_string()),
+                pallas_primitives::babbage::BigInt::BigUInt(v) => RcDoc::text(v.to_string()),
+                pallas_primitives::babbage::BigInt::BigNInt(v) => RcDoc::text(v.to_string()),
+            }),
             PlutusData::BoundedBytes(bs) => RcDoc::text("B")
                 .append(RcDoc::space())
                 .append(RcDoc::text("#"))
