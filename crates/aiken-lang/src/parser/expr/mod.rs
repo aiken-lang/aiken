@@ -364,3 +364,42 @@ pub fn parser(
             })
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn plus_binop() {
+        assert_expr!("a + 1");
+    }
+
+    #[test]
+    fn pipeline() {
+        assert_expr!(
+            r#"
+            a + 2
+            |> add_one
+            |> add_one
+            "#
+        );
+    }
+
+    #[test]
+    fn field_access() {
+        assert_expr!("user.name");
+    }
+
+    #[test]
+    fn function_invoke() {
+        assert_expr!(
+            r#"
+            let x = add_one(3)
+
+            let map_add_x = list.map(_, fn (y) { x + y })
+
+            map_add_x([ 1, 2, 3 ])
+            "#
+        );
+    }
+}

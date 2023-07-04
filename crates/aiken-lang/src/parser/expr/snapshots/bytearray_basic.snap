@@ -1,0 +1,17 @@
+---
+source: crates/aiken-lang/src/parser/expr/bytearray.rs
+description: "Code:\n\n#[0, 170, 255]"
+---
+ByteArray {
+    location: 0..14,
+    bytes: [
+        0,
+        170,
+        255,
+    ],
+    preferred_format: ArrayOfBytes(
+        Decimal {
+            numeric_underscore: false,
+        },
+    ),
+}

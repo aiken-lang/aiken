@@ -28,3 +28,25 @@ pub fn parser(
             clauses,
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn when_basic() {
+        assert_expr!(
+            r#"
+            when a is {
+              2 if x > 1 -> 3
+              1 | 4 | 5 -> {
+                let amazing = 5
+                amazing
+              }
+              3 -> 9
+              _ -> 4
+            }
+            "#
+        );
+    }
+}

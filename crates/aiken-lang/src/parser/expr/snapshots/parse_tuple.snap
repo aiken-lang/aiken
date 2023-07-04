@@ -1,0 +1,95 @@
+---
+source: crates/aiken-lang/src/parser/expr/tuple.rs
+description: "Code:\n\nlet tuple = (1, 2, 3, 4)\ntuple.1st + tuple.2nd + tuple.3rd + tuple.4th\n"
+---
+Sequence {
+    location: 0..70,
+    expressions: [
+        Assignment {
+            location: 0..24,
+            value: Tuple {
+                location: 12..24,
+                elems: [
+                    Int {
+                        location: 13..14,
+                        value: "1",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                    Int {
+                        location: 16..17,
+                        value: "2",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                    Int {
+                        location: 19..20,
+                        value: "3",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                    Int {
+                        location: 22..23,
+                        value: "4",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                ],
+            },
+            pattern: Var {
+                location: 4..9,
+                name: "tuple",
+            },
+            kind: Let,
+            annotation: None,
+        },
+        BinOp {
+            location: 25..70,
+            name: AddInt,
+            left: BinOp {
+                location: 25..58,
+                name: AddInt,
+                left: BinOp {
+                    location: 25..46,
+                    name: AddInt,
+                    left: TupleIndex {
+                        location: 25..34,
+                        index: 0,
+                        tuple: Var {
+                            location: 25..30,
+                            name: "tuple",
+                        },
+                    },
+                    right: TupleIndex {
+                        location: 37..46,
+                        index: 1,
+                        tuple: Var {
+                            location: 37..42,
+                            name: "tuple",
+                        },
+                    },
+                },
+                right: TupleIndex {
+                    location: 49..58,
+                    index: 2,
+                    tuple: Var {
+                        location: 49..54,
+                        name: "tuple",
+                    },
+                },
+            },
+            right: TupleIndex {
+                location: 61..70,
+                index: 3,
+                tuple: Var {
+                    location: 61..66,
+                    name: "tuple",
+                },
+            },
+        },
+    ],
+}

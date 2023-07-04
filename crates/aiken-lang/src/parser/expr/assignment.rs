@@ -50,6 +50,11 @@ mod tests {
 
     #[test]
     fn let_bindings() {
-        assert_expr!(r#"let thing = [ 1, 2, a ]"#);
+        assert_expr!("let thing = [ 1, 2, a ]");
+    }
+
+    #[test]
+    fn expect() {
+        assert_expr!("expect Some(x) = something.field");
     }
 }

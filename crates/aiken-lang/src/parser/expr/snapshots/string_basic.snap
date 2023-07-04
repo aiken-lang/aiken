@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/parser/expr/string.rs
+description: "Code:\n\n@\"aiken\""
+---
+String {
+    location: 0..8,
+    value: "aiken",
+}

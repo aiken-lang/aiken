@@ -1,6 +1,6 @@
 ---
-source: crates/aiken-lang/src/tests/parser.rs
-description: "Code:\n\nfn foo() {\n  let x = \"★\"\n  x\n}\n"
+source: crates/aiken-lang/src/parser.rs
+description: "Code:\n\nfn foo() {\n  let x = \"*\"\n  x\n}\n"
 ---
 Module {
     name: "",
@@ -11,16 +11,14 @@ Module {
             Function {
                 arguments: [],
                 body: Sequence {
-                    location: 13..30,
+                    location: 13..28,
                     expressions: [
                         Assignment {
-                            location: 13..26,
+                            location: 13..24,
                             value: ByteArray {
-                                location: 21..26,
+                                location: 21..24,
                                 bytes: [
-                                    226,
-                                    152,
-                                    133,
+                                    42,
                                 ],
                                 preferred_format: Utf8String,
                             },
@@ -32,7 +30,7 @@ Module {
                             annotation: None,
                         },
                         Var {
-                            location: 29..30,
+                            location: 27..28,
                             name: "x",
                         },
                     ],
@@ -43,7 +41,7 @@ Module {
                 public: false,
                 return_annotation: None,
                 return_type: (),
-                end_position: 31,
+                end_position: 29,
                 can_error: true,
             },
         ),

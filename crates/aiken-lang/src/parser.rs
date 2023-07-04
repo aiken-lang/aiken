@@ -84,4 +84,28 @@ mod tests {
             "#
         );
     }
+
+    #[test]
+    fn parse_unicode_offset_1() {
+        assert_module!(
+            r#"
+            fn foo() {
+              let x = "★"
+              x
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn parse_unicode_offset_2() {
+        assert_module!(
+            r#"
+            fn foo() {
+              let x = "*"
+              x
+            }
+            "#
+        );
+    }
 }

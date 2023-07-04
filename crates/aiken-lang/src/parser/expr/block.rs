@@ -18,3 +18,21 @@ pub fn parser(
         ),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn block_basic() {
+        assert_expr!(
+            r#"
+            let b = {
+              let x = 4
+
+              x + 5
+            }
+            "#
+        );
+    }
+}

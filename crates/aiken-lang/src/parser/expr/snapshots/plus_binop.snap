@@ -1,0 +1,19 @@
+---
+source: crates/aiken-lang/src/parser/expr/mod.rs
+description: "Code:\n\na + 1"
+---
+BinOp {
+    location: 0..5,
+    name: AddInt,
+    left: Var {
+        location: 0..1,
+        name: "a",
+    },
+    right: Int {
+        location: 4..5,
+        value: "1",
+        base: Decimal {
+            numeric_underscore: false,
+        },
+    },
+}

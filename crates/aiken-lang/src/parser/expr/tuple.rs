@@ -21,3 +21,28 @@ pub fn parser(
             elems,
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn parse_tuple() {
+        assert_expr!(
+            r#"
+            let tuple = (1, 2, 3, 4)
+            tuple.1st + tuple.2nd + tuple.3rd + tuple.4th
+            "#
+        );
+    }
+
+    #[test]
+    fn parse_tuple2() {
+        assert_expr!(
+            r#"
+            let a = foo(14)
+            (a, 42)
+            "#
+        );
+    }
+}

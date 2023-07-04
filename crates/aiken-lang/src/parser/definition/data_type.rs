@@ -92,3 +92,32 @@ fn labeled_constructor_type_args(
         .allow_trailing()
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_definition;
+
+    #[test]
+    fn custom_type() {
+        assert_definition!(
+            r#"
+            type Option<a> {
+              Some(a, Int)
+              None
+              Wow { name: Int, age: Int }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn opaque_type() {
+        assert_definition!(
+            r#"
+            pub opaque type User {
+              name: _w
+            }
+            "#
+        );
+    }
+}

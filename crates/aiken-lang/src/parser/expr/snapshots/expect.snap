@@ -1,0 +1,36 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Code:\n\nexpect Some(x) = something.field"
+---
+Assignment {
+    location: 0..32,
+    value: FieldAccess {
+        location: 17..32,
+        label: "field",
+        container: Var {
+            location: 17..26,
+            name: "something",
+        },
+    },
+    pattern: Constructor {
+        is_record: false,
+        location: 7..14,
+        name: "Some",
+        arguments: [
+            CallArg {
+                label: None,
+                location: 12..13,
+                value: Var {
+                    location: 12..13,
+                    name: "x",
+                },
+            },
+        ],
+        module: None,
+        constructor: (),
+        with_spread: false,
+        tipo: (),
+    },
+    kind: Expect,
+    annotation: None,
+}

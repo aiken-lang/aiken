@@ -1,0 +1,92 @@
+---
+source: crates/aiken-lang/src/parser/definition/data_type.rs
+description: "Code:\n\ntype Option<a> {\n  Some(a, Int)\n  None\n  Wow { name: Int, age: Int }\n}\n"
+---
+DataType(
+    DataType {
+        constructors: [
+            RecordConstructor {
+                location: 19..31,
+                name: "Some",
+                arguments: [
+                    RecordConstructorArg {
+                        label: None,
+                        annotation: Var {
+                            location: 24..25,
+                            name: "a",
+                        },
+                        location: 24..25,
+                        tipo: (),
+                        doc: None,
+                    },
+                    RecordConstructorArg {
+                        label: None,
+                        annotation: Constructor {
+                            location: 27..30,
+                            module: None,
+                            name: "Int",
+                            arguments: [],
+                        },
+                        location: 27..30,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                location: 34..38,
+                name: "None",
+                arguments: [],
+                doc: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                location: 41..68,
+                name: "Wow",
+                arguments: [
+                    RecordConstructorArg {
+                        label: Some(
+                            "name",
+                        ),
+                        annotation: Constructor {
+                            location: 53..56,
+                            module: None,
+                            name: "Int",
+                            arguments: [],
+                        },
+                        location: 47..56,
+                        tipo: (),
+                        doc: None,
+                    },
+                    RecordConstructorArg {
+                        label: Some(
+                            "age",
+                        ),
+                        annotation: Constructor {
+                            location: 63..66,
+                            module: None,
+                            name: "Int",
+                            arguments: [],
+                        },
+                        location: 58..66,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: false,
+            },
+        ],
+        doc: None,
+        location: 0..70,
+        name: "Option",
+        opaque: false,
+        parameters: [
+            "a",
+        ],
+        public: false,
+        typed_parameters: [],
+    },
+)

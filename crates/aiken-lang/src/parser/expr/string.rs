@@ -31,3 +31,13 @@ pub fn flexible(expr: UntypedExpr) -> UntypedExpr {
         _ => expr,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn string_basic() {
+        assert_expr!("@\"aiken\"");
+    }
+}

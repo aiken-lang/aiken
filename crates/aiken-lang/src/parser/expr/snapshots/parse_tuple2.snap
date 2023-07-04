@@ -1,0 +1,54 @@
+---
+source: crates/aiken-lang/src/parser/expr/tuple.rs
+description: "Code:\n\nlet a = foo(14)\n(a, 42)\n"
+---
+Sequence {
+    location: 0..23,
+    expressions: [
+        Assignment {
+            location: 0..15,
+            value: Call {
+                arguments: [
+                    CallArg {
+                        label: None,
+                        location: 12..14,
+                        value: Int {
+                            location: 12..14,
+                            value: "14",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
+                        },
+                    },
+                ],
+                fun: Var {
+                    location: 8..11,
+                    name: "foo",
+                },
+                location: 8..15,
+            },
+            pattern: Var {
+                location: 4..5,
+                name: "a",
+            },
+            kind: Let,
+            annotation: None,
+        },
+        Tuple {
+            location: 16..23,
+            elems: [
+                Var {
+                    location: 17..18,
+                    name: "a",
+                },
+                Int {
+                    location: 20..22,
+                    value: "42",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            ],
+        },
+    ],
+}
