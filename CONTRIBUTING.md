@@ -25,7 +25,7 @@
 
    ***
 
-   > Tip: if you have nix installed, you can run `nix develop` to take advantage of the projects dev-shell flake. This will provide any needed tools and dependencies in a reproducible way.
+   > **Note** if you have nix installed, you can run `nix develop` to take advantage of the projects dev-shell flake. This will provide any needed tools and dependencies in a reproducible way.
 
    If everything runs fine without any errors you're good to go. If you do run into any errors please come chat with us on [Discord (#aiken)](https://discord.gg/Vc3x8N9nz2)
 
