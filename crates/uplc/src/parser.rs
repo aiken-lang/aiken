@@ -7,7 +7,7 @@ use crate::{
 
 use interner::Interner;
 use num_bigint::BigInt;
-use pallas_primitives::{alonzo::PlutusData, Fragment};
+use pallas_primitives::{alonzo::PlutusData};
 use peg::{error::ParseError, str::LineCol};
 
 pub mod interner;
