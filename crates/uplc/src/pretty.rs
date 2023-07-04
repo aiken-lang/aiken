@@ -252,7 +252,7 @@ impl Constant {
                 .append(RcDoc::text(")")),
 
             Constant::Data(data) => RcDoc::text("(")
-                .append(Self::to_doc_list_plutus_data(&data))
+                .append(Self::to_doc_list_plutus_data(data))
                 .append(RcDoc::text(")")),
         }
     }
@@ -266,7 +266,7 @@ impl Constant {
                 .append(RcDoc::space())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
-                    fields.iter().map(|f| Self::to_doc_list_plutus_data(f)),
+                    fields.iter().map(Self::to_doc_list_plutus_data),
                     RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
@@ -297,7 +297,7 @@ impl Constant {
                 .append(RcDoc::space())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
-                    a.iter().map(|item| Self::to_doc_list_plutus_data(item)),
+                    a.iter().map(Self::to_doc_list_plutus_data),
                     RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
