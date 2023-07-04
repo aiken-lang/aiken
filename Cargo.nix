@@ -122,7 +122,7 @@ in
       hex = rustPackages."registry+https://github.com/rust-lang/crates.io-index".hex."0.4.3" { inherit profileName; };
       ignore = rustPackages."registry+https://github.com/rust-lang/crates.io-index".ignore."0.4.20" { inherit profileName; };
       indoc = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".indoc."2.0.1" { profileName = "__noProfile"; };
-      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.7.0" { inherit profileName; };
+      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.9.0" { inherit profileName; };
       owo_colors = rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; };
       pallas_addresses = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas-addresses."0.18.0" { inherit profileName; };
       pallas_codec = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas-codec."0.18.0" { inherit profileName; };
@@ -150,7 +150,7 @@ in
       indexmap = rustPackages."registry+https://github.com/rust-lang/crates.io-index".indexmap."1.9.3" { inherit profileName; };
       indoc = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".indoc."2.0.1" { profileName = "__noProfile"; };
       itertools = rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; };
-      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.7.0" { inherit profileName; };
+      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.9.0" { inherit profileName; };
       num_bigint = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-bigint."0.4.3" { inherit profileName; };
       ordinal = rustPackages."registry+https://github.com/rust-lang/crates.io-index".ordinal."0.3.2" { inherit profileName; };
       owo_colors = rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; };
@@ -178,7 +178,7 @@ in
       itertools = rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; };
       lsp_server = rustPackages."registry+https://github.com/rust-lang/crates.io-index".lsp-server."0.7.0" { inherit profileName; };
       lsp_types = rustPackages."registry+https://github.com/rust-lang/crates.io-index".lsp-types."0.94.0" { inherit profileName; };
-      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.7.0" { inherit profileName; };
+      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.9.0" { inherit profileName; };
       owo_colors = rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; };
       serde = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde."1.0.159" { inherit profileName; };
       serde_json = rustPackages."registry+https://github.com/rust-lang/crates.io-index".serde_json."1.0.95" { inherit profileName; };
@@ -205,7 +205,7 @@ in
       ignore = rustPackages."registry+https://github.com/rust-lang/crates.io-index".ignore."0.4.20" { inherit profileName; };
       indexmap = rustPackages."registry+https://github.com/rust-lang/crates.io-index".indexmap."1.9.3" { inherit profileName; };
       itertools = rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; };
-      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.7.0" { inherit profileName; };
+      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.9.0" { inherit profileName; };
       minicbor = rustPackages."registry+https://github.com/rust-lang/crates.io-index".minicbor."0.19.1" { inherit profileName; };
       owo_colors = rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; };
       pallas = rustPackages."registry+https://github.com/rust-lang/crates.io-index".pallas."0.18.0" { inherit profileName; };
@@ -2045,11 +2045,11 @@ in
     };
   });
   
-  "registry+https://github.com/rust-lang/crates.io-index".miette."5.7.0" = overridableMkRustCrate (profileName: rec {
+  "registry+https://github.com/rust-lang/crates.io-index".miette."5.9.0" = overridableMkRustCrate (profileName: rec {
     name = "miette";
-    version = "5.7.0";
+    version = "5.9.0";
     registry = "registry+https://github.com/rust-lang/crates.io-index";
-    src = fetchCratesIo { inherit name version; sha256 = "7abdc09c381c9336b9f2e9bd6067a9a5290d20e2d2e2296f275456121c33ae89"; };
+    src = fetchCratesIo { inherit name version; sha256 = "a236ff270093b0b67451bc50a509bd1bad302cb1d3c7d37d5efe931238581fa9"; };
     features = builtins.concatLists [
       [ "backtrace" ]
       [ "backtrace-ext" ]
@@ -2068,7 +2068,7 @@ in
       backtrace = rustPackages."registry+https://github.com/rust-lang/crates.io-index".backtrace."0.3.67" { inherit profileName; };
       backtrace_ext = rustPackages."registry+https://github.com/rust-lang/crates.io-index".backtrace-ext."0.2.1" { inherit profileName; };
       is_terminal = rustPackages."registry+https://github.com/rust-lang/crates.io-index".is-terminal."0.4.7" { inherit profileName; };
-      miette_derive = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".miette-derive."5.7.0" { profileName = "__noProfile"; };
+      miette_derive = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".miette-derive."5.9.0" { profileName = "__noProfile"; };
       once_cell = rustPackages."registry+https://github.com/rust-lang/crates.io-index".once_cell."1.17.1" { inherit profileName; };
       owo_colors = rustPackages."registry+https://github.com/rust-lang/crates.io-index".owo-colors."3.5.0" { inherit profileName; };
       supports_color = rustPackages."registry+https://github.com/rust-lang/crates.io-index".supports-color."2.0.0" { inherit profileName; };
@@ -2081,11 +2081,11 @@ in
     };
   });
   
-  "registry+https://github.com/rust-lang/crates.io-index".miette-derive."5.7.0" = overridableMkRustCrate (profileName: rec {
+  "registry+https://github.com/rust-lang/crates.io-index".miette-derive."5.9.0" = overridableMkRustCrate (profileName: rec {
     name = "miette-derive";
-    version = "5.7.0";
+    version = "5.9.0";
     registry = "registry+https://github.com/rust-lang/crates.io-index";
-    src = fetchCratesIo { inherit name version; sha256 = "8842972f23939443013dfd3720f46772b743e86f1a81d120d4b6fb090f87de1c"; };
+    src = fetchCratesIo { inherit name version; sha256 = "4901771e1d44ddb37964565c654a3223ba41a594d02b8da471cc4464912b5cfa"; };
     dependencies = {
       proc_macro2 = rustPackages."registry+https://github.com/rust-lang/crates.io-index".proc-macro2."1.0.56" { inherit profileName; };
       quote = rustPackages."registry+https://github.com/rust-lang/crates.io-index".quote."1.0.26" { inherit profileName; };
@@ -4070,7 +4070,7 @@ in
       indexmap = rustPackages."registry+https://github.com/rust-lang/crates.io-index".indexmap."1.9.3" { inherit profileName; };
       itertools = rustPackages."registry+https://github.com/rust-lang/crates.io-index".itertools."0.10.5" { inherit profileName; };
       ${ if false then "k256" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".k256."0.13.0" { inherit profileName; };
-      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.7.0" { inherit profileName; };
+      miette = rustPackages."registry+https://github.com/rust-lang/crates.io-index".miette."5.9.0" { inherit profileName; };
       num_bigint = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-bigint."0.4.3" { inherit profileName; };
       num_integer = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-integer."0.1.45" { inherit profileName; };
       num_traits = rustPackages."registry+https://github.com/rust-lang/crates.io-index".num-traits."0.2.15" { inherit profileName; };
