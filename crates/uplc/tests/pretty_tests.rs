@@ -1,12 +1,13 @@
 use num_bigint::ToBigInt;
 use uplc::{
-    ast::{Constant, Term, Type, Name},
-    Constr, PlutusData, parser::term,
+    ast::{Constant, Name, Term, Type},
+    parser::term,
+    Constr, PlutusData,
 };
 
 // Examples sourced from https://github.com/input-output-hk/plutus/issues/4751#issuecomment-1538377273
 
-fn round_trip(old_term: Term::<Name>, pp: &str) {
+fn round_trip(old_term: Term<Name>, pp: &str) {
     //assert_eq!(old_term.to_pretty(), pp);
     let new_term = term(pp).expect("failed to parse");
     assert_eq!(new_term, old_term);

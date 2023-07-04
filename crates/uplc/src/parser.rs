@@ -72,10 +72,13 @@ pub fn escape(string: &str) -> String {
 
 peg::parser! {
     grammar uplc() for str {
+
         pub rule program() -> Program<Name>
           = _* "(" _* "program" _+ v:version() _+ t:term() _* ")" _* {
             Program {version: v, term: t}
           }
+
+        rule comma() = _* "," _*
 
         rule version() -> (usize, usize, usize)
           = major:number() "." minor:number() "." patch:number()  {
@@ -155,7 +158,7 @@ peg::parser! {
           = "unit" _+ "()" { Constant::Unit }
 
         rule constant_data() -> Constant
-          = "data" _+ d:data() { Constant::Data(d) }
+          = "data" _+ "(" d:data() ")" { Constant::Data(d) }
 
         rule constant_list() -> Constant
           = "(" _* "list" _* t:type_info() _* ")" _+ ls:list(Some(&t)) {
@@ -168,7 +171,7 @@ peg::parser! {
           }
 
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
-          = "(" _* x:typed_constant(type_info.map(|t| t.0)) _* "," _* y:typed_constant(type_info.map(|t| t.1)) _* ")" { (x, y) }
+          = "(" _* x:typed_constant(type_info.map(|t| t.0)) comma() y:typed_constant(type_info.map(|t| t.1)) _* ")" { (x, y) }
 
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
@@ -196,14 +199,35 @@ peg::parser! {
           / expected!("or any valid ascii character")
 
         rule data() -> PlutusData
-          = "#" i:ident()* {
-              PlutusData::decode_fragment(
-                  hex::decode(String::from_iter(i)).unwrap().as_slice()
-              ).unwrap()
-            }
+          = _* "Constr" _+ t:number() _+ fs:plutus_list() {?
+            Ok(PlutusData::Constr(pallas_primitives::babbage::Constr {
+                tag: u64::try_from(t).or(Err("tag"))?,
+                any_constructor: None,
+                fields: fs
+            }))
+          }
+          / _* "Map" _+ kvps:plutus_key_value_pairs() {
+            PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
+          }
+          / _* "List" _+ ls:plutus_list() { PlutusData::Array(ls) }
+          / _* "I" _+ n:number() {? Ok(PlutusData::BigInt(pallas_primitives::babbage::BigInt::Int(i64::try_from(n).or(Err("int"))?.into()))) }
+          / _* "B" _+ "#" i:ident()* {?
+            Ok(PlutusData::BoundedBytes(
+              hex::decode(String::from_iter(i)).or(Err("bytes"))?.into()
+            ))
+          }
+
+        rule plutus_list() -> Vec<PlutusData>
+          = "[" _* xs:(data() ** comma()) _* "]" { xs }
+
+        rule plutus_key_value_pairs() -> Vec<(PlutusData, PlutusData)>
+          = "[" _* kvps:(plutus_key_value_pair() ** comma()) _* "]" { kvps }
+
+        rule plutus_key_value_pair() -> (PlutusData, PlutusData)
+          = "(" _* k:data() comma() v:data() _* ")" { (k, v) }
 
         rule list(type_info: Option<&Type>) -> Vec<Constant>
-          = "[" _* xs:(typed_constant(type_info) ** (_* "," _*)) _* "]" { xs }
+          = "[" _* xs:(typed_constant(type_info) ** comma()) _* "]" { xs }
 
         rule typed_constant(type_info : Option<&Type>) -> Constant
           = "()" {?
@@ -262,10 +286,10 @@ peg::parser! {
           / _* "bytestring" { Type::ByteString }
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
-          / _* "(" _* "list" _+ t:type_info() _* ")" _* {
+          / _* "(" _* "list" _+ t:type_info() _* ")" {
               Type::List(t.into())
             }
-          / _* "(" _* "pair" _+ l:type_info() _+ r:type_info() _* ")" _* {
+          / _* "(" _* "pair" _+ l:type_info() _+ r:type_info() _* ")" {
               Type::Pair(l.into(), r.into())
             }
 
@@ -657,7 +681,7 @@ mod test {
 
     #[test]
     fn parse_list_empty() {
-        let uplc = "(program 0.0.0 (con list<unit> []))";
+        let uplc = "(program 0.0.0 (con (list unit) []))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -669,7 +693,7 @@ mod test {
 
     #[test]
     fn parse_list_singleton_unit() {
-        let uplc = "(program 0.0.0 (con list<unit> [ () ]))";
+        let uplc = "(program 0.0.0 (con (list unit) [ () ]))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -681,7 +705,7 @@ mod test {
 
     #[test]
     fn parse_list_bools() {
-        let uplc = "(program 0.0.0 (con list<bool> [True, False, True]))";
+        let uplc = "(program 0.0.0 (con (list bool) [True, False, True]))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -703,7 +727,7 @@ mod test {
 
     #[test]
     fn parse_list_bytestrings() {
-        let uplc = "(program 0.0.0 (con list<bytestring> [#00, #01]))";
+        let uplc = "(program 0.0.0 (con (list bytestring) [#00, #01]))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -724,7 +748,7 @@ mod test {
 
     #[test]
     fn parse_list_list_integers() {
-        let uplc = "(program 0.0.0 (con list<list<integer>> [[14,42], [1337]]))";
+        let uplc = "(program 0.0.0 (con (list (list integer)) [[14,42], [1337]]))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -753,8 +777,7 @@ mod test {
     fn parse_list_multiline() {
         let uplc = r#"
         (program 0.0.0
-            (con list
-              <integer>
+            (con (list integer)
               [ 14
               , 42
               ]
@@ -777,7 +800,7 @@ mod test {
 
     #[test]
     fn parse_pair_unit_unit() {
-        let uplc = "(program 0.0.0 (con pair <unit,unit> [(),()]))";
+        let uplc = "(program 0.0.0 (con (pair unit unit) ((),())))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -797,7 +820,7 @@ mod test {
 
     #[test]
     fn parse_pair_bool_pair_integer_bytestring() {
-        let uplc = "(program 0.0.0 (con pair<bool, pair<integer, bytestring>> [True, [14, #42]]))";
+        let uplc = "(program 0.0.0 (con (pair bool (pair integer bytestring)) (True, (14, #42))))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -823,7 +846,7 @@ mod test {
 
     #[test]
     fn parse_pair_string_list_integer() {
-        let uplc = "(program 0.0.0 (con pair<string, list<integer>> [\"foo\", [14, 42]]))";
+        let uplc = "(program 0.0.0 (con (pair string (list integer)) (\"foo\", [14, 42])))";
         assert_eq!(
             super::program(uplc).unwrap(),
             Program::<Name> {
@@ -849,9 +872,8 @@ mod test {
     fn parse_pair_multiline() {
         let uplc = r#"
         (program 0.0.0
-            (con pair
-              <integer, integer>
-              [14, 42]
+            (con (pair integer integer)
+              (14, 42)
             )
         )"#;
         assert_eq!(
@@ -873,13 +895,13 @@ mod test {
 
     #[test]
     fn parse_list_type_mismatch() {
-        let uplc = "(program 0.0.0 (con list<integer> [True, False]))";
+        let uplc = "(program 0.0.0 (con (list integer) [True, False]))";
         assert!(super::program(uplc).is_err())
     }
 
     #[test]
     fn parse_list_mixed_types() {
-        let uplc = "(program 0.0.0 (con list<integer> [14, False]))";
+        let uplc = "(program 0.0.0 (con (list integer) [14, False]))";
         assert!(super::program(uplc).is_err())
     }
 
