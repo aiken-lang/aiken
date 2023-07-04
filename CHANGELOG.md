@@ -6,6 +6,10 @@
 
  - **aiken**: added a `blueprint policy` command to compute the policy ID of a minting script
 
+### Fixed
+
+ - **aiken-lang**: Prevent mutual recursion caused by conflicting function names for generic expect type
+ 
 ### Changed
 
 ### Removed

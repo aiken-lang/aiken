@@ -2029,3 +2029,15 @@ pub fn special_case_builtin(
         _ => unreachable!(),
     }
 }
+
+pub fn get_arg_type_name(tipo: &Type) -> String {
+    match tipo {
+        Type::App { name, .. } => name.clone(),
+        Type::Var { tipo } => match tipo.borrow().clone() {
+            TypeVar::Link { tipo } => get_arg_type_name(tipo.as_ref()),
+            _ => unreachable!(),
+        },
+        Type::Tuple { .. } => "".to_string(),
+        _ => unreachable!(),
+    }
+}

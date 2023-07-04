@@ -19,7 +19,7 @@ use crate::{
     builtins::{bool, data, void},
     expr::TypedExpr,
     gen_uplc::builder::{
-        find_and_replace_generics, get_generic_id_and_type, get_variant_name,
+        find_and_replace_generics, get_arg_type_name, get_generic_id_and_type, get_variant_name,
         lookup_data_type_by_tipo,
     },
     tipo::{
@@ -2533,7 +2533,11 @@ impl<'a> CodeGenerator<'a> {
             let mut func_stack = expect_stack.empty_with_scope();
             let mut call_stack = expect_stack.empty_with_scope();
 
-            let mut data_type_variant = String::new();
+            let mut data_type_variant = tipo
+                .get_inner_types()
+                .iter()
+                .map(|arg| get_arg_type_name(arg))
+                .join("_");
 
             if let Some(types) = tipo.arg_types() {
                 for mut tipo in types {
