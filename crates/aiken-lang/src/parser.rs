@@ -24,7 +24,7 @@ pub fn module(
 ) -> Result<(ast::UntypedModule, ModuleExtra), Vec<ParseError>> {
     let lexer::LexInfo { tokens, extra } = lexer::run(src)?;
 
-    let stream = chumsky::Stream::from_iter(ast::Span::create(tokens.len()), tokens.into_iter());
+    let stream = chumsky::Stream::from_iter(ast::Span::create(tokens.len(), 1), tokens.into_iter());
 
     let definitions = definition().repeated().then_ignore(end()).parse(stream)?;
 

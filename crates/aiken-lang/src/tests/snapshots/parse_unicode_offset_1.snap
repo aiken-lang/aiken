@@ -1,0 +1,52 @@
+---
+source: crates/aiken-lang/src/tests/parser.rs
+description: "Code:\n\nfn foo() {\n  let x = \"★\"\n  x\n}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Fn(
+            Function {
+                arguments: [],
+                body: Sequence {
+                    location: 13..30,
+                    expressions: [
+                        Assignment {
+                            location: 13..26,
+                            value: ByteArray {
+                                location: 21..26,
+                                bytes: [
+                                    226,
+                                    152,
+                                    133,
+                                ],
+                                preferred_format: Utf8String,
+                            },
+                            pattern: Var {
+                                location: 17..18,
+                                name: "x",
+                            },
+                            kind: Let,
+                            annotation: None,
+                        },
+                        Var {
+                            location: 29..30,
+                            name: "x",
+                        },
+                    ],
+                },
+                doc: None,
+                location: 0..8,
+                name: "foo",
+                public: false,
+                return_annotation: None,
+                return_type: (),
+                end_position: 31,
+                can_error: true,
+            },
+        ),
+    ],
+    kind: Validator,
+}
