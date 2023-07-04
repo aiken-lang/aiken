@@ -158,17 +158,17 @@ peg::parser! {
           = "data" _+ d:data() { Constant::Data(d) }
 
         rule constant_list() -> Constant
-          = "list" _* "<" _* t:type_info() _* ">" _+ ls:list(Some(&t)) {
+          = "(" _* "list" _* t:type_info() _* ")" _+ ls:list(Some(&t)) {
             Constant::ProtoList(t, ls)
           }
 
         rule constant_pair() -> Constant
-          = "pair" _* "<" _* l:type_info() _* "," r:type_info() _* ">" _+ p:pair(Some((&l, &r))) {
+          = "(" _* "pair" _+ l:type_info() _+ r:type_info() _* ")" _+ p:pair(Some((&l, &r))) {
             Constant::ProtoPair(l, r, p.0.into(), p.1.into())
           }
 
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
-          = "[" _* x:typed_constant(type_info.map(|t| t.0)) _* "," _* y:typed_constant(type_info.map(|t| t.1)) _* "]" { (x, y) }
+          = "(" _* x:typed_constant(type_info.map(|t| t.0)) _* "," _* y:typed_constant(type_info.map(|t| t.1)) _* ")" { (x, y) }
 
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
@@ -262,10 +262,10 @@ peg::parser! {
           / _* "bytestring" { Type::ByteString }
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
-          / _* "list" _* "<" _* t:type_info() _* ">" {
+          / _* "(" _* "list" _+ t:type_info() _* ")" _* {
               Type::List(t.into())
             }
-          / _* "pair" _* "<" l:type_info() "," r:type_info() ">" {
+          / _* "(" _* "pair" _+ l:type_info() _+ r:type_info() _* ")" _* {
               Type::Pair(l.into(), r.into())
             }
 
