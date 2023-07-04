@@ -3,8 +3,10 @@ use crate::{
     flat::Binder,
     plutus_data_to_bytes,
 };
+use pallas_codec::utils::KeyValuePairs;
+use pallas_primitives::babbage::{PlutusData, Constr};
 use pretty::RcDoc;
-use std::ascii::escape_default;
+use std::{ascii::escape_default, io::Read};
 
 impl<'a, T> Program<T>
 where
@@ -201,31 +203,31 @@ impl Constant {
             Constant::Bool(b) => RcDoc::text("bool")
                 .append(RcDoc::line())
                 .append(RcDoc::text(if *b { "True" } else { "False" })),
-            Constant::ProtoList(r#type, items) => RcDoc::text("list")
-                .append(RcDoc::line_())
-                .append(RcDoc::text("<"))
+            Constant::ProtoList(r#type, items) => RcDoc::text("(")
+                .append("list")
+                .append(RcDoc::space())
                 .append(r#type.to_doc())
-                .append(RcDoc::text(">"))
+                .append(")")
                 .append(RcDoc::line())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
                     items.iter().map(|c| c.to_doc_list()),
-                    RcDoc::text(","),
+                    RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(type_left, type_right, left, right) => RcDoc::text("pair")
-                .append(RcDoc::line_())
-                .append(RcDoc::text("<"))
+            Constant::ProtoPair(type_left, type_right, left, right) => RcDoc::text("(")
+                .append("pair")
+                .append(RcDoc::space())
                 .append(type_left.to_doc())
-                .append(RcDoc::text(", "))
+                .append(RcDoc::space())
                 .append(type_right.to_doc())
-                .append(RcDoc::text(">"))
+                .append(RcDoc::text(")"))
                 .append(RcDoc::line())
-                .append(RcDoc::text("["))
+                .append(RcDoc::text("("))
                 .append(left.to_doc_list())
-                .append(RcDoc::text(","))
+                .append(RcDoc::text(", "))
                 .append(right.to_doc_list())
-                .append(RcDoc::text("]")),
+                .append(RcDoc::text(")")),
             d @ Constant::Data(_) => RcDoc::text("data ").append(d.to_doc_list()),
         }
     }
@@ -242,18 +244,66 @@ impl Constant {
             Constant::ProtoList(_, items) => RcDoc::text("[")
                 .append(RcDoc::intersperse(
                     items.iter().map(|c| c.to_doc_list()),
-                    RcDoc::text(","),
+                    RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
-            Constant::ProtoPair(_, _, left, right) => RcDoc::text("[")
+            Constant::ProtoPair(_, _, left, right) => RcDoc::text("(")
                 .append((*left).to_doc_list())
                 .append(RcDoc::text(", "))
                 .append((*right).to_doc_list())
-                .append(RcDoc::text("]")),
+                .append(RcDoc::text(")")),
 
-            Constant::Data(data) => RcDoc::text("#").append(RcDoc::text(hex::encode(
-                plutus_data_to_bytes(data).unwrap(),
-            ))),
+            Constant::Data(data) => RcDoc::text("(")
+                .append(Self::to_doc_list_plutus_data(&data))
+                .append(RcDoc::text(")"))
+        }
+    }
+
+    // This feels a little awkward here; not sure if it should be upstreamed to pallas
+    fn to_doc_list_plutus_data(data: &PlutusData) -> RcDoc<()> {
+        match data {
+            PlutusData::Constr(Constr{ tag, fields, ..}) => RcDoc::text("Constr")
+                .append(RcDoc::space())
+                .append(RcDoc::as_string(tag))
+                .append(RcDoc::space())
+                .append(RcDoc::text("["))
+                .append(RcDoc::intersperse(
+                    fields.iter().map(|f| Self::to_doc_list_plutus_data(f)),
+                    RcDoc::text(", "),
+                ))
+                .append(RcDoc::text("]")),
+            PlutusData::Map(kvp) => RcDoc::text("Map")
+                .append(RcDoc::space())
+                .append(RcDoc::text("["))
+                .append(RcDoc::intersperse(
+                    kvp.iter().map(|(key, value)| RcDoc::text("(")
+                        .append(Self::to_doc_list_plutus_data(key))
+                        .append(RcDoc::text(", "))
+                        .append(Self::to_doc_list_plutus_data(value))
+                        .append(RcDoc::text(")")),
+                    ),
+                    RcDoc::text(", "),
+                ))
+                .append(RcDoc::text("]")),
+            PlutusData::BigInt(bi) => RcDoc::text("I")
+                .append(RcDoc::space())
+                .append(match bi {
+                    pallas_primitives::babbage::BigInt::Int(v) => RcDoc::text(v.to_string()),
+                    pallas_primitives::babbage::BigInt::BigUInt(v) => RcDoc::text(v.to_string()),
+                    pallas_primitives::babbage::BigInt::BigNInt(v) => RcDoc::text(v.to_string()),
+                }),
+            PlutusData::BoundedBytes(bs) => RcDoc::text("B")
+                .append(RcDoc::space())
+                .append(RcDoc::text("#"))
+                .append(RcDoc::text(hex::encode(bs.to_vec()))),
+            PlutusData::Array(a) => RcDoc::text("List")
+                .append(RcDoc::space())
+                .append(RcDoc::text("["))
+                .append(RcDoc::intersperse(
+                    a.iter().map(|item| Self::to_doc_list_plutus_data(item)),
+                    RcDoc::text(", "),
+                ))
+                .append(RcDoc::text("]")),
         }
     }
 }
@@ -266,10 +316,11 @@ impl Type {
             Type::String => RcDoc::text("string"),
             Type::ByteString => RcDoc::text("bytestring"),
             Type::Unit => RcDoc::text("unit"),
-            Type::List(r#type) => RcDoc::text("list")
-                .append(RcDoc::text("<"))
+            Type::List(r#type) => RcDoc::text("(list")
+                .append(RcDoc::line())
                 .append(r#type.to_doc())
-                .append(RcDoc::text(">")),
+                .append(RcDoc::line_())
+                .append(")"),
             Type::Pair(l, r) => RcDoc::text("pair")
                 .append(RcDoc::text("<"))
                 .append(l.to_doc())
