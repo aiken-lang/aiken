@@ -18,7 +18,7 @@ fn constant_list_integer() {
     round_trip(
         Term::<Name>::Constant(
             Constant::ProtoList(
-                Type::Integer.into(),
+                Type::Integer,
                 vec![
                     Constant::Integer(0.to_bigint().unwrap()),
                     Constant::Integer(1.to_bigint().unwrap()),
@@ -36,8 +36,8 @@ fn constant_pair_bool_bytestring() {
     round_trip(
         Term::<Name>::Constant(
             Constant::ProtoPair(
-                Type::Bool.into(),
-                Type::ByteString.into(),
+                Type::Bool,
+                Type::ByteString,
                 Constant::Bool(true).into(),
                 Constant::ByteString(vec![0x01, 0x23, 0x45]).into(),
             )
@@ -52,8 +52,8 @@ fn constant_pair_unit_string() {
     round_trip(
         Term::<Name>::Constant(
             Constant::ProtoPair(
-                Type::Unit.into(),
-                Type::String.into(),
+                Type::Unit,
+                Type::String,
                 Constant::Unit.into(),
                 Constant::String("hello universe".into()).into(),
             )
@@ -78,17 +78,17 @@ fn constant_deeply_nested_list() {
                         vec![
                             Constant::ProtoList(
                                 t0.clone(),
-                                vec![Constant::Integer(-1.to_bigint().unwrap())],
+                                vec![Constant::Integer((-1).to_bigint().unwrap())],
                             ),
                             Constant::ProtoList(t0.clone(), vec![]),
                         ],
                     ),
                     Constant::ProtoList(
-                        t1.clone(),
+                        t1,
                         vec![
                             Constant::ProtoList(t0.clone(), vec![]),
                             Constant::ProtoList(
-                                t0.clone(),
+                                t0,
                                 vec![
                                     Constant::Integer(2.to_bigint().unwrap()),
                                     Constant::Integer(3.to_bigint().unwrap()),
