@@ -540,7 +540,7 @@ pub const DEFAULT_TODO_STR: &str = "aiken::todo";
 pub const DEFAULT_ERROR_STR: &str = "aiken::error";
 
 impl UntypedExpr {
-    pub fn todo(location: Span, reason: Option<Self>) -> Self {
+    pub fn todo(reason: Option<Self>, location: Span) -> Self {
         UntypedExpr::Trace {
             location,
             kind: TraceKind::Todo,
@@ -552,7 +552,7 @@ impl UntypedExpr {
         }
     }
 
-    pub fn error(location: Span, reason: Option<Self>) -> Self {
+    pub fn error(reason: Option<Self>, location: Span) -> Self {
         UntypedExpr::Trace {
             location,
             kind: TraceKind::Error,

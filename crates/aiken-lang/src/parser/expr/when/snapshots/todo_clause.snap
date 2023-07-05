@@ -1,0 +1,60 @@
+---
+source: crates/aiken-lang/src/parser/expr/when/clause.rs
+description: "Code:\n\nwhen val is {\n  Bar1{..} -> True\n  Bar2{..} -> todo @\"unimplemented\"\n}\n"
+---
+When {
+    location: 0..70,
+    subject: Var {
+        location: 5..8,
+        name: "val",
+    },
+    clauses: [
+        UntypedClause {
+            location: 16..32,
+            patterns: [
+                Constructor {
+                    is_record: true,
+                    location: 16..24,
+                    name: "Bar1",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    with_spread: true,
+                    tipo: (),
+                },
+            ],
+            guard: None,
+            then: Var {
+                location: 28..32,
+                name: "True",
+            },
+        },
+        UntypedClause {
+            location: 35..68,
+            patterns: [
+                Constructor {
+                    is_record: true,
+                    location: 35..43,
+                    name: "Bar2",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    with_spread: true,
+                    tipo: (),
+                },
+            ],
+            guard: None,
+            then: Trace {
+                kind: Todo,
+                location: 47..68,
+                then: ErrorTerm {
+                    location: 47..68,
+                },
+                text: String {
+                    location: 52..68,
+                    value: "unimplemented",
+                },
+            },
+        },
+    ],
+}

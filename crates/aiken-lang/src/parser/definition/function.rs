@@ -27,7 +27,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
             |((((public, name), (arguments, args_span)), return_annotation), body), span| {
                 ast::UntypedDefinition::Fn(ast::Function {
                     arguments,
-                    body: body.unwrap_or_else(|| UntypedExpr::todo(span, None)),
+                    body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
                     doc: None,
                     location: ast::Span {
                         start: span.start,

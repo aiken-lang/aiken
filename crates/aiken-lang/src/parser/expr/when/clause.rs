@@ -4,13 +4,13 @@ use vec1::vec1;
 use crate::{
     ast,
     expr::UntypedExpr,
-    parser::{error::ParseError, expr::string::flexible, pattern, token::Token},
+    parser::{error::ParseError, pattern, token::Token},
 };
 
 use super::guard;
 
 pub fn parser(
-    r: Recursive<'_, Token, UntypedExpr, ParseError>,
+    expression: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, ast::UntypedClause, Error = ParseError> + '_ {
     pattern()
         .then(just(Token::Vbar).ignore_then(pattern()).repeated().or_not())
@@ -27,23 +27,7 @@ pub fn parser(
                 }),
         )))
         // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
-        .then(choice((
-            r.clone(),
-            just(Token::Todo)
-                .ignore_then(
-                    r.clone()
-                        .then_ignore(one_of(Token::RArrow).not().rewind())
-                        .or_not(),
-                )
-                .map_with_span(|reason, span| UntypedExpr::todo(span, reason.map(flexible))),
-            just(Token::ErrorTerm)
-                .ignore_then(
-                    r.clone()
-                        .then_ignore(just(Token::RArrow).not().rewind())
-                        .or_not(),
-                )
-                .map_with_span(|reason, span| UntypedExpr::error(span, reason.map(flexible))),
-        )))
+        .then(expression)
         .map_with_span(
             |(((pattern, alternative_patterns_opt), guard), then), span| {
                 let mut patterns = vec1![pattern];
@@ -56,4 +40,44 @@ pub fn parser(
                 }
             },
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_expr;
+
+    #[test]
+    fn todo_clause() {
+        assert_expr!(
+            r#"
+            when val is {
+              Bar1{..} -> True
+              Bar2{..} -> todo @"unimplemented"
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn error_single_clause_no_message() {
+        assert_expr!(
+            r#"
+            when val is {
+              Bar1{..} -> error
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn todo_double_clause_no_message() {
+        assert_expr!(
+            r#"
+            when val is {
+              Bar1{..} -> todo
+              Bar2{..} -> todo
+            }
+            "#
+        );
+    }
 }

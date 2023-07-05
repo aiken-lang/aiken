@@ -23,7 +23,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .map_with_span(|(((fail, name), span_end), body), span| {
             ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
-                body: body.unwrap_or_else(|| UntypedExpr::todo(span, None)),
+                body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
                 doc: None,
                 location: span_end,
                 end_position: span.end - 1,
