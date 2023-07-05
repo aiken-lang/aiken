@@ -1,4 +1,5 @@
 mod annotation;
+pub mod chain;
 pub mod definition;
 pub mod error;
 pub mod expr;
