@@ -9,23 +9,22 @@ use crate::{
 pub fn let_(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    assignment(r, Token::Let)
+    assignment(r, ast::AssignmentKind::Let)
 }
 
 pub fn expect(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    assignment(r, Token::Expect)
+    assignment(r, ast::AssignmentKind::Expect)
 }
 
 fn assignment(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
-    keyword: Token,
+    kind: ast::AssignmentKind,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    let kind = if keyword == Token::Let {
-        ast::AssignmentKind::Let
-    } else {
-        ast::AssignmentKind::Expect
+    let keyword = match kind {
+        ast::AssignmentKind::Let => Token::Let,
+        ast::AssignmentKind::Expect => Token::Expect,
     };
 
     just(keyword)
