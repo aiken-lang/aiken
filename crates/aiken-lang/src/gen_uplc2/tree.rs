@@ -5,7 +5,6 @@ use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 use crate::{
     ast::{BinOp, Span, UnOp},
     builtins::{data, list, void},
-    gen_uplc::air,
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 
@@ -923,7 +922,7 @@ impl AirTree {
                     right,
                 } => {
                     air_vec.push(Air::BinOp {
-                        name: name.clone(),
+                        name: *name,
                         tipo: tipo.clone(),
                     });
                     left.create_air_vec(air_vec);

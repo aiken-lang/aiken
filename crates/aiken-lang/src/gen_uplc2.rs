@@ -4,7 +4,7 @@ pub mod tree;
 
 use std::sync::Arc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{Name, Program, Term},
@@ -21,10 +21,11 @@ use crate::{
     gen_uplc::{
         air::Air,
         builder::{
-            self as build, lookup_data_type_by_tipo, AssignmentProperties, ClauseProperties,
-            DataTypeKey, FunctionAccessKey, SpecificClause,
+            self as build, AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey,
+            SpecificClause,
         },
     },
+    gen_uplc2::builder::convert_opaque_type,
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
@@ -80,9 +81,9 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate(
         &mut self,
         TypedValidator {
-            fun,
-            other_fun,
-            params,
+            fun: _,
+            other_fun: _,
+            params: _,
             ..
         }: &TypedValidator,
     ) -> Program<Name> {
@@ -99,7 +100,7 @@ impl<'a> CodeGenerator<'a> {
         todo!()
     }
 
-    fn finalize(&mut self, term: Term<Name>) -> Program<Name> {
+    fn finalize(&mut self, _term: Term<Name>) -> Program<Name> {
         todo!()
     }
 
@@ -1044,6 +1045,7 @@ impl<'a> CodeGenerator<'a> {
             let tuple_inner_types = tipo.get_inner_types();
 
             let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
+
             let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
             let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
 
@@ -1078,12 +1080,60 @@ impl<'a> CodeGenerator<'a> {
             ])
             .hoist_over(AirTree::void())
         } else if tipo.is_tuple() {
-            todo!()
+            let tuple_inner_types = tipo.get_inner_types();
+
+            let tuple_name = format!("__tuple_span_{}_{}", location.start, location.end);
+            let tuple_assign = AirTree::let_assignment(&tuple_name, value);
+
+            let tuple_expect_items = tuple_inner_types
+                .iter()
+                .enumerate()
+                .map(|(index, arg)| {
+                    let tuple_index_name = format!(
+                        "__tuple_index_{}_span_{}_{}",
+                        index, location.start, location.end
+                    );
+
+                    let expect_tuple_item = self.expect_type_assign(
+                        tipo,
+                        AirTree::local_var(&tuple_index_name, arg.clone()),
+                        defined_data_types,
+                        location,
+                    );
+
+                    (tuple_index_name, expect_tuple_item)
+                })
+                .collect_vec();
+
+            let tuple_index_names = tuple_expect_items
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect_vec();
+
+            let tuple_access = AirTree::tuple_access(
+                tuple_index_names,
+                tipo.clone(),
+                false,
+                AirTree::local_var(tuple_name, tipo.clone()),
+            );
+
+            let mut tuple_expects = tuple_expect_items
+                .into_iter()
+                .map(|(_, item)| item)
+                .collect_vec();
+
+            let mut sequence = vec![tuple_assign, tuple_access];
+
+            sequence.append(&mut tuple_expects);
+
+            AirTree::UnhoistedSequence(sequence).hoist_over(AirTree::void())
         } else {
             let data_type =
                 build::lookup_data_type_by_tipo(&self.data_types, tipo).unwrap_or_else(|| {
                     unreachable!("We need a data type definition fot type {:#?}", tipo)
                 });
+
+            let mut tipo = convert_opaque_type();
 
             // for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
             //     let field_type = arg.clone();
@@ -1093,7 +1143,7 @@ impl<'a> CodeGenerator<'a> {
             // TODO calculate the variant name.
             let data_type_name = format!("__expect_{}{}", data_type.name, "");
             let function = self.code_gen_functions.get(&data_type_name);
-
+            todo!();
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
                 todo!()
             } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
@@ -1104,7 +1154,7 @@ impl<'a> CodeGenerator<'a> {
 
             let func_var = AirTree::var(
                 ValueConstructor::public(
-                    tipo.clone(),
+                    tipo,
                     ValueConstructorVariant::ModuleFn {
                         name: data_type_name.to_string(),
                         field_map: None,
@@ -1167,14 +1217,11 @@ impl<'a> CodeGenerator<'a> {
 
                     let complex_clause = props.complex_clause;
 
-                    let mut next_clause_props = ClauseProperties {
-                        clause_var_name: props.clause_var_name.clone(),
-                        complex_clause: false,
-                        needs_constr_var: false,
-                        original_subject_name: props.original_subject_name.clone(),
-                        final_clause: false,
-                        specific_clause: props.specific_clause.clone(),
-                    };
+                    let mut next_clause_props = ClauseProperties::init(
+                        subject_tipo,
+                        props.clause_var_name.clone(),
+                        props.original_subject_name.clone(),
+                    );
 
                     if let Some(data_type) = data_type {
                         if data_type.constructors.len() > 1 {
@@ -1340,7 +1387,62 @@ impl<'a> CodeGenerator<'a> {
                         )
                     }
                 }
-                SpecificClause::TupleClause { .. } => todo!(),
+                SpecificClause::TupleClause {
+                    defined_tuple_indices,
+                } => {
+                    let current_defined_indices = defined_tuple_indices.clone();
+
+                    let (_, pattern_assigns) =
+                        self.clause_pattern(&clause.pattern, subject_tipo, props);
+
+                    let ClauseProperties{ specific_clause: SpecificClause::TupleClause { defined_tuple_indices }, ..} = props
+                    else {
+                        unreachable!()
+                    };
+
+                    let new_defined_indices: IndexSet<(usize, String)> = defined_tuple_indices
+                        .difference(&current_defined_indices)
+                        .cloned()
+                        .collect();
+
+                    let mut next_clause_props = ClauseProperties {
+                        clause_var_name: props.clause_var_name.clone(),
+                        complex_clause: false,
+                        needs_constr_var: false,
+                        original_subject_name: props.original_subject_name.clone(),
+                        final_clause: false,
+                        specific_clause: SpecificClause::TupleClause {
+                            defined_tuple_indices: defined_tuple_indices.clone(),
+                        },
+                    };
+
+                    if new_defined_indices.is_empty() {
+                        AirTree::wrap_clause(
+                            pattern_assigns.hoist_over(clause_then),
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                        )
+                    } else {
+                        AirTree::tuple_clause(
+                            &props.original_subject_name,
+                            subject_tipo.clone(),
+                            new_defined_indices,
+                            current_defined_indices,
+                            pattern_assigns.hoist_over(clause_then),
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                            props.complex_clause,
+                        )
+                    }
+                }
             }
         } else {
             // handle final_clause
@@ -1607,7 +1709,98 @@ impl<'a> CodeGenerator<'a> {
                     )
                 }
             }
-            Pattern::Tuple { .. } => todo!(),
+            Pattern::Tuple { elems, .. } => {
+                let items_type = subject_tipo.get_inner_types();
+
+                let name_index_assigns = elems
+                    .iter()
+                    .enumerate()
+                    .map(|(index, element)| {
+                        let elem_name = match element {
+                            Pattern::Var { name, .. } => name.to_string(),
+                            Pattern::Assign { name, .. } => name.to_string(),
+                            Pattern::Discard { .. } => "_".to_string(),
+                            _ => format!(
+                                "tuple_index_{}_span_{}_{}",
+                                index,
+                                element.location().start,
+                                element.location().end
+                            ),
+                        };
+
+                        let mut tuple_props = ClauseProperties::init_inner(
+                            &items_type[index],
+                            elem_name.clone(),
+                            elem_name.clone(),
+                            props.final_clause,
+                        );
+
+                        let elem = self.nested_clause_condition(
+                            element,
+                            &items_type[index],
+                            &mut tuple_props,
+                        );
+
+                        (elem_name, index, elem)
+                    })
+                    .collect_vec();
+
+                let mut defined_indices = match props.clone() {
+                    ClauseProperties {
+                        specific_clause:
+                            SpecificClause::TupleClause {
+                                defined_tuple_indices,
+                            },
+                        ..
+                    } => defined_tuple_indices,
+                    _ => unreachable!(),
+                };
+
+                let mut previous_defined_names = vec![];
+                name_index_assigns.iter().for_each(|(name, index, _)| {
+                    if let Some((index, prev_name)) = defined_indices
+                        .iter()
+                        .find(|(defined_index, _)| defined_index == index)
+                    {
+                        previous_defined_names.push((*index, prev_name.clone(), name.clone()));
+                    } else {
+                        assert!(defined_indices.insert((*index, name.clone())));
+                    }
+                });
+
+                let tuple_name_assigns = previous_defined_names
+                    .into_iter()
+                    .map(|(index, prev_name, name)| {
+                        AirTree::let_assignment(
+                            name,
+                            AirTree::local_var(prev_name, items_type[index].clone()),
+                        )
+                    })
+                    .collect_vec();
+
+                let mut tuple_item_assigns = name_index_assigns
+                    .into_iter()
+                    .map(|(_, _, item)| item)
+                    .collect_vec();
+
+                match props {
+                    ClauseProperties {
+                        specific_clause:
+                            SpecificClause::TupleClause {
+                                defined_tuple_indices,
+                            },
+                        ..
+                    } => {
+                        *defined_tuple_indices = defined_indices;
+                    }
+                    _ => unreachable!(),
+                }
+
+                let mut sequence = tuple_name_assigns;
+                sequence.append(&mut tuple_item_assigns);
+
+                (AirTree::void(), AirTree::UnhoistedSequence(sequence))
+            }
         }
     }
 
@@ -1639,11 +1832,7 @@ impl<'a> CodeGenerator<'a> {
                     self.nested_clause_condition(pattern, subject_tipo, props),
                 ]),
                 Pattern::Discard { .. } => AirTree::no_op(),
-                Pattern::List {
-                    location,
-                    elements,
-                    tail,
-                } => {
+                Pattern::List { .. } => {
                     todo!();
                 }
                 Pattern::Constructor {
@@ -1671,7 +1860,7 @@ impl<'a> CodeGenerator<'a> {
                         ])
                     }
                 }
-                Pattern::Tuple { location, elems } => todo!(),
+                Pattern::Tuple { .. } => todo!(),
             }
         }
     }
