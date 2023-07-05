@@ -3,11 +3,11 @@ use chumsky::prelude::*;
 use crate::{
     ast,
     expr::UntypedExpr,
-    parser::{error::ParseError, token::Token},
+    parser::{error::ParseError, literal::string::parser as string, token::Token},
 };
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
-    select! {Token::String {value} => value}.map_with_span(|value, span| UntypedExpr::String {
+    string().map_with_span(|value, span| UntypedExpr::String {
         location: span,
         value,
     })

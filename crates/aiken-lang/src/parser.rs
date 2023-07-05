@@ -4,6 +4,7 @@ pub mod error;
 pub mod expr;
 pub mod extra;
 pub mod lexer;
+pub mod literal;
 pub mod pattern;
 pub mod token;
 mod utils;
