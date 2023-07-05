@@ -7,9 +7,9 @@ use crate::{
     parser::{token::Token, ParseError},
 };
 
-pub(crate) fn parser<'a>(
-    expression: Recursive<'a, Token, UntypedExpr, ParseError>,
-) -> impl Parser<Token, Chain, Error = ParseError> + 'a {
+pub(crate) fn parser(
+    expression: Recursive<'_, Token, UntypedExpr, ParseError>,
+) -> impl Parser<Token, Chain, Error = ParseError> + '_ {
     choice((
         select! { Token::Name { name } => name }
             .then_ignore(just(Token::Colon))
