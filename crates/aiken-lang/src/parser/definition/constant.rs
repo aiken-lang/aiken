@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{annotation, error::ParseError, token::Token, utils},
+    parser::{annotation, error::ParseError, expr::bytearray::bytearray, token::Token, utils},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -48,12 +48,10 @@ pub fn value() -> impl Parser<Token, ast::Constant, Error = ParseError> {
         });
 
     let constant_bytearray_parser =
-        utils::bytearray().map_with_span(|(preferred_format, bytes), span| {
-            ast::Constant::ByteArray {
-                location: span,
-                bytes,
-                preferred_format,
-            }
+        bytearray().map_with_span(|(preferred_format, bytes), span| ast::Constant::ByteArray {
+            location: span,
+            bytes,
+            preferred_format,
         });
 
     choice((

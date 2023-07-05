@@ -5,7 +5,7 @@ mod anonymous_binop;
 pub mod anonymous_function;
 pub mod assignment;
 mod block;
-mod bytearray;
+pub(crate) mod bytearray;
 mod if_else;
 mod int;
 mod list;
