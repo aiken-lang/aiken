@@ -7,7 +7,7 @@ use crate::{
 };
 
 pub fn parser(
-    seq_r: Recursive<'_, Token, UntypedExpr, ParseError>,
+    sequence: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     just(Token::Fn)
         .ignore_then(
@@ -17,7 +17,7 @@ pub fn parser(
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
         )
         .then(just(Token::RArrow).ignore_then(annotation()).or_not())
-        .then(seq_r.delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
+        .then(sequence.delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
         .map_with_span(
             |((arguments, return_annotation), body), span| UntypedExpr::Fn {
                 arguments,

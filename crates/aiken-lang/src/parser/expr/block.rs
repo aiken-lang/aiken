@@ -6,13 +6,13 @@ use crate::{
 };
 
 pub fn parser(
-    seq_r: Recursive<'_, Token, UntypedExpr, ParseError>,
+    sequence: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     choice((
-        seq_r
+        sequence
             .clone()
             .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
-        seq_r.clone().delimited_by(
+        sequence.clone().delimited_by(
             choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
             just(Token::RightParen),
         ),

@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseError> {
-    recursive(|r| {
+    recursive(|expression| {
         let var_parser = select! {
             Token::Name { name } => name,
             Token::UpName { name } => name,
@@ -19,7 +19,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
 
         let constant_parser = definition::constant::value().map(ast::ClauseGuard::Constant);
 
-        let block_parser = r
+        let block_parser = expression
             .clone()
             .delimited_by(just(Token::LeftParen), just(Token::RightParen));
 

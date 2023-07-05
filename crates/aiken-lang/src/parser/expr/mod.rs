@@ -40,9 +40,9 @@ use crate::{
 use super::{error::ParseError, token::Token};
 
 pub fn parser(
-    seq_r: Recursive<'_, Token, UntypedExpr, ParseError>,
+    sequence: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    recursive(|r| {
+    recursive(|expression| {
         let field_access_constructor = select! {Token::Name { name } => name}
             .map_with_span(|module, span| (module, span))
             .then_ignore(just(Token::Dot))
@@ -59,20 +59,20 @@ pub fn parser(
         let expr_unit_parser = choice((
             string(),
             int(),
-            record_update(r.clone()),
-            record(r.clone()),
+            record_update(expression.clone()),
+            record(expression.clone()),
             field_access_constructor,
             var(),
-            tuple(r.clone()),
+            tuple(expression.clone()),
             bytearray(),
-            list(r.clone()),
-            anonymous_function(seq_r.clone()),
+            list(expression.clone()),
+            anonymous_function(sequence.clone()),
             anonymous_binop(),
-            block(seq_r.clone()),
-            when(r.clone()),
-            assignment::let_(r.clone()),
-            assignment::expect(r.clone()),
-            if_else(seq_r, r.clone()),
+            block(sequence.clone()),
+            when(expression.clone()),
+            assignment::let_(expression.clone()),
+            assignment::expect(expression.clone()),
+            if_else(sequence, expression.clone()),
         ));
 
         // Parsing a function call into the appropriate structure
@@ -118,7 +118,7 @@ pub fn parser(
             select! { Token::Name { name } => name }
                 .then_ignore(just(Token::Colon))
                 .or_not()
-                .then(r)
+                .then(expression)
                 .map_with_span(|(label, value), span| {
                     ParserArg::Arg(Box::new(ast::CallArg {
                         label,

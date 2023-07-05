@@ -8,11 +8,11 @@ use super::{
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
-    recursive(|r| {
+    recursive(|expression| {
         let record_constructor_pattern_arg_parser = choice((
             select! {Token::Name {name} => name}
                 .then_ignore(just(Token::Colon))
-                .then(r.clone())
+                .then(expression.clone())
                 .map_with_span(|(name, pattern), span| ast::CallArg {
                     location: span,
                     label: Some(name),
@@ -37,7 +37,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
         )
         .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
-        let tuple_constructor_pattern_arg_parser = r
+        let tuple_constructor_pattern_arg_parser = expression
             .clone()
             .map(|pattern| ast::CallArg {
                 location: pattern.location(),
@@ -121,7 +121,8 @@ pub fn parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
                     base,
                 },
             ),
-            r.clone()
+            expression
+                .clone()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(
@@ -133,10 +134,13 @@ pub fn parser() -> impl Parser<Token, ast::UntypedPattern, Error = ParseError> {
                     elems,
                 }),
             just(Token::LeftSquare)
-                .ignore_then(r.clone().separated_by(just(Token::Comma)))
+                .ignore_then(expression.clone().separated_by(just(Token::Comma)))
                 .then(choice((
-                    just(Token::Comma)
-                        .ignore_then(just(Token::DotDot).ignore_then(r.clone().or_not()).or_not()),
+                    just(Token::Comma).ignore_then(
+                        just(Token::DotDot)
+                            .ignore_then(expression.clone().or_not())
+                            .or_not(),
+                    ),
                     just(Token::Comma).ignored().or_not().map(|_| None),
                 )))
                 .then_ignore(just(Token::RightSquare))

@@ -9,31 +9,37 @@ use crate::{
 use super::block;
 
 pub fn parser<'a>(
-    seq_r: Recursive<'a, Token, UntypedExpr, ParseError>,
-    r: Recursive<'a, Token, UntypedExpr, ParseError>,
+    sequence: Recursive<'a, Token, UntypedExpr, ParseError>,
+    expression: Recursive<'a, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
     just(Token::If)
-        .ignore_then(r.clone().then(block(seq_r.clone())).map_with_span(
-            |(condition, body), span| ast::IfBranch {
-                condition,
-                body,
-                location: span,
-            },
-        ))
+        .ignore_then(
+            expression
+                .clone()
+                .then(block(sequence.clone()))
+                .map_with_span(|(condition, body), span| ast::IfBranch {
+                    condition,
+                    body,
+                    location: span,
+                }),
+        )
         .then(
             just(Token::Else)
                 .ignore_then(just(Token::If))
-                .ignore_then(r.clone().then(block(seq_r.clone())).map_with_span(
-                    |(condition, body), span| ast::IfBranch {
-                        condition,
-                        body,
-                        location: span,
-                    },
-                ))
+                .ignore_then(
+                    expression
+                        .clone()
+                        .then(block(sequence.clone()))
+                        .map_with_span(|(condition, body), span| ast::IfBranch {
+                            condition,
+                            body,
+                            location: span,
+                        }),
+                )
                 .repeated(),
         )
         .then_ignore(just(Token::Else))
-        .then(block(seq_r))
+        .then(block(sequence))
         .map_with_span(|((first, alternative_branches), final_else), span| {
             let mut branches = vec1::vec1![first];
 
