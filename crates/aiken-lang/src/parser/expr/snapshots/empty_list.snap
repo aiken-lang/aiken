@@ -1,0 +1,9 @@
+---
+source: crates/aiken-lang/src/parser/expr/list.rs
+description: "Code:\n\n[]"
+---
+List {
+    location: 0..2,
+    elements: [],
+    tail: None,
+}

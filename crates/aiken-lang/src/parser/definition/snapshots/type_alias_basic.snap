@@ -1,0 +1,20 @@
+---
+source: crates/aiken-lang/src/parser/definition/type_alias.rs
+description: "Code:\n\ntype Thing = Int"
+---
+TypeAlias(
+    TypeAlias {
+        alias: "Thing",
+        annotation: Constructor {
+            location: 13..16,
+            module: None,
+            name: "Int",
+            arguments: [],
+        },
+        doc: None,
+        location: 0..16,
+        parameters: [],
+        public: false,
+        tipo: (),
+    },
+)

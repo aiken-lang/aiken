@@ -1,0 +1,32 @@
+---
+source: crates/aiken-lang/src/parser/expr/mod.rs
+description: "Code:\n\na + 2\n|> add_one\n|> add_one\n"
+---
+PipeLine {
+    expressions: [
+        BinOp {
+            location: 0..5,
+            name: AddInt,
+            left: Var {
+                location: 0..1,
+                name: "a",
+            },
+            right: Int {
+                location: 4..5,
+                value: "2",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+        Var {
+            location: 9..16,
+            name: "add_one",
+        },
+        Var {
+            location: 20..27,
+            name: "add_one",
+        },
+    ],
+    one_liner: false,
+}

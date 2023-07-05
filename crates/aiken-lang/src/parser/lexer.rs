@@ -1,11 +1,83 @@
-use super::{
-    error::ParseError,
-    token::{Base, Token},
-};
-use crate::ast::Span;
 use chumsky::prelude::*;
 use num_bigint::BigInt;
 use ordinal::Ordinal;
+
+use super::{
+    error::ParseError,
+    extra::ModuleExtra,
+    token::{Base, Token},
+};
+use crate::ast::Span;
+
+pub struct LexInfo {
+    pub tokens: Vec<(Token, Span)>,
+    pub extra: ModuleExtra,
+}
+
+pub fn run(src: &str) -> Result<LexInfo, Vec<ParseError>> {
+    let len = src.as_bytes().len();
+
+    let tokens = lexer().parse(chumsky::Stream::from_iter(
+        Span::create(len, 1),
+        src.chars().scan(0, |i, c| {
+            let start = *i;
+            let offset = c.len_utf8();
+            *i = start + offset;
+            Some((c, Span::create(start, offset)))
+        }),
+    ))?;
+
+    let mut extra = ModuleExtra::new();
+
+    let mut previous_is_newline = false;
+
+    let tokens = tokens
+        .into_iter()
+        .filter_map(|(token, ref span)| {
+            let current_is_newline = token == Token::NewLine || token == Token::EmptyLine;
+            let result = match token {
+                Token::ModuleComment => {
+                    extra.module_comments.push(*span);
+                    None
+                }
+                Token::DocComment => {
+                    extra.doc_comments.push(*span);
+                    None
+                }
+                Token::Comment => {
+                    extra.comments.push(*span);
+                    None
+                }
+                Token::EmptyLine => {
+                    extra.empty_lines.push(span.start);
+                    None
+                }
+                Token::LeftParen => {
+                    if previous_is_newline {
+                        Some((Token::NewLineLeftParen, *span))
+                    } else {
+                        Some((Token::LeftParen, *span))
+                    }
+                }
+                Token::Pipe => {
+                    if previous_is_newline {
+                        Some((Token::NewLinePipe, *span))
+                    } else {
+                        Some((Token::Pipe, *span))
+                    }
+                }
+                Token::NewLine => None,
+                _ => Some((token, *span)),
+            };
+
+            previous_is_newline = current_is_newline;
+
+            result
+        })
+        .collect::<Vec<(Token, Span)>>();
+
+    Ok(LexInfo { tokens, extra })
+}
 
 pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
     let base10 = text::int(10).map(|value| Token::Int {

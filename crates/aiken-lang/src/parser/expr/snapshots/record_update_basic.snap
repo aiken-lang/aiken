@@ -1,0 +1,43 @@
+---
+source: crates/aiken-lang/src/parser/expr/record_update.rs
+description: "Code:\n\nUser { ..user, name: \"Aiken\", age }"
+---
+RecordUpdate {
+    location: 0..35,
+    constructor: Var {
+        location: 0..4,
+        name: "User",
+    },
+    spread: RecordUpdateSpread {
+        base: Var {
+            location: 9..13,
+            name: "user",
+        },
+        location: 7..13,
+    },
+    arguments: [
+        UntypedRecordUpdateArg {
+            label: "name",
+            location: 15..28,
+            value: ByteArray {
+                location: 21..28,
+                bytes: [
+                    65,
+                    105,
+                    107,
+                    101,
+                    110,
+                ],
+                preferred_format: Utf8String,
+            },
+        },
+        UntypedRecordUpdateArg {
+            label: "age",
+            location: 30..33,
+            value: Var {
+                location: 30..33,
+                name: "age",
+            },
+        },
+    ],
+}

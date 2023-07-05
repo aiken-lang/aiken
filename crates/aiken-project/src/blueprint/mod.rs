@@ -140,7 +140,7 @@ impl From<&Config> for Preamble {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use aiken_lang::builtins;
     use schema::{Data, Declaration, Items, Schema};

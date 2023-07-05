@@ -1,0 +1,37 @@
+---
+source: crates/aiken-lang/src/parser/definition/data_type.rs
+description: "Code:\n\npub opaque type User {\n  name: _w\n}\n"
+---
+DataType(
+    DataType {
+        constructors: [
+            RecordConstructor {
+                location: 21..35,
+                name: "User",
+                arguments: [
+                    RecordConstructorArg {
+                        label: Some(
+                            "name",
+                        ),
+                        annotation: Hole {
+                            location: 31..33,
+                            name: "_w",
+                        },
+                        location: 25..33,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: true,
+            },
+        ],
+        doc: None,
+        location: 0..35,
+        name: "User",
+        opaque: true,
+        parameters: [],
+        public: true,
+        typed_parameters: [],
+    },
+)

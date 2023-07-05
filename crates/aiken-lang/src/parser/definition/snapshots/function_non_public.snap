@@ -1,0 +1,28 @@
+---
+source: crates/aiken-lang/src/parser/definition/function.rs
+description: "Code:\n\nfn run() {}\n"
+---
+Fn(
+    Function {
+        arguments: [],
+        body: Trace {
+            kind: Todo,
+            location: 0..11,
+            then: ErrorTerm {
+                location: 0..11,
+            },
+            text: String {
+                location: 0..11,
+                value: "aiken::todo",
+            },
+        },
+        doc: None,
+        location: 0..8,
+        name: "run",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 10,
+        can_error: true,
+    },
+)

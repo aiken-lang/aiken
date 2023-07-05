@@ -1,0 +1,20 @@
+---
+source: crates/aiken-lang/src/parser/definition/type_alias.rs
+description: "Code:\n\npub type Me = String"
+---
+TypeAlias(
+    TypeAlias {
+        alias: "Me",
+        annotation: Constructor {
+            location: 14..20,
+            module: None,
+            name: "String",
+            arguments: [],
+        },
+        doc: None,
+        location: 0..20,
+        parameters: [],
+        public: true,
+        tipo: (),
+    },
+)

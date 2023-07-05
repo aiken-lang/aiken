@@ -1,0 +1,12 @@
+---
+source: crates/aiken-lang/src/parser/expr/mod.rs
+description: "Code:\n\nuser.name"
+---
+FieldAccess {
+    location: 0..9,
+    label: "name",
+    container: Var {
+        location: 0..4,
+        name: "user",
+    },
+}

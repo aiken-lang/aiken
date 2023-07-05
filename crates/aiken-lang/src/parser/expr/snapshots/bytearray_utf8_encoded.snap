@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/parser/expr/bytearray.rs
+description: "Code:\n\n\"aiken\""
+---
+ByteArray {
+    location: 0..7,
+    bytes: [
+        97,
+        105,
+        107,
+        101,
+        110,
+    ],
+    preferred_format: Utf8String,
+}

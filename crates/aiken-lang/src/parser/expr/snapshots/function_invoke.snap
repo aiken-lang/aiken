@@ -1,0 +1,160 @@
+---
+source: crates/aiken-lang/src/parser/expr/mod.rs
+description: "Code:\n\nlet x = add_one(3)\n\nlet map_add_x = list.map(_, fn (y) { x + y })\n\nmap_add_x([ 1, 2, 3 ])\n"
+---
+Sequence {
+    location: 0..89,
+    expressions: [
+        Assignment {
+            location: 0..18,
+            value: Call {
+                arguments: [
+                    CallArg {
+                        label: None,
+                        location: 16..17,
+                        value: Int {
+                            location: 16..17,
+                            value: "3",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
+                        },
+                    },
+                ],
+                fun: Var {
+                    location: 8..15,
+                    name: "add_one",
+                },
+                location: 8..18,
+            },
+            pattern: Var {
+                location: 4..5,
+                name: "x",
+            },
+            kind: Let,
+            annotation: None,
+        },
+        Assignment {
+            location: 20..65,
+            value: Fn {
+                location: 36..65,
+                fn_style: Capture,
+                arguments: [
+                    Arg {
+                        arg_name: Named {
+                            name: "_capture__0",
+                            label: "_capture__0",
+                            location: 0..0,
+                            is_validator_param: false,
+                        },
+                        location: 0..0,
+                        annotation: None,
+                        tipo: (),
+                    },
+                ],
+                body: Call {
+                    arguments: [
+                        CallArg {
+                            label: None,
+                            location: 45..46,
+                            value: Var {
+                                location: 45..46,
+                                name: "_capture__0",
+                            },
+                        },
+                        CallArg {
+                            label: None,
+                            location: 48..64,
+                            value: Fn {
+                                location: 48..64,
+                                fn_style: Plain,
+                                arguments: [
+                                    Arg {
+                                        arg_name: Named {
+                                            name: "y",
+                                            label: "y",
+                                            location: 52..53,
+                                            is_validator_param: false,
+                                        },
+                                        location: 52..53,
+                                        annotation: None,
+                                        tipo: (),
+                                    },
+                                ],
+                                body: BinOp {
+                                    location: 57..62,
+                                    name: AddInt,
+                                    left: Var {
+                                        location: 57..58,
+                                        name: "x",
+                                    },
+                                    right: Var {
+                                        location: 61..62,
+                                        name: "y",
+                                    },
+                                },
+                                return_annotation: None,
+                            },
+                        },
+                    ],
+                    fun: FieldAccess {
+                        location: 36..44,
+                        label: "map",
+                        container: Var {
+                            location: 36..40,
+                            name: "list",
+                        },
+                    },
+                    location: 36..65,
+                },
+                return_annotation: None,
+            },
+            pattern: Var {
+                location: 24..33,
+                name: "map_add_x",
+            },
+            kind: Let,
+            annotation: None,
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 77..88,
+                    value: List {
+                        location: 77..88,
+                        elements: [
+                            Int {
+                                location: 79..80,
+                                value: "1",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                            Int {
+                                location: 82..83,
+                                value: "2",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                            Int {
+                                location: 85..86,
+                                value: "3",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        ],
+                        tail: None,
+                    },
+                },
+            ],
+            fun: Var {
+                location: 67..76,
+                name: "map_add_x",
+            },
+            location: 67..89,
+        },
+    ],
+}
