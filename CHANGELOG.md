@@ -1,15 +1,16 @@
 # Changelog
 
-## [next] - YYY-MM-DD
+## v1.0.12-alpha - unreleased
 
 ### Added
 
- - **aiken**: added a `blueprint policy` command to compute the policy ID of a minting script
+- **aiken**: added a `blueprint policy` command to compute the policy ID of a minting script
 
 ### Fixed
 
- - **aiken-lang**: Prevent mutual recursion caused by conflicting function names for generic expect type
- 
+- **aiken-lang**: Prevent mutual recursion caused by conflicting function names for generic expect type
+- **aiken-lang**: UPLC evaluation of large integers literals (> max u64)
+
 ### Changed
 
 ### Removed
