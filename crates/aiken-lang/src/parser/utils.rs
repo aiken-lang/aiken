@@ -7,8 +7,8 @@ use super::{
     token::{Base, Token},
 };
 
-pub fn public() -> impl Parser<Token, (), Error = ParseError> {
-    just(Token::Pub).ignored()
+pub fn optional_flag(token: Token) -> impl Parser<Token, bool, Error = ParseError> {
+    just(token).ignored().or_not().map(|v| v.is_some())
 }
 
 pub fn bytearray(

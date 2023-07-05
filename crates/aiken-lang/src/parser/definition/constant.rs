@@ -6,8 +6,7 @@ use crate::{
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    utils::public()
-        .or_not()
+    utils::optional_flag(Token::Pub)
         .then_ignore(just(Token::Const))
         .then(select! {Token::Name{name} => name})
         .then(
@@ -21,7 +20,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
             ast::UntypedDefinition::ModuleConstant(ast::ModuleConstant {
                 doc: None,
                 location: span,
-                public: public.is_some(),
+                public,
                 name,
                 annotation,
                 value: Box::new(value),

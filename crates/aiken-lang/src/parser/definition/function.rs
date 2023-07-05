@@ -7,8 +7,7 @@ use crate::{
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    utils::public()
-        .or_not()
+    utils::optional_flag(Token::Pub)
         .then_ignore(just(Token::Fn))
         .then(select! {Token::Name {name} => name})
         .then(
@@ -25,7 +24,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(
-            |((((opt_pub, name), (arguments, args_span)), return_annotation), body), span| {
+            |((((public, name), (arguments, args_span)), return_annotation), body), span| {
                 ast::UntypedDefinition::Fn(ast::Function {
                     arguments,
                     body: body.unwrap_or_else(|| UntypedExpr::todo(span, None)),
@@ -39,7 +38,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                     },
                     end_position: span.end - 1,
                     name,
-                    public: opt_pub.is_some(),
+                    public,
                     return_annotation,
                     return_type: (),
                     can_error: true,

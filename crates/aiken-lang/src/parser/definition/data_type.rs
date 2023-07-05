@@ -46,34 +46,33 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         }]
     });
 
-    utils::public()
-        .then(just(Token::Opaque).ignored().or_not())
-        .or_not()
+    utils::optional_flag(Token::Pub)
+        .then(utils::optional_flag(Token::Opaque))
         .then(utils::type_name_with_args())
         .then(choice((constructors, record_sugar)))
-        .map_with_span(|((pub_opaque, (name, parameters)), constructors), span| {
-            ast::UntypedDefinition::DataType(ast::DataType {
-                location: span,
-                constructors: constructors
-                    .into_iter()
-                    .map(|mut constructor| {
-                        if constructor.sugar {
-                            constructor.name = name.clone();
-                        }
+        .map_with_span(
+            |(((public, opaque), (name, parameters)), constructors), span| {
+                ast::UntypedDefinition::DataType(ast::DataType {
+                    location: span,
+                    constructors: constructors
+                        .into_iter()
+                        .map(|mut constructor| {
+                            if constructor.sugar {
+                                constructor.name = name.clone();
+                            }
 
-                        constructor
-                    })
-                    .collect(),
-                doc: None,
-                name,
-                opaque: pub_opaque
-                    .map(|(_, opt_opaque)| opt_opaque.is_some())
-                    .unwrap_or(false),
-                parameters: parameters.unwrap_or_default(),
-                public: pub_opaque.is_some(),
-                typed_parameters: vec![],
-            })
-        })
+                            constructor
+                        })
+                        .collect(),
+                    doc: None,
+                    name,
+                    opaque,
+                    parameters: parameters.unwrap_or_default(),
+                    public,
+                    typed_parameters: vec![],
+                })
+            },
+        )
 }
 
 fn labeled_constructor_type_args(
