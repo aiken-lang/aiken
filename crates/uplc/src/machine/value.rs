@@ -316,10 +316,8 @@ pub fn from_pallas_bigint(n: &pallas::BigInt) -> BigInt {
 }
 
 pub fn to_pallas_bigint(n: &BigInt) -> pallas::BigInt {
-    if n.bits() <= 64 {
-        let regular_int: i64 = n.try_into().unwrap();
-        let pallas_int: pallas_codec::utils::Int = regular_int.into();
-
+    if let Ok(i) = <&BigInt as TryInto<i64>>::try_into(n) {
+        let pallas_int: pallas_codec::utils::Int = i.into();
         pallas::BigInt::Int(pallas_int)
     } else if n.is_positive() {
         let (_, bytes) = n.to_bytes_be();
