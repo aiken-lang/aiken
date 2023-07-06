@@ -702,7 +702,10 @@ impl<'comments> Formatter<'comments> {
     }
 
     pub fn int<'a>(&mut self, s: &'a str, base: &Base) -> Document<'a> {
-        unimplemented!()
+        match s.chars().next() {
+            Some('-') => Document::Str("-").append(self.uint(&s[1..], base)),
+            _ => self.uint(s, base),
+        }
     }
 
     pub fn uint<'a>(&mut self, s: &'a str, base: &Base) -> Document<'a> {
