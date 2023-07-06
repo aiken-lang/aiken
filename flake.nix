@@ -6,75 +6,68 @@
 #
 {
   inputs = {
-    cargo2nix = {
-      url = "github:cargo2nix/cargo2nix/release-0.11.0";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-      inputs.rust-overlay.follows = "rust-overlay";
-    };
+    nixpkgs.url = "github:nixos/nixpkgs";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "github:nixos/nixpkgs";
-    devshell.url = "github:numtide/devshell";
   };
 
-  outputs = {
-    self,
-    cargo2nix,
-    rust-overlay,
-    nixpkgs,
-    flake-utils,
-    devshell,
-  }:
-    flake-utils.lib.eachDefaultSystem (
-      system: let
+  outputs = { self, rust-overlay, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [cargo2nix.overlays.default devshell.overlays.default];
+          overlays = [ rust-overlay.overlays.default ];
         };
 
         deno = nixpkgs.legacyPackages.${system}.deno;
 
-        rustPkgs = pkgs.rustBuilder.makePackageSet {
-          rustVersion = "1.69.0";
-          packageFun = import ./Cargo.nix;
+        aiken = pkgs.rustPlatform.buildRustPackage {
+          name = "aiken";
+          version = "1.0.11-alpha";
+
+          buildInputs = with pkgs; [ openssl ];
+          nativeBuildInputs = with pkgs; [ pkg-config openssl ];
+
+          src = pkgs.lib.cleanSourceWith { src = self; };
+
+          cargoLock.lockFile = ./Cargo.lock;
         };
 
-        commonCategory = y: builtins.map (x: x // {category = y;});
+        commonCategory = y: builtins.map (x: x // { category = y; });
 
         packages = {
-          aiken = (rustPkgs.workspace.aiken {}).bin;
+          aiken = aiken;
           default = packages.aiken;
         };
 
-        aikenCmds = commonCategory "Aiken Development" [
-          {
-            name = "aiken";
-            help = "Aiken toolchain";
-            package = packages.aiken;
-          }
-        ];
+        aikenCmds = commonCategory "Aiken Development" [{
+          name = "aiken";
+          help = "Aiken toolchain";
+          package = packages.aiken;
+        }];
 
-        gitRev = if (builtins.hasAttr "rev" self)
-            then self.rev
-            else "dirty";
+        gitRev = if (builtins.hasAttr "rev" self) then self.rev else "dirty";
       in {
         inherit packages;
-        devShell = rustPkgs.workspaceShell {
-          packages = [deno];
-          shellHook =
-          ''
+
+        devShells.aiken = pkgs.mkShell {
+          name = "aiken";
+          motd = ''
+            Aiken
+            $(type -p menu &>/dev/null && menu)'';
+          commands = aikenCmds;
+
+          packages = [
+            deno
+
+            (pkgs.rust-bin.stable.latest.default.override {
+              extensions = [ "rust-src" "clippy" "rustfmt" ];
+            })
+          ];
+
+          shellHook = ''
             export GIT_REVISION=${gitRev}
           '';
         };
-        devShells = {
-          aiken = pkgs.devshell.mkShell {
-            name = "aiken";
-            motd = ''              Aiken
-                                        $(type -p menu &>/dev/null && menu)'';
-            commands = aikenCmds;
-          };
-        };
-      }
-    );
+      });
 }
