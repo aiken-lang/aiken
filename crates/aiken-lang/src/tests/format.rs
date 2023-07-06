@@ -887,3 +887,21 @@ fn first_class_binop() {
 
     assert_fmt(src, src);
 }
+
+#[test]
+fn int_uint() {
+    let src = indoc! { r#"
+        const i = 42
+
+        const j = -14
+
+        fn foo() {
+          when y is {
+            14 -> -14
+            -42 -> 42
+          }
+        }
+    "#};
+
+    assert_fmt(src, src);
+}
