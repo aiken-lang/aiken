@@ -12,15 +12,15 @@ use crate::{
 };
 
 pub fn parser(
-    r: Recursive<'_, Token, UntypedExpr, ParseError>,
+    expression: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     just(Token::When)
         // TODO: If subject is empty we should return ParseErrorType::ExpectedExpr,
-        .ignore_then(r.clone().map(Box::new))
+        .ignore_then(expression.clone().map(Box::new))
         .then_ignore(just(Token::Is))
         .then_ignore(just(Token::LeftBrace))
         // TODO: If clauses are empty we should return ParseErrorType::NoCaseClause
-        .then(clause(r).repeated())
+        .then(clause(expression).repeated())
         .then_ignore(just(Token::RightBrace))
         .map_with_span(|(subject, clauses), span| UntypedExpr::When {
             location: span,

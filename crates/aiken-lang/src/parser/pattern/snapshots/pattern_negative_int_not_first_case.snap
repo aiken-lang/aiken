@@ -1,0 +1,57 @@
+---
+source: crates/aiken-lang/src/parser/pattern/int.rs
+description: "Code:\n\nwhen bar is {\n  42 -> -14\n  -42 -> 14\n}\n"
+---
+When {
+    location: 0..39,
+    subject: Var {
+        location: 5..8,
+        name: "bar",
+    },
+    clauses: [
+        UntypedClause {
+            location: 16..25,
+            patterns: [
+                Int {
+                    location: 16..18,
+                    value: "42",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            ],
+            guard: None,
+            then: UnOp {
+                op: Negate,
+                location: 22..25,
+                value: UInt {
+                    location: 23..25,
+                    value: "14",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            },
+        },
+        UntypedClause {
+            location: 28..37,
+            patterns: [
+                Int {
+                    location: 28..31,
+                    value: "-42",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            ],
+            guard: None,
+            then: UInt {
+                location: 35..37,
+                value: "14",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+    ],
+}

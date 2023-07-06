@@ -27,6 +27,7 @@ pub enum Token {
     // Int Operators
     Plus,
     Minus,
+    NewLineMinus,
     Star,
     Slash,
     Less,
@@ -115,6 +116,7 @@ impl fmt::Display for Token {
             Token::RightBrace => "}",
             Token::Plus => "+",
             Token::Minus => "-",
+            Token::NewLineMinus => "↳-",
             Token::Star => "*",
             Token::Slash => "/",
             Token::Less => "<",

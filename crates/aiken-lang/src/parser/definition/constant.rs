@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{annotation, error::ParseError, literal::bytearray, token::Token, utils},
+    parser::{annotation, error::ParseError, literal, token::Token, utils},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -39,20 +39,20 @@ pub fn value() -> impl Parser<Token, ast::Constant, Error = ParseError> {
         });
 
     let constant_int_parser =
-        select! {Token::Int {value, base} => (value, base)}.map_with_span(|(value, base), span| {
-            ast::Constant::Int {
-                location: span,
-                value,
-                base,
-            }
+        literal::int().map_with_span(|(value, base), location| ast::Constant::Int {
+            location,
+            value,
+            base,
         });
 
     let constant_bytearray_parser =
-        bytearray(|bytes, preferred_format, span| ast::Constant::ByteArray {
-            location: span,
-            bytes,
-            preferred_format,
-        });
+        literal::bytearray(
+            |bytes, preferred_format, location| ast::Constant::ByteArray {
+                location,
+                bytes,
+                preferred_format,
+            },
+        );
 
     choice((
         constant_string_parser,

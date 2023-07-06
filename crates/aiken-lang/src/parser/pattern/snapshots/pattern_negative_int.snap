@@ -1,0 +1,30 @@
+---
+source: crates/aiken-lang/src/parser/pattern/int.rs
+description: "Code:\n\nwhen foo is {\n  -1 -> True\n}\n"
+---
+When {
+    location: 0..28,
+    subject: Var {
+        location: 5..8,
+        name: "foo",
+    },
+    clauses: [
+        UntypedClause {
+            location: 16..26,
+            patterns: [
+                Int {
+                    location: 16..18,
+                    value: "-1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            ],
+            guard: None,
+            then: Var {
+                location: 22..26,
+                name: "True",
+            },
+        },
+    ],
+}

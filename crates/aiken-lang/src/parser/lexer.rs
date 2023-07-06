@@ -59,6 +59,13 @@ pub fn run(src: &str) -> Result<LexInfo, Vec<ParseError>> {
                         Some((Token::LeftParen, *span))
                     }
                 }
+                Token::Minus => {
+                    if previous_is_newline {
+                        Some((Token::NewLineMinus, *span))
+                    } else {
+                        Some((Token::Minus, *span))
+                    }
+                }
                 Token::Pipe => {
                     if previous_is_newline {
                         Some((Token::NewLinePipe, *span))
