@@ -702,6 +702,10 @@ impl<'comments> Formatter<'comments> {
     }
 
     pub fn int<'a>(&mut self, s: &'a str, base: &Base) -> Document<'a> {
+        unimplemented!()
+    }
+
+    pub fn uint<'a>(&mut self, s: &'a str, base: &Base) -> Document<'a> {
         match base {
             Base::Decimal { numeric_underscore } if *numeric_underscore => {
                 let s = s
@@ -755,7 +759,7 @@ impl<'comments> Formatter<'comments> {
                 one_liner,
             } => self.pipeline(expressions, *one_liner),
 
-            UntypedExpr::Int { value, base, .. } => self.int(value, base),
+            UntypedExpr::UInt { value, base, .. } => self.uint(value, base),
 
             UntypedExpr::String { value, .. } => self.string(value),
 

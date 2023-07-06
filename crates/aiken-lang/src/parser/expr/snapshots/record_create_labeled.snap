@@ -36,7 +36,7 @@ Call {
                 "thing",
             ),
             location: 27..35,
-            value: Int {
+            value: UInt {
                 location: 34..35,
                 value: "2",
                 base: Decimal {

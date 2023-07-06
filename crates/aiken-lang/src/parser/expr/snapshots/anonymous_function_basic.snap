@@ -32,7 +32,7 @@ Fn {
             location: 21..22,
             name: "a",
         },
-        right: Int {
+        right: UInt {
             location: 25..26,
             value: "1",
             base: Decimal {

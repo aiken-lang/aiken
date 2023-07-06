@@ -7,7 +7,7 @@ Call {
         CallArg {
             label: None,
             location: 18..19,
-            value: Int {
+            value: UInt {
                 location: 18..19,
                 value: "1",
                 base: Decimal {

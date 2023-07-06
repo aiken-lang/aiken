@@ -13,14 +13,14 @@ If {
             body: BinOp {
                 location: 12..17,
                 name: AddInt,
-                left: Int {
+                left: UInt {
                     location: 12..13,
                     value: "1",
                     base: Decimal {
                         numeric_underscore: false,
                     },
                 },
-                right: Int {
+                right: UInt {
                     location: 16..17,
                     value: "1",
                     base: Decimal {
@@ -38,7 +38,7 @@ If {
                     location: 28..29,
                     name: "a",
                 },
-                right: Int {
+                right: UInt {
                     location: 32..33,
                     value: "1",
                     base: Decimal {
@@ -46,7 +46,7 @@ If {
                     },
                 },
             },
-            body: Int {
+            body: UInt {
                 location: 38..39,
                 value: "3",
                 base: Decimal {
@@ -56,7 +56,7 @@ If {
             location: 28..41,
         },
     ],
-    final_else: Int {
+    final_else: UInt {
         location: 51..52,
         value: "4",
         base: Decimal {

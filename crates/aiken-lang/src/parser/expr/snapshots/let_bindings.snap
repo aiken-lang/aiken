@@ -7,14 +7,14 @@ Assignment {
     value: List {
         location: 12..23,
         elements: [
-            Int {
+            UInt {
                 location: 14..15,
                 value: "1",
                 base: Decimal {
                     numeric_underscore: false,
                 },
             },
-            Int {
+            UInt {
                 location: 17..18,
                 value: "2",
                 base: Decimal {

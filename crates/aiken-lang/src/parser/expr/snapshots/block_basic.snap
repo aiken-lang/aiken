@@ -9,7 +9,7 @@ Assignment {
         expressions: [
             Assignment {
                 location: 12..21,
-                value: Int {
+                value: UInt {
                     location: 20..21,
                     value: "4",
                     base: Decimal {
@@ -30,7 +30,7 @@ Assignment {
                     location: 25..26,
                     name: "x",
                 },
-                right: Int {
+                right: UInt {
                     location: 29..30,
                     value: "5",
                     base: Decimal {

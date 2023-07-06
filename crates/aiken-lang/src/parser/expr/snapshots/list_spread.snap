@@ -5,14 +5,14 @@ description: "Code:\n\n[1, 2, ..[]]"
 List {
     location: 0..12,
     elements: [
-        Int {
+        UInt {
             location: 1..2,
             value: "1",
             base: Decimal {
                 numeric_underscore: false,
             },
         },
-        Int {
+        UInt {
             location: 4..5,
             value: "2",
             base: Decimal {

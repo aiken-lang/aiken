@@ -7,7 +7,7 @@ Sequence {
     expressions: [
         Assignment {
             location: 4..21,
-            value: Int {
+            value: UInt {
                 location: 12..21,
                 value: "1234567",
                 base: Decimal {
@@ -23,7 +23,7 @@ Sequence {
         },
         Assignment {
             location: 24..41,
-            value: Int {
+            value: UInt {
                 location: 32..41,
                 value: "1000000",
                 base: Decimal {
@@ -42,7 +42,7 @@ Sequence {
             value: UnOp {
                 op: Negate,
                 location: 52..59,
-                value: Int {
+                value: UInt {
                     location: 53..59,
                     value: "10000",
                     base: Decimal {

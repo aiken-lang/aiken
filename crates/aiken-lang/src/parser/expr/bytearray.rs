@@ -1,8 +1,6 @@
 use chumsky::prelude::*;
 
-use crate::parser::{
-    error::ParseError, expr::UntypedExpr, literal::bytearray::parser as bytearray, token::Token,
-};
+use crate::parser::{error::ParseError, expr::UntypedExpr, literal::bytearray, token::Token};
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
     bytearray(|bytes, preferred_format, location| UntypedExpr::ByteArray {

@@ -11,7 +11,7 @@ PipeLine {
                 location: 0..1,
                 name: "a",
             },
-            right: Int {
+            right: UInt {
                 location: 4..5,
                 value: "2",
                 base: Decimal {

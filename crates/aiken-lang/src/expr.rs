@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypedExpr {
-    Int {
+    UInt {
         location: Span,
         tipo: Arc<Type>,
         value: String,
@@ -170,7 +170,7 @@ impl TypedExpr {
             Self::Var { constructor, .. } => constructor.tipo.clone(),
             Self::Trace { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
-            | Self::Int { tipo, .. }
+            | Self::UInt { tipo, .. }
             | Self::ErrorTerm { tipo, .. }
             | Self::When { tipo, .. }
             | Self::List { tipo, .. }
@@ -195,7 +195,7 @@ impl TypedExpr {
     pub fn is_literal(&self) -> bool {
         matches!(
             self,
-            Self::Int { .. }
+            Self::UInt { .. }
                 | Self::List { .. }
                 | Self::Tuple { .. }
                 | Self::String { .. }
@@ -211,7 +211,7 @@ impl TypedExpr {
     pub fn definition_location(&self) -> Option<DefinitionLocation<'_>> {
         match self {
             TypedExpr::Fn { .. }
-            | TypedExpr::Int { .. }
+            | TypedExpr::UInt { .. }
             | TypedExpr::Trace { .. }
             | TypedExpr::List { .. }
             | TypedExpr::Call { .. }
@@ -251,7 +251,7 @@ impl TypedExpr {
     pub fn type_defining_location(&self) -> Span {
         match self {
             Self::Fn { location, .. }
-            | Self::Int { location, .. }
+            | Self::UInt { location, .. }
             | Self::Var { location, .. }
             | Self::Trace { location, .. }
             | Self::ErrorTerm { location, .. }
@@ -286,7 +286,7 @@ impl TypedExpr {
     pub fn location(&self) -> Span {
         match self {
             Self::Fn { location, .. }
-            | Self::Int { location, .. }
+            | Self::UInt { location, .. }
             | Self::Trace { location, .. }
             | Self::Var { location, .. }
             | Self::ErrorTerm { location, .. }
@@ -319,7 +319,7 @@ impl TypedExpr {
         match self {
             TypedExpr::ErrorTerm { .. }
             | TypedExpr::Var { .. }
-            | TypedExpr::Int { .. }
+            | TypedExpr::UInt { .. }
             | TypedExpr::String { .. }
             | TypedExpr::ByteArray { .. }
             | TypedExpr::ModuleSelect { .. } => Some(self),
@@ -409,7 +409,7 @@ pub enum FnStyle {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UntypedExpr {
-    Int {
+    UInt {
         location: Span,
         value: String,
         base: Base,
@@ -619,7 +619,7 @@ impl UntypedExpr {
             Self::TraceIfFalse { location, .. }
             | Self::Fn { location, .. }
             | Self::Var { location, .. }
-            | Self::Int { location, .. }
+            | Self::UInt { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
@@ -669,7 +669,7 @@ impl UntypedExpr {
     pub fn is_simple_constant(&self) -> bool {
         matches!(
             self,
-            Self::String { .. } | Self::Int { .. } | Self::ByteArray { .. }
+            Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. }
         )
     }
 }

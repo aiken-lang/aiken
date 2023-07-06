@@ -12,7 +12,7 @@ Sequence {
                     CallArg {
                         label: None,
                         location: 16..17,
-                        value: Int {
+                        value: UInt {
                             location: 16..17,
                             value: "3",
                             base: Decimal {
@@ -124,21 +124,21 @@ Sequence {
                     value: List {
                         location: 77..88,
                         elements: [
-                            Int {
+                            UInt {
                                 location: 79..80,
                                 value: "1",
                                 base: Decimal {
                                     numeric_underscore: false,
                                 },
                             },
-                            Int {
+                            UInt {
                                 location: 82..83,
                                 value: "2",
                                 base: Decimal {
                                     numeric_underscore: false,
                                 },
                             },
-                            Int {
+                            UInt {
                                 location: 85..86,
                                 value: "3",
                                 base: Decimal {

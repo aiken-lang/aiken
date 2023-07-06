@@ -2,11 +2,11 @@ use chumsky::prelude::*;
 
 use crate::{
     expr::UntypedExpr,
-    parser::{error::ParseError, literal::int::parser as int, token::Token},
+    parser::{error::ParseError, literal::uint, token::Token},
 };
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
-    int().map_with_span(|(value, base), span| UntypedExpr::Int {
+    uint().map_with_span(|(value, base), span| UntypedExpr::UInt {
         location: span,
         value,
         base,

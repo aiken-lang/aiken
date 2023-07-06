@@ -5,7 +5,7 @@ description: "Code:\n\n-1"
 UnOp {
     op: Negate,
     location: 0..2,
-    value: Int {
+    value: UInt {
         location: 1..2,
         value: "1",
         base: Decimal {
