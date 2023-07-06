@@ -10,6 +10,8 @@
 
 - **aiken-lang**: Prevent mutual recursion caused by conflicting function names for generic expect type
 - **aiken-lang**: UPLC evaluation of large integers literals (> max u64)
+- **aiken-lang**: Parsing of error / todo keywords in when cases
+- **aiken-lang**: Parsing of negative integer patterns and constants
 
 ### Changed
 
