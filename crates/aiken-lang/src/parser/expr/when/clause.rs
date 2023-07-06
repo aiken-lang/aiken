@@ -47,7 +47,7 @@ mod tests {
     use crate::assert_expr;
 
     #[test]
-    fn todo_clause() {
+    fn when_clause_todo() {
         assert_expr!(
             r#"
             when val is {
@@ -59,7 +59,7 @@ mod tests {
     }
 
     #[test]
-    fn error_single_clause_no_message() {
+    fn when_clause_solo_error() {
         assert_expr!(
             r#"
             when val is {
@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn todo_double_clause_no_message() {
+    fn when_clause_double_todo() {
         assert_expr!(
             r#"
             when val is {
