@@ -56,6 +56,12 @@ pub enum AirStatement {
         next_tail_name: Option<String>,
         inverse: bool,
     },
+    TupleGuard {
+        tipo: Arc<Type>,
+        indices: IndexSet<(usize, String)>,
+        subject_name: String,
+        type_count: usize,
+    },
     // Field Access
     FieldsExpose {
         indices: Vec<(usize, String, Arc<Type>)>,
@@ -498,6 +504,21 @@ impl AirTree {
             hoisted_over: None,
         }
     }
+    pub fn tuple_clause_guard(
+        subject_name: impl ToString,
+        tipo: Arc<Type>,
+        indices: IndexSet<(usize, String)>,
+    ) -> AirTree {
+        AirTree::Statement {
+            statement: AirStatement::TupleGuard {
+                indices,
+                subject_name: subject_name.to_string(),
+                type_count: tipo.get_inner_types().len(),
+                tipo,
+            },
+            hoisted_over: None,
+        }
+    }
     pub fn finally(pattern: AirTree, then: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::Finally {
             pattern: pattern.into(),
@@ -788,6 +809,19 @@ impl AirTree {
                             tail_name: tail_name.clone(),
                             next_tail_name: next_tail_name.clone(),
                             inverse: *inverse,
+                        });
+                    }
+                    AirStatement::TupleGuard {
+                        tipo,
+                        indices,
+                        subject_name,
+                        type_count,
+                    } => {
+                        air_vec.push(Air::TupleGuard {
+                            tipo: tipo.clone(),
+                            indices: indices.clone(),
+                            subject_name: subject_name.clone(),
+                            type_count: *type_count,
                         });
                     }
                     AirStatement::FieldsExpose {
