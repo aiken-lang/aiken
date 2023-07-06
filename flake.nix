@@ -19,13 +19,17 @@
           overlays = [ rust-overlay.overlays.default ];
         };
 
+        osxDependencies = with pkgs;
+          lib.optionals stdenv.isDarwin
+          [ darwin.apple_sdk.frameworks.Security ];
+
         deno = nixpkgs.legacyPackages.${system}.deno;
 
         aiken = pkgs.rustPlatform.buildRustPackage {
           name = "aiken";
           version = "1.0.11-alpha";
 
-          buildInputs = with pkgs; [ openssl ];
+          buildInputs = with pkgs; [ openssl ] ++ osxDependencies;
           nativeBuildInputs = with pkgs; [ pkg-config openssl ];
 
           src = pkgs.lib.cleanSourceWith { src = self; };
@@ -63,7 +67,7 @@
             (pkgs.rust-bin.stable.latest.default.override {
               extensions = [ "rust-src" "clippy" "rustfmt" ];
             })
-          ];
+          ] ++ osxDependencies;
 
           shellHook = ''
             export GIT_REVISION=${gitRev}
