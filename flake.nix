@@ -1,9 +1,3 @@
-# This setup relies on 'Cargo.nix' to be up-to-date.
-#
-# It can be re-generated using:
-#
-#     nix run github:cargo2nix/cargo2nix
-#
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
