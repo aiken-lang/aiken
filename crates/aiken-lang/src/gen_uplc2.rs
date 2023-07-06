@@ -759,8 +759,6 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
-                    println!("tipo is {tipo:#?}");
-
                     for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
                         let field_type = arg.clone();
                         type_map.insert(index, field_type);
@@ -1269,7 +1267,7 @@ impl<'a> CodeGenerator<'a> {
                     current_index,
                     defined_tails,
                 } => {
-                    let Pattern::List { elements, .. } = &clause.pattern
+                    let Pattern::List { elements, tail, .. } = &clause.pattern
                     else {
                         let mut next_clause_props = ClauseProperties {
                             clause_var_name: props.clause_var_name.clone(),
@@ -1335,7 +1333,9 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut use_wrap_clause = false;
 
-                    if elements.len() >= *current_index as usize {
+                    if elements.len() - usize::from(tail.is_some() && !elements.is_empty())
+                        >= *current_index as usize
+                    {
                         *current_index += 1;
                         defined_tails.push(tail_name.clone());
                     } else if next_tail_name.is_none() {
@@ -1598,11 +1598,13 @@ impl<'a> CodeGenerator<'a> {
                 name,
                 arguments,
                 constructor,
+                tipo: function_tipo,
                 ..
             } => {
                 if subject_tipo.is_bool() {
                     (AirTree::bool(name == "True"), AirTree::no_op())
                 } else {
+                    assert!(matches!(function_tipo.as_ref().clone(), Type::Fn { .. }));
                     let data_type = build::lookup_data_type_by_tipo(&self.data_types, subject_tipo)
                         .unwrap_or_else(|| {
                             unreachable!(
@@ -1626,9 +1628,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
-                    println!("tipo is {subject_tipo:#?}");
-
-                    for (index, arg) in subject_tipo.arg_types().unwrap().iter().enumerate() {
+                    for (index, arg) in function_tipo.arg_types().unwrap().iter().enumerate() {
                         let field_type = arg.clone();
                         type_map.insert(index, field_type);
                     }
@@ -1833,10 +1833,16 @@ impl<'a> CodeGenerator<'a> {
                 ]),
                 Pattern::Discard { .. } => AirTree::no_op(),
                 Pattern::List { .. } => {
-                    todo!();
+                    assert!(
+                        !subject_tipo.is_void(),
+                        "WHY ARE YOU PATTERN MATCHING ON A NESTED VOID???"
+                    );
+                    todo!()
                 }
                 Pattern::Constructor {
-                    name: constr_name, ..
+                    name: constr_name,
+                    is_record,
+                    ..
                 } => {
                     props.complex_clause = true;
                     if subject_tipo.is_bool() {
@@ -1850,17 +1856,38 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         let (cond, assign) = self.clause_pattern(pattern, subject_tipo, props);
 
-                        AirTree::UnhoistedSequence(vec![
-                            AirTree::clause_guard(
-                                &props.original_subject_name,
-                                cond,
-                                subject_tipo.clone(),
-                            ),
-                            assign,
-                        ])
+                        if *is_record {
+                            assign
+                        } else {
+                            AirTree::UnhoistedSequence(vec![
+                                AirTree::clause_guard(
+                                    &props.original_subject_name,
+                                    cond,
+                                    subject_tipo.clone(),
+                                ),
+                                assign,
+                            ])
+                        }
                     }
                 }
-                Pattern::Tuple { .. } => todo!(),
+                Pattern::Tuple { .. } => {
+                    let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
+
+                    let defined_indices = match &props.specific_clause {
+                        SpecificClause::TupleClause {
+                            defined_tuple_indices,
+                        } => defined_tuple_indices.clone(),
+                        _ => unreachable!(),
+                    };
+
+                    let tuple_access = AirTree::tuple_clause_guard(
+                        &props.original_subject_name,
+                        subject_tipo.clone(),
+                        defined_indices,
+                    );
+
+                    AirTree::UnhoistedSequence(vec![tuple_access, assign])
+                }
             }
         }
     }

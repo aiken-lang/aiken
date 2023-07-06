@@ -116,6 +116,12 @@ pub enum Air {
         next_tail_name: Option<String>,
         inverse: bool,
     },
+    TupleGuard {
+        tipo: Arc<Type>,
+        indices: IndexSet<(usize, String)>,
+        subject_name: String,
+        type_count: usize,
+    },
     Finally,
     // If
     If {
@@ -244,6 +250,7 @@ impl Air {
             | Air::ListClause { tipo, .. }
             | Air::TupleClause { tipo, .. }
             | Air::ClauseGuard { tipo, .. }
+            | Air::TupleGuard { tipo, .. }
             | Air::If { tipo, .. }
             | Air::ListClauseGuard { tipo, .. }
             | Air::Constr { tipo, .. }
