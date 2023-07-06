@@ -116,5 +116,11 @@ macro_rules! assert_format {
         }, {
             insta::assert_snapshot!(out);
         });
+
+        // Check if formatting is imdepotent
+        let (module2, extra2) = $crate::parser::module(&out, $crate::ast::ModuleKind::Lib).unwrap();
+        let mut out2 = String::new();
+        $crate::format::pretty(&mut out2, module2, extra2, &out);
+        assert_eq!(out, out2, "formatting isn't idempotent");
     };
 }
