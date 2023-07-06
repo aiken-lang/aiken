@@ -2,9 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     ast,
-    parser::{
-        annotation, error::ParseError, literal::bytearray::parser as bytearray, token::Token, utils,
-    },
+    parser::{annotation, error::ParseError, literal::bytearray, token::Token, utils},
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {

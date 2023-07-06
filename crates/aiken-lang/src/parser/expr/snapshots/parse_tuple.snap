@@ -10,28 +10,28 @@ Sequence {
             value: Tuple {
                 location: 12..24,
                 elems: [
-                    Int {
+                    UInt {
                         location: 13..14,
                         value: "1",
                         base: Decimal {
                             numeric_underscore: false,
                         },
                     },
-                    Int {
+                    UInt {
                         location: 16..17,
                         value: "2",
                         base: Decimal {
                             numeric_underscore: false,
                         },
                     },
-                    Int {
+                    UInt {
                         location: 19..20,
                         value: "3",
                         base: Decimal {
                             numeric_underscore: false,
                         },
                     },
-                    Int {
+                    UInt {
                         location: 22..23,
                         value: "4",
                         base: Decimal {

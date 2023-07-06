@@ -2,7 +2,7 @@
 source: crates/aiken-lang/src/parser/expr/int.rs
 description: "Code:\n\n0x01"
 ---
-Int {
+UInt {
     location: 0..4,
     value: "1",
     base: Hexadecimal,

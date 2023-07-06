@@ -2,10 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     expr::UntypedExpr,
-    parser::{
-        error::ParseError, literal::bytearray::utf8_string, literal::string::parser as string,
-        token::Token,
-    },
+    parser::{error::ParseError, literal::string, literal::utf8_string, token::Token},
 };
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {

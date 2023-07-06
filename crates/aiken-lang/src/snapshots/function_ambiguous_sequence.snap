@@ -26,7 +26,7 @@ Module {
                             kind: Let,
                             annotation: None,
                         },
-                        Int {
+                        UInt {
                             location: 30..32,
                             value: "40",
                             base: Decimal {
@@ -64,7 +64,7 @@ Module {
                             kind: Let,
                             annotation: None,
                         },
-                        Int {
+                        UInt {
                             location: 67..69,
                             value: "40",
                             base: Decimal {
@@ -91,14 +91,14 @@ Module {
                     value: BinOp {
                         location: 98..102,
                         name: AddInt,
-                        left: Int {
+                        left: UInt {
                             location: 98..100,
                             value: "40",
                             base: Decimal {
                                 numeric_underscore: false,
                             },
                         },
-                        right: Int {
+                        right: UInt {
                             location: 101..102,
                             value: "2",
                             base: Decimal {
@@ -136,7 +136,7 @@ Module {
                                     CallArg {
                                         label: None,
                                         location: 134..136,
-                                        value: Int {
+                                        value: UInt {
                                             location: 134..136,
                                             value: "42",
                                             base: Decimal {
@@ -168,7 +168,7 @@ Module {
                                     location: 141..142,
                                     name: "a",
                                 },
-                                right: Int {
+                                right: UInt {
                                     location: 145..147,
                                     value: "14",
                                     base: Decimal {
@@ -176,7 +176,7 @@ Module {
                                     },
                                 },
                             },
-                            right: Int {
+                            right: UInt {
                                 location: 151..153,
                                 value: "42",
                                 base: Decimal {

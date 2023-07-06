@@ -39,7 +39,7 @@ When {
                     ),
                 },
             ),
-            then: Int {
+            then: UInt {
                 location: 28..29,
                 value: "3",
                 base: Decimal {
@@ -78,7 +78,7 @@ When {
                 expressions: [
                     Assignment {
                         location: 51..66,
-                        value: Int {
+                        value: UInt {
                             location: 65..66,
                             value: "5",
                             base: Decimal {
@@ -111,7 +111,7 @@ When {
                 },
             ],
             guard: None,
-            then: Int {
+            then: UInt {
                 location: 90..91,
                 value: "9",
                 base: Decimal {
@@ -128,7 +128,7 @@ When {
                 },
             ],
             guard: None,
-            then: Int {
+            then: UInt {
                 location: 99..100,
                 value: "4",
                 base: Decimal {

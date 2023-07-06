@@ -221,7 +221,7 @@ impl<'a> CodeGenerator<'a> {
 
     pub(crate) fn build(&mut self, body: &TypedExpr, ir_stack: &mut AirStack) {
         match body {
-            TypedExpr::Int { value, .. } => ir_stack.integer(value.to_string()),
+            TypedExpr::UInt { value, .. } => ir_stack.integer(value.to_string()),
             TypedExpr::String { value, .. } => ir_stack.string(value.to_string()),
             TypedExpr::ByteArray { bytes, .. } => ir_stack.byte_array(bytes.to_vec()),
             TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {

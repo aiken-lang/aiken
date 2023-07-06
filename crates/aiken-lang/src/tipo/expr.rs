@@ -199,9 +199,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             UntypedExpr::Var { location, name, .. } => self.infer_var(name, location),
 
-            UntypedExpr::Int {
+            UntypedExpr::UInt {
                 location, value, ..
-            } => Ok(self.infer_int(value, location)),
+            } => Ok(self.infer_uint(value, location)),
 
             UntypedExpr::Sequence {
                 expressions,
@@ -1520,8 +1520,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((args, body))
     }
 
-    fn infer_int(&mut self, value: String, location: Span) -> TypedExpr {
-        TypedExpr::Int {
+    fn infer_uint(&mut self, value: String, location: Span) -> TypedExpr {
+        TypedExpr::UInt {
             location,
             value,
             tipo: int(),
@@ -1943,7 +1943,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::ErrorTerm { .. }
         | UntypedExpr::FieldAccess { .. }
         | UntypedExpr::If { .. }
-        | UntypedExpr::Int { .. }
+        | UntypedExpr::UInt { .. }
         | UntypedExpr::List { .. }
         | UntypedExpr::PipeLine { .. }
         | UntypedExpr::RecordUpdate { .. }
