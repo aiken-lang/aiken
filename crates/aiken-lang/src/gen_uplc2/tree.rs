@@ -80,7 +80,6 @@ pub enum AirStatement {
         tipo: Arc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
-        list: Box<AirTree>,
     },
     // Tuple Access
     TupleAccessor {
@@ -614,14 +613,12 @@ impl AirTree {
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
         tipo: Arc<Type>,
-        list: AirTree,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListExpose {
                 tipo,
                 tail_head_names,
                 tail,
-                list: list.into(),
             },
             hoisted_over: None,
         }
@@ -854,14 +851,12 @@ impl AirTree {
                         tipo,
                         tail_head_names,
                         tail,
-                        list,
                     } => {
                         air_vec.push(Air::ListExpose {
                             tipo: tipo.clone(),
                             tail_head_names: tail_head_names.clone(),
                             tail: tail.clone(),
                         });
-                        list.create_air_vec(air_vec);
                     }
                     AirStatement::TupleAccessor {
                         names,
