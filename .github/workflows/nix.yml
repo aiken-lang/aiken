@@ -23,15 +23,6 @@ jobs:
       - name: Run the Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v1
 
-      - name: Run cargo2nix
-        shell: bash
-        run: |
-          nix run github:cargo2nix/cargo2nix -- -s > Cargo.nix
+      - name: Build Aiken
+        run: nix build
 
-      - name: Create PR
-        uses: peter-evans/create-pull-request@v4
-        with:
-          branch: patch/cargo.nix
-          delete-branch: true
-          title: Update Cargo.nix
-          add-paths: Cargo.nix
