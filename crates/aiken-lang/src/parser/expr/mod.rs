@@ -56,7 +56,7 @@ pub fn pure_expression<'a>(
     // Negate
     let op = choice((
         just(Token::Bang).to(ast::UnOp::Not),
-        just(Token::Minus)
+        choice((just(Token::Minus), just(Token::NewLineMinus)))
             // NOTE: Prevent conflict with usage for '-' as a standalone binary op.
             // This will make '-' parse when used as standalone binop in a function call.
             // For example:

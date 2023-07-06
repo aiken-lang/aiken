@@ -6,14 +6,14 @@ use crate::{
 };
 
 pub fn parser(
-    r: Recursive<'_, Token, UntypedExpr, ParseError>,
+    expression: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     just(Token::LeftSquare)
-        .ignore_then(r.clone().separated_by(just(Token::Comma)))
+        .ignore_then(expression.clone().separated_by(just(Token::Comma)))
         .then(choice((
             just(Token::Comma).ignore_then(
                 just(Token::DotDot)
-                    .ignore_then(r.clone())
+                    .ignore_then(expression)
                     .map(Box::new)
                     .or_not(),
             ),
