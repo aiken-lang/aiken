@@ -16,13 +16,9 @@ use super::var::parser as var;
 use super::when::parser as when;
 
 use crate::{
-    ast::{self, Span},
-    expr::{FnStyle, UntypedExpr},
+    expr::UntypedExpr,
     parser::{
-        chain::{
-            call::parser as call, field_access, tuple_index::parser as tuple_index, Chain,
-            ParserArg,
-        },
+        chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
         error::ParseError,
         token::Token,
     },
@@ -40,71 +36,17 @@ pub fn parser<'a>(
     chain_start(sequence, expression)
         .then(chain.repeated())
         .foldl(|expr, chain| match chain {
-            Chain::Call(args, span) => {
-                let mut holes = Vec::new();
-
-                let args = args
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, a)| match a {
-                        ParserArg::Arg(arg) => *arg,
-                        ParserArg::Hole { location, label } => {
-                            let name = format!("{}__{index}", ast::CAPTURE_VARIABLE);
-
-                            holes.push(ast::Arg {
-                                location: Span::empty(),
-                                annotation: None,
-                                arg_name: ast::ArgName::Named {
-                                    label: name.clone(),
-                                    name,
-                                    location: Span::empty(),
-                                    is_validator_param: false,
-                                },
-                                tipo: (),
-                            });
-
-                            ast::CallArg {
-                                label,
-                                location,
-                                value: UntypedExpr::Var {
-                                    location,
-                                    name: format!("{}__{index}", ast::CAPTURE_VARIABLE),
-                                },
-                            }
-                        }
-                    })
-                    .collect();
-
-                let call = UntypedExpr::Call {
-                    location: expr.location().union(span),
-                    fun: Box::new(expr),
-                    arguments: args,
-                };
-
-                if holes.is_empty() {
-                    call
-                } else {
-                    UntypedExpr::Fn {
-                        location: call.location(),
-                        fn_style: FnStyle::Capture,
-                        arguments: holes,
-                        body: Box::new(call),
-                        return_annotation: None,
-                    }
-                }
-            }
-
-            Chain::FieldAccess(label, span) => UntypedExpr::FieldAccess {
-                location: expr.location().union(span),
-                label,
-                container: Box::new(expr),
+            Chain::Call(args, span) => expr.call(args, span),
+            Chain::FieldAccess(label, span) => expr.field_access(label, span),
+            Chain::TupleIndex(index, span) => expr.tuple_index(index, span),
+        })
+        .then(just(Token::Question).or_not())
+        .map_with_span(|(value, token), location| match token {
+            Some(_) => UntypedExpr::TraceIfFalse {
+                value: Box::new(value),
+                location,
             },
-
-            Chain::TupleIndex(index, span) => UntypedExpr::TupleIndex {
-                location: expr.location().union(span),
-                index,
-                tuple: Box::new(expr),
-            },
+            None => value,
         })
 }
 
