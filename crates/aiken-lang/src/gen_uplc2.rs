@@ -1815,6 +1815,10 @@ impl<'a> CodeGenerator<'a> {
             let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
             assign
         } else {
+            assert!(
+                !subject_tipo.is_void(),
+                "WHY ARE YOU PATTERN MATCHING ON A NESTED VOID???"
+            );
             match pattern {
                 Pattern::Int { value, .. } => {
                     props.complex_clause = true;
@@ -1832,12 +1836,98 @@ impl<'a> CodeGenerator<'a> {
                     self.nested_clause_condition(pattern, subject_tipo, props),
                 ]),
                 Pattern::Discard { .. } => AirTree::no_op(),
-                Pattern::List { .. } => {
-                    assert!(
-                        !subject_tipo.is_void(),
-                        "WHY ARE YOU PATTERN MATCHING ON A NESTED VOID???"
-                    );
-                    todo!()
+                Pattern::List { elements, tail, .. } => {
+                    props.complex_clause = true;
+                    // let item_name = format!("__list_item_id_{}", self.id_gen.next());
+                    let tail_name_base = "__tail".to_string();
+
+                    if elements.is_empty() {
+                        assert!(
+                            tail.is_none(),
+                            "Why do you have a [..] in a clause? Use a var."
+                        );
+
+                        AirTree::list_clause_guard(
+                            &props.original_subject_name,
+                            subject_tipo.clone(),
+                            false,
+                            None,
+                        )
+                    } else {
+                        let mut clause_assigns = vec![];
+
+                        let ClauseProperties {
+                            specific_clause:
+                                SpecificClause::ListClause {
+                                    current_index,
+                                    defined_tails,
+                                },
+                            ..
+                        } = props
+                        else { unreachable!() };
+
+                        for (index, _) in elements.iter().enumerate() {
+                            let prev_tail_name = if index == 0 {
+                                props.original_subject_name.clone()
+                            } else {
+                                format!("{}_{}", tail_name_base, index - 1)
+                            };
+
+                            // let mut clause_properties = ClauseProperties {
+                            //     clause_var_name: item_name.clone(),
+                            //     needs_constr_var: false,
+                            //     complex_clause: false,
+                            //     original_subject_name: item_name.clone(),
+                            //     specific_clause: SpecificClause::ListClause {
+                            //         current_index: index as i64,
+                            //         defined_tails: vec![],
+                            //     },
+                            //     final_clause,
+                            // };
+
+                            let tail_name = format!("{tail_name_base}_{index}");
+
+                            if elements.len() - 1 == index {
+                                if tail.is_some() {
+                                    clause_assigns.push(AirTree::list_clause_guard(
+                                        prev_tail_name,
+                                        subject_tipo.clone(),
+                                        true,
+                                        None,
+                                    ));
+                                } else {
+                                    clause_assigns.push(AirTree::list_clause_guard(
+                                        prev_tail_name,
+                                        subject_tipo.clone(),
+                                        true,
+                                        Some(tail_name.to_string()),
+                                    ));
+
+                                    clause_assigns.push(AirTree::list_clause_guard(
+                                        tail_name.to_string(),
+                                        subject_tipo.clone(),
+                                        false,
+                                        None,
+                                    ));
+                                    *current_index += 1;
+                                    defined_tails.push(tail_name);
+                                }
+                            } else {
+                                clause_assigns.push(AirTree::list_clause_guard(
+                                    prev_tail_name,
+                                    subject_tipo.clone(),
+                                    true,
+                                    Some(tail_name.to_string()),
+                                ));
+
+                                *current_index += 1;
+                                defined_tails.push(tail_name);
+                            };
+                        }
+                        let (_, assigns) = self.clause_pattern(pattern, subject_tipo, props);
+                        clause_assigns.push(assigns);
+                        AirTree::UnhoistedSequence(clause_assigns)
+                    }
                 }
                 Pattern::Constructor {
                     name: constr_name,
@@ -1851,8 +1941,6 @@ impl<'a> CodeGenerator<'a> {
                             AirTree::bool(constr_name == "True"),
                             bool(),
                         )
-                    } else if subject_tipo.is_void() {
-                        todo!()
                     } else {
                         let (cond, assign) = self.clause_pattern(pattern, subject_tipo, props);
 
@@ -1871,6 +1959,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 Pattern::Tuple { .. } => {
+                    props.complex_clause = true;
                     let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
 
                     let defined_indices = match &props.specific_clause {
