@@ -1,8 +1,8 @@
 use chumsky::prelude::*;
 
-use super::{Chain, ParserArg};
+use super::Chain;
 use crate::{
-    ast,
+    ast::CallArg,
     expr::UntypedExpr,
     parser::{token::Token, ParseError},
 };
@@ -15,20 +15,19 @@ pub(crate) fn parser(
             .then_ignore(just(Token::Colon))
             .or_not()
             .then(expression)
-            .map_with_span(|(label, value), span| {
-                ParserArg::Arg(Box::new(ast::CallArg {
-                    label,
-                    location: span,
-                    value,
-                }))
+            .map_with_span(|(label, value), location| CallArg {
+                label,
+                location,
+                value: Some(value),
             }),
         select! { Token::Name { name } => name }
             .then_ignore(just(Token::Colon))
             .or_not()
             .then_ignore(select! {Token::DiscardName {name} => name })
-            .map_with_span(|label, span| ParserArg::Hole {
-                location: span,
+            .map_with_span(|label, location| CallArg {
+                location,
                 label,
+                value: None,
             }),
     ))
     .separated_by(just(Token::Comma))

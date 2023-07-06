@@ -53,16 +53,6 @@ pub fn pure_expression<'a>(
     sequence: Recursive<'a, Token, UntypedExpr, ParseError>,
     expression: Recursive<'a, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
-    let chained_debugged = chained(sequence, expression)
-        .then(just(Token::Question).or_not())
-        .map_with_span(|(value, token), location| match token {
-            Some(_) => UntypedExpr::TraceIfFalse {
-                value: Box::new(value),
-                location,
-            },
-            None => value,
-        });
-
     // Negate
     let op = choice((
         just(Token::Bang).to(ast::UnOp::Not),
@@ -85,7 +75,7 @@ pub fn pure_expression<'a>(
     let unary = op
         .map_with_span(|op, span| (op, span))
         .repeated()
-        .then(chained_debugged)
+        .then(chained(sequence, expression))
         .foldr(|(un_op, span), value| UntypedExpr::UnOp {
             op: un_op,
             location: span.union(value.location()),

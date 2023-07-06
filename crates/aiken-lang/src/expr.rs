@@ -4,9 +4,9 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        DefinitionLocation, IfBranch, Pattern, RecordUpdateSpread, Span, TraceKind, TypedClause,
-        TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
+        self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        DefinitionLocation, IfBranch, ParsedCallArg, Pattern, RecordUpdateSpread, Span, TraceKind,
+        TypedClause, TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -561,6 +561,88 @@ impl UntypedExpr {
                 location,
                 value: DEFAULT_ERROR_STR.to_string(),
             })),
+        }
+    }
+
+    pub fn tuple_index(self, index: usize, location: Span) -> Self {
+        UntypedExpr::TupleIndex {
+            location: self.location().union(location),
+            index,
+            tuple: Box::new(self),
+        }
+    }
+
+    pub fn field_access(self, label: String, location: Span) -> Self {
+        UntypedExpr::FieldAccess {
+            location: self.location().union(location),
+            label,
+            container: Box::new(self),
+        }
+    }
+
+    pub fn call(self, args: Vec<ParsedCallArg>, location: Span) -> Self {
+        let mut holes = Vec::new();
+
+        let args = args
+            .into_iter()
+            .enumerate()
+            .map(|(index, a)| match a {
+                CallArg {
+                    value: Some(value),
+                    label,
+                    location,
+                } => CallArg {
+                    value,
+                    label,
+                    location,
+                },
+                CallArg {
+                    value: None,
+                    label,
+                    location,
+                } => {
+                    let name = format!("{}__{index}", ast::CAPTURE_VARIABLE);
+
+                    holes.push(ast::Arg {
+                        location: Span::empty(),
+                        annotation: None,
+                        arg_name: ast::ArgName::Named {
+                            label: name.clone(),
+                            name,
+                            location: Span::empty(),
+                            is_validator_param: false,
+                        },
+                        tipo: (),
+                    });
+
+                    ast::CallArg {
+                        label,
+                        location,
+                        value: UntypedExpr::Var {
+                            location,
+                            name: format!("{}__{index}", ast::CAPTURE_VARIABLE),
+                        },
+                    }
+                }
+            })
+            .collect();
+
+        let call = UntypedExpr::Call {
+            location: self.location().union(location),
+            fun: Box::new(self),
+            arguments: args,
+        };
+
+        if holes.is_empty() {
+            call
+        } else {
+            UntypedExpr::Fn {
+                location: call.location(),
+                fn_style: FnStyle::Capture,
+                arguments: holes,
+                body: Box::new(call),
+                return_annotation: None,
+            }
         }
     }
 

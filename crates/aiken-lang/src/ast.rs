@@ -475,6 +475,7 @@ impl Constant {
 }
 
 pub type TypedCallArg = CallArg<TypedExpr>;
+pub type ParsedCallArg = CallArg<Option<UntypedExpr>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallArg<A> {
