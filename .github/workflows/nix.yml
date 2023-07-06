@@ -1,15 +1,11 @@
-name: Nix
+name: Nix Build
 
 on:
   push:
-    branches: ["main"]
 
 jobs:
-  update-cargo-nix:
+  nix-build:
     runs-on: ubuntu-latest
-
-    permissions:
-      pull-requests: write
 
     steps:
       - name: Checkout repository
