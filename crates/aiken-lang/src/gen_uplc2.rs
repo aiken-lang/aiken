@@ -1509,8 +1509,7 @@ impl<'a> CodeGenerator<'a> {
                 let elems = elements
                     .iter()
                     .enumerate()
-                    .zip(defined_tails.iter())
-                    .map(|((index, elem), tail)| {
+                    .map(|(index, elem)| {
                         let elem_name = match elem {
                             Pattern::Var { name, .. } => name.to_string(),
                             Pattern::Assign { name, .. } => name.to_string(),
@@ -1535,26 +1534,22 @@ impl<'a> CodeGenerator<'a> {
 
                         *complex_clause = *complex_clause || elem_props.complex_clause;
 
-                        (tail, elem_name, statement)
+                        (elem_name, statement)
                     })
                     .collect_vec();
 
-                let defined_tail_heads = elems
-                    .iter()
-                    .map(|(tail, head, _)| (tail.to_string(), head.to_string()))
-                    .collect_vec();
+                let mut defined_heads =
+                    elems.iter().map(|(head, _)| head.to_string()).collect_vec();
 
                 let mut air_elems = elems
                     .into_iter()
-                    .map(|(_, _, statement)| statement)
+                    .map(|(_, statement)| statement)
                     .collect_vec();
 
                 let mut list_tail = None;
 
                 tail.iter().for_each(|elem| {
-                    let tail = defined_tails
-                        .last()
-                        .unwrap_or_else(|| panic!("WHERE IS THE TAIL???"));
+                    let tail = defined_tails.last().cloned().unwrap_or_default();
                     let elem_name = match elem.as_ref() {
                         Pattern::Var { name, .. } => name.to_string(),
                         Pattern::Assign { name, .. } => name.to_string(),
@@ -1578,15 +1573,28 @@ impl<'a> CodeGenerator<'a> {
                     *complex_clause = *complex_clause || elem_props.complex_clause;
 
                     air_elems.push(statement);
-                    list_tail = Some((tail.to_string(), elem_name));
+                    list_tail = Some((tail, elem_name.to_string()));
+                    defined_heads.push(elem_name)
                 });
 
-                let list_assign = AirTree::list_expose(
-                    defined_tail_heads,
-                    list_tail,
-                    subject_tipo.clone(),
-                    AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
-                );
+                let list_assign = if props.final_clause {
+                    AirTree::list_access(
+                        defined_heads,
+                        subject_tipo.clone(),
+                        tail.is_some(),
+                        false,
+                        AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                    )
+                } else {
+                    AirTree::list_expose(
+                        defined_heads
+                            .into_iter()
+                            .zip(defined_tails.into_iter())
+                            .collect_vec(),
+                        list_tail,
+                        subject_tipo.clone(),
+                    )
+                };
 
                 let mut sequence = vec![list_assign];
 
