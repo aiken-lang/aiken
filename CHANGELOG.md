@@ -5,6 +5,7 @@
 ### Added
 
 - **aiken**: added a `blueprint policy` command to compute the policy ID of a minting script
+- **uplc**: parsing and pretty printing for PlutusData
 
 ### Fixed
 
@@ -14,6 +15,8 @@
 - **aiken-lang**: Parsing of negative integer patterns and constants
 
 ### Changed
+
+- **uplc**: make list type and pair type parsing match the plutus core spec
 
 ### Removed
 
