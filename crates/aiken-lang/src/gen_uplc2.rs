@@ -21,8 +21,8 @@ use crate::{
     gen_uplc::{
         air::Air,
         builder::{
-            self as build, AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey,
-            SpecificClause,
+            self as build, get_arg_type_name, AssignmentProperties, ClauseProperties, DataTypeKey,
+            FunctionAccessKey, SpecificClause,
         },
     },
     gen_uplc2::builder::convert_opaque_type,
@@ -106,7 +106,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn build(&mut self, body: &TypedExpr) -> AirTree {
         match body {
-            TypedExpr::Int { value, .. } => AirTree::int(value),
+            TypedExpr::UInt { value, .. } => AirTree::int(value),
             TypedExpr::String { value, .. } => AirTree::string(value),
             TypedExpr::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
             TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
@@ -544,7 +544,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Var { name, .. } => {
                 if props.full_check {
                     let mut index_map = IndexMap::new();
-                    // let tipo = builder::convert_opaque_type();
+                    let tipo = convert_opaque_type(tipo, &self.data_types);
                     let assignment = AirTree::let_assignment(name, value);
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -552,7 +552,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::let_assignment(name, assignment.hoist_over(val))
                     } else {
                         let expect = self.expect_type_assign(
-                            tipo,
+                            &tipo,
                             val.clone(),
                             &mut index_map,
                             pattern.location(),
@@ -575,14 +575,14 @@ impl<'a> CodeGenerator<'a> {
                 if props.full_check {
                     let name = &format!("__discard_expect_{}", name);
                     let mut index_map = IndexMap::new();
-                    // let tipo = builder::convert_opaque_type();
+                    let tipo = convert_opaque_type(tipo, &self.data_types);
                     let assignment = AirTree::let_assignment(name, value);
                     let val = AirTree::local_var(name, tipo.clone());
                     if tipo.is_primitive() {
                         AirTree::let_assignment(name, assignment.hoist_over(val))
                     } else {
                         let expect = self.expect_type_assign(
-                            tipo,
+                            &tipo,
                             val.clone(),
                             &mut index_map,
                             pattern.location(),
@@ -1131,15 +1131,14 @@ impl<'a> CodeGenerator<'a> {
                     unreachable!("We need a data type definition fot type {:#?}", tipo)
                 });
 
-            let mut tipo = convert_opaque_type();
-
-            // for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
-            //     let field_type = arg.clone();
-            //     type_map.insert(index, field_type);
-            // }
+            let mut data_type_variant = tipo
+                .get_inner_types()
+                .iter()
+                .map(|arg| get_arg_type_name(arg))
+                .join("_");
 
             // TODO calculate the variant name.
-            let data_type_name = format!("__expect_{}{}", data_type.name, "");
+            let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
             let function = self.code_gen_functions.get(&data_type_name);
             todo!();
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
@@ -1152,7 +1151,7 @@ impl<'a> CodeGenerator<'a> {
 
             let func_var = AirTree::var(
                 ValueConstructor::public(
-                    tipo,
+                    tipo.clone(),
                     ValueConstructorVariant::ModuleFn {
                         name: data_type_name.to_string(),
                         field_map: None,
@@ -1846,7 +1845,6 @@ impl<'a> CodeGenerator<'a> {
                 Pattern::Discard { .. } => AirTree::no_op(),
                 Pattern::List { elements, tail, .. } => {
                     props.complex_clause = true;
-                    // let item_name = format!("__list_item_id_{}", self.id_gen.next());
                     let tail_name_base = "__tail".to_string();
 
                     if elements.is_empty() {
@@ -1880,18 +1878,6 @@ impl<'a> CodeGenerator<'a> {
                             } else {
                                 format!("{}_{}", tail_name_base, index - 1)
                             };
-
-                            // let mut clause_properties = ClauseProperties {
-                            //     clause_var_name: item_name.clone(),
-                            //     needs_constr_var: false,
-                            //     complex_clause: false,
-                            //     original_subject_name: item_name.clone(),
-                            //     specific_clause: SpecificClause::ListClause {
-                            //         current_index: index as i64,
-                            //         defined_tails: vec![],
-                            //     },
-                            //     final_clause,
-                            // };
 
                             let tail_name = format!("{tail_name_base}_{index}");
 
