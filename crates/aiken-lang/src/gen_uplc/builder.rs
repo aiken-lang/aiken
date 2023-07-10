@@ -2010,12 +2010,18 @@ pub fn special_case_builtin(
 
 pub fn get_arg_type_name(tipo: &Type) -> String {
     match tipo {
-        Type::App { name, .. } => name.clone(),
+        Type::App { name, args, .. } => {
+            let inner_args = args.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
+            format!("{}_{}", name, inner_args.join("_"))
+        }
         Type::Var { tipo } => match tipo.borrow().clone() {
             TypeVar::Link { tipo } => get_arg_type_name(tipo.as_ref()),
             _ => unreachable!(),
         },
-        Type::Tuple { .. } => "".to_string(),
+        Type::Tuple { elems } => {
+            let inner_args = elems.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
+            inner_args.join("_")
+        }
         _ => unreachable!(),
     }
 }
