@@ -29,7 +29,7 @@ fn assert_mint(purpose, transaction) {
   let tokens = value.tokens(transaction.mint, policy_id)
 
   when dict.get(tokens, #"666f6f") is {
-    None -> error @"token not found"
+    None -> fail @"token not found"
     Some(quantity) -> quantity == 1337
   }
 }
