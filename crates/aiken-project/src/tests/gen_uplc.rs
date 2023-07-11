@@ -2601,7 +2601,7 @@ fn when_bool_is_true() {
           True ->
             True
           False ->
-            error
+            fail
         }
       }    
     "#;
@@ -2622,7 +2622,7 @@ fn when_bool_is_true_switched_cases() {
       test it() {
         when True is {
           False ->
-            error
+            fail
           True ->
             True
         }
@@ -2645,7 +2645,7 @@ fn when_bool_is_false() {
       test it() {
         when False is {
           False ->
-            error
+            fail
           True ->
             True
         }

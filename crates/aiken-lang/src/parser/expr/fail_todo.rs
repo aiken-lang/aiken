@@ -17,9 +17,9 @@ pub fn parser(
         just(Token::Todo)
             .ignore_then(message().or_not())
             .map_with_span(UntypedExpr::todo),
-        just(Token::ErrorTerm)
+        just(Token::Fail)
             .ignore_then(message().or_not())
-            .map_with_span(UntypedExpr::error),
+            .map_with_span(UntypedExpr::fail),
     ))
 }
 
@@ -31,7 +31,7 @@ mod tests {
     fn error_basic() {
         assert_expr!(
             r#"
-            error @"foo"
+            fail @"foo"
             "#
         );
     }
@@ -40,7 +40,7 @@ mod tests {
     fn error_sugar() {
         assert_expr!(
             r#"
-            error "foo"
+            fail "foo"
             "#
         );
     }

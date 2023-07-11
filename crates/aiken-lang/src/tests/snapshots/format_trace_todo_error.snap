@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-lang/src/tests/format.rs
-description: "Code:\n\nfn foo_1() {\n  todo\n}\n\nfn foo_2() {\n  todo \"my custom message\"\n}\n\nfn foo_3() {\n  when x is {\n    Foo -> True\n    _ -> error\n  }\n}\n\nfn foo_4() {\n  if 14 == 42 {\n    error \"I don't think so\"\n  } else {\n    trace \"been there\"\n    True\n  }\n}\n"
+description: "Code:\n\nfn foo_1() {\n  todo\n}\n\nfn foo_2() {\n  todo \"my custom message\"\n}\n\nfn foo_3() {\n  when x is {\n    Foo -> True\n    _ -> fail\n  }\n}\n\nfn foo_4() {\n  if 14 == 42 {\n    fail \"I don't think so\"\n  } else {\n    trace \"been there\"\n    True\n  }\n}\n"
 ---
 fn foo_1() {
   todo
@@ -13,13 +13,13 @@ fn foo_2() {
 fn foo_3() {
   when x is {
     Foo -> True
-    _ -> error
+    _ -> fail
   }
 }
 
 fn foo_4() {
   if 14 == 42 {
-    error @"I don't think so"
+    fail @"I don't think so"
   } else {
     trace @"been there"
     True

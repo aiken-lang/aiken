@@ -116,7 +116,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "type" => Some(Token::Type),
         "trace" => Some(Token::Trace),
         "test" => Some(Token::Test),
-        "error" => Some(Token::ErrorTerm),
+        "error" => Some(Token::Fail),
         "validator" => Some(Token::Validator),
         _ => None,
     }

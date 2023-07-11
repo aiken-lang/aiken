@@ -873,7 +873,7 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         let (keyword, default_text) = match kind {
             TraceKind::Trace => ("trace", None),
-            TraceKind::Error => ("error", Some(DEFAULT_ERROR_STR.to_string())),
+            TraceKind::Error => ("fail", Some(DEFAULT_ERROR_STR.to_string())),
             TraceKind::Todo => ("todo", Some(DEFAULT_TODO_STR.to_string())),
         };
 
