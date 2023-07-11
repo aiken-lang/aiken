@@ -28,7 +28,7 @@ fn assert_purpose(purpose) {
       ref.transaction_id == TransactionId(
         #"0000000000000000000000000000000000000000000000000000000000000000",
       ) && ref.output_index == 0
-    _ -> error @"script purpose isn't 'Spend'"
+    _ -> fail @"script purpose isn't 'Spend'"
   }
 }
 
@@ -49,6 +49,6 @@ fn assert_outputs(transaction) {
         output.reference_script == None,
       ]
         |> list.and
-    _ -> error @"unexpected number of outputs"
+    _ -> fail @"unexpected number of outputs"
   }
 }
