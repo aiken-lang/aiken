@@ -13,6 +13,8 @@
 - **aiken-lang**: UPLC evaluation of large integers literals (> max u64)
 - **aiken-lang**: Parsing of error / todo keywords in when cases
 - **aiken-lang**: Parsing of negative integer patterns and constants
+- **aiken-lang**: automatically infer unused validator args as `Data`
+- **aiken**: mem and cpu values were not showing in white terminals, switched to cyan
 
 ### Changed
 
