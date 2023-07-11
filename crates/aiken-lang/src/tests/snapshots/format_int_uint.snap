@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nconst i = 42\n\nconst j = -14\n\nfn foo() {\n  when y is {\n    14 -> -14\n    -42 -> 42\n  }\n}\n"
+---
+const i = 42
+
+const j = -14
+
+fn foo() {
+  when y is {
+    14 -> -14
+    -42 -> 42
+  }
+}
+
