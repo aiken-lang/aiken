@@ -298,10 +298,10 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
             })
         },
         mem_unit = pretty::style_if(styled, mem_pad, |s| s
-            .if_supports_color(Stderr, |s| s.bright_white())
+            .if_supports_color(Stderr, |s| s.cyan())
             .to_string()),
         cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
-            .if_supports_color(Stderr, |s| s.bright_white())
+            .if_supports_color(Stderr, |s| s.cyan())
             .to_string()),
         module = pretty::style_if(styled, script.name.clone(), |s| s
             .if_supports_color(Stderr, |s| s.bright_blue())
