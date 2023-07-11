@@ -74,7 +74,7 @@ pub enum Token {
     Fn,
     If,
     Else,
-    ErrorTerm,
+    Fail,
     Expect,
     Is,
     Let,
@@ -170,7 +170,7 @@ impl fmt::Display for Token {
             Token::Trace => "trace",
             Token::Type => "type",
             Token::Test => "test",
-            Token::ErrorTerm => "error",
+            Token::Fail => "fail",
             Token::Validator => "validator",
         };
         write!(f, "\"{s}\"")

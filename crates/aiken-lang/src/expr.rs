@@ -552,7 +552,7 @@ impl UntypedExpr {
         }
     }
 
-    pub fn error(reason: Option<Self>, location: Span) -> Self {
+    pub fn fail(reason: Option<Self>, location: Span) -> Self {
         UntypedExpr::Trace {
             location,
             kind: TraceKind::Error,

@@ -247,7 +247,7 @@ fn test_format_nested_function_calls() {
             ,
             when output.datum is {
               InlineDatum(_) -> True
-              _ -> error "expected inline datum"
+              _ -> fail "expected inline datum"
             },
           ]
           |> list.and
@@ -271,13 +271,13 @@ fn test_format_trace_todo_error() {
         fn foo_3() {
           when x is {
             Foo -> True
-            _ -> error
+            _ -> fail
           }
         }
 
         fn foo_4() {
           if 14 == 42 {
-            error "I don't think so"
+            fail "I don't think so"
           } else {
             trace "been there"
             True

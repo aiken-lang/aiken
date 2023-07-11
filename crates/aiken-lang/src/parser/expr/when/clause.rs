@@ -63,7 +63,7 @@ mod tests {
         assert_expr!(
             r#"
             when val is {
-              Bar1{..} -> error
+              Bar1{..} -> fail
             }
             "#
         );

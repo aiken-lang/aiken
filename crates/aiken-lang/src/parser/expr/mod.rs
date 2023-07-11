@@ -7,7 +7,7 @@ pub mod assignment;
 mod block;
 pub(crate) mod bytearray;
 mod chained;
-mod error_todo;
+mod fail_todo;
 mod if_else;
 mod int;
 mod list;
@@ -23,7 +23,7 @@ pub use anonymous_function::parser as anonymous_function;
 pub use block::parser as block;
 pub use bytearray::parser as bytearray;
 pub use chained::parser as chained;
-pub use error_todo::parser as error_todo;
+pub use fail_todo::parser as fail_todo;
 pub use if_else::parser as if_else;
 pub use int::parser as int;
 pub use list::parser as list;
@@ -43,7 +43,7 @@ pub fn parser(
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     recursive(|expression| {
         choice((
-            error_todo(sequence.clone()),
+            fail_todo(sequence.clone()),
             pure_expression(sequence, expression),
         ))
     })
