@@ -501,8 +501,8 @@ fn test_format_first_class_binop() {
 }
 
 #[test]
-fn int_uint() {
-    let src = indoc! { r#"
+fn test_format_int_uint() {
+    assert_format!(r#"
         const i = 42
 
         const j = -14
@@ -513,7 +513,5 @@ fn int_uint() {
             -42 -> 42
           }
         }
-    "#};
-
-    assert_fmt(src, src);
+    "#);
 }
