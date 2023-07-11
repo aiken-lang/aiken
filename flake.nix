@@ -38,6 +38,8 @@
           default = packages.aiken;
         };
 
+        overlays.default = final: prev: { aiken = packages.aiken; };
+
         aikenCmds = commonCategory "Aiken Development" [{
           name = "aiken";
           help = "Aiken toolchain";
@@ -46,7 +48,7 @@
 
         gitRev = if (builtins.hasAttr "rev" self) then self.rev else "dirty";
       in {
-        inherit packages;
+        inherit packages overlays;
 
         devShells.aiken = pkgs.mkShell {
           name = "aiken";
