@@ -319,13 +319,29 @@ fn infer_definition(
                     });
                 }
 
-                let typed_params = typed_fun.arguments.drain(0..params_length).collect();
+                let typed_params = typed_fun.arguments
+                    .drain(0..params_length)
+                    .map(|mut arg| {
+                        if arg.tipo.is_unbound() {
+                            arg.tipo = builtins::data();
+                        }
+
+                        arg
+                    })
+                    .collect();
+
 
                 if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
                     return Err(Error::IncorrectValidatorArity {
                         count: typed_fun.arguments.len() as u32,
                         location: typed_fun.location,
                     });
+                }
+
+                for arg in typed_fun.arguments.iter_mut() {
+                    if arg.tipo.is_unbound() {
+                        arg.tipo = builtins::data();
+                    }
                 }
 
                 let typed_other_fun = other_fun
@@ -372,9 +388,17 @@ fn infer_definition(
                             });
                         }
 
+                        for arg in other_typed_fun.arguments.iter_mut() {
+                            if arg.tipo.is_unbound() {
+                                arg.tipo = builtins::data();
+                            }
+                        }
+
                         Ok(other_typed_fun)
                     })
                     .transpose();
+
+
 
                 Ok(Definition::Validator(Validator {
                     doc,
