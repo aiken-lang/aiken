@@ -25,7 +25,7 @@ use crate::{
             FunctionAccessKey, SpecificClause,
         },
     },
-    gen_uplc2::builder::convert_opaque_type,
+    gen_uplc2::builder::{convert_opaque_type, get_generic_id_and_type},
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
@@ -1131,7 +1131,7 @@ impl<'a> CodeGenerator<'a> {
                     unreachable!("We need a data type definition fot type {:#?}", tipo)
                 });
 
-            let mut data_type_variant = tipo
+            let data_type_variant = tipo
                 .get_inner_types()
                 .iter()
                 .map(|arg| get_arg_type_name(arg))
@@ -1140,13 +1140,30 @@ impl<'a> CodeGenerator<'a> {
             // TODO calculate the variant name.
             let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
             let function = self.code_gen_functions.get(&data_type_name);
-            todo!();
+
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
+                defined_data_types.insert(data_type_name.clone(), 1);
+
+                let mono_types: IndexMap<u64, Arc<Type>> = if !data_type.typed_parameters.is_empty()
+                {
+                    data_type
+                        .typed_parameters
+                        .iter()
+                        .zip(tipo.arg_types().unwrap())
+                        .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
+                        .collect()
+                } else {
+                    vec![].into_iter().collect()
+                };
+
+                let current_defined_state = defined_data_types.clone();
+                // let mut diff_defined_types = IndexMap::new();
+
                 todo!()
             } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
                 *counter += 1;
             } else {
-                defined_data_types.insert(data_type_name.to_string(), 0);
+                defined_data_types.insert(data_type_name.to_string(), 1);
             }
 
             let func_var = AirTree::var(
