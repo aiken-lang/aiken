@@ -239,6 +239,7 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 body,
                 *end_position,
+                false,
             ),
 
             Definition::Validator(Validator {
@@ -258,12 +259,13 @@ impl<'comments> Formatter<'comments> {
                 ..
             }) => self.definition_fn(
                 &false,
-                if *can_error { "!test" } else { "test" },
+                "test",
                 name,
                 args,
                 &None,
                 body,
                 *end_position,
+                *can_error,
             ),
 
             Definition::TypeAlias(TypeAlias {
@@ -483,13 +485,15 @@ impl<'comments> Formatter<'comments> {
         return_annotation: &'a Option<Annotation>,
         body: &'a UntypedExpr,
         end_location: usize,
+        can_error: bool,
     ) -> Document<'a> {
         // Fn name and args
         let head = pub_(*public)
             .append(keyword)
             .append(" ")
             .append(name)
-            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
+            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))))
+            .append(if can_error { " fail" } else { "" });
 
         // Add return annotation
         let head = match return_annotation {
@@ -532,6 +536,7 @@ impl<'comments> Formatter<'comments> {
                 &fun.return_annotation,
                 &fun.body,
                 fun.end_position,
+                false,
             )
             .group();
         let first_fn = commented(fun_doc_comments.append(first_fn).group(), fun_comments);
@@ -551,6 +556,7 @@ impl<'comments> Formatter<'comments> {
                         &other.return_annotation,
                         &other.body,
                         other.end_position,
+                        false,
                     )
                     .group();
 

@@ -507,12 +507,12 @@ fn test_format_match_record() {
 fn test_format_fail() {
     assert_format!(
         r#"
-      !test foo() {
-        expect Some(a) = bar
+        test foo() fail {
+          expect Some(a) = bar
 
-        a
-      }
-    "#
+          a
+        }
+        "#
     );
 }
 
