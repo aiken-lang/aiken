@@ -7,8 +7,12 @@ use crate::{
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    just(Token::Test)
-        .ignore_then(select! {Token::Name {name} => name})
+    // TODO: can remove Token::Bang after a few releases (curr v1.0.11)
+    just(Token::Bang)
+        .ignored()
+        .or_not()
+        .then_ignore(just(Token::Test))
+        .then(select! {Token::Name {name} => name})
         .then_ignore(just(Token::LeftParen))
         .then_ignore(just(Token::RightParen))
         .then(just(Token::Fail).ignored().or_not())
@@ -18,7 +22,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .or_not()
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
-        .map_with_span(|(((name, fail), span_end), body), span| {
+        .map_with_span(|((((old_fail, name), fail), span_end), body), span| {
             ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
                 body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
@@ -29,7 +33,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 public: false,
                 return_annotation: None,
                 return_type: (),
-                can_error: fail.is_some(),
+                can_error: fail.is_some() || old_fail.is_some(),
             })
         })
 }
