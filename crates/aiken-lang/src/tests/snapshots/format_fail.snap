@@ -1,8 +1,8 @@
 ---
 source: crates/aiken-lang/src/tests/format.rs
-description: "Code:\n\n!test foo() {\n  expect Some(a) = bar\n\n  a\n}\n"
+description: "Code:\n\ntest foo() fail {\n  expect Some(a) = bar\n\n  a\n}\n"
 ---
-!test foo() {
+test foo() fail {
   expect Some(a) = bar
 
   a

@@ -7,20 +7,18 @@ use crate::{
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    just(Token::Bang)
-        .ignored()
-        .or_not()
-        .then_ignore(just(Token::Test))
-        .then(select! {Token::Name {name} => name})
+    just(Token::Test)
+        .ignore_then(select! {Token::Name {name} => name})
         .then_ignore(just(Token::LeftParen))
         .then_ignore(just(Token::RightParen))
+        .then(just(Token::Fail).ignored().or_not())
         .map_with_span(|name, span| (name, span))
         .then(
             expr::sequence()
                 .or_not()
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
-        .map_with_span(|(((fail, name), span_end), body), span| {
+        .map_with_span(|(((name, fail), span_end), body), span| {
             ast::UntypedDefinition::Test(ast::Function {
                 arguments: vec![],
                 body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
@@ -41,10 +39,10 @@ mod tests {
     use crate::assert_definition;
 
     #[test]
-    fn test_fail() {
+    fn def_test_fail() {
         assert_definition!(
             r#"
-            !test invalid_inputs() {
+            test invalid_inputs() fail {
               expect True = False
 
               False
