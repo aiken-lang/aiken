@@ -21,8 +21,8 @@ use crate::{
     gen_uplc::{
         air::Air,
         builder::{
-            self as build, get_arg_type_name, wrap_validator_args, AssignmentProperties,
-            ClauseProperties, DataTypeKey, FunctionAccessKey, SpecificClause,
+            self as build, get_arg_type_name, AssignmentProperties, ClauseProperties, DataTypeKey,
+            FunctionAccessKey, SpecificClause,
         },
     },
     gen_uplc2::builder::{convert_opaque_type, find_and_replace_generics, get_generic_id_and_type},
@@ -32,7 +32,7 @@ use crate::{
     },
 };
 
-use self::tree::AirTree;
+use self::tree::{AirExpression, AirTree};
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
@@ -93,6 +93,8 @@ impl<'a> CodeGenerator<'a> {
         validator_args_tree = AirTree::no_op().hoist_over(validator_args_tree);
         println!("{:#?}", validator_args_tree);
         println!("{:#?}", validator_args_tree.to_vec());
+
+        let hydrated_tree = self.hoist_functions(validator_args_tree);
 
         todo!()
     }
@@ -2190,5 +2192,150 @@ impl<'a> CodeGenerator<'a> {
             AirTree::UnhoistedSequence(checked_args.into_iter().map(|(_, arg)| arg).collect_vec());
 
         AirTree::anon_func(arg_names, arg_assigns.hoist_over(body))
+    }
+
+    fn hoist_functions(&mut self, mut validator_args_tree: AirTree) -> AirTree {
+        let mut functions_to_hoist = IndexMap::new();
+        let mut function_holder = IndexMap::new();
+
+        self.find_function_vars_and_depth(
+            &mut validator_args_tree,
+            &mut functions_to_hoist,
+            &mut function_holder,
+            0,
+        );
+
+        todo!()
+    }
+
+    fn find_function_vars_and_depth(
+        &mut self,
+        validator_args_tree: &mut AirTree,
+        function_usage: &mut IndexMap<FunctionAccessKey, usize>,
+        function_holder: &mut IndexMap<FunctionAccessKey, AirTree>,
+        current_depth: usize,
+    ) {
+        match validator_args_tree {
+            AirTree::Statement {
+                statement,
+                hoisted_over: Some(hoisted_over),
+            } => todo!(),
+            AirTree::Expression(e) => match e {
+                AirExpression::Var {
+                    constructor,
+                    name,
+                    variant_name,
+                } => {
+                    let ValueConstructorVariant::ModuleFn {
+                        name: func_name,
+                        module,
+                        builtin: None,
+                        ..
+                    } = &constructor.variant
+                    else { return };
+
+                    let function_var_tipo = &constructor.tipo;
+                    let generic_function_key = FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: func_name.clone(),
+                        variant_name: "".to_string(),
+                    };
+
+                    todo!()
+                }
+                AirExpression::Call { func, args, .. } => {
+                    self.find_function_vars_and_depth(
+                        func,
+                        function_usage,
+                        function_holder,
+                        current_depth + 1,
+                    );
+
+                    for arg in args {
+                        self.find_function_vars_and_depth(
+                            arg,
+                            function_usage,
+                            function_holder,
+                            current_depth + 1,
+                        );
+                    }
+                }
+                AirExpression::Fn { params, func_body } => todo!(),
+                AirExpression::Builtin { func, tipo, args } => todo!(),
+                AirExpression::BinOp {
+                    name,
+                    tipo,
+                    left,
+                    right,
+                } => todo!(),
+                AirExpression::UnOp { op, arg } => todo!(),
+                AirExpression::UnWrapData { tipo, value } => todo!(),
+                AirExpression::WrapData { tipo, value } => todo!(),
+                AirExpression::When {
+                    tipo,
+                    subject_name,
+                    subject,
+                    clauses,
+                } => todo!(),
+                AirExpression::Clause {
+                    tipo,
+                    subject_name,
+                    complex_clause,
+                    pattern,
+                    then,
+                    otherwise,
+                } => todo!(),
+                AirExpression::ListClause {
+                    tipo,
+                    tail_name,
+                    next_tail_name,
+                    complex_clause,
+                    then,
+                    otherwise,
+                } => todo!(),
+                AirExpression::WrapClause { then, otherwise } => todo!(),
+                AirExpression::TupleClause {
+                    tipo,
+                    indices,
+                    predefined_indices,
+                    subject_name,
+                    type_count,
+                    complex_clause,
+                    then,
+                    otherwise,
+                } => todo!(),
+                AirExpression::Finally { pattern, then } => todo!(),
+                AirExpression::If {
+                    tipo,
+                    pattern,
+                    then,
+                    otherwise,
+                } => todo!(),
+                AirExpression::Constr { tag, tipo, args } => todo!(),
+                AirExpression::RecordUpdate {
+                    highest_index,
+                    indices,
+                    tipo,
+                    record,
+                    args,
+                } => todo!(),
+                AirExpression::RecordAccess {
+                    field_index,
+                    tipo,
+                    record,
+                } => todo!(),
+                AirExpression::TupleIndex {
+                    tipo,
+                    tuple_index,
+                    tuple,
+                } => todo!(),
+                AirExpression::ErrorTerm { tipo } => todo!(),
+                AirExpression::Trace { tipo, msg, then } => todo!(),
+                AirExpression::FieldsEmpty { constr } => todo!(),
+                AirExpression::ListEmpty { list } => todo!(),
+                _ => {}
+            },
+            _ => unreachable!(),
+        }
     }
 }
