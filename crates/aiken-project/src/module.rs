@@ -335,7 +335,7 @@ impl CheckedModules {
                     Definition::TypeAlias(_)
                     | Definition::ModuleConstant(_)
                     | Definition::Test(_)
-                    | Definition::Validator { .. }
+                    | Definition::Validator(_)
                     | Definition::Use(_) => {}
                 }
             }

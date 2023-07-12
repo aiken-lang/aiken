@@ -16,7 +16,7 @@ mod tests;
 
 use crate::blueprint::Blueprint;
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction},
+    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction, Validator},
     builtins,
     gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::TypeInfo,
@@ -638,6 +638,7 @@ where
         tracing: bool,
     ) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
+        let mut testable_validators = Vec::new();
 
         let match_tests = match_tests.map(|mt| {
             mt.into_iter()
@@ -669,45 +670,85 @@ where
             }
 
             for def in checked_module.ast.definitions() {
-                if let Definition::Test(func) = def {
-                    if let Some(match_tests) = &match_tests {
-                        let is_match = match_tests.iter().any(|(module, names)| {
-                            let matched_module =
-                                module.is_empty() || checked_module.name.contains(module);
+                match def {
+                    Definition::Validator(Validator {
+                        params,
+                        fun,
+                        other_fun,
+                        ..
+                    }) => {
+                        let mut fun = fun.clone();
 
-                            let matched_name = match names {
-                                None => true,
-                                Some(names) => names.iter().any(|name| {
-                                    if exact_match {
-                                        name == &func.name
-                                    } else {
-                                        func.name.contains(name)
-                                    }
-                                }),
-                            };
+                        fun.arguments = params.clone().into_iter().chain(fun.arguments).collect();
 
-                            matched_module && matched_name
-                        });
+                        testable_validators.push((&checked_module.name, fun));
 
-                        if is_match {
+                        if let Some(other) = other_fun {
+                            let mut other = other.clone();
+
+                            other.arguments =
+                                params.clone().into_iter().chain(other.arguments).collect();
+
+                            testable_validators.push((&checked_module.name, other));
+                        }
+                    }
+                    Definition::Test(func) => {
+                        if let Some(match_tests) = &match_tests {
+                            let is_match = match_tests.iter().any(|(module, names)| {
+                                let matched_module =
+                                    module.is_empty() || checked_module.name.contains(module);
+
+                                let matched_name = match names {
+                                    None => true,
+                                    Some(names) => names.iter().any(|name| {
+                                        if exact_match {
+                                            name == &func.name
+                                        } else {
+                                            func.name.contains(name)
+                                        }
+                                    }),
+                                };
+
+                                matched_module && matched_name
+                            });
+
+                            if is_match {
+                                scripts.push((
+                                    checked_module.input_path.clone(),
+                                    checked_module.name.clone(),
+                                    func,
+                                ))
+                            }
+                        } else {
                             scripts.push((
                                 checked_module.input_path.clone(),
                                 checked_module.name.clone(),
                                 func,
                             ))
                         }
-                    } else {
-                        scripts.push((
-                            checked_module.input_path.clone(),
-                            checked_module.name.clone(),
-                            func,
-                        ))
                     }
+                    _ => (),
                 }
             }
         }
 
         let mut programs = Vec::new();
+
+        let mut generator = self.checked_modules.new_generator(
+            &self.functions,
+            &self.data_types,
+            &self.module_types,
+            tracing,
+        );
+
+        for (module_name, testable_validator) in &testable_validators {
+            generator.insert_function(
+                module_name.to_string(),
+                testable_validator.name.clone(),
+                String::new(),
+                testable_validator,
+            );
+        }
 
         for (input_path, module_name, func_def) in scripts {
             let Function {
@@ -723,13 +764,6 @@ where
                     path: input_path.clone(),
                 })
             }
-
-            let mut generator = self.checked_modules.new_generator(
-                &self.functions,
-                &self.data_types,
-                &self.module_types,
-                tracing,
-            );
 
             let evaluation_hint = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator

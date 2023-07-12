@@ -162,7 +162,7 @@ impl fmt::Display for Token {
             Token::Fn => "fn",
             Token::If => "if",
             Token::Else => "else",
-            Token::Use => "import",
+            Token::Use => "use",
             Token::Let => "let",
             Token::Opaque => "opaque",
             Token::Pub => "pub",

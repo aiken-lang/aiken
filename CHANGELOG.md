@@ -14,6 +14,7 @@
 - **aiken-lang**: Parsing of error / todo keywords in when cases
 - **aiken-lang**: Parsing of negative integer patterns and constants
 - **aiken-lang**: automatically infer unused validator args as `Data`
+- **aiken-lang**: test crashing when referencing validators
 - **aiken**: mem and cpu values were not showing in white terminals, switched to cyan
 
 ### Changed

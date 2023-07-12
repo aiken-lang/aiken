@@ -88,6 +88,23 @@ impl<'a> CodeGenerator<'a> {
         self.defined_functions = IndexMap::new();
     }
 
+    pub fn insert_function(
+        &mut self,
+        module_name: String,
+        function_name: String,
+        variant_name: String,
+        value: &'a TypedFunction,
+    ) -> Option<&'a TypedFunction> {
+        self.functions.insert(
+            FunctionAccessKey {
+                module_name,
+                function_name,
+                variant_name,
+            },
+            value,
+        )
+    }
+
     pub fn generate(
         &mut self,
         TypedValidator {
