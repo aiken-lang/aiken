@@ -19,6 +19,8 @@
 ### Changed
 
 - **uplc**: make list type and pair type parsing match the plutus core spec
+- **aiken-lang**: rename `error` to `fail`
+- **aiken-lang**: new failing test syntax `test name() fail {`
 
 ### Removed
 
