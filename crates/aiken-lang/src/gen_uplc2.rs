@@ -13,19 +13,19 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, BinOp, Pattern, Span, TypedClause, TypedDataType, TypedFunction,
+        AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedValidator,
     },
-    builtins::{bool, int, void},
+    builtins::{bool, data, int, void},
     expr::TypedExpr,
     gen_uplc::{
         air::Air,
         builder::{
-            self as build, get_arg_type_name, AssignmentProperties, ClauseProperties, DataTypeKey,
-            FunctionAccessKey, SpecificClause,
+            self as build, get_arg_type_name, wrap_validator_args, AssignmentProperties,
+            ClauseProperties, DataTypeKey, FunctionAccessKey, SpecificClause,
         },
     },
-    gen_uplc2::builder::{convert_opaque_type, get_generic_id_and_type},
+    gen_uplc2::builder::{convert_opaque_type, find_and_replace_generics, get_generic_id_and_type},
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
@@ -81,12 +81,19 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate(
         &mut self,
         TypedValidator {
-            fun: _,
-            other_fun: _,
-            params: _,
+            fun,
+            other_fun,
+            params,
             ..
         }: &TypedValidator,
     ) -> Program<Name> {
+        let air_tree_fun = self.build(&fun.body);
+        let mut validator_args_tree = self.check_validator_args(&fun.arguments, true, air_tree_fun);
+
+        validator_args_tree = AirTree::no_op().hoist_over(validator_args_tree);
+        println!("{:#?}", validator_args_tree);
+        println!("{:#?}", validator_args_tree.to_vec());
+
         todo!()
     }
 
@@ -264,12 +271,8 @@ impl<'a> CodeGenerator<'a> {
                 }
             },
             TypedExpr::BinOp {
-                name,
-                tipo,
-                left,
-                right,
-                ..
-            } => AirTree::binop(*name, tipo.clone(), self.build(left), self.build(right)),
+                name, left, right, ..
+            } => AirTree::binop(*name, left.tipo(), self.build(left), self.build(right)),
 
             TypedExpr::Assignment {
                 tipo,
@@ -545,6 +548,7 @@ impl<'a> CodeGenerator<'a> {
                 if props.full_check {
                     let mut index_map = IndexMap::new();
                     let tipo = convert_opaque_type(tipo, &self.data_types);
+
                     let assignment = AirTree::let_assignment(name, value);
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -557,8 +561,12 @@ impl<'a> CodeGenerator<'a> {
                             &mut index_map,
                             pattern.location(),
                         );
-                        let assign = AirTree::let_assignment("_", assignment.hoist_over(expect));
-                        AirTree::let_assignment(name, assign.hoist_over(val))
+
+                        let assign_expect = AirTree::let_assignment("_", expect);
+                        AirTree::let_assignment(
+                            name,
+                            assignment.hoist_over(assign_expect.hoist_over(val)),
+                        )
                     }
                 } else {
                     AirTree::let_assignment(name, value)
@@ -587,8 +595,12 @@ impl<'a> CodeGenerator<'a> {
                             &mut index_map,
                             pattern.location(),
                         );
-                        let assign = AirTree::let_assignment("_", assignment.hoist_over(expect));
-                        AirTree::let_assignment(name, assign.hoist_over(val))
+
+                        let assign_expect = AirTree::let_assignment("_", expect);
+                        AirTree::let_assignment(
+                            name,
+                            assignment.hoist_over(assign_expect.hoist_over(val)),
+                        )
                     }
                 } else if !props.remove_unused {
                     AirTree::let_assignment(name, value)
@@ -688,13 +700,13 @@ impl<'a> CodeGenerator<'a> {
 
                 let names = elems.iter().map(|(name, _)| name.to_string()).collect_vec();
 
-                let mut sequence = vec![AirTree::list_access(
-                    names,
-                    tipo.clone(),
-                    tail.is_some(),
-                    tail.is_none(),
-                    value,
-                )];
+                let list_access = if elements.is_empty() {
+                    AirTree::let_assignment("_", AirTree::list_empty(value))
+                } else {
+                    AirTree::list_access(names, tipo.clone(), tail.is_some(), tail.is_none(), value)
+                };
+
+                let mut sequence = vec![list_access];
 
                 sequence.append(&mut elems.into_iter().map(|(_, elem)| elem).collect_vec());
 
@@ -1137,29 +1149,163 @@ impl<'a> CodeGenerator<'a> {
                 .map(|arg| get_arg_type_name(arg))
                 .join("_");
 
-            // TODO calculate the variant name.
+            let mono_types: IndexMap<u64, Arc<Type>> = if !data_type.typed_parameters.is_empty() {
+                data_type
+                    .typed_parameters
+                    .iter()
+                    .zip(tipo.arg_types().unwrap())
+                    .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
+                    .collect()
+            } else {
+                vec![].into_iter().collect()
+            };
+
             let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
             let function = self.code_gen_functions.get(&data_type_name);
+
+            let error_term = if self.tracing {
+                AirTree::trace(
+                    AirTree::string("Constr index did not match any type variant"),
+                    tipo.clone(),
+                    AirTree::error(tipo.clone()),
+                )
+            } else {
+                AirTree::error(tipo.clone())
+            };
 
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
                 defined_data_types.insert(data_type_name.clone(), 1);
 
-                let mono_types: IndexMap<u64, Arc<Type>> = if !data_type.typed_parameters.is_empty()
-                {
-                    data_type
-                        .typed_parameters
-                        .iter()
-                        .zip(tipo.arg_types().unwrap())
-                        .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
-                        .collect()
-                } else {
-                    vec![].into_iter().collect()
-                };
+                let current_defined = defined_data_types.clone();
+                let mut diff_defined_types = vec![];
 
-                let current_defined_state = defined_data_types.clone();
-                // let mut diff_defined_types = IndexMap::new();
+                let constr_clauses = data_type.constructors.iter().enumerate().rfold(
+                    error_term,
+                    |acc, (index, constr)| {
+                        let constr_args = constr
+                            .arguments
+                            .iter()
+                            .enumerate()
+                            .map(|(index, arg)| {
+                                let arg_name =
+                                    arg.label.clone().unwrap_or(format!("__field_{index}"));
 
-                todo!()
+                                let arg_tipo = find_and_replace_generics(&arg.tipo, &mono_types);
+
+                                let assign = AirTree::let_assignment(
+                                    "_",
+                                    self.expect_type_assign(
+                                        &arg_tipo,
+                                        AirTree::local_var(&arg_name, arg_tipo.clone()),
+                                        defined_data_types,
+                                        location,
+                                    ),
+                                );
+
+                                (index, arg_name, arg_tipo, assign)
+                            })
+                            .collect_vec();
+
+                        let indices = constr_args
+                            .iter()
+                            .map(|(index, arg_name, arg_tipo, _)| {
+                                (*index, arg_name.clone(), (*arg_tipo).clone())
+                            })
+                            .collect_vec();
+
+                        let mut assigns = constr_args
+                            .into_iter()
+                            .map(|(_, _, _, assign)| assign)
+                            .collect_vec();
+
+                        if assigns.is_empty() {
+                            let empty = AirTree::fields_empty(AirTree::local_var(
+                                format!("__constr_var_span_{}_{}", location.start, location.end),
+                                tipo.clone(),
+                            ));
+
+                            assigns.insert(0, AirTree::let_assignment("_", empty));
+                        } else {
+                            let expose = AirTree::fields_expose(
+                                indices,
+                                true,
+                                AirTree::local_var(
+                                    format!(
+                                        "__constr_var_span_{}_{}",
+                                        location.start, location.end
+                                    ),
+                                    tipo.clone(),
+                                ),
+                            );
+
+                            assigns.insert(0, expose);
+                        };
+
+                        let then = AirTree::UnhoistedSequence(assigns).hoist_over(AirTree::void());
+
+                        AirTree::clause(
+                            format!("__subject_span_{}_{}", location.start, location.end),
+                            AirTree::int(index),
+                            tipo.clone(),
+                            then,
+                            acc,
+                            false,
+                        )
+                    },
+                );
+
+                let overhead_assign = AirTree::let_assignment(
+                    format!("__constr_var_span_{}_{}", location.start, location.end),
+                    AirTree::local_var("__param_0", tipo.clone()),
+                );
+
+                let when_expr = AirTree::when(
+                    format!("__subject_span_{}_{}", location.start, location.end),
+                    tipo.clone(),
+                    AirTree::local_var(
+                        format!("__constr_var_span_{}_{}", location.start, location.end),
+                        tipo.clone(),
+                    ),
+                    constr_clauses,
+                );
+
+                let func_body = overhead_assign.hoist_over(when_expr);
+
+                for (inner_data_type, inner_count) in defined_data_types.iter() {
+                    if let Some(prev_count) = current_defined.get(inner_data_type) {
+                        if inner_count - prev_count > 0 {
+                            diff_defined_types.push(inner_data_type.to_string());
+                        }
+                    } else {
+                        diff_defined_types.push(inner_data_type.to_string());
+                    }
+                }
+
+                let recursive = diff_defined_types.contains(&data_type_name);
+                // remove self from dependencies
+                if recursive {
+                    diff_defined_types.remove(
+                        diff_defined_types
+                            .iter()
+                            .position(|item| item == &data_type_name)
+                            .unwrap(),
+                    );
+                }
+
+                let code_gen_func = CodeGenFunction::Function(
+                    AirTree::define_func(
+                        &data_type_name,
+                        "",
+                        "",
+                        vec!["__param_0".to_string()],
+                        recursive,
+                        func_body,
+                    ),
+                    diff_defined_types,
+                );
+
+                self.code_gen_functions
+                    .insert(data_type_name.clone(), code_gen_func);
             } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
                 *counter += 1;
             } else {
@@ -1628,7 +1774,10 @@ impl<'a> CodeGenerator<'a> {
                 if subject_tipo.is_bool() {
                     (AirTree::bool(name == "True"), AirTree::no_op())
                 } else {
-                    assert!(matches!(function_tipo.as_ref().clone(), Type::Fn { .. }));
+                    assert!(
+                        matches!(function_tipo.as_ref().clone(), Type::Fn { .. })
+                            || matches!(function_tipo.as_ref().clone(), Type::App { .. })
+                    );
                     let data_type = build::lookup_data_type_by_tipo(&self.data_types, subject_tipo)
                         .unwrap_or_else(|| {
                             unreachable!(
@@ -1765,6 +1914,8 @@ impl<'a> CodeGenerator<'a> {
                             &mut tuple_props,
                         );
 
+                        props.complex_clause = props.complex_clause || tuple_props.complex_clause;
+
                         (elem_name, index, elem)
                     })
                     .collect_vec();
@@ -1784,10 +1935,10 @@ impl<'a> CodeGenerator<'a> {
                 name_index_assigns.iter().for_each(|(name, index, _)| {
                     if let Some((index, prev_name)) = defined_indices
                         .iter()
-                        .find(|(defined_index, _)| defined_index == index)
+                        .find(|(defined_index, nm)| defined_index == index)
                     {
                         previous_defined_names.push((*index, prev_name.clone(), name.clone()));
-                    } else {
+                    } else if name != "_" {
                         assert!(defined_indices.insert((*index, name.clone())));
                     }
                 });
@@ -1990,5 +2141,54 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
         }
+    }
+
+    pub fn check_validator_args(
+        &mut self,
+        arguments: &[TypedArg],
+        has_context: bool,
+        body: AirTree,
+    ) -> AirTree {
+        let checked_args = arguments
+            .iter()
+            .enumerate()
+            .map(|(index, arg)| {
+                let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+                if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
+                    let param = AirTree::local_var(&arg_name, data());
+
+                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+
+                    let assign = self.assignment(
+                        &Pattern::Var {
+                            location: Span::empty(),
+                            name: arg_name.to_string(),
+                        },
+                        param,
+                        &actual_type,
+                        AssignmentProperties {
+                            value_type: data(),
+                            kind: AssignmentKind::Expect,
+                            remove_unused: false,
+                            full_check: true,
+                        },
+                    );
+
+                    (arg_name, assign)
+                } else {
+                    (arg_name, AirTree::no_op())
+                }
+            })
+            .collect_vec();
+
+        let arg_names = checked_args
+            .iter()
+            .map(|(name, _)| name.to_string())
+            .collect_vec();
+
+        let arg_assigns =
+            AirTree::UnhoistedSequence(checked_args.into_iter().map(|(_, arg)| arg).collect_vec());
+
+        AirTree::anon_func(arg_names, arg_assigns.hoist_over(body))
     }
 }
