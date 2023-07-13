@@ -4,7 +4,7 @@ use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
     ast::{BinOp, Span, UnOp},
-    builtins::{data, list, void},
+    builtins::{bool, byte_array, data, int, list, string, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 
@@ -1128,6 +1128,52 @@ impl AirTree {
                 unreachable!("FIRST RESOLVE ALL UNHOISTED SEQUENCES")
             }
             _ => unreachable!("FOUND UNHOISTED STATEMENT"),
+        }
+    }
+
+    pub fn get_type(&self) -> Arc<Type> {
+        match self {
+            AirTree::Statement {
+                hoisted_over: Some(hoisted_over),
+                ..
+            } => hoisted_over.get_type(),
+            AirTree::Expression(e) => match e {
+                AirExpression::Int { .. } => int(),
+                AirExpression::String { .. } => string(),
+                AirExpression::ByteArray { .. } => byte_array(),
+                AirExpression::Bool { .. } => bool(),
+                AirExpression::List { tipo, .. }
+                | AirExpression::Tuple { tipo, .. }
+                | AirExpression::Call { tipo, .. }
+                | AirExpression::Builtin { tipo, .. }
+                | AirExpression::BinOp { tipo, .. }
+                | AirExpression::UnWrapData { tipo, .. }
+                | AirExpression::When { tipo, .. }
+                | AirExpression::If { tipo, .. }
+                | AirExpression::Constr { tipo, .. }
+                | AirExpression::RecordUpdate { tipo, .. }
+                | AirExpression::RecordAccess { tipo, .. }
+                | AirExpression::TupleIndex { tipo, .. }
+                | AirExpression::ErrorTerm { tipo }
+                | AirExpression::Trace { tipo, .. } => tipo.clone(),
+                AirExpression::Void => void(),
+                AirExpression::Var { constructor, .. } => constructor.tipo.clone(),
+                AirExpression::Fn { func_body, .. } => func_body.get_type(),
+                AirExpression::UnOp { op, .. } => match op {
+                    UnOp::Not => bool(),
+                    UnOp::Negate => int(),
+                },
+                AirExpression::WrapData { .. } => data(),
+                AirExpression::Clause { then, .. }
+                | AirExpression::ListClause { then, .. }
+                | AirExpression::WrapClause { then, .. }
+                | AirExpression::TupleClause { then, .. }
+                | AirExpression::Finally { then, .. } => then.get_type(),
+
+                AirExpression::FieldsEmpty { constr } => todo!(),
+                AirExpression::ListEmpty { list } => todo!(),
+            },
+            _ => unreachable!(),
         }
     }
 }
