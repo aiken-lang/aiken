@@ -53,7 +53,6 @@ pub type ConstrUsageKey = String;
 pub struct FunctionAccessKey {
     pub module_name: String,
     pub function_name: String,
-    pub variant_name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -766,7 +765,6 @@ pub fn match_ir_for_recursion(
             let var_func_access = FunctionAccessKey {
                 module_name: module,
                 function_name: func_name.clone(),
-                variant_name: variant_name.clone(),
             };
 
             if function_access_key.clone() == var_func_access {
@@ -1571,7 +1569,7 @@ pub fn handle_func_dependencies(
                 temp_stack.define_func(
                     dependency.function_name.clone(),
                     dependency.module_name.clone(),
-                    dependency.variant_name.clone(),
+                    "",
                     depend_comp.args.clone(),
                     depend_comp.recursive,
                     recursion_stack,
@@ -1607,7 +1605,6 @@ pub fn handle_recursion_ir(
             &FunctionAccessKey {
                 function_name: func_key.function_name.clone(),
                 module_name: func_key.module_name.clone(),
-                variant_name: func_key.variant_name.clone(),
             },
             index,
         );

@@ -25,18 +25,30 @@ use crate::{
             FunctionAccessKey, SpecificClause,
         },
     },
-    gen_uplc2::builder::{convert_opaque_type, find_and_replace_generics, get_generic_id_and_type},
+    gen_uplc2::builder::{
+        convert_opaque_type, erase_opaque_operations, find_and_replace_generics,
+        get_generic_id_and_type,
+    },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
     },
 };
 
-use self::tree::{AirExpression, AirTree};
+use self::{
+    builder::{IndexCounter, TreePath},
+    tree::{AirExpression, AirStatement, AirTree},
+};
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
     Function(AirTree, Vec<String>),
+    Link(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum UserFunction {
+    Function(AirTree, Term<Name>),
     Link(String),
 }
 
@@ -94,7 +106,7 @@ impl<'a> CodeGenerator<'a> {
         println!("{:#?}", validator_args_tree);
         println!("{:#?}", validator_args_tree.to_vec());
 
-        let hydrated_tree = self.hoist_functions(validator_args_tree);
+        let full_tree = self.hoist_functions(validator_args_tree);
 
         todo!()
     }
@@ -105,6 +117,8 @@ impl<'a> CodeGenerator<'a> {
         air_tree = AirTree::no_op().hoist_over(air_tree);
         println!("{:#?}", air_tree);
         println!("{:#?}", air_tree.to_vec());
+
+        let full_tree = self.hoist_functions(air_tree);
 
         todo!()
     }
@@ -222,7 +236,6 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 TypedExpr::ModuleSelect {
-                    tipo,
                     module_name,
                     constructor: ModuleValueConstructor::Fn { name, .. },
                     ..
@@ -273,8 +286,12 @@ impl<'a> CodeGenerator<'a> {
                 }
             },
             TypedExpr::BinOp {
-                name, left, right, ..
-            } => AirTree::binop(*name, left.tipo(), self.build(left), self.build(right)),
+                name,
+                left,
+                right,
+                tipo,
+                ..
+            } => AirTree::binop(*name, tipo.clone(), self.build(left), self.build(right)),
 
             TypedExpr::Assignment {
                 tipo,
@@ -360,6 +377,7 @@ impl<'a> CodeGenerator<'a> {
                         &clauses,
                         last_clause,
                         &subject.tipo(),
+                        tipo,
                         &mut ClauseProperties::init(
                             &subject.tipo(),
                             constr_var.clone(),
@@ -370,8 +388,8 @@ impl<'a> CodeGenerator<'a> {
                     let constr_assign = AirTree::let_assignment(&constr_var, self.build(subject));
                     let when_assign = AirTree::when(
                         subject_name,
-                        subject.tipo(),
-                        AirTree::local_var(constr_var, tipo.clone()),
+                        tipo.clone(),
+                        AirTree::local_var(constr_var, subject.tipo()),
                         clauses,
                     );
 
@@ -438,7 +456,6 @@ impl<'a> CodeGenerator<'a> {
                     let func = self.functions.get(&FunctionAccessKey {
                         module_name: module_name.clone(),
                         function_name: name.clone(),
-                        variant_name: String::new(),
                     });
 
                     let type_info = self.module_types.get(module_name).unwrap();
@@ -549,7 +566,7 @@ impl<'a> CodeGenerator<'a> {
             Pattern::Var { name, .. } => {
                 if props.full_check {
                     let mut index_map = IndexMap::new();
-                    let tipo = convert_opaque_type(tipo, &self.data_types);
+                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types);
 
                     let assignment = AirTree::let_assignment(name, value);
                     let val = AirTree::local_var(name, tipo.clone());
@@ -558,7 +575,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::let_assignment(name, assignment.hoist_over(val))
                     } else {
                         let expect = self.expect_type_assign(
-                            &tipo,
+                            &non_opaque_tipo,
                             val.clone(),
                             &mut index_map,
                             pattern.location(),
@@ -1159,7 +1176,7 @@ impl<'a> CodeGenerator<'a> {
                     .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
                     .collect()
             } else {
-                vec![].into_iter().collect()
+                IndexMap::new()
             };
 
             let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
@@ -1339,6 +1356,7 @@ impl<'a> CodeGenerator<'a> {
         clauses: &[TypedClause],
         final_clause: TypedClause,
         subject_tipo: &Arc<Type>,
+        return_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
     ) -> AirTree {
         assert!(
@@ -1396,6 +1414,7 @@ impl<'a> CodeGenerator<'a> {
                                     rest_clauses,
                                     final_clause,
                                     subject_tipo,
+                                    return_tipo,
                                     &mut next_clause_props,
                                 ),
                                 complex_clause,
@@ -1407,6 +1426,7 @@ impl<'a> CodeGenerator<'a> {
                                     rest_clauses,
                                     final_clause,
                                     subject_tipo,
+                                    return_tipo,
                                     &mut next_clause_props,
                                 ),
                             )
@@ -1421,6 +1441,7 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
+                                return_tipo,
                                 &mut next_clause_props,
                             ),
                             complex_clause,
@@ -1456,6 +1477,7 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
+                                return_tipo,
                                 &mut next_clause_props,
                             ),
                         );
@@ -1532,6 +1554,7 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
+                                return_tipo,
                                 &mut next_clause_props,
                             ),
                         )
@@ -1544,6 +1567,7 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
+                                return_tipo,
                                 &mut next_clause_props,
                             ),
                             next_tail_name,
@@ -1587,6 +1611,7 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
+                                return_tipo,
                                 &mut next_clause_props,
                             ),
                         )
@@ -1601,6 +1626,7 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
+                                return_tipo,
                                 &mut next_clause_props,
                             ),
                             props.complex_clause,
@@ -2194,14 +2220,18 @@ impl<'a> CodeGenerator<'a> {
         AirTree::anon_func(arg_names, arg_assigns.hoist_over(body))
     }
 
-    fn hoist_functions(&mut self, mut validator_args_tree: AirTree) -> AirTree {
+    fn hoist_functions(&mut self, mut air_tree: AirTree) -> AirTree {
         let mut functions_to_hoist = IndexMap::new();
         let mut function_holder = IndexMap::new();
 
+        erase_opaque_operations(&mut air_tree, &self.data_types);
+
         self.find_function_vars_and_depth(
-            &mut validator_args_tree,
+            &air_tree,
             &mut functions_to_hoist,
             &mut function_holder,
+            &mut TreePath::new(),
+            0,
             0,
         );
 
@@ -2210,17 +2240,141 @@ impl<'a> CodeGenerator<'a> {
 
     fn find_function_vars_and_depth(
         &mut self,
-        validator_args_tree: &mut AirTree,
-        function_usage: &mut IndexMap<FunctionAccessKey, usize>,
-        function_holder: &mut IndexMap<FunctionAccessKey, AirTree>,
+        validator_args_tree: &AirTree,
+        function_usage: &mut IndexMap<FunctionAccessKey, IndexMap<String, TreePath>>,
+        function_holder: &mut IndexMap<FunctionAccessKey, IndexMap<String, UserFunction>>,
+        tree_path: &mut TreePath,
         current_depth: usize,
+        depth_index: usize,
     ) {
+        let mut index_count = IndexCounter::new();
+        tree_path.push(current_depth, depth_index);
         match validator_args_tree {
             AirTree::Statement {
                 statement,
                 hoisted_over: Some(hoisted_over),
-            } => todo!(),
+            } => {
+                match statement {
+                    AirStatement::Let { value, .. } => {
+                        self.find_function_vars_and_depth(
+                            value,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::DefineFunc { func_body, .. } => {
+                        self.find_function_vars_and_depth(
+                            func_body,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::AssertConstr { constr, .. } => {
+                        self.find_function_vars_and_depth(
+                            constr,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::AssertBool { value, .. } => {
+                        self.find_function_vars_and_depth(
+                            value,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::ClauseGuard { pattern, .. } => {
+                        self.find_function_vars_and_depth(
+                            pattern,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::ListClauseGuard { .. } => {}
+                    AirStatement::TupleGuard { .. } => {}
+                    AirStatement::FieldsExpose { record, .. } => {
+                        self.find_function_vars_and_depth(
+                            record,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::ListAccessor { list, .. } => {
+                        self.find_function_vars_and_depth(
+                            list,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::ListExpose { .. } => {}
+                    AirStatement::TupleAccessor { tuple, .. } => {
+                        self.find_function_vars_and_depth(
+                            tuple,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                    AirStatement::NoOp => {}
+                };
+
+                self.find_function_vars_and_depth(
+                    hoisted_over,
+                    function_usage,
+                    function_holder,
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next(),
+                );
+            }
             AirTree::Expression(e) => match e {
+                AirExpression::List { items, .. } => {
+                    for item in items {
+                        self.find_function_vars_and_depth(
+                            item,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                }
+                AirExpression::Tuple { items, .. } => {
+                    for item in items {
+                        self.find_function_vars_and_depth(
+                            item,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                }
                 AirExpression::Var {
                     constructor,
                     name,
@@ -2235,10 +2389,48 @@ impl<'a> CodeGenerator<'a> {
                     else { return };
 
                     let function_var_tipo = &constructor.tipo;
+                    println!("FUNCTION VAR TYPE {:#?}", function_var_tipo);
+
                     let generic_function_key = FunctionAccessKey {
                         module_name: module.clone(),
                         function_name: func_name.clone(),
-                        variant_name: "".to_string(),
+                    };
+
+                    let function_def = self
+                        .functions
+                        .get(&generic_function_key)
+                        .unwrap_or_else(|| panic!("Missing Function Definition"));
+
+                    println!("Function Def {:#?}", function_def);
+
+                    let mut function_var_types = function_var_tipo
+                        .arg_types()
+                        .unwrap_or_else(|| panic!("Expected a function tipo with arg types"));
+
+                    function_var_types.push(
+                        function_var_tipo
+                            .return_type()
+                            .unwrap_or_else(|| panic!("Should have return type")),
+                    );
+
+                    let mut function_def_types = function_def
+                        .arguments
+                        .iter()
+                        .map(|arg| &arg.tipo)
+                        .collect_vec();
+
+                    function_def_types.push(&function_def.return_type);
+
+                    let mono_types: IndexMap<u64, Arc<Type>> = if !function_def_types.is_empty() {
+                        function_def_types
+                            .into_iter()
+                            .zip(function_var_types.into_iter())
+                            .flat_map(|(func_tipo, var_tipo)| {
+                                get_generic_id_and_type(func_tipo, &var_tipo)
+                            })
+                            .collect()
+                    } else {
+                        IndexMap::new()
                     };
 
                     todo!()
@@ -2248,7 +2440,9 @@ impl<'a> CodeGenerator<'a> {
                         func,
                         function_usage,
                         function_holder,
+                        tree_path,
                         current_depth + 1,
+                        index_count.next(),
                     );
 
                     for arg in args {
@@ -2256,86 +2450,345 @@ impl<'a> CodeGenerator<'a> {
                             arg,
                             function_usage,
                             function_holder,
+                            tree_path,
                             current_depth + 1,
+                            index_count.next(),
                         );
                     }
                 }
-                AirExpression::Fn { params, func_body } => todo!(),
-                AirExpression::Builtin { func, tipo, args } => todo!(),
-                AirExpression::BinOp {
-                    name,
-                    tipo,
-                    left,
-                    right,
-                } => todo!(),
-                AirExpression::UnOp { op, arg } => todo!(),
-                AirExpression::UnWrapData { tipo, value } => todo!(),
-                AirExpression::WrapData { tipo, value } => todo!(),
+                AirExpression::Fn { func_body, .. } => {
+                    self.find_function_vars_and_depth(
+                        func_body,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::Builtin { args, .. } => {
+                    for arg in args {
+                        self.find_function_vars_and_depth(
+                            arg,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                }
+                AirExpression::BinOp { left, right, .. } => {
+                    self.find_function_vars_and_depth(
+                        left,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        right,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::UnOp { arg, .. } => {
+                    self.find_function_vars_and_depth(
+                        arg,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::UnWrapData { value, .. } => {
+                    self.find_function_vars_and_depth(
+                        value,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::WrapData { value, .. } => {
+                    self.find_function_vars_and_depth(
+                        value,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
                 AirExpression::When {
-                    tipo,
-                    subject_name,
-                    subject,
-                    clauses,
-                } => todo!(),
+                    subject, clauses, ..
+                } => {
+                    self.find_function_vars_and_depth(
+                        subject,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        clauses,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
                 AirExpression::Clause {
-                    tipo,
-                    subject_name,
-                    complex_clause,
                     pattern,
                     then,
                     otherwise,
-                } => todo!(),
+                    ..
+                } => {
+                    self.find_function_vars_and_depth(
+                        pattern,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        otherwise,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
                 AirExpression::ListClause {
-                    tipo,
-                    tail_name,
-                    next_tail_name,
-                    complex_clause,
-                    then,
-                    otherwise,
-                } => todo!(),
-                AirExpression::WrapClause { then, otherwise } => todo!(),
+                    then, otherwise, ..
+                } => {
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        otherwise,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::WrapClause { then, otherwise } => {
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        otherwise,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
                 AirExpression::TupleClause {
-                    tipo,
-                    indices,
-                    predefined_indices,
-                    subject_name,
-                    type_count,
-                    complex_clause,
-                    then,
-                    otherwise,
-                } => todo!(),
-                AirExpression::Finally { pattern, then } => todo!(),
+                    then, otherwise, ..
+                } => {
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        otherwise,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::Finally { pattern, then } => {
+                    self.find_function_vars_and_depth(
+                        pattern,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
                 AirExpression::If {
-                    tipo,
                     pattern,
                     then,
                     otherwise,
-                } => todo!(),
-                AirExpression::Constr { tag, tipo, args } => todo!(),
-                AirExpression::RecordUpdate {
-                    highest_index,
-                    indices,
-                    tipo,
-                    record,
-                    args,
-                } => todo!(),
-                AirExpression::RecordAccess {
-                    field_index,
-                    tipo,
-                    record,
-                } => todo!(),
-                AirExpression::TupleIndex {
-                    tipo,
-                    tuple_index,
-                    tuple,
-                } => todo!(),
-                AirExpression::ErrorTerm { tipo } => todo!(),
-                AirExpression::Trace { tipo, msg, then } => todo!(),
-                AirExpression::FieldsEmpty { constr } => todo!(),
-                AirExpression::ListEmpty { list } => todo!(),
+                    ..
+                } => {
+                    self.find_function_vars_and_depth(
+                        pattern,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        otherwise,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::Constr { args, .. } => {
+                    for arg in args {
+                        self.find_function_vars_and_depth(
+                            arg,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                }
+                AirExpression::RecordUpdate { record, args, .. } => {
+                    self.find_function_vars_and_depth(
+                        record,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                    for arg in args {
+                        self.find_function_vars_and_depth(
+                            arg,
+                            function_usage,
+                            function_holder,
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next(),
+                        );
+                    }
+                }
+                AirExpression::RecordAccess { record, .. } => {
+                    self.find_function_vars_and_depth(
+                        record,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::TupleIndex { tuple, .. } => {
+                    self.find_function_vars_and_depth(
+                        tuple,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::Trace { msg, then, .. } => {
+                    self.find_function_vars_and_depth(
+                        msg,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+
+                    self.find_function_vars_and_depth(
+                        then,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::FieldsEmpty { constr } => {
+                    self.find_function_vars_and_depth(
+                        constr,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
+                AirExpression::ListEmpty { list } => {
+                    self.find_function_vars_and_depth(
+                        list,
+                        function_usage,
+                        function_holder,
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next(),
+                    );
+                }
                 _ => {}
             },
             _ => unreachable!(),
         }
+        tree_path.pop();
     }
 }

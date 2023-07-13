@@ -702,7 +702,6 @@ impl<'a> CodeGenerator<'a> {
                     let func = self.functions.get(&FunctionAccessKey {
                         module_name: module_name.clone(),
                         function_name: name.clone(),
-                        variant_name: String::new(),
                     });
 
                     let type_info = self.module_types.get(module_name).unwrap();
@@ -3068,7 +3067,7 @@ impl<'a> CodeGenerator<'a> {
                             func_stack.define_func(
                                 function_access_key.function_name.clone(),
                                 function_access_key.module_name.clone(),
-                                function_access_key.variant_name.clone(),
+                                "",
                                 func_comp.args.clone(),
                                 func_comp.recursive,
                                 recursion_stack,
@@ -3112,7 +3111,7 @@ impl<'a> CodeGenerator<'a> {
             let mut skip = false;
 
             for ir in function_ir.clone() {
-                let Air::Var {  constructor,  variant_name, .. } = ir
+                let Air::Var {  constructor,   .. } = ir
                 else {
                     continue;
                 };
@@ -3125,7 +3124,6 @@ impl<'a> CodeGenerator<'a> {
                 let ir_function_key = FunctionAccessKey {
                     module_name: module.clone(),
                     function_name: func_name.clone(),
-                    variant_name: variant_name.clone(),
                 };
 
                 if recursion_func_map.contains_key(&ir_function_key) && func == &ir_function_key {
@@ -3203,7 +3201,6 @@ impl<'a> CodeGenerator<'a> {
             let non_variant_function_key = FunctionAccessKey {
                 module_name: module.clone(),
                 function_name: name.clone(),
-                variant_name: String::new(),
             };
 
             if let Some(function) = self.functions.get(&non_variant_function_key).cloned() {
@@ -3243,7 +3240,6 @@ impl<'a> CodeGenerator<'a> {
                 let function_key = FunctionAccessKey {
                     module_name: module.clone(),
                     function_name: non_variant_function_key.function_name,
-                    variant_name: variant_name.clone(),
                 };
 
                 ir_stack[index] = Air::Var {
@@ -3278,13 +3274,11 @@ impl<'a> CodeGenerator<'a> {
                         let current_func = FunctionAccessKey {
                             module_name: module.clone(),
                             function_name: func_name.clone(),
-                            variant_name: String::new(),
                         };
 
                         let current_func_as_variant = FunctionAccessKey {
                             module_name: module.clone(),
                             function_name: func_name.clone(),
-                            variant_name: variant_name.clone(),
                         };
 
                         let function = self.functions.get(&current_func);
@@ -3335,7 +3329,6 @@ impl<'a> CodeGenerator<'a> {
                                 FunctionAccessKey {
                                     module_name: current_func.module_name,
                                     function_name: current_func.function_name,
-                                    variant_name,
                                 },
                                 (),
                             );
@@ -3394,7 +3387,6 @@ impl<'a> CodeGenerator<'a> {
                 let function_key = FunctionAccessKey {
                     module_name: "".to_string(),
                     function_name: name.to_string(),
-                    variant_name: "".to_string(),
                 };
 
                 let function_stack = AirStack {
@@ -3416,7 +3408,6 @@ impl<'a> CodeGenerator<'a> {
                             .map(|item| FunctionAccessKey {
                                 module_name: "".to_string(),
                                 function_name: item,
-                                variant_name: "".to_string(),
                             })
                             .collect_vec(),
                         recursive: false,
@@ -4178,14 +4169,12 @@ impl<'a> CodeGenerator<'a> {
                             FunctionAccessKey {
                                 module_name,
                                 function_name,
-                                variant_name,
                             },
                             ir,
                         ) in zero_arg_functions.into_iter()
                         {
-                            let name_module =
-                                format!("{module_name}_{function_name}{variant_name}");
-                            let name = format!("{function_name}{variant_name}");
+                            let name_module = format!("{module_name}_{function_name}");
+                            let name = function_name.to_string();
                             if text == &name || text == &name_module {
                                 let mut term = self.uplc_code_gen(&mut ir.clone());
                                 term = term

@@ -671,7 +671,6 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
         FunctionAccessKey {
             module_name: "".to_string(),
             function_name: "not".to_string(),
-            variant_name: "".to_string(),
         },
         Function {
             arguments: vec![Arg {
@@ -722,7 +721,6 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
         FunctionAccessKey {
             module_name: "".to_string(),
             function_name: "identity".to_string(),
-            variant_name: "".to_string(),
         },
         Function {
             arguments: vec![Arg {
@@ -769,7 +767,6 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
         FunctionAccessKey {
             module_name: "".to_string(),
             function_name: "always".to_string(),
-            variant_name: "".to_string(),
         },
         Function {
             can_error: false,
@@ -832,7 +829,6 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
         FunctionAccessKey {
             module_name: "".to_string(),
             function_name: "flip".to_string(),
-            variant_name: "".to_string(),
         },
         Function {
             can_error: false,
