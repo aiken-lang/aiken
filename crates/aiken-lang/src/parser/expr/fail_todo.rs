@@ -62,4 +62,13 @@ mod tests {
             "#
         );
     }
+
+    #[test]
+    fn fail_expr() {
+        assert_expr!(
+            r#"
+            fail str.join([@"Some string ", some_params, @" some string"], @"")
+            "#
+        );
+    }
 }

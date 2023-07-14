@@ -1,0 +1,63 @@
+---
+source: crates/aiken-lang/src/parser/expr/fail_todo.rs
+description: "Code:\n\nfail str.join([@\"Some string \", some_params, @\" some string\"], @\"\")\n"
+---
+Sequence {
+    location: 0..67,
+    expressions: [
+        Trace {
+            kind: Error,
+            location: 0..4,
+            then: ErrorTerm {
+                location: 0..4,
+            },
+            text: String {
+                location: 0..4,
+                value: "aiken::error",
+            },
+        },
+        Call {
+            arguments: [
+                CallArg {
+                    label: None,
+                    location: 14..61,
+                    value: List {
+                        location: 14..61,
+                        elements: [
+                            String {
+                                location: 15..30,
+                                value: "Some string ",
+                            },
+                            Var {
+                                location: 32..43,
+                                name: "some_params",
+                            },
+                            String {
+                                location: 45..60,
+                                value: " some string",
+                            },
+                        ],
+                        tail: None,
+                    },
+                },
+                CallArg {
+                    label: None,
+                    location: 63..66,
+                    value: String {
+                        location: 63..66,
+                        value: "",
+                    },
+                },
+            ],
+            fun: FieldAccess {
+                location: 5..13,
+                label: "join",
+                container: Var {
+                    location: 5..8,
+                    name: "str",
+                },
+            },
+            location: 5..67,
+        },
+    ],
+}
