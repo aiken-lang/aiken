@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "aiken"
-version = "1.0.11-alpha"
+version = "1.0.12-alpha"
 dependencies = [
  "aiken-lang",
  "aiken-lsp",
@@ -77,7 +77,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lang"
-version = "1.0.11-alpha"
+version = "1.0.12-alpha"
 dependencies = [
  "chumsky",
  "hex",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lsp"
-version = "1.0.11-alpha"
+version = "1.0.12-alpha"
 dependencies = [
  "aiken-lang",
  "aiken-project",
@@ -119,7 +119,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-project"
-version = "1.0.11-alpha"
+version = "1.0.12-alpha"
 dependencies = [
  "aiken-lang",
  "askama",
@@ -814,7 +814,7 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flat-rs"
-version = "1.0.11-alpha"
+version = "1.0.12-alpha"
 dependencies = [
  "anyhow",
  "proptest",
@@ -2902,7 +2902,7 @@ checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
 
 [[package]]
 name = "uplc"
-version = "1.0.11-alpha"
+version = "1.0.12-alpha"
 dependencies = [
  "anyhow",
  "cryptoxide",
