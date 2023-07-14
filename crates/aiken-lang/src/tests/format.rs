@@ -1,7 +1,7 @@
 use crate::assert_format;
 
 #[test]
-fn test_format_comment_at_end_of_file() {
+fn format_comment_at_end_of_file() {
     assert_format!(
         r#"
       type Foo =
@@ -12,7 +12,7 @@ fn test_format_comment_at_end_of_file() {
 }
 
 #[test]
-fn test_format_simple_module() {
+fn format_simple_module() {
     assert_format!(
         r#"
       fn smth() { let a = foo.Foo { bar: 1 } }
@@ -21,7 +21,7 @@ fn test_format_simple_module() {
 }
 
 #[test]
-fn test_format_if() {
+fn format_if() {
     assert_format!(
         r#"
         pub fn foo(a) {
@@ -36,7 +36,7 @@ fn test_format_if() {
 }
 
 #[test]
-fn test_format_validator() {
+fn format_validator() {
     assert_format!(
         r#"
       validator ( ) {
@@ -61,7 +61,7 @@ fn test_format_validator() {
 }
 
 #[test]
-fn test_format_double_validator() {
+fn format_double_validator() {
     assert_format!(
         r#"
         validator ( param1 : ByteArray ) {
@@ -76,7 +76,7 @@ fn test_format_double_validator() {
 }
 
 #[test]
-fn test_format_when() {
+fn format_when() {
     assert_format!(
         r#"
         pub fn foo( a) {
@@ -99,7 +99,7 @@ fn test_format_when() {
 }
 
 #[test]
-fn test_format_nested_if() {
+fn format_nested_if() {
     assert_format!(
         r#"
         pub fn foo(n) {
@@ -114,7 +114,7 @@ fn test_format_nested_if() {
 }
 
 #[test]
-fn test_format_nested_when_if() {
+fn format_nested_when_if() {
     assert_format!(
         r#"
         pub fn drop(xs: List<a>, n: Int) -> List<a> {
@@ -134,7 +134,7 @@ fn test_format_nested_when_if() {
 }
 
 #[test]
-fn test_format_nested_when() {
+fn format_nested_when() {
     assert_format!(
         r#"
         fn foo() {
@@ -154,7 +154,7 @@ fn test_format_nested_when() {
 }
 
 #[test]
-fn test_format_else_if() {
+fn format_else_if() {
     assert_format!(
         r#"
         pub fn foo(xs: List<a>, n: Int) -> List<a> {
@@ -171,7 +171,7 @@ fn test_format_else_if() {
 }
 
 #[test]
-fn test_format_imports() {
+fn format_imports() {
     // TODO: Fix this case, this is behaving weirdly, not keeping the order for the comments and
     // imports.
     assert_format!(
@@ -188,7 +188,7 @@ fn test_format_imports() {
 }
 
 #[test]
-fn test_format_negate() {
+fn format_negate() {
     assert_format!(
         r#"
         fn foo() {
@@ -199,7 +199,7 @@ fn test_format_negate() {
 }
 
 #[test]
-fn test_format_block_arithmetic_expr() {
+fn format_block_arithmetic_expr() {
     assert_format!(
         r#"
         fn foo() {
@@ -214,7 +214,7 @@ fn test_format_block_arithmetic_expr() {
 }
 
 #[test]
-fn test_format_block_logical_expr() {
+fn format_block_logical_expr() {
     assert_format!(
         r#"
         fn foo() {
@@ -233,7 +233,7 @@ fn test_format_block_logical_expr() {
 }
 
 #[test]
-fn test_format_nested_function_calls() {
+fn format_nested_function_calls() {
     assert_format!(
         r#"
         fn foo(output) {
@@ -257,7 +257,7 @@ fn test_format_nested_function_calls() {
 }
 
 #[test]
-fn test_format_trace_todo_error() {
+fn format_trace_todo_error() {
     assert_format!(
         r#"
         fn foo_1() {
@@ -288,7 +288,7 @@ fn test_format_trace_todo_error() {
 }
 
 #[test]
-fn test_format_trace_if_false() {
+fn format_trace_if_false() {
     assert_format!(
         r#"
         fn foo() {
@@ -303,7 +303,7 @@ fn test_format_trace_if_false() {
 }
 
 #[test]
-fn test_format_newline_comments() {
+fn format_newline_comments() {
     assert_format!(
         r#"
         // My comment
@@ -324,7 +324,7 @@ fn test_format_newline_comments() {
 }
 
 #[test]
-fn test_format_newline_doc_comments() {
+fn format_newline_doc_comments() {
     assert_format!(
         r#"
         /// My doc comment
@@ -345,7 +345,7 @@ fn test_format_newline_doc_comments() {
 }
 
 #[test]
-fn test_format_newline_module_comments() {
+fn format_newline_module_comments() {
     assert_format!(
         r#"
         //// My module comment
@@ -364,7 +364,7 @@ fn test_format_newline_module_comments() {
 }
 
 #[test]
-fn test_format_bytearray_literals() {
+fn format_bytearray_literals() {
     assert_format!(
         r#"
         const foo_const_array = #[102, 111, 111]
@@ -385,7 +385,7 @@ fn test_format_bytearray_literals() {
 }
 
 #[test]
-fn test_format_string_literal() {
+fn format_string_literal() {
     assert_format!(
         r#"
         const foo_const: String = @"foo"
@@ -398,7 +398,7 @@ fn test_format_string_literal() {
 }
 
 #[test]
-fn test_format_unicode() {
+fn format_unicode() {
     assert_format!(
         r#"
         /// ∞ ★ ♩ ♫ ✓
@@ -411,7 +411,7 @@ fn test_format_unicode() {
 }
 
 #[test]
-fn test_format_preserve_pipe() {
+fn format_preserve_pipe() {
     assert_format!(
         r#"
         fn foo() {
@@ -435,7 +435,7 @@ fn test_format_preserve_pipe() {
 }
 
 #[test]
-fn test_format_weird_comments() {
+fn format_weird_comments() {
     assert_format!(
         r#"
         // A
@@ -460,7 +460,7 @@ fn test_format_weird_comments() {
 }
 
 #[test]
-fn test_format_trace_callback() {
+fn format_trace_callback() {
     assert_format!(
         r#"
       fn foo() {
@@ -473,7 +473,7 @@ fn test_format_trace_callback() {
 }
 
 #[test]
-fn test_format_pipe_fn() {
+fn format_pipe_fn() {
     assert_format!(
         r#"
       fn foo() {
@@ -487,7 +487,7 @@ fn test_format_pipe_fn() {
 }
 
 #[test]
-fn test_format_match_record() {
+fn format_match_record() {
     assert_format!(
         r#"
       fn foo() {
@@ -504,7 +504,7 @@ fn test_format_match_record() {
 }
 
 #[test]
-fn test_format_fail() {
+fn format_fail() {
     assert_format!(
         r#"
         test foo() fail {
@@ -517,7 +517,7 @@ fn test_format_fail() {
 }
 
 #[test]
-fn test_format_pipes_and_expressions() {
+fn format_pipes_and_expressions() {
     assert_format!(
         r#"
         test fmt() {
@@ -528,7 +528,7 @@ fn test_format_pipes_and_expressions() {
 }
 
 #[test]
-fn test_format_hex_and_numeric_underscore() {
+fn format_hex_and_numeric_underscore() {
     assert_format!(
         r#"
         fn foo() {
@@ -542,7 +542,7 @@ fn test_format_hex_and_numeric_underscore() {
 }
 
 #[test]
-fn test_format_first_class_binop() {
+fn format_first_class_binop() {
     assert_format!(
         r#"
         fn foo() {
@@ -565,7 +565,7 @@ fn test_format_first_class_binop() {
 }
 
 #[test]
-fn test_format_int_uint() {
+fn format_int_uint() {
     assert_format!(
         r#"
         const i = 42
