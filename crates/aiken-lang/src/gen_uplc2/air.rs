@@ -87,19 +87,19 @@ pub enum Air {
         subject_name: String,
     },
     Clause {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         subject_name: String,
         complex_clause: bool,
     },
     ListClause {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         complex_clause: bool,
     },
     WrapClause,
     TupleClause {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
@@ -108,16 +108,16 @@ pub enum Air {
     },
     ClauseGuard {
         subject_name: String,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
     },
     ListClauseGuard {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
     },
     TupleGuard {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
         type_count: usize,
@@ -181,118 +181,4 @@ pub enum Air {
     ListEmpty,
 }
 
-impl Air {
-    pub fn tipo(&self) -> Option<Arc<Type>> {
-        match self {
-            Air::Int { .. } => Some(
-                Type::App {
-                    public: true,
-                    module: String::new(),
-                    name: "Int".to_string(),
-                    args: vec![],
-                }
-                .into(),
-            ),
-            Air::String { .. } => Some(
-                Type::App {
-                    public: true,
-                    module: String::new(),
-                    name: "String".to_string(),
-                    args: vec![],
-                }
-                .into(),
-            ),
-            Air::ByteArray { .. } => Some(
-                Type::App {
-                    public: true,
-                    module: String::new(),
-                    name: "ByteArray".to_string(),
-                    args: vec![],
-                }
-                .into(),
-            ),
-            Air::Bool { .. } => Some(
-                Type::App {
-                    public: true,
-                    module: String::new(),
-                    name: "Bool".to_string(),
-                    args: vec![],
-                }
-                .into(),
-            ),
-            Air::Void { .. } => Some(
-                Type::App {
-                    public: true,
-                    module: String::new(),
-                    name: "Void".to_string(),
-                    args: vec![],
-                }
-                .into(),
-            ),
-            Air::WrapData { .. } => Some(
-                Type::App {
-                    public: true,
-                    module: String::new(),
-                    name: "Data".to_string(),
-                    args: vec![],
-                }
-                .into(),
-            ),
-            Air::Var { constructor, .. } => Some(constructor.tipo.clone()),
-            Air::List { tipo, .. }
-            | Air::Tuple { tipo, .. }
-            | Air::Call { tipo, .. }
-            | Air::Builtin { tipo, .. }
-            | Air::BinOp { tipo, .. }
-            | Air::UnWrapData { tipo, .. }
-            | Air::When { tipo, .. }
-            | Air::Clause { tipo, .. }
-            | Air::ListClause { tipo, .. }
-            | Air::TupleClause { tipo, .. }
-            | Air::ClauseGuard { tipo, .. }
-            | Air::TupleGuard { tipo, .. }
-            | Air::If { tipo, .. }
-            | Air::ListClauseGuard { tipo, .. }
-            | Air::Constr { tipo, .. }
-            | Air::RecordUpdate { tipo, .. }
-            | Air::RecordAccess { tipo, .. }
-            | Air::ListAccessor { tipo, .. }
-            | Air::ListExpose { tipo, .. }
-            | Air::TupleAccessor { tipo, .. }
-            | Air::TupleIndex { tipo, .. }
-            | Air::ErrorTerm { tipo, .. }
-            | Air::Trace { tipo, .. } => Some(tipo.clone()),
-            Air::DefineFunc { .. }
-            | Air::Fn { .. }
-            | Air::Let { .. }
-            | Air::WrapClause { .. }
-            | Air::AssertConstr { .. }
-            | Air::AssertBool { .. }
-            | Air::Finally { .. }
-            | Air::FieldsExpose { .. }
-            | Air::FieldsEmpty { .. }
-            | Air::ListEmpty { .. }
-            | Air::NoOp { .. } => None,
-            Air::UnOp { op, .. } => match op {
-                UnOp::Not => Some(
-                    Type::App {
-                        public: true,
-                        module: String::new(),
-                        name: "Bool".to_string(),
-                        args: vec![],
-                    }
-                    .into(),
-                ),
-                UnOp::Negate => Some(
-                    Type::App {
-                        public: true,
-                        module: String::new(),
-                        name: "Int".to_string(),
-                        args: vec![],
-                    }
-                    .into(),
-                ),
-            },
-        }
-    }
-}
+impl Air {}
