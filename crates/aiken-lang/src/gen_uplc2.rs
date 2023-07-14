@@ -377,7 +377,6 @@ impl<'a> CodeGenerator<'a> {
                         &clauses,
                         last_clause,
                         &subject.tipo(),
-                        tipo,
                         &mut ClauseProperties::init(
                             &subject.tipo(),
                             constr_var.clone(),
@@ -1356,7 +1355,6 @@ impl<'a> CodeGenerator<'a> {
         clauses: &[TypedClause],
         final_clause: TypedClause,
         subject_tipo: &Arc<Type>,
-        return_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
     ) -> AirTree {
         assert!(
@@ -1414,7 +1412,6 @@ impl<'a> CodeGenerator<'a> {
                                     rest_clauses,
                                     final_clause,
                                     subject_tipo,
-                                    return_tipo,
                                     &mut next_clause_props,
                                 ),
                                 complex_clause,
@@ -1426,7 +1423,6 @@ impl<'a> CodeGenerator<'a> {
                                     rest_clauses,
                                     final_clause,
                                     subject_tipo,
-                                    return_tipo,
                                     &mut next_clause_props,
                                 ),
                             )
@@ -1441,7 +1437,6 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
-                                return_tipo,
                                 &mut next_clause_props,
                             ),
                             complex_clause,
@@ -1477,7 +1472,6 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
-                                return_tipo,
                                 &mut next_clause_props,
                             ),
                         );
@@ -1554,7 +1548,6 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
-                                return_tipo,
                                 &mut next_clause_props,
                             ),
                         )
@@ -1567,7 +1560,6 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
-                                return_tipo,
                                 &mut next_clause_props,
                             ),
                             next_tail_name,
@@ -1611,7 +1603,6 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
-                                return_tipo,
                                 &mut next_clause_props,
                             ),
                         )
@@ -1626,7 +1617,6 @@ impl<'a> CodeGenerator<'a> {
                                 rest_clauses,
                                 final_clause,
                                 subject_tipo,
-                                return_tipo,
                                 &mut next_clause_props,
                             ),
                             props.complex_clause,

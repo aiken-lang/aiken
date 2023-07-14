@@ -47,17 +47,17 @@ pub enum AirStatement {
     // Clause Guards
     ClauseGuard {
         subject_name: String,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         pattern: Box<AirTree>,
     },
     ListClauseGuard {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
     },
     TupleGuard {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
         type_count: usize,
@@ -167,7 +167,7 @@ pub enum AirExpression {
         clauses: Box<AirTree>,
     },
     Clause {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         subject_name: String,
         complex_clause: bool,
         pattern: Box<AirTree>,
@@ -175,7 +175,7 @@ pub enum AirExpression {
         otherwise: Box<AirTree>,
     },
     ListClause {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         complex_clause: bool,
@@ -187,7 +187,7 @@ pub enum AirExpression {
         otherwise: Box<AirTree>,
     },
     TupleClause {
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
@@ -418,13 +418,13 @@ impl AirTree {
     pub fn clause(
         subject_name: impl ToString,
         pattern: AirTree,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         then: AirTree,
         otherwise: AirTree,
         complex_clause: bool,
     ) -> AirTree {
         AirTree::Expression(AirExpression::Clause {
-            tipo,
+            subject_tipo,
             subject_name: subject_name.to_string(),
             complex_clause,
             pattern: pattern.into(),
@@ -434,14 +434,14 @@ impl AirTree {
     }
     pub fn list_clause(
         tail_name: impl ToString,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         then: AirTree,
         otherwise: AirTree,
         next_tail_name: Option<String>,
         complex_clause: bool,
     ) -> AirTree {
         AirTree::Expression(AirExpression::ListClause {
-            tipo,
+            subject_tipo,
             tail_name: tail_name.to_string(),
             next_tail_name,
             complex_clause,
@@ -451,17 +451,17 @@ impl AirTree {
     }
     pub fn tuple_clause(
         subject_name: impl ToString,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         then: AirTree,
         otherwise: AirTree,
         complex_clause: bool,
     ) -> AirTree {
-        let type_count = tipo.get_inner_types().len();
+        let type_count = subject_tipo.get_inner_types().len();
 
         AirTree::Expression(AirExpression::TupleClause {
-            tipo,
+            subject_tipo,
             indices,
             predefined_indices,
             subject_name: subject_name.to_string(),
@@ -477,11 +477,15 @@ impl AirTree {
             otherwise: otherwise.into(),
         })
     }
-    pub fn clause_guard(subject_name: impl ToString, pattern: AirTree, tipo: Arc<Type>) -> AirTree {
+    pub fn clause_guard(
+        subject_name: impl ToString,
+        pattern: AirTree,
+        subject_tipo: Arc<Type>,
+    ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ClauseGuard {
                 subject_name: subject_name.to_string(),
-                tipo,
+                subject_tipo,
                 pattern: pattern.into(),
             },
             hoisted_over: None,
@@ -489,13 +493,13 @@ impl AirTree {
     }
     pub fn list_clause_guard(
         tail_name: impl ToString,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         inverse: bool,
         next_tail_name: Option<String>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListClauseGuard {
-                tipo,
+                subject_tipo,
                 tail_name: tail_name.to_string(),
                 next_tail_name,
                 inverse,
@@ -505,15 +509,15 @@ impl AirTree {
     }
     pub fn tuple_clause_guard(
         subject_name: impl ToString,
-        tipo: Arc<Type>,
+        subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::TupleGuard {
                 indices,
                 subject_name: subject_name.to_string(),
-                type_count: tipo.get_inner_types().len(),
-                tipo,
+                type_count: subject_tipo.get_inner_types().len(),
+                subject_tipo,
             },
             hoisted_over: None,
         }
@@ -785,37 +789,37 @@ impl AirTree {
                     }
                     AirStatement::ClauseGuard {
                         subject_name,
-                        tipo,
+                        subject_tipo,
                         pattern,
                     } => {
                         air_vec.push(Air::ClauseGuard {
                             subject_name: subject_name.clone(),
-                            tipo: tipo.clone(),
+                            subject_tipo: subject_tipo.clone(),
                         });
 
                         pattern.create_air_vec(air_vec);
                     }
                     AirStatement::ListClauseGuard {
-                        tipo,
+                        subject_tipo,
                         tail_name,
                         next_tail_name,
                         inverse,
                     } => {
                         air_vec.push(Air::ListClauseGuard {
-                            tipo: tipo.clone(),
+                            subject_tipo: subject_tipo.clone(),
                             tail_name: tail_name.clone(),
                             next_tail_name: next_tail_name.clone(),
                             inverse: *inverse,
                         });
                     }
                     AirStatement::TupleGuard {
-                        tipo,
+                        subject_tipo,
                         indices,
                         subject_name,
                         type_count,
                     } => {
                         air_vec.push(Air::TupleGuard {
-                            tipo: tipo.clone(),
+                            subject_tipo: subject_tipo.clone(),
                             indices: indices.clone(),
                             subject_name: subject_name.clone(),
                             type_count: *type_count,
@@ -983,7 +987,7 @@ impl AirTree {
                     clauses.create_air_vec(air_vec);
                 }
                 AirExpression::Clause {
-                    tipo,
+                    subject_tipo,
                     subject_name,
                     complex_clause,
                     pattern,
@@ -991,7 +995,7 @@ impl AirTree {
                     otherwise,
                 } => {
                     air_vec.push(Air::Clause {
-                        tipo: tipo.clone(),
+                        subject_tipo: subject_tipo.clone(),
                         subject_name: subject_name.clone(),
                         complex_clause: *complex_clause,
                     });
@@ -1000,7 +1004,7 @@ impl AirTree {
                     otherwise.create_air_vec(air_vec);
                 }
                 AirExpression::ListClause {
-                    tipo,
+                    subject_tipo,
                     tail_name,
                     next_tail_name,
                     complex_clause,
@@ -1008,7 +1012,7 @@ impl AirTree {
                     otherwise,
                 } => {
                     air_vec.push(Air::ListClause {
-                        tipo: tipo.clone(),
+                        subject_tipo: subject_tipo.clone(),
                         tail_name: tail_name.clone(),
                         next_tail_name: next_tail_name.clone(),
                         complex_clause: *complex_clause,
@@ -1022,7 +1026,7 @@ impl AirTree {
                     otherwise.create_air_vec(air_vec);
                 }
                 AirExpression::TupleClause {
-                    tipo,
+                    subject_tipo,
                     indices,
                     predefined_indices,
                     subject_name,
@@ -1032,7 +1036,7 @@ impl AirTree {
                     otherwise,
                 } => {
                     air_vec.push(Air::TupleClause {
-                        tipo: tipo.clone(),
+                        subject_tipo: subject_tipo.clone(),
                         indices: indices.clone(),
                         predefined_indices: predefined_indices.clone(),
                         subject_name: subject_name.clone(),
@@ -1170,8 +1174,8 @@ impl AirTree {
                 | AirExpression::TupleClause { then, .. }
                 | AirExpression::Finally { then, .. } => then.get_type(),
 
-                AirExpression::FieldsEmpty { constr } => todo!(),
-                AirExpression::ListEmpty { list } => todo!(),
+                AirExpression::FieldsEmpty { constr } => constr.get_type(),
+                AirExpression::ListEmpty { list } => list.get_type(),
             },
             _ => unreachable!(),
         }
