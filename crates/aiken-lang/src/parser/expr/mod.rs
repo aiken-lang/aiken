@@ -43,7 +43,7 @@ pub fn parser(
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     recursive(|expression| {
         choice((
-            fail_todo(sequence.clone()),
+            fail_todo(expression.clone(), sequence.clone()),
             pure_expression(sequence, expression),
         ))
     })
