@@ -34,13 +34,12 @@ pub fn parser<'a>(
                 .map_with_span(UntypedExpr::fail),
         ))),
         just(Token::Trace)
-            .ignore_then(clause(expression.clone()).or_not().ignored().rewind())
             .ignore_then(choice((string::hybrid(), expression.clone())))
-            .then(sequence.clone())
+            .then(sequence.clone().or_not())
             .map_with_span(|(text, then_), span| UntypedExpr::Trace {
                 kind: TraceKind::Trace,
                 location: span,
-                then: Box::new(then_),
+                then: Box::new(then_.unwrap_or_else(|| UntypedExpr::todo(None, span))),
                 text: Box::new(text),
             }),
     ))
@@ -87,6 +86,24 @@ mod tests {
     }
 
     #[test]
+    fn todo_empty() {
+        assert_expr!(
+            r#"
+            todo
+            "#
+        );
+    }
+
+    #[test]
+    fn todo_expr() {
+        assert_expr!(
+            r#"
+            todo string.join(["foo", "bar"])
+            "#
+        );
+    }
+
+    #[test]
     fn fail_expr() {
         assert_expr!(
             r#"
@@ -106,6 +123,16 @@ mod tests {
 
     #[test]
     fn trace_expr() {
+        assert_expr!(
+            r#"
+            trace string.join(["foo", "bar"])
+            a
+            "#
+        );
+    }
+
+    #[test]
+    fn trace_expr_todo() {
         assert_expr!(
             r#"
             trace some_var 

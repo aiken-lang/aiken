@@ -1,12 +1,12 @@
 ---
-source: crates/aiken-lang/src/parser/expr/fail_todo.rs
+source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
 description: "Code:\n\nfail \"foo\"\n"
 ---
 Trace {
     kind: Error,
-    location: 0..10,
+    location: 5..10,
     then: ErrorTerm {
-        location: 0..10,
+        location: 5..10,
     },
     text: String {
         location: 5..10,

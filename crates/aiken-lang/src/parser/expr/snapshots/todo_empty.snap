@@ -1,15 +1,15 @@
 ---
 source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
-description: "Code:\n\ntodo @\"foo\"\n"
+description: "Code:\n\ntodo\n"
 ---
 Trace {
     kind: Todo,
-    location: 5..11,
+    location: 1..2,
     then: ErrorTerm {
-        location: 5..11,
+        location: 1..2,
     },
     text: String {
-        location: 5..11,
-        value: "foo",
+        location: 1..2,
+        value: "aiken::todo",
     },
 }

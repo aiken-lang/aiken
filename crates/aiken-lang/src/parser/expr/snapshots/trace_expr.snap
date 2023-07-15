@@ -1,0 +1,53 @@
+---
+source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
+description: "Code:\n\ntrace string.join([\"foo\", \"bar\"])\na\n"
+---
+Trace {
+    kind: Trace,
+    location: 0..35,
+    then: Var {
+        location: 34..35,
+        name: "a",
+    },
+    text: Call {
+        arguments: [
+            CallArg {
+                label: None,
+                location: 18..32,
+                value: List {
+                    location: 18..32,
+                    elements: [
+                        ByteArray {
+                            location: 19..24,
+                            bytes: [
+                                102,
+                                111,
+                                111,
+                            ],
+                            preferred_format: Utf8String,
+                        },
+                        ByteArray {
+                            location: 26..31,
+                            bytes: [
+                                98,
+                                97,
+                                114,
+                            ],
+                            preferred_format: Utf8String,
+                        },
+                    ],
+                    tail: None,
+                },
+            },
+        ],
+        fun: FieldAccess {
+            location: 6..17,
+            label: "join",
+            container: Var {
+                location: 6..12,
+                name: "string",
+            },
+        },
+        location: 6..33,
+    },
+}
