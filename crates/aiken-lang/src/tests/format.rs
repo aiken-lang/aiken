@@ -581,3 +581,14 @@ fn format_int_uint() {
     "#
     );
 }
+
+#[test]
+fn fail_expr() {
+    assert_format!(
+        r#"
+        fn foo() {
+          fail some_var
+        }
+        "#
+    );
+}
