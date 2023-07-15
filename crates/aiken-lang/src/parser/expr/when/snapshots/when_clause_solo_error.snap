@@ -26,12 +26,12 @@ When {
             guard: None,
             then: Trace {
                 kind: Error,
-                location: 28..32,
+                location: 33..34,
                 then: ErrorTerm {
-                    location: 28..32,
+                    location: 33..34,
                 },
                 text: String {
-                    location: 28..32,
+                    location: 33..34,
                     value: "aiken::error",
                 },
             },

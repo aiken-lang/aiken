@@ -1,0 +1,23 @@
+---
+source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
+description: "Code:\n\ntrace some_var \n"
+---
+Trace {
+    kind: Trace,
+    location: 0..14,
+    then: Trace {
+        kind: Todo,
+        location: 0..14,
+        then: ErrorTerm {
+            location: 0..14,
+        },
+        text: String {
+            location: 0..14,
+            value: "aiken::todo",
+        },
+    },
+    text: Var {
+        location: 6..14,
+        name: "some_var",
+    },
+}

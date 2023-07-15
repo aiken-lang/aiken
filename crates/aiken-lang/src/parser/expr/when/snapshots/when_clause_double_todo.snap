@@ -26,12 +26,12 @@ When {
             guard: None,
             then: Trace {
                 kind: Todo,
-                location: 28..32,
+                location: 35..39,
                 then: ErrorTerm {
-                    location: 28..32,
+                    location: 35..39,
                 },
                 text: String {
-                    location: 28..32,
+                    location: 35..39,
                     value: "aiken::todo",
                 },
             },
@@ -53,12 +53,12 @@ When {
             guard: None,
             then: Trace {
                 kind: Todo,
-                location: 47..51,
+                location: 52..53,
                 then: ErrorTerm {
-                    location: 47..51,
+                    location: 52..53,
                 },
                 text: String {
-                    location: 47..51,
+                    location: 52..53,
                     value: "aiken::todo",
                 },
             },
