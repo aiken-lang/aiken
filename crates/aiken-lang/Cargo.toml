@@ -1,7 +1,7 @@
 [package]
 name = "aiken-lang"
 description = "The Aiken compiler"
-version = "1.0.12-alpha"
+version = "1.0.13-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -24,7 +24,7 @@ owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 strum = "0.24.1"
 thiserror = "1.0.39"
 vec1 = "1.10.1"
-uplc = { path = '../uplc', version = "1.0.12-alpha" }
+uplc = { path = '../uplc', version = "1.0.13-alpha" }
 num-bigint = "0.4.3"
 
 [target.'cfg(not(target_family="wasm"))'.dependencies]
