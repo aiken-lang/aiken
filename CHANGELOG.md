@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.13-alpha - unreleased
+
+### Fixed
+
+- **aiken-lang**: fail, todo, and trace had issues with sequences and expressions
+
 ## v1.0.12-alpha - 2023-07-14
 
 ### Added
