@@ -643,21 +643,31 @@ impl<'comments> Formatter<'comments> {
         self.pop_empty_lines(pattern.location().end);
 
         let keyword = match kind {
-            AssignmentKind::Let => "let ",
-            AssignmentKind::Expect => "expect ",
+            AssignmentKind::Let => "let",
+            AssignmentKind::Expect => "expect",
         };
 
-        let pattern = self.pattern(pattern);
+        match pattern {
+            UntypedPattern::Constructor {
+                name, module: None, ..
+            } if name == "True" && annotation.is_none() && kind.is_expect() => {
+                keyword.to_doc().append(self.case_clause_value(value))
+            }
+            _ => {
+                let pattern = self.pattern(pattern);
 
-        let annotation = annotation
-            .as_ref()
-            .map(|a| ": ".to_doc().append(self.annotation(a)));
+                let annotation = annotation
+                    .as_ref()
+                    .map(|a| ": ".to_doc().append(self.annotation(a)));
 
-        keyword
-            .to_doc()
-            .append(pattern.append(annotation).group())
-            .append(" =")
-            .append(self.case_clause_value(value))
+                keyword
+                    .to_doc()
+                    .append(" ")
+                    .append(pattern.append(annotation).group())
+                    .append(" =")
+                    .append(self.case_clause_value(value))
+            }
+        }
     }
 
     pub fn bytearray<'a>(

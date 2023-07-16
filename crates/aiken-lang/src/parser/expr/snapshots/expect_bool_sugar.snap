@@ -1,0 +1,35 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Code:\n\nexpect something.field == wow"
+---
+Assignment {
+    location: 0..29,
+    value: BinOp {
+        location: 7..29,
+        name: Eq,
+        left: FieldAccess {
+            location: 7..22,
+            label: "field",
+            container: Var {
+                location: 7..16,
+                name: "something",
+            },
+        },
+        right: Var {
+            location: 26..29,
+            name: "wow",
+        },
+    },
+    pattern: Constructor {
+        is_record: false,
+        location: 0..29,
+        name: "True",
+        arguments: [],
+        module: None,
+        constructor: (),
+        with_spread: false,
+        tipo: (),
+    },
+    kind: Expect,
+    annotation: None,
+}

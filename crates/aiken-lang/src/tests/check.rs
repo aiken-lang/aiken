@@ -155,6 +155,33 @@ fn multi_validator_warning() {
 }
 
 #[test]
+fn expect_sugar_correct_type() {
+    let source_code = r#"
+        fn foo() {
+          expect 1 == 1
+          2
+        }
+    "#;
+
+    assert!(matches!(check(parse(source_code)), Ok(_)))
+}
+
+#[test]
+fn expect_sugar_incorrect_type() {
+    let source_code = r#"
+        fn foo() {
+          expect 1
+          2
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
 fn anonymous_function_scoping() {
     let source_code = r#"
         fn reduce(list, f, i) {

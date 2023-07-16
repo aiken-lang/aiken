@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/parser/pattern/constructor.rs
+description: "Code:\n\nTrue"
+---
+Constructor {
+    is_record: false,
+    location: 0..4,
+    name: "True",
+    arguments: [],
+    module: None,
+    constructor: (),
+    with_spread: false,
+    tipo: (),
+}

@@ -2,6 +2,10 @@
 
 ## v1.0.13-alpha - unreleased
 
+### Added
+
+- **aiken-lang**: `expect foo == bar` desugars into `expect True = foo == bar`
+
 ### Fixed
 
 - **aiken-lang**: fail, todo, and trace had issues with sequences and expressions

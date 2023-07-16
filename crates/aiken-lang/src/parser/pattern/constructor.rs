@@ -83,3 +83,18 @@ pub(crate) fn args(
             .unwrap_or_else(|| (vec![], false, false))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_pattern;
+
+    #[test]
+    fn constructor_basic() {
+        assert_pattern!("True");
+    }
+
+    #[test]
+    fn constructor_module_select() {
+        assert_pattern!("module.Foo");
+    }
+}
