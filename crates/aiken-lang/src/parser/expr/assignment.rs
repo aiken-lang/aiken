@@ -81,4 +81,9 @@ mod tests {
     fn expect_bool_sugar() {
         assert_expr!("expect something.field == wow");
     }
+
+    #[test]
+    fn expect_trace_if_false() {
+        assert_expr!("expect foo?");
+    }
 }

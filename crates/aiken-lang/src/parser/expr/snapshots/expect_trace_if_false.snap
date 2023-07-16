@@ -1,0 +1,26 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Code:\n\nexpect foo?"
+---
+Assignment {
+    location: 0..11,
+    value: TraceIfFalse {
+        location: 7..11,
+        value: Var {
+            location: 7..10,
+            name: "foo",
+        },
+    },
+    pattern: Constructor {
+        is_record: false,
+        location: 0..11,
+        name: "True",
+        arguments: [],
+        module: None,
+        constructor: (),
+        with_spread: false,
+        tipo: (),
+    },
+    kind: Expect,
+    annotation: None,
+}
