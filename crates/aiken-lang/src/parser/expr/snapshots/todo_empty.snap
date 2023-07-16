@@ -4,12 +4,12 @@ description: "Code:\n\ntodo\n"
 ---
 Trace {
     kind: Todo,
-    location: 1..2,
+    location: 0..4,
     then: ErrorTerm {
-        location: 1..2,
+        location: 0..4,
     },
     text: String {
-        location: 1..2,
+        location: 0..4,
         value: "aiken::todo",
     },
 }

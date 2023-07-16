@@ -4,9 +4,9 @@ description: "Code:\n\ntodo string.join([\"foo\", \"bar\"])\n"
 ---
 Trace {
     kind: Todo,
-    location: 5..32,
+    location: 0..32,
     then: ErrorTerm {
-        location: 5..32,
+        location: 0..32,
     },
     text: Call {
         arguments: [

@@ -4,9 +4,9 @@ description: "Code:\n\nfail str.join([@\"Some string \", some_params, @\" some s
 ---
 Trace {
     kind: Error,
-    location: 5..67,
+    location: 0..67,
     then: ErrorTerm {
-        location: 5..67,
+        location: 0..67,
     },
     text: Call {
         arguments: [

@@ -4,9 +4,9 @@ description: "Code:\n\nfail \"foo\"\n"
 ---
 Trace {
     kind: Error,
-    location: 5..10,
+    location: 0..10,
     then: ErrorTerm {
-        location: 5..10,
+        location: 0..10,
     },
     text: String {
         location: 5..10,

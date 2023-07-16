@@ -4,9 +4,9 @@ description: "Code:\n\ntodo @\"foo\"\n"
 ---
 Trace {
     kind: Todo,
-    location: 5..11,
+    location: 0..11,
     then: ErrorTerm {
-        location: 5..11,
+        location: 0..11,
     },
     text: String {
         location: 5..11,
