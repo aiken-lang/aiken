@@ -46,9 +46,9 @@ When {
             guard: None,
             then: Trace {
                 kind: Todo,
-                location: 52..68,
+                location: 47..68,
                 then: ErrorTerm {
-                    location: 52..68,
+                    location: 47..68,
                 },
                 text: String {
                     location: 52..68,

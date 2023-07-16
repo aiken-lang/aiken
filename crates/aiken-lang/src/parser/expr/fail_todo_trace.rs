@@ -14,25 +14,19 @@ pub fn parser<'a>(
     expression: Recursive<'a, Token, UntypedExpr, ParseError>,
     sequence: Recursive<'a, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
+    let message = choice((
+        clause(expression.clone()).ignored().rewind().to(None),
+        choice((string::hybrid(), expression.clone())).or_not(),
+    ))
+    .boxed();
+
     choice((
-        just(Token::Todo).ignore_then(choice((
-            clause(expression.clone())
-                .ignored()
-                .rewind()
-                .map_with_span(|_, span| UntypedExpr::todo(None, span)),
-            choice((string::hybrid(), expression.clone()))
-                .or_not()
-                .map_with_span(UntypedExpr::todo),
-        ))),
-        just(Token::Fail).ignore_then(choice((
-            clause(expression.clone())
-                .ignored()
-                .rewind()
-                .map_with_span(|_, span| UntypedExpr::fail(None, span)),
-            choice((string::hybrid(), expression.clone()))
-                .or_not()
-                .map_with_span(UntypedExpr::fail),
-        ))),
+        just(Token::Todo)
+            .ignore_then(message.clone())
+            .map_with_span(UntypedExpr::todo),
+        just(Token::Fail)
+            .ignore_then(message)
+            .map_with_span(UntypedExpr::fail),
         just(Token::Trace)
             .ignore_then(choice((string::hybrid(), expression.clone())))
             .then(sequence.clone().or_not())
