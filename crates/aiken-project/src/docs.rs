@@ -579,6 +579,10 @@ fn find_modules_prefix(modules: &[DocLink]) -> String {
 }
 
 fn do_find_modules_prefix(current_prefix: &str, modules: &[DocLink]) -> String {
+    if modules.len() == 1 {
+        return current_prefix.to_string();
+    }
+
     let prefix = modules
         .iter()
         .fold(None, |previous_prefix, module| {
@@ -592,7 +596,6 @@ fn do_find_modules_prefix(current_prefix: &str, modules: &[DocLink]) -> String {
             let prefix = name.split('/').next().unwrap_or_default().to_string();
 
             match previous_prefix {
-                None if modules.len() == 1 => None, // just 1 module
                 None if prefix != module.name => Some(prefix),
                 Some(..) if Some(prefix) == previous_prefix => previous_prefix,
                 _ => Some(String::new()),
