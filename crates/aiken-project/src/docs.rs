@@ -579,9 +579,8 @@ fn find_modules_prefix(modules: &[DocLink]) -> String {
 }
 
 fn do_find_modules_prefix(current_prefix: &str, modules: &[DocLink]) -> String {
-    match modules {
-        [_] => return current_prefix.to_string(),
-        _ => { /* continue */ }
+    if let [_] = modules {
+        return current_prefix.to_string();
     }
 
     let prefix = modules
