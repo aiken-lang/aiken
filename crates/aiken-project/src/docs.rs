@@ -592,6 +592,7 @@ fn do_find_modules_prefix(current_prefix: &str, modules: &[DocLink]) -> String {
             let prefix = name.split('/').next().unwrap_or_default().to_string();
 
             match previous_prefix {
+                None if modules.len() == 1 => None, // just 1 module
                 None if prefix != module.name => Some(prefix),
                 Some(..) if Some(prefix) == previous_prefix => previous_prefix,
                 _ => Some(String::new()),
@@ -620,7 +621,8 @@ fn find_modules_prefix_test() {
             name: "aiken/list".to_string(),
             path: String::new()
         }]),
-        "aiken/list".to_string()
+        // "aiken/list".to_string()
+        "".to_string()
     );
 
     assert_eq!(
