@@ -318,13 +318,35 @@ impl Type {
                 .append(r#type.to_doc())
                 .append(RcDoc::line_())
                 .append(")"),
-            Type::Pair(l, r) => RcDoc::text("pair")
-                .append(RcDoc::text("<"))
+            Type::Pair(l, r) => RcDoc::text("(pair")
+                .append(RcDoc::line())
                 .append(l.to_doc())
-                .append(RcDoc::text(", "))
+                .append(RcDoc::line())
                 .append(r.to_doc())
-                .append(RcDoc::text(">")),
+                .append(")"),
             Type::Data => RcDoc::text("data"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn format_pair_bool_pair_integer_bytestring() {
+        let uplc = "(program 0.0.0 (con (pair bool (pair integer bytestring)) (True, (14, #42))))";
+
+        assert_eq!(
+            crate::parser::program(uplc).unwrap().to_pretty(),
+            indoc! {
+                r#"
+                (program
+                  0.0.0
+                  (con (pair bool (pair integer bytestring)) (True, (14, #42)))
+                )"#
+            }
+        )
     }
 }

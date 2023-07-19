@@ -99,7 +99,7 @@ impl Config {
     }
 
     pub fn insert(mut self, dependency: &Dependency, and_replace: bool) -> Option<Self> {
-        for mut existing in self.dependencies.iter_mut() {
+        for existing in self.dependencies.iter_mut() {
             if existing.name == dependency.name {
                 return if and_replace {
                     existing.version = dependency.version.clone();
