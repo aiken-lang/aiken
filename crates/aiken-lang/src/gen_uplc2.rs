@@ -2214,9 +2214,10 @@ impl<'a> CodeGenerator<'a> {
             &mut air_tree,
             &mut functions_to_hoist,
             &mut used_functions,
+            &mut TreePath::new(),
+            0,
+            0,
         );
-
-        println!("FUNCTIONS TO HOIST {:#?}", functions_to_hoist);
 
         while let Some((key, variant_name)) = used_functions.pop() {
             defined_functions.push((key.clone(), variant_name.clone()));
@@ -2224,7 +2225,7 @@ impl<'a> CodeGenerator<'a> {
                 .get(&key)
                 .unwrap_or_else(|| panic!("Missing Function Definition"));
 
-            let (_, function) = function_variants
+            let (tree_path, function) = function_variants
                 .get(&variant_name)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
@@ -2232,12 +2233,15 @@ impl<'a> CodeGenerator<'a> {
                 let mut hoist_body = body.clone();
                 let mut hoist_deps = deps.clone();
 
-                self.hoist_functions(
+                let mut tree_path = tree_path.clone();
+
+                self.define_dependent_functions(
                     &mut hoist_body,
                     &mut functions_to_hoist,
                     &mut used_functions,
                     &defined_functions,
                     &mut hoist_deps,
+                    &mut tree_path,
                 );
 
                 let function_variants = functions_to_hoist
@@ -2258,10 +2262,14 @@ impl<'a> CodeGenerator<'a> {
         println!("FUNCTIONS DEFINED {:#?}", defined_functions);
         println!("FUNCTIONS USED {:#?}", used_functions);
 
+        // First we need to sort functions by dependencies
+
+        // Now we need to hoist the functions to the top of the validator
+
         air_tree
     }
 
-    fn hoist_functions(
+    fn define_dependent_functions(
         &mut self,
         air_tree: &mut AirTree,
         function_usage: &mut IndexMap<
@@ -2271,8 +2279,21 @@ impl<'a> CodeGenerator<'a> {
         used_functions: &mut Vec<(FunctionAccessKey, String)>,
         defined_functions: &[(FunctionAccessKey, String)],
         current_function_deps: &mut Vec<(FunctionAccessKey, String)>,
+        validator_tree_path: &mut TreePath,
     ) {
-        self.find_function_vars_and_depth(air_tree, function_usage, current_function_deps);
+        let Some((depth, index)) = validator_tree_path.pop()
+        else { return };
+
+        validator_tree_path.push(depth, index);
+
+        self.find_function_vars_and_depth(
+            air_tree,
+            function_usage,
+            current_function_deps,
+            validator_tree_path,
+            depth + 1,
+            0,
+        );
 
         for (generic_function_key, variant_name) in current_function_deps.iter() {
             if !used_functions
@@ -2295,80 +2316,101 @@ impl<'a> CodeGenerator<'a> {
             IndexMap<String, (TreePath, UserFunction)>,
         >,
         dependency_functions: &mut Vec<(FunctionAccessKey, String)>,
+        path: &mut TreePath,
+        current_depth: usize,
+        depth_index: usize,
     ) {
-        air_tree.traverse_tree_with(&mut |air_tree, tree_path| {
-            if let AirTree::Expression(AirExpression::Var { constructor, .. }) = air_tree {
-                let ValueConstructorVariant::ModuleFn {
-                name: func_name,
-                module,
-                builtin: None,
-                ..
-            } = &constructor.variant
-            else { return };
+        air_tree.traverse_tree_with_path(
+            path,
+            current_depth,
+            depth_index,
+            &mut |air_tree, tree_path| {
+                if let AirTree::Expression(AirExpression::Var { constructor, .. }) = air_tree {
+                    let ValueConstructorVariant::ModuleFn {
+                        name: func_name,
+                        module,
+                        builtin: None,
+                        ..
+                    } = &constructor.variant
+                    else { return };
 
-                let function_var_tipo = &constructor.tipo;
-                println!("FUNCTION VAR TYPE {:#?}", function_var_tipo);
+                    let function_var_tipo = &constructor.tipo;
 
-                let generic_function_key = FunctionAccessKey {
-                    module_name: module.clone(),
-                    function_name: func_name.clone(),
-                };
+                    let generic_function_key = FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: func_name.clone(),
+                    };
 
-                let function_def = self
-                    .functions
-                    .get(&generic_function_key)
-                    .unwrap_or_else(|| panic!("Missing Function Definition"));
+                    let function_def = self
+                        .functions
+                        .get(&generic_function_key)
+                        .unwrap_or_else(|| panic!("Missing Function Definition"));
 
-                println!("Function Def {:#?}", function_def);
+                    let mut function_var_types = function_var_tipo
+                        .arg_types()
+                        .unwrap_or_else(|| panic!("Expected a function tipo with arg types"));
 
-                let mut function_var_types = function_var_tipo
-                    .arg_types()
-                    .unwrap_or_else(|| panic!("Expected a function tipo with arg types"));
+                    function_var_types.push(
+                        function_var_tipo
+                            .return_type()
+                            .unwrap_or_else(|| panic!("Should have return type")),
+                    );
 
-                function_var_types.push(
-                    function_var_tipo
-                        .return_type()
-                        .unwrap_or_else(|| panic!("Should have return type")),
-                );
+                    let mut function_def_types = function_def
+                        .arguments
+                        .iter()
+                        .map(|arg| &arg.tipo)
+                        .collect_vec();
 
-                let mut function_def_types = function_def
-                    .arguments
-                    .iter()
-                    .map(|arg| &arg.tipo)
-                    .collect_vec();
+                    function_def_types.push(&function_def.return_type);
 
-                function_def_types.push(&function_def.return_type);
+                    let mono_types: IndexMap<u64, Arc<Type>> = if !function_def_types.is_empty() {
+                        function_def_types
+                            .into_iter()
+                            .zip(function_var_types.into_iter())
+                            .flat_map(|(func_tipo, var_tipo)| {
+                                get_generic_id_and_type(func_tipo, &var_tipo)
+                            })
+                            .collect()
+                    } else {
+                        IndexMap::new()
+                    };
 
-                let mono_types: IndexMap<u64, Arc<Type>> = if !function_def_types.is_empty() {
-                    function_def_types
-                        .into_iter()
-                        .zip(function_var_types.into_iter())
-                        .flat_map(|(func_tipo, var_tipo)| {
-                            get_generic_id_and_type(func_tipo, &var_tipo)
-                        })
-                        .collect()
-                } else {
-                    IndexMap::new()
-                };
+                    let variant_name = mono_types
+                        .iter()
+                        .sorted_by(|(id, _), (id2, _)| id.cmp(id2))
+                        .map(|(_, tipo)| get_variant_name(tipo))
+                        .join("");
 
-                println!("MONO TYPES {:#?}", mono_types);
+                    if !dependency_functions
+                        .iter()
+                        .any(|(key, name)| key == &generic_function_key && name == &variant_name)
+                    {
+                        dependency_functions
+                            .push((generic_function_key.clone(), variant_name.clone()));
+                    }
 
-                let variant_name = mono_types
-                    .iter()
-                    .sorted_by(|(id, _), (id2, _)| id.cmp(id2))
-                    .map(|(_, tipo)| get_variant_name(tipo))
-                    .join("");
+                    if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
+                        if let Some((path, _)) = func_variants.get_mut(&variant_name) {
+                            *path = path.common_ancestor(tree_path);
+                        } else {
+                            let mut function_air_tree_body = self.build(&function_def.body);
 
-                if !dependency_functions
-                    .iter()
-                    .any(|(key, name)| key == &generic_function_key && name == &variant_name)
-                {
-                    dependency_functions.push((generic_function_key.clone(), variant_name.clone()));
-                }
+                            monomorphize(&mut function_air_tree_body, &mono_types);
 
-                if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
-                    if let Some((path, _)) = func_variants.get_mut(&variant_name) {
-                        *path = path.common_ancestor(tree_path);
+                            erase_opaque_type_operations(
+                                &mut function_air_tree_body,
+                                &self.data_types,
+                            );
+
+                            func_variants.insert(
+                                variant_name,
+                                (
+                                    tree_path.current_path(),
+                                    UserFunction::Function(function_air_tree_body, vec![]),
+                                ),
+                            );
+                        }
                     } else {
                         let mut function_air_tree_body = self.build(&function_def.body);
 
@@ -2376,35 +2418,21 @@ impl<'a> CodeGenerator<'a> {
 
                         erase_opaque_type_operations(&mut function_air_tree_body, &self.data_types);
 
-                        func_variants.insert(
+                        let mut function_variant_path = IndexMap::new();
+
+                        function_variant_path.insert(
                             variant_name,
                             (
                                 tree_path.current_path(),
                                 UserFunction::Function(function_air_tree_body, vec![]),
                             ),
                         );
+
+                        function_usage.insert(generic_function_key, function_variant_path);
                     }
-                } else {
-                    let mut function_air_tree_body = self.build(&function_def.body);
-
-                    monomorphize(&mut function_air_tree_body, &mono_types);
-
-                    erase_opaque_type_operations(&mut function_air_tree_body, &self.data_types);
-
-                    let mut function_variant_path = IndexMap::new();
-
-                    function_variant_path.insert(
-                        variant_name,
-                        (
-                            tree_path.current_path(),
-                            UserFunction::Function(function_air_tree_body, vec![]),
-                        ),
-                    );
-
-                    function_usage.insert(generic_function_key, function_variant_path);
                 }
-            }
-        });
+            },
+        );
     }
 
     fn uplc_code_gen(&mut self, ir_stack: &mut Vec<Air>) -> Term<Name> {

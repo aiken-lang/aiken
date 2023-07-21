@@ -175,8 +175,6 @@ pub fn find_and_replace_generics(
                     new_args.push(arg);
                 }
 
-                println!("SO ARGS ARE {:#?}", new_args);
-
                 let ret = find_and_replace_generics(ret, mono_types);
 
                 let t = Type::Fn {
@@ -199,10 +197,7 @@ pub fn find_and_replace_generics(
                 let var_type = var_tipo.as_ref().borrow().clone();
 
                 match var_type {
-                    TypeVar::Link { tipo } => {
-                        find_and_replace_generics(&tipo, mono_types);
-                        tipo
-                    }
+                    TypeVar::Link { tipo } => find_and_replace_generics(&tipo, mono_types),
                     TypeVar::Generic { .. } | TypeVar::Unbound { .. } => unreachable!(),
                 }
             }
@@ -328,7 +323,6 @@ pub fn get_variant_name(t: &Arc<Type>) -> String {
 pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>>) {
     air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
         let mut held_types = air_tree.mut_held_types();
-        println!("Held types: {:#?}", held_types);
 
         while let Some(tipo) = held_types.pop() {
             *tipo = find_and_replace_generics(tipo, mono_types)
