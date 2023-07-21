@@ -1,5 +1,5 @@
 use indexmap::IndexSet;
-use std::{borrow::BorrowMut, slice::Iter, sync::Arc};
+use std::{borrow::BorrowMut, path, slice::Iter, sync::Arc};
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
@@ -24,8 +24,8 @@ impl TreePath {
         self.path.push((depth, index));
     }
 
-    pub fn pop(&mut self) {
-        self.path.pop();
+    pub fn pop(&mut self) -> Option<(usize, usize)> {
+        self.path.pop()
     }
 
     pub fn current_path(&self) -> Self {
@@ -1331,6 +1331,16 @@ impl AirTree {
     pub fn traverse_tree_with(&mut self, with: &mut impl FnMut(&mut AirTree, &TreePath)) {
         let mut tree_path = TreePath::new();
         self.do_traverse_tree_with(&mut tree_path, 0, 0, with);
+    }
+
+    pub fn traverse_tree_with_path(
+        &mut self,
+        path: &mut TreePath,
+        current_depth: usize,
+        depth_index: usize,
+        with: &mut impl FnMut(&mut AirTree, &TreePath),
+    ) {
+        self.do_traverse_tree_with(path, current_depth, depth_index, with);
     }
 
     fn do_traverse_tree_with(
