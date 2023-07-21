@@ -1011,7 +1011,21 @@ impl<'a> CodeGenerator<'a> {
             }
 
             let func_call = AirTree::call(
-                AirTree::local_var(EXPECT_ON_LIST, void()),
+                AirTree::var(
+                    ValueConstructor::public(
+                        void(),
+                        ValueConstructorVariant::ModuleFn {
+                            name: EXPECT_ON_LIST.to_string(),
+                            field_map: None,
+                            module: "".to_string(),
+                            arity: 1,
+                            location,
+                            builtin: None,
+                        },
+                    ),
+                    EXPECT_ON_LIST,
+                    "",
+                ),
                 void(),
                 vec![AirTree::local_var(map_name, tipo.clone()), unwrap_function],
             );
@@ -1055,7 +1069,21 @@ impl<'a> CodeGenerator<'a> {
             }
 
             let func_call = AirTree::call(
-                AirTree::local_var(EXPECT_ON_LIST, void()),
+                AirTree::var(
+                    ValueConstructor::public(
+                        void(),
+                        ValueConstructorVariant::ModuleFn {
+                            name: EXPECT_ON_LIST.to_string(),
+                            field_map: None,
+                            module: "".to_string(),
+                            arity: 1,
+                            location,
+                            builtin: None,
+                        },
+                    ),
+                    EXPECT_ON_LIST,
+                    "",
+                ),
                 void(),
                 vec![AirTree::local_var(list_name, tipo.clone()), unwrap_function],
             );
@@ -2446,10 +2474,37 @@ impl<'a> CodeGenerator<'a> {
                         function_name: func_name.clone(),
                     };
 
-                    let function_def = self
-                        .functions
-                        .get(&generic_function_key)
-                        .unwrap_or_else(|| panic!("Missing Function Definition"));
+                    let function_def = self.functions.get(&generic_function_key);
+
+                    let Some(function_def) = function_def
+                    else {
+                        let code_gen_func = self
+                            .code_gen_functions
+                            .get(&generic_function_key.function_name)
+                            .unwrap_or_else(|| panic!("Missing Code Gen Function Definition"));
+
+                        if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
+                            let (path, _) = func_variants.get_mut("").unwrap();
+
+                            *path = path.common_ancestor(tree_path);
+                        } else {
+                            let CodeGenFunction::Function(tree, _) = code_gen_func
+                            else { unreachable!() };
+
+                            let mut function_variant_path = IndexMap::new();
+
+                            function_variant_path.insert(
+                                "".to_string(),
+                                (
+                                    tree_path.clone(),
+                                    UserFunction::Function(tree.clone(), vec![]),
+                                ),
+                            );
+
+                            function_usage.insert(generic_function_key, function_variant_path);
+                        }
+                        return;
+                    };
 
                     let mut function_var_types = function_var_tipo
                         .arg_types()
@@ -2511,7 +2566,7 @@ impl<'a> CodeGenerator<'a> {
                             func_variants.insert(
                                 variant_name,
                                 (
-                                    tree_path.current_path(),
+                                    tree_path.clone(),
                                     UserFunction::Function(function_air_tree_body, vec![]),
                                 ),
                             );
@@ -2528,7 +2583,7 @@ impl<'a> CodeGenerator<'a> {
                         function_variant_path.insert(
                             variant_name,
                             (
-                                tree_path.current_path(),
+                                tree_path.clone(),
                                 UserFunction::Function(function_air_tree_body, vec![]),
                             ),
                         );

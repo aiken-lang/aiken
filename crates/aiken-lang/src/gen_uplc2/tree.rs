@@ -28,12 +28,6 @@ impl TreePath {
         self.path.pop()
     }
 
-    pub fn current_path(&self) -> Self {
-        let mut path = self.path.clone();
-        path.pop();
-        TreePath { path }
-    }
-
     pub fn common_ancestor(&self, other: &Self) -> Self {
         let mut common_ancestor = TreePath::new();
 
@@ -1743,9 +1737,9 @@ impl AirTree {
             _ => unreachable!(),
         }
 
-        with(self, tree_path);
-
         tree_path.pop();
+
+        with(self, tree_path);
     }
 
     pub fn find_air_tree_node<'a>(&'a mut self, tree_path: &TreePath) -> &'a mut AirTree {
@@ -1757,7 +1751,7 @@ impl AirTree {
         &'a mut self,
         tree_path_iter: &mut Iter<(usize, usize)>,
     ) -> &'a mut AirTree {
-        if let Some((_depth, index)) = tree_path_iter.next() {
+        if let Some((depth, index)) = tree_path_iter.next() {
             let mut children_nodes = vec![];
             match self {
                 AirTree::Statement {
@@ -1891,7 +1885,7 @@ impl AirTree {
                     }
                     AirExpression::BinOp { left, right, .. } => {
                         if *index == 0 {
-                            left.as_mut()
+                            left.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else if *index == 1 {
                             right.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else {
