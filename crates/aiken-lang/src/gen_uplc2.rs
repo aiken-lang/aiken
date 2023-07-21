@@ -2263,10 +2263,115 @@ impl<'a> CodeGenerator<'a> {
         println!("FUNCTIONS USED {:#?}", used_functions);
 
         // First we need to sort functions by dependencies
+        // here's also where we deal with mutual recursion
+        let mut function_vec = vec![];
+        let mut sorted_function_vec = vec![];
+        for (generic_func, function_variants) in functions_to_hoist.iter() {
+            for (variant, _) in function_variants {
+                function_vec.push((generic_func, variant));
+            }
+        }
+
+        println!("FUNCTION VEC {:#?}", function_vec);
+
+        function_vec.reverse();
+
+        while let Some((generic_func, variant)) = function_vec.pop() {
+            let function_variants = functions_to_hoist
+                .get(generic_func)
+                .unwrap_or_else(|| panic!("Missing Function Definition"));
+
+            let (_, function) = function_variants
+                .get(variant)
+                .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
+
+            // TODO: change this part to handle mutual recursion
+            if let UserFunction::Function(_, deps) = function {
+                for (dep_generic_func, dep_variant) in deps.iter() {
+                    if !(dep_generic_func == generic_func && dep_variant == variant) {
+                        function_vec.push((dep_generic_func, dep_variant));
+                        let remove_index =
+                            sorted_function_vec
+                                .iter()
+                                .position(|(generic_func, variant)| {
+                                    *generic_func == dep_generic_func && *variant == dep_variant
+                                });
+                        if let Some(index) = remove_index {
+                            sorted_function_vec.remove(index);
+                        }
+                    }
+                }
+            } else {
+                todo!("Deal with Link later")
+            }
+
+            sorted_function_vec.push((generic_func, variant));
+        }
+        sorted_function_vec.dedup();
+        println!("SORTED FUNCTION VEC {:#?}", sorted_function_vec);
 
         // Now we need to hoist the functions to the top of the validator
 
+        for (key, variant) in sorted_function_vec {
+            let function_variants = functions_to_hoist
+                .get(key)
+                .unwrap_or_else(|| panic!("Missing Function Definition"));
+
+            let (tree_path, function) = function_variants
+                .get(variant)
+                .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
+
+            self.hoist_function(&mut air_tree, tree_path, function, key, variant);
+        }
+        println!("NOW AIR TREE {:#?}", air_tree);
+
         air_tree
+    }
+
+    fn hoist_function(
+        &mut self,
+        air_tree: &mut AirTree,
+        tree_path: &TreePath,
+        function: &UserFunction,
+        key: &FunctionAccessKey,
+        variant: &String,
+    ) {
+        if let UserFunction::Function(body, deps) = function {
+            let node_to_edit = air_tree.find_air_tree_node(tree_path);
+
+            let is_recursive = deps
+                .iter()
+                .any(|(dep_key, dep_variant)| dep_key == key && dep_variant == variant);
+
+            // first grab dependencies
+
+            let func = self
+                .functions
+                .get(key)
+                .unwrap_or_else(|| panic!("Missing Function Definition"));
+            let params = func
+                .arguments
+                .iter()
+                .map(|func_arg| {
+                    func_arg
+                        .arg_name
+                        .get_variable_name()
+                        .unwrap_or("_")
+                        .to_string()
+                })
+                .collect_vec();
+
+            // now hoist full function onto validator tree
+            *node_to_edit = AirTree::define_func(
+                &key.function_name,
+                &key.module_name,
+                variant,
+                params,
+                is_recursive,
+                body.clone(),
+            )
+            .hoist_over(node_to_edit.clone());
+        }
     }
 
     fn define_dependent_functions(
