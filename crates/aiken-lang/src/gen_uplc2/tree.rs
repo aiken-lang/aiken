@@ -1,5 +1,5 @@
 use indexmap::IndexSet;
-use std::{borrow::BorrowMut, path, slice::Iter, sync::Arc};
+use std::{borrow::BorrowMut, slice::Iter, sync::Arc};
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
@@ -1751,7 +1751,7 @@ impl AirTree {
         &'a mut self,
         tree_path_iter: &mut Iter<(usize, usize)>,
     ) -> &'a mut AirTree {
-        if let Some((depth, index)) = tree_path_iter.next() {
+        if let Some((_depth, index)) = tree_path_iter.next() {
             let mut children_nodes = vec![];
             match self {
                 AirTree::Statement {

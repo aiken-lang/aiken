@@ -3,10 +3,10 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 
 use crate::{
-    ast::{Function, TypedDataType, TypedFunction},
+    ast::TypedDataType,
     builtins::bool,
     gen_uplc::builder::{lookup_data_type_by_tipo, DataTypeKey, FunctionAccessKey},
-    tipo::{TypeVar, ValueConstructorVariant},
+    tipo::TypeVar,
 };
 
 use crate::{
@@ -14,10 +14,7 @@ use crate::{
     tipo::Type,
 };
 
-use super::{
-    air::Air,
-    tree::{AirExpression, AirStatement, AirTree, TreePath},
-};
+use super::tree::{AirExpression, AirStatement, AirTree};
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
@@ -328,10 +325,6 @@ pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>
             *tipo = find_and_replace_generics(tipo, mono_types)
         }
     });
-}
-
-pub fn function_deps(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>>) {
-    air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {});
 }
 
 pub fn erase_opaque_type_operations(

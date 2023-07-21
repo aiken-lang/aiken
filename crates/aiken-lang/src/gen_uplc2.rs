@@ -2377,6 +2377,7 @@ impl<'a> CodeGenerator<'a> {
                 .functions
                 .get(key)
                 .unwrap_or_else(|| panic!("Missing Function Definition"));
+
             let params = func
                 .arguments
                 .iter()
@@ -2399,6 +2400,8 @@ impl<'a> CodeGenerator<'a> {
                 body.clone(),
             )
             .hoist_over(node_to_edit.clone());
+        } else {
+            todo!()
         }
     }
 
