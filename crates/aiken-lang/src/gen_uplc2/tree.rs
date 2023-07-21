@@ -1,4 +1,5 @@
 use indexmap::IndexSet;
+use itertools::Itertools;
 use std::{borrow::BorrowMut, slice::Iter, sync::Arc};
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
@@ -52,6 +53,30 @@ impl TreePath {
         }
 
         common_ancestor
+    }
+
+    pub fn diff_paths(&self, other: &Self) -> Self {
+        let mut self_iter = self.path.iter();
+        let mut other_iter = other.path.iter();
+
+        let mut self_next = self_iter.next();
+        let mut other_next = other_iter.next();
+
+        while self_next.is_some() && other_next.is_some() {
+            let self_next_level = self_next.unwrap();
+            let other_next_level = other_next.unwrap();
+
+            if self_next_level == other_next_level {
+                self_next = self_iter.next();
+                other_next = other_iter.next();
+            } else {
+                unreachable!()
+            }
+        }
+
+        TreePath {
+            path: self_iter.cloned().collect_vec(),
+        }
     }
 }
 
@@ -1751,7 +1776,14 @@ impl AirTree {
         &'a mut self,
         tree_path_iter: &mut Iter<(usize, usize)>,
     ) -> &'a mut AirTree {
-        if let Some((_depth, index)) = tree_path_iter.next() {
+        // For Finding the air node we skip over the define func ops since those are added later on.
+        if let AirTree::Statement {
+            statement: AirStatement::DefineFunc { .. },
+            hoisted_over: Some(hoisted_over),
+        } = self
+        {
+            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
+        } else if let Some((_depth, index)) = tree_path_iter.next() {
             let mut children_nodes = vec![];
             match self {
                 AirTree::Statement {
@@ -1761,15 +1793,6 @@ impl AirTree {
                     AirStatement::Let { value, .. } => {
                         if *index == 0 {
                             value.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-                    AirStatement::DefineFunc { func_body, .. } => {
-                        if *index == 0 {
-                            func_body.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else if *index == 1 {
                             hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else {
@@ -1858,6 +1881,7 @@ impl AirTree {
                             panic!("Tree Path index outside tree children nodes")
                         }
                     }
+                    AirStatement::DefineFunc { .. } => unreachable!(),
                 },
                 AirTree::Expression(e) => match e {
                     AirExpression::List { items, .. }

@@ -2235,6 +2235,7 @@ impl<'a> CodeGenerator<'a> {
         let mut functions_to_hoist = IndexMap::new();
         let mut used_functions = vec![];
         let mut defined_functions = vec![];
+        let mut hoisted_functions = vec![];
 
         erase_opaque_type_operations(&mut air_tree, &self.data_types);
 
@@ -2286,10 +2287,6 @@ impl<'a> CodeGenerator<'a> {
             }
         }
 
-        println!("FUNCTIONS TO HOIST {:#?}", functions_to_hoist);
-        println!("FUNCTIONS DEFINED {:#?}", defined_functions);
-        println!("FUNCTIONS USED {:#?}", used_functions);
-
         // First we need to sort functions by dependencies
         // here's also where we deal with mutual recursion
         let mut function_vec = vec![];
@@ -2299,8 +2296,6 @@ impl<'a> CodeGenerator<'a> {
                 function_vec.push((generic_func, variant));
             }
         }
-
-        println!("FUNCTION VEC {:#?}", function_vec);
 
         function_vec.reverse();
 
@@ -2341,6 +2336,13 @@ impl<'a> CodeGenerator<'a> {
         // Now we need to hoist the functions to the top of the validator
 
         for (key, variant) in sorted_function_vec {
+            if hoisted_functions
+                .iter()
+                .any(|(func_key, func_variant)| func_key == key && func_variant == variant)
+            {
+                continue;
+            }
+
             let function_variants = functions_to_hoist
                 .get(key)
                 .unwrap_or_else(|| panic!("Missing Function Definition"));
@@ -2349,7 +2351,14 @@ impl<'a> CodeGenerator<'a> {
                 .get(variant)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
-            self.hoist_function(&mut air_tree, tree_path, function, key, variant);
+            self.hoist_function(
+                &mut air_tree,
+                tree_path,
+                function,
+                key,
+                variant,
+                &mut hoisted_functions,
+            );
         }
         println!("NOW AIR TREE {:#?}", air_tree);
 
@@ -2363,6 +2372,7 @@ impl<'a> CodeGenerator<'a> {
         function: &UserFunction,
         key: &FunctionAccessKey,
         variant: &String,
+        hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
     ) {
         if let UserFunction::Function(body, deps) = function {
             let node_to_edit = air_tree.find_air_tree_node(tree_path);
@@ -2390,6 +2400,10 @@ impl<'a> CodeGenerator<'a> {
                 })
                 .collect_vec();
 
+            for dependency in deps {
+                todo!()
+            }
+
             // now hoist full function onto validator tree
             *node_to_edit = AirTree::define_func(
                 &key.function_name,
@@ -2400,6 +2414,8 @@ impl<'a> CodeGenerator<'a> {
                 body.clone(),
             )
             .hoist_over(node_to_edit.clone());
+
+            hoisted_functions.push((key.clone(), variant.clone()));
         } else {
             todo!()
         }
