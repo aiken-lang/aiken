@@ -1,53 +1,34 @@
+use std::sync::Arc;
+
 use indexmap::IndexMap;
 
 use crate::{
-    ast::TypedDataType,
+    ast::{Function, TypedDataType, TypedFunction},
     builtins::bool,
     gen_uplc::builder::{lookup_data_type_by_tipo, DataTypeKey, FunctionAccessKey},
     tipo::{TypeVar, ValueConstructorVariant},
 };
-use std::sync::Arc;
 
 use crate::{
     ast::{BinOp, ClauseGuard, Constant, UnOp},
     tipo::Type,
 };
 
-use super::tree::{AirExpression, AirStatement, AirTree};
+use super::{
+    air::Air,
+    tree::{AirExpression, AirStatement, AirTree, TreePath},
+};
 
 #[derive(Clone, Debug)]
-pub struct TreePath {
-    path: Vec<(usize, usize)>,
+pub enum CodeGenFunction {
+    Function(AirTree, Vec<String>),
+    Link(String),
 }
 
-impl TreePath {
-    pub fn new() -> Self {
-        TreePath { path: vec![] }
-    }
-
-    pub fn push(&mut self, depth: usize, index: usize) {
-        self.path.push((depth, index));
-    }
-
-    pub fn pop(&mut self) {
-        self.path.pop();
-    }
-}
-
-pub struct IndexCounter {
-    current_index: usize,
-}
-
-impl IndexCounter {
-    pub fn new() -> Self {
-        IndexCounter { current_index: 0 }
-    }
-
-    pub fn next(&mut self) -> usize {
-        let current_index = self.current_index;
-        self.current_index += 1;
-        current_index
-    }
+#[derive(Clone, Debug)]
+pub enum UserFunction {
+    Function(AirTree, Vec<(FunctionAccessKey, String)>),
+    Link(String),
 }
 
 pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)> {
@@ -194,6 +175,8 @@ pub fn find_and_replace_generics(
                     new_args.push(arg);
                 }
 
+                println!("SO ARGS ARE {:#?}", new_args);
+
                 let ret = find_and_replace_generics(ret, mono_types);
 
                 let t = Type::Fn {
@@ -245,63 +228,123 @@ pub fn handle_clause_guard(clause_guard: &ClauseGuard<Arc<Type>>) -> AirTree {
             AirTree::unop(UnOp::Not, val)
         }
         ClauseGuard::Equals { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::Eq, bool(), left, right)
+            AirTree::binop(BinOp::Eq, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::NotEquals { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::NotEq, bool(), left, right)
+            AirTree::binop(BinOp::NotEq, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::GtInt { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::GtInt, bool(), left, right)
+            AirTree::binop(BinOp::GtInt, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::GtEqInt { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::GtEqInt, bool(), left, right)
+            AirTree::binop(BinOp::GtEqInt, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::LtInt { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::LtInt, bool(), left, right)
+            AirTree::binop(BinOp::LtInt, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::LtEqInt { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::LtEqInt, bool(), left, right)
+            AirTree::binop(BinOp::LtEqInt, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::Or { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::Or, bool(), left, right)
+            AirTree::binop(BinOp::Or, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::And { left, right, .. } => {
-            let left = handle_clause_guard(left);
-            let right = handle_clause_guard(right);
+            let left_child = handle_clause_guard(left);
+            let right_child = handle_clause_guard(right);
 
-            AirTree::binop(BinOp::And, bool(), left, right)
+            AirTree::binop(BinOp::And, bool(), left_child, right_child, left.tipo())
         }
         ClauseGuard::Var { tipo, name, .. } => AirTree::local_var(name, tipo.clone()),
         ClauseGuard::Constant(constant) => constants_ir(constant),
     }
 }
 
-pub fn erase_opaque_operations(
+pub fn get_variant_name(t: &Arc<Type>) -> String {
+    if t.is_string() {
+        "_string".to_string()
+    } else if t.is_int() {
+        "_int".to_string()
+    } else if t.is_bool() {
+        "_bool".to_string()
+    } else if t.is_bytearray() {
+        "_bytearray".to_string()
+    } else if t.is_map() {
+        let mut full_type = vec!["_map".to_string()];
+        let pair_type = &t.get_inner_types()[0];
+        let fst_type = &pair_type.get_inner_types()[0];
+        let snd_type = &pair_type.get_inner_types()[1];
+        full_type.push(get_variant_name(fst_type));
+        full_type.push(get_variant_name(snd_type));
+        full_type.join("")
+    } else if t.is_list() {
+        let full_type = "_list".to_string();
+        let list_type = &t.get_inner_types()[0];
+
+        format!("{}{}", full_type, get_variant_name(list_type))
+    } else if t.is_tuple() {
+        let mut full_type = vec!["_tuple".to_string()];
+
+        let inner_types = t.get_inner_types();
+
+        for arg_type in inner_types {
+            full_type.push(get_variant_name(&arg_type));
+        }
+        full_type.join("")
+    } else if t.is_unbound() {
+        "_unbound".to_string()
+    } else {
+        let full_type = "_data".to_string();
+
+        if t.is_generic() {
+            println!("FULL TYPE: {:#?}", t);
+            panic!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE");
+        }
+
+        full_type
+    }
+}
+
+pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>>) {
+    air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+        let mut held_types = air_tree.mut_held_types();
+        println!("Held types: {:#?}", held_types);
+
+        while let Some(tipo) = held_types.pop() {
+            *tipo = find_and_replace_generics(tipo, mono_types)
+        }
+    });
+}
+
+pub fn function_deps(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>>) {
+    air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {});
+}
+
+pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) {
-    traverse_tree_with(air_tree, &mut TreePath::new(), 0, 0, &|air_tree, _| {
+    air_tree.traverse_tree_with(&mut |air_tree, _| {
         if let AirTree::Expression(e) = air_tree {
             match e {
                 AirExpression::Constr { tipo, args, .. } => {
@@ -325,372 +368,11 @@ pub fn erase_opaque_operations(
             hoisted_over: Some(hoisted_over),
         } = air_tree
         {
-            let name = indices[0].1.clone();
-            if check_replaceable_opaque_type(&record.get_type(), data_types) {
+            if check_replaceable_opaque_type(&record.return_type(), data_types) {
+                let name = indices[0].1.clone();
                 *air_tree = AirTree::let_assignment(name, (**record).clone())
                     .hoist_over((**hoisted_over).clone())
             }
         }
     });
-}
-
-fn traverse_tree_with(
-    air_tree: &mut AirTree,
-    tree_path: &mut TreePath,
-    current_depth: usize,
-    depth_index: usize,
-    with: &impl Fn(&mut AirTree, &TreePath),
-) {
-    let mut index_count = IndexCounter::new();
-    tree_path.push(current_depth, depth_index);
-    match air_tree {
-        AirTree::Statement {
-            statement,
-            hoisted_over: Some(hoisted_over),
-        } => {
-            match statement {
-                AirStatement::Let { value, .. } => {
-                    traverse_tree_with(
-                        value,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::DefineFunc { func_body, .. } => {
-                    traverse_tree_with(
-                        func_body,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::AssertConstr { constr, .. } => {
-                    traverse_tree_with(
-                        constr,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::AssertBool { value, .. } => {
-                    traverse_tree_with(
-                        value,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::ClauseGuard { pattern, .. } => {
-                    traverse_tree_with(
-                        pattern,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::ListClauseGuard { .. } => {}
-                AirStatement::TupleGuard { .. } => {}
-                AirStatement::FieldsExpose { record, .. } => {
-                    traverse_tree_with(
-                        record,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::ListAccessor { list, .. } => {
-                    traverse_tree_with(
-                        list,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::ListExpose { .. } => {}
-                AirStatement::TupleAccessor { tuple, .. } => {
-                    traverse_tree_with(
-                        tuple,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-                AirStatement::NoOp => {}
-            };
-
-            traverse_tree_with(
-                hoisted_over,
-                tree_path,
-                current_depth + 1,
-                index_count.next(),
-                with,
-            );
-        }
-        AirTree::Expression(e) => match e {
-            AirExpression::List { items, .. } => {
-                for item in items {
-                    traverse_tree_with(
-                        item,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-            }
-            AirExpression::Tuple { items, .. } => {
-                for item in items {
-                    traverse_tree_with(
-                        item,
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next(),
-                        with,
-                    );
-                }
-            }
-            AirExpression::Var {
-                constructor,
-                name,
-                variant_name,
-            } => {
-                todo!()
-            }
-            AirExpression::Call { func, args, .. } => {
-                traverse_tree_with(func, tree_path, current_depth + 1, index_count.next(), with);
-
-                for arg in args {
-                    traverse_tree_with(arg, tree_path, current_depth + 1, index_count.next(), with);
-                }
-            }
-            AirExpression::Fn { func_body, .. } => {
-                traverse_tree_with(
-                    func_body,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::Builtin { args, .. } => {
-                for arg in args {
-                    traverse_tree_with(arg, tree_path, current_depth + 1, index_count.next(), with);
-                }
-            }
-            AirExpression::BinOp { left, right, .. } => {
-                traverse_tree_with(left, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(
-                    right,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::UnOp { arg, .. } => {
-                traverse_tree_with(arg, tree_path, current_depth + 1, index_count.next(), with);
-            }
-            AirExpression::UnWrapData { value, .. } => {
-                traverse_tree_with(
-                    value,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::WrapData { value, .. } => {
-                traverse_tree_with(
-                    value,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::When {
-                subject, clauses, ..
-            } => {
-                traverse_tree_with(
-                    subject,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-
-                traverse_tree_with(
-                    clauses,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::Clause {
-                pattern,
-                then,
-                otherwise,
-                ..
-            } => {
-                traverse_tree_with(
-                    pattern,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(
-                    otherwise,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::ListClause {
-                then, otherwise, ..
-            } => {
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(
-                    otherwise,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::WrapClause { then, otherwise } => {
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(
-                    otherwise,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::TupleClause {
-                then, otherwise, ..
-            } => {
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(
-                    otherwise,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::Finally { pattern, then } => {
-                traverse_tree_with(
-                    pattern,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-            }
-            AirExpression::If {
-                pattern,
-                then,
-                otherwise,
-                ..
-            } => {
-                traverse_tree_with(
-                    pattern,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(
-                    otherwise,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::Constr { args, .. } => {
-                for arg in args {
-                    traverse_tree_with(arg, tree_path, current_depth + 1, index_count.next(), with);
-                }
-            }
-            AirExpression::RecordUpdate { record, args, .. } => {
-                traverse_tree_with(
-                    record,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-                for arg in args {
-                    traverse_tree_with(arg, tree_path, current_depth + 1, index_count.next(), with);
-                }
-            }
-            AirExpression::RecordAccess { record, .. } => {
-                traverse_tree_with(
-                    record,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::TupleIndex { tuple, .. } => {
-                traverse_tree_with(
-                    tuple,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::Trace { msg, then, .. } => {
-                traverse_tree_with(msg, tree_path, current_depth + 1, index_count.next(), with);
-
-                traverse_tree_with(then, tree_path, current_depth + 1, index_count.next(), with);
-            }
-            AirExpression::FieldsEmpty { constr } => {
-                traverse_tree_with(
-                    constr,
-                    tree_path,
-                    current_depth + 1,
-                    index_count.next(),
-                    with,
-                );
-            }
-            AirExpression::ListEmpty { list } => {
-                traverse_tree_with(list, tree_path, current_depth + 1, index_count.next(), with);
-            }
-            _ => {}
-        },
-        _ => unreachable!(),
-    }
-
-    with(air_tree, tree_path);
-
-    tree_path.pop();
 }

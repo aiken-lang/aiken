@@ -103,7 +103,6 @@ impl<'a> CodeGenerator<'a> {
             FunctionAccessKey {
                 module_name,
                 function_name,
-                variant_name,
             },
             value,
         )
