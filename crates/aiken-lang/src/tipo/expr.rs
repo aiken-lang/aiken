@@ -1,21 +1,23 @@
-use crate::ast::TypedPattern;
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
-
 use vec1::Vec1;
+
+mod usefulness;
 
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
         ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg,
-        TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedRecordUpdateArg, UnOp,
-        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedPattern,
-        UntypedRecordUpdateArg,
+        TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
+        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
+        UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     tipo::fields::FieldMap,
 };
+
+use self::usefulness::compute_match_usefulness;
 
 use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
@@ -48,9 +50,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         subject: &Type,
         typed_clauses: &[TypedClause],
-        location: Span,
+        _location: Span,
     ) -> Result<(), Vec<String>> {
-        let value_typ = collapse_links(Arc::new(subject.clone()));
+        let _value_typ = collapse_links(Arc::new(subject.clone()));
 
         // Currently guards in exhaustiveness checking are assumed that they can fail,
         // so we go through all clauses and pluck out only the patterns
@@ -63,12 +65,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ..
             } = clause
             {
-                patterns.push(pattern.clone())
+                patterns.push(pattern)
             }
         }
 
-        self.environment
-            .check_exhaustiveness(patterns, value_typ, location)
+        let _ = dbg!(compute_match_usefulness(self.environment, &patterns));
+
+        // self.environment
+        // .check_exhaustiveness(patterns, value_typ, location)
+
+        Ok(())
     }
 
     pub fn do_infer_call(
