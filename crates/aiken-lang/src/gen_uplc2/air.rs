@@ -61,6 +61,7 @@ pub enum Air {
     BinOp {
         name: BinOp,
         tipo: Arc<Type>,
+        argument_tipo: Arc<Type>,
     },
     UnOp {
         op: UnOp,
@@ -85,6 +86,7 @@ pub enum Air {
     When {
         tipo: Arc<Type>,
         subject_name: String,
+        subject_tipo: Arc<Type>,
     },
     Clause {
         subject_tipo: Arc<Type>,
@@ -180,5 +182,3 @@ pub enum Air {
     FieldsEmpty,
     ListEmpty,
 }
-
-impl Air {}
