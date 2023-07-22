@@ -2,7 +2,7 @@ use crate::with_project;
 use aiken_lang::ast::Tracing;
 use std::path::PathBuf;
 
-/// Compute a minting scripts Policy ID
+/// Compute a validator's hash
 #[derive(clap::Args)]
 pub struct Args {
     /// Path to project
@@ -46,9 +46,9 @@ pub fn exec(
 
         let title = title.as_ref().or(validator.as_ref());
 
-        let policy = p.policy(title)?;
+        let address = p.address(title, None)?;
 
-        println!("{}", policy);
+        println!("{}", address.payment().to_hex());
 
         Ok(())
     })
