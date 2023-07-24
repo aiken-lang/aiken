@@ -21,7 +21,7 @@
 
         aiken = pkgs.rustPlatform.buildRustPackage {
           name = "aiken";
-          version = "1.0.11-alpha";
+          version = "1.0.13-alpha";
 
           buildInputs = with pkgs; [ openssl ] ++ osxDependencies;
           nativeBuildInputs = with pkgs; [ pkg-config openssl ];
