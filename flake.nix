@@ -19,9 +19,13 @@
 
         deno = nixpkgs.legacyPackages.${system}.deno;
 
+        cargoTomlContents = builtins.readFile ./crates/aiken/Cargo.toml;
+        version = (builtins.fromTOML cargoTomlContents).package.version;
+
         aiken = pkgs.rustPlatform.buildRustPackage {
+          inherit version;
+
           name = "aiken";
-          version = "1.0.13-alpha";
 
           buildInputs = with pkgs; [ openssl ] ++ osxDependencies;
           nativeBuildInputs = with pkgs; [ pkg-config openssl.dev ];
