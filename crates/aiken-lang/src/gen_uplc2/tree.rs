@@ -11,7 +11,7 @@ use crate::{
 
 use super::air::Air;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TreePath {
     path: Vec<(usize, usize)>,
 }
@@ -55,22 +55,19 @@ impl TreePath {
         common_ancestor
     }
 
-    pub fn diff_paths(&self, other: &Self) -> Self {
+    pub fn diff_ancestor(&self, ancestor: &Self) -> Self {
         let mut self_iter = self.path.iter();
-        let mut other_iter = other.path.iter();
+        let ancestor_iter = ancestor.path.iter();
 
-        let mut self_next = self_iter.next();
-        let mut other_next = other_iter.next();
-
-        while self_next.is_some() && other_next.is_some() {
-            let self_next_level = self_next.unwrap();
-            let other_next_level = other_next.unwrap();
-
-            if self_next_level == other_next_level {
-                self_next = self_iter.next();
-                other_next = other_iter.next();
+        for ancestor in ancestor_iter {
+            if let Some(self_path) = self_iter.next() {
+                if self_path == ancestor {
+                    continue;
+                } else {
+                    unreachable!("Other path is not a common ancestor self path.")
+                }
             } else {
-                unreachable!()
+                unreachable!("Other path is longer than self path.")
             }
         }
 
@@ -86,6 +83,7 @@ impl Default for TreePath {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct IndexCounter {
     current_index: usize,
 }
@@ -1371,6 +1369,7 @@ impl AirTree {
     ) {
         let mut index_count = IndexCounter::new();
         tree_path.push(current_depth, depth_index);
+        with(self, tree_path);
         match self {
             AirTree::Statement {
                 statement,
@@ -1763,12 +1762,11 @@ impl AirTree {
         }
 
         tree_path.pop();
-
-        with(self, tree_path);
     }
 
     pub fn find_air_tree_node<'a>(&'a mut self, tree_path: &TreePath) -> &'a mut AirTree {
         let mut path_iter = tree_path.path.iter();
+        path_iter.next();
         self.do_find_air_tree_node(&mut path_iter)
     }
 

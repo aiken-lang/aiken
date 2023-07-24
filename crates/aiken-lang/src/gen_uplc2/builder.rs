@@ -361,5 +361,11 @@ pub fn erase_opaque_type_operations(
                     .hoist_over((**hoisted_over).clone())
             }
         }
+
+        let mut held_types = air_tree.mut_held_types();
+
+        while let Some(tipo) = held_types.pop() {
+            *tipo = convert_opaque_type(tipo, data_types);
+        }
     });
 }
