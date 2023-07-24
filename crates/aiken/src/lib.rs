@@ -23,7 +23,7 @@ where
         env::current_dir().into_diagnostic()?
     };
 
-    let mut project = match Project::new(project_path, Terminal::default()) {
+    let mut project = match Project::new(project_path, Terminal) {
         Ok(p) => p,
         Err(e) => {
             e.report();
