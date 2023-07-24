@@ -65,13 +65,10 @@ fn main() -> miette::Result<()> {
 }
 
 fn version() -> String {
-    use std::env;
-    let nix_git_rev = env::var("GIT_REVISION").unwrap_or("unknown".to_string());
-
     format!(
         "v{} {}",
         built_info::PKG_VERSION,
-        built_info::GIT_COMMIT_HASH_SHORT.unwrap_or(&nix_git_rev)
+        built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown")
     )
 }
 
