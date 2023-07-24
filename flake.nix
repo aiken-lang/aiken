@@ -24,7 +24,7 @@
           version = "1.0.13-alpha";
 
           buildInputs = with pkgs; [ openssl ] ++ osxDependencies;
-          nativeBuildInputs = with pkgs; [ pkg-config openssl ];
+          nativeBuildInputs = with pkgs; [ pkg-config openssl.dev ];
 
           src = pkgs.lib.cleanSourceWith { src = self; };
 
