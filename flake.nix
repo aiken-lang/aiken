@@ -29,6 +29,13 @@
           src = pkgs.lib.cleanSourceWith { src = self; };
 
           cargoLock.lockFile = ./Cargo.lock;
+
+          meta = with pkgs.lib; {
+            description = "Cardano smart contract language and toolchain";
+            homepage = "https://github.com/aiken-lang/aiken";
+            license = licenses.asl20;
+            mainProgram = "aiken";
+          };
         };
 
         commonCategory = y: builtins.map (x: x // { category = y; });
