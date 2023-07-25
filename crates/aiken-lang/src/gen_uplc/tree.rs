@@ -185,6 +185,12 @@ pub enum AirStatement {
         tuple: Box<AirTree>,
     },
     // Misc.
+    FieldsEmpty {
+        constr: Box<AirTree>,
+    },
+    ListEmpty {
+        list: Box<AirTree>,
+    },
     NoOp,
 }
 
@@ -338,12 +344,6 @@ pub enum AirExpression {
         tipo: Arc<Type>,
         msg: Box<AirTree>,
         then: Box<AirTree>,
-    },
-    FieldsEmpty {
-        constr: Box<AirTree>,
-    },
-    ListEmpty {
-        list: Box<AirTree>,
     },
 }
 
@@ -769,12 +769,18 @@ impl AirTree {
         }
     }
     pub fn fields_empty(constr: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::FieldsEmpty {
-            constr: constr.into(),
-        })
+        AirTree::Statement {
+            statement: AirStatement::FieldsEmpty {
+                constr: constr.into(),
+            },
+            hoisted_over: None,
+        }
     }
     pub fn list_empty(list: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::ListEmpty { list: list.into() })
+        AirTree::Statement {
+            statement: AirStatement::ListEmpty { list: list.into() },
+            hoisted_over: None,
+        }
     }
     pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
         match &mut self {
@@ -968,6 +974,14 @@ impl AirTree {
                     }
                     AirStatement::NoOp => {
                         air_vec.push(Air::NoOp);
+                    }
+                    AirStatement::FieldsEmpty { constr } => {
+                        air_vec.push(Air::FieldsEmpty);
+                        constr.create_air_vec(air_vec);
+                    }
+                    AirStatement::ListEmpty { list } => {
+                        air_vec.push(Air::ListEmpty);
+                        list.create_air_vec(air_vec);
                     }
                 };
                 exp.create_air_vec(air_vec);
@@ -1212,14 +1226,6 @@ impl AirTree {
                     msg.create_air_vec(air_vec);
                     then.create_air_vec(air_vec);
                 }
-                AirExpression::FieldsEmpty { constr } => {
-                    air_vec.push(Air::FieldsEmpty);
-                    constr.create_air_vec(air_vec);
-                }
-                AirExpression::ListEmpty { list } => {
-                    air_vec.push(Air::ListEmpty);
-                    list.create_air_vec(air_vec);
-                }
             },
             AirTree::UnhoistedSequence(_) => {
                 unreachable!("FIRST RESOLVE ALL UNHOISTED SEQUENCES")
@@ -1266,9 +1272,6 @@ impl AirTree {
                 | AirExpression::WrapClause { then, .. }
                 | AirExpression::TupleClause { then, .. }
                 | AirExpression::Finally { then, .. } => then.return_type(),
-
-                AirExpression::FieldsEmpty { constr } => constr.return_type(),
-                AirExpression::ListEmpty { list } => list.return_type(),
             },
             _ => unreachable!(),
         }
@@ -1425,6 +1428,22 @@ impl AirTree {
                         );
                     }
                     AirStatement::NoOp => {}
+                    AirStatement::FieldsEmpty { constr } => {
+                        constr.do_traverse_tree_with(
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next_number(),
+                            with,
+                        );
+                    }
+                    AirStatement::ListEmpty { list } => {
+                        list.do_traverse_tree_with(
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next_number(),
+                            with,
+                        );
+                    }
                 };
 
                 hoisted_over.do_traverse_tree_with(
@@ -1721,22 +1740,6 @@ impl AirTree {
                         with,
                     );
                 }
-                AirExpression::FieldsEmpty { constr } => {
-                    constr.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                    );
-                }
-                AirExpression::ListEmpty { list } => {
-                    list.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                    );
-                }
                 _ => {}
             },
             a => unreachable!("GOT THIS {:#?}", a),
@@ -1861,6 +1864,24 @@ impl AirTree {
                         }
                     }
                     AirStatement::DefineFunc { .. } => unreachable!(),
+                    AirStatement::FieldsEmpty { constr } => {
+                        if *index == 0 {
+                            constr.as_mut().do_find_air_tree_node(tree_path_iter)
+                        } else if *index == 1 {
+                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
+                        } else {
+                            panic!("Tree Path index outside tree children nodes")
+                        }
+                    }
+                    AirStatement::ListEmpty { list } => {
+                        if *index == 0 {
+                            list.as_mut().do_find_air_tree_node(tree_path_iter)
+                        } else if *index == 1 {
+                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
+                        } else {
+                            panic!("Tree Path index outside tree children nodes")
+                        }
+                    }
                 },
                 AirTree::Expression(e) => match e {
                     AirExpression::List { items, .. }
@@ -2033,20 +2054,6 @@ impl AirTree {
                             msg.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else if *index == 1 {
                             then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-                    AirExpression::FieldsEmpty { constr } => {
-                        if *index == 0 {
-                            constr.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-                    AirExpression::ListEmpty { list } => {
-                        if *index == 0 {
-                            list.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else {
                             panic!("Tree Path index outside tree children nodes")
                         }
