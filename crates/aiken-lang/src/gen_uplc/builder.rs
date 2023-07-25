@@ -15,7 +15,7 @@ use uplc::{
 
 use crate::{
     ast::{AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedDataType},
-    builtins::bool,
+    builtins::{bool, void},
     expr::TypedExpr,
     tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
@@ -1373,4 +1373,11 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
         term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
     }
     term
+}
+
+pub fn wrap_validator_condition(air_tree: AirTree) -> AirTree {
+    let success_branch = vec![(air_tree, AirTree::void())];
+    let otherwise = AirTree::error(void());
+
+    AirTree::if_branches(success_branch, void(), otherwise)
 }

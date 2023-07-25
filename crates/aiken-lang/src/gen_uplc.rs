@@ -11,6 +11,7 @@ use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
+    optimize::aiken_optimize_and_intern,
     parser::interner::Interner,
 };
 
@@ -24,7 +25,7 @@ use crate::{
     gen_uplc::builder::{
         convert_opaque_type, erase_opaque_type_operations, find_and_replace_generics,
         get_arg_type_name, get_generic_id_and_type, get_variant_name, monomorphize,
-        CodeGenFunction, SpecificClause,
+        wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction, SpecificClause,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -36,8 +37,9 @@ use crate::{
 use self::{
     air::Air,
     builder::{
-        convert_type_to_data, lookup_data_type_by_tipo, modify_self_calls, rearrange_clauses,
-        AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey, UserFunction,
+        cast_validator_args, convert_type_to_data, lookup_data_type_by_tipo, modify_self_calls,
+        rearrange_clauses, AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey,
+        UserFunction,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -108,24 +110,58 @@ impl<'a> CodeGenerator<'a> {
             ..
         }: &TypedValidator,
     ) -> Program<Name> {
-        let air_tree_fun = self.build(&fun.body);
+        let mut air_tree_fun = self.build(&fun.body);
+
+        air_tree_fun = wrap_validator_condition(air_tree_fun);
+
         let mut validator_args_tree = self.check_validator_args(&fun.arguments, true, air_tree_fun);
 
         validator_args_tree = AirTree::no_op().hoist_over(validator_args_tree);
-        println!("{:#?}", validator_args_tree.to_vec());
 
         let full_tree = self.hoist_functions_to_validator(validator_args_tree);
 
         // optimizations on air tree
 
         let full_vec = full_tree.to_vec();
-        println!("FULL VEC {:#?}", full_vec);
+        // println!("FULL VEC {:#?}", full_vec);
 
         let mut term = self.uplc_code_gen(full_vec);
 
-        if let Some(other) = other_fun {}
+        if let Some(other) = other_fun {
+            self.reset();
 
-        todo!()
+            let mut air_tree_fun_other = self.build(&other.body);
+
+            air_tree_fun_other = wrap_validator_condition(air_tree_fun_other);
+
+            let mut validator_args_tree_other =
+                self.check_validator_args(&fun.arguments, true, air_tree_fun_other);
+
+            validator_args_tree_other = AirTree::no_op().hoist_over(validator_args_tree_other);
+
+            let full_tree_other = self.hoist_functions_to_validator(validator_args_tree_other);
+
+            // optimizations on air tree
+
+            let full_vec_other = full_tree_other.to_vec();
+            // println!("FULL VEC {:#?}", full_vec_other);
+
+            let other_term = self.uplc_code_gen(full_vec_other);
+
+            let (spend, mint) = if other.arguments.len() > fun.arguments.len() {
+                (other_term, term)
+            } else {
+                (term, other_term)
+            };
+
+            term = wrap_as_multi_validator(spend, mint);
+
+            self.needs_field_access = true;
+        }
+
+        term = cast_validator_args(term, params);
+
+        self.finalize(term)
     }
 
     pub fn generate_test(&mut self, test_body: &TypedExpr) -> Program<Name> {
@@ -140,13 +176,39 @@ impl<'a> CodeGenerator<'a> {
 
         let full_vec = full_tree.to_vec();
 
-        println!("FULL VEC {:#?}", full_vec);
+        // println!("FULL VEC {:#?}", full_vec);
 
-        todo!()
+        let term = self.uplc_code_gen(full_vec);
+
+        self.finalize(term)
     }
 
-    fn finalize(&mut self, _term: Term<Name>) -> Program<Name> {
-        todo!()
+    fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
+        if self.needs_field_access {
+            term = term
+                .constr_get_field()
+                .constr_fields_exposer()
+                .constr_index_exposer();
+        }
+
+        // TODO: Once SOP is implemented, new version is 1.1.0
+        let mut program = Program {
+            version: (1, 0, 0),
+            term,
+        };
+
+        program = aiken_optimize_and_intern(program);
+
+        // This is very important to call here.
+        // If this isn't done, re-using the same instance
+        // of the generator will result in free unique errors
+        // among other unpredictable things. In fact,
+        // switching to a shared code generator caused some
+        // instability issues and we fixed it by placing this
+        // method here.
+        self.reset();
+
+        program
     }
 
     fn build(&mut self, body: &TypedExpr) -> AirTree {
