@@ -6,53 +6,69 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct PatternStack {
-    pub(crate) patterns: Vec<Pattern>,
-}
+pub(crate) struct PatternStack(Vec<Pattern>);
 
 impl From<Pattern> for PatternStack {
     fn from(value: Pattern) -> Self {
-        Self {
-            patterns: vec![value],
-        }
+        Self(vec![value])
     }
 }
 
 impl From<Vec<Pattern>> for PatternStack {
     fn from(value: Vec<Pattern>) -> Self {
-        Self { patterns: value }
+        Self(value)
+    }
+}
+
+impl From<PatternStack> for Vec<Pattern> {
+    fn from(value: PatternStack) -> Self {
+        value.0
     }
 }
 
 impl PatternStack {
     fn is_empty(&self) -> bool {
-        self.patterns.is_empty()
+        self.0.is_empty()
+    }
+    
+    fn insert(&mut self, index: usize, element: Pattern) {
+        self.0.insert(index, element);
     }
 
     fn head(&self) -> &Pattern {
-        &self.patterns[0]
+        &self.0[0]
     }
 
     fn tail(&self) -> PatternStack {
-        PatternStack {
-            patterns: self.patterns.iter().skip(1).cloned().collect(),
-        }
+        self.0
+            .iter()
+            .skip(1)
+            .cloned()
+            .collect::<Vec<Pattern>>()
+            .into()
     }
 
     fn iter(&self) -> impl Iterator<Item = &Pattern> {
-        self.patterns.iter()
+        self.0.iter()
     }
 
     fn chain_tail_to_iter<'a>(&'a self, front: impl Iterator<Item = &'a Pattern>) -> PatternStack {
-        PatternStack {
-            patterns: front.chain(self.iter().skip(1)).cloned().collect(),
-        }
+        front
+            .chain(self.iter().skip(1))
+            .cloned()
+            .collect::<Vec<Pattern>>()
+            .into()
     }
 
     fn chain_tail_into_iter(&self, front: impl Iterator<Item = Pattern>) -> PatternStack {
-        PatternStack {
-            patterns: front.chain(self.iter().skip(1).cloned()).collect(),
-        }
+        front
+            .chain(
+                self.iter()
+                    .skip(1)
+                    .cloned()
+            )
+            .collect::<Vec<Pattern>>()
+            .into()
     }
 
     // INVARIANT: (length row == N) ==> (length result == arity + N - 1)
@@ -103,40 +119,48 @@ impl PatternStack {
         ),
         }
     }
+
+    fn split_at(self, arity: usize) -> (PatternStack, PatternStack) {
+        let mut rest = self.0;
+
+        let mut args = rest.split_off(arity);
+
+        std::mem::swap(&mut rest, &mut args);
+
+        (args.into(), rest.into())
+    }
 }
 
 #[derive(Debug)]
-pub(super) struct Matrix {
-    pub patterns: Vec<PatternStack>,
-}
+pub(super) struct Matrix(Vec<PatternStack>);
 
 impl Matrix {
     fn new() -> Self {
-        Matrix { patterns: vec![] }
+        Matrix(vec![])
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.patterns.is_empty()
+        self.0.is_empty()
     }
 
     pub(crate) fn push(&mut self, pattern_stack: PatternStack) {
-        self.patterns.push(pattern_stack);
+        self.0.push(pattern_stack);
     }
 
     /// Iterate over the first component of each row
     pub(super) fn iter(&self) -> impl Iterator<Item = &PatternStack> {
-        self.patterns.iter()
+        self.0.iter()
     }
 
     /// Iterate over the first component of each row, mutably
     pub(super) fn into_iter(self) -> impl Iterator<Item = PatternStack> {
-        self.patterns.into_iter()
+        self.0.into_iter()
     }
 
     pub(super) fn concat(self, other: Matrix) -> Matrix {
-        let mut patterns = self.patterns;
-        patterns.extend(other.patterns);
-        Matrix { patterns }
+        let mut patterns = self.0;
+        patterns.extend(other.0);
+        Matrix(patterns)
     }
 
     pub(crate) fn is_complete(&self) -> Complete {
@@ -187,6 +211,70 @@ impl Matrix {
         self.iter()
             .filter_map(|p_stack| p_stack.specialize_row_by_literal(literal))
             .collect()
+    }
+
+    fn is_useful(&self, vector: &PatternStack) -> bool {
+        // No rows are the same as the new vector! The vector is useful!
+        if self.is_empty() {
+            return true;
+        }
+    
+        // There is nothing left in the new vector, but we still have
+        // rows that match the same things. This is not a useful vector!
+        if vector.is_empty() {
+            return false;
+        }
+    
+        let first_pattern = vector.head();
+    
+        match first_pattern {
+            Pattern::Constructor(name, _, args) => {
+                let arity = args.len();
+    
+                let new_matrix = self.specialize_rows_by_ctor(name, arity);
+    
+                let new_vector: PatternStack = vector.chain_tail_to_iter(args.iter());
+    
+                new_matrix.is_useful(&new_vector)
+            }
+            Pattern::Wildcard => {
+                // check if all alts appear in matrix
+                match self.is_complete() {
+                    Complete::No => {
+                        // This Wildcard is useful because some Ctors are missing.
+                        // But what if a previous row has a Wildcard?
+                        // If so, this one is not useful.
+                        let new_matrix = self.specialize_rows_by_wildcard();
+    
+                        let new_vector = vector.tail();
+    
+                        new_matrix.is_useful( &new_vector)
+                    }
+                    Complete::Yes(alts) => alts.into_iter().any(|alt| {
+                        let tipo::ValueConstructor { variant, .. } = alt;
+                        let tipo::ValueConstructorVariant::Record {
+                            name,
+                            arity,
+                            ..
+                        } = variant else {unreachable!("variant should be a ValueConstructorVariant")};
+    
+                        let new_matrix = self.specialize_rows_by_ctor(&name, arity);
+    
+                        let new_vector =
+                            vector.chain_tail_into_iter(vec![Pattern::Wildcard; arity].into_iter());
+    
+                        new_matrix.is_useful(&new_vector)
+                    }),
+                }
+            }
+            Pattern::Literal(literal) => {
+                let new_matrix: Matrix = self.specialize_rows_by_literal(literal);
+    
+                let new_vector = vector.tail();
+    
+                new_matrix.is_useful(&new_vector)
+            }
+        }
     }
 }
 
@@ -300,9 +388,7 @@ fn simplify(environment: &mut Environment, value: &ast::TypedPattern) -> Result<
 
 impl iter::FromIterator<PatternStack> for Matrix {
     fn from_iter<T: IntoIterator<Item = PatternStack>>(iter: T) -> Self {
-        Matrix {
-            patterns: iter.into_iter().collect(),
-        }
+        Matrix(iter.into_iter().collect())
     }
 }
 
@@ -316,9 +402,10 @@ pub(crate) fn compute_match_usefulness(
         let pattern = simplify(environment, unchecked_pattern)?;
         let pattern_stack = PatternStack::from(pattern);
 
-        if is_useful(&matrix, &pattern_stack) {
+        if matrix.is_useful(&pattern_stack) {
             matrix.push(pattern_stack);
         } else {
+            dbg!(&pattern_stack);
             todo!("redudant")
         }
     }
@@ -343,11 +430,7 @@ pub(crate) fn compute_match_usefulness(
 //
 fn is_exhaustive(matrix: Matrix, n: usize) -> Matrix {
     if matrix.is_empty() {
-        return Matrix {
-            patterns: vec![PatternStack {
-                patterns: vec![Pattern::Wildcard; n],
-            }],
-        };
+        return Matrix(vec![vec![Pattern::Wildcard; n].into()]);
     }
 
     if n == 0 {
@@ -366,7 +449,7 @@ fn is_exhaustive(matrix: Matrix, n: usize) -> Matrix {
             .iter()
             .map(|p_stack| {
                 let mut new_p_stack = p_stack.clone();
-                new_p_stack.patterns.insert(0, Pattern::Wildcard);
+                new_p_stack.insert(0, Pattern::Wildcard);
                 new_p_stack
             })
             .collect::<Matrix>();
@@ -388,7 +471,7 @@ fn is_exhaustive(matrix: Matrix, n: usize) -> Matrix {
         for p_stack in new_matrix.into_iter() {
             for p in prefix.clone() {
                 let mut p_stack = p_stack.clone();
-                p_stack.patterns.insert(0, p);
+                p_stack.insert(0, p);
                 m.push(p_stack);
             }
         }
@@ -436,15 +519,11 @@ fn recover_ctor(
     arity: usize,
     patterns: PatternStack,
 ) -> PatternStack {
-    let mut rest = patterns.patterns;
+    let (args, mut rest) = patterns.split_at(arity);
 
-    let mut args = rest.split_off(arity);
+    rest.insert(0, Pattern::Constructor(name.to_string(), alts, args.into()));
 
-    std::mem::swap(&mut rest, &mut args);
-
-    rest.insert(0, Pattern::Constructor(name.to_string(), alts, args));
-
-    rest.into()
+    rest
 }
 
 fn is_missing(
@@ -470,66 +549,4 @@ fn is_missing(
     }
 }
 
-fn is_useful(matrix: &Matrix, vector: &PatternStack) -> bool {
-    // No rows are the same as the new vector! The vector is useful!
-    if matrix.is_empty() {
-        return true;
-    }
 
-    // There is nothing left in the new vector, but we still have
-    // rows that match the same things. This is not a useful vector!
-    if vector.is_empty() {
-        return false;
-    }
-
-    let first_pattern = vector.head();
-
-    match first_pattern {
-        Pattern::Constructor(name, _, args) => {
-            let arity = args.len();
-
-            let new_matrix = matrix.specialize_rows_by_ctor(name, arity);
-
-            let new_vector: PatternStack = vector.chain_tail_to_iter(args.iter());
-
-            is_useful(&new_matrix, &new_vector)
-        }
-        Pattern::Wildcard => {
-            // check if all alts appear in matrix
-            match matrix.is_complete() {
-                Complete::No => {
-                    // This Wildcard is useful because some Ctors are missing.
-                    // But what if a previous row has a Wildcard?
-                    // If so, this one is not useful.
-                    let new_matrix = matrix.specialize_rows_by_wildcard();
-
-                    let new_vector = vector.tail();
-
-                    is_useful(&new_matrix, &new_vector)
-                }
-                Complete::Yes(alts) => alts.into_iter().any(|alt| {
-                    let tipo::ValueConstructor { variant, .. } = alt;
-                    let tipo::ValueConstructorVariant::Record {
-                        name,
-                        arity,
-                        ..
-                    } = variant else {unreachable!("variant should be a ValueConstructorVariant")};
-
-                    let new_matrix = matrix.specialize_rows_by_ctor(&name, arity);
-
-                    let new_vector =
-                        vector.chain_tail_into_iter(vec![Pattern::Wildcard; arity].into_iter());
-
-                    is_useful(&new_matrix, &new_vector)
-                }),
-            }
-        }
-        Pattern::Literal(literal) => {
-            let new_matrix: Matrix = matrix.specialize_rows_by_literal(literal);
-
-            let new_vector = vector.tail();
-
-            is_useful(&new_matrix, &new_vector)
-        }
-    }
-}

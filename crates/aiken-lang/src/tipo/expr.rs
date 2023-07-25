@@ -1,8 +1,6 @@
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 use vec1::Vec1;
 
-mod usefulness;
-
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
@@ -17,11 +15,10 @@ use crate::{
     tipo::fields::FieldMap,
 };
 
-use self::usefulness::compute_match_usefulness;
-
 use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
     error::{Error, Warning},
+    exhaustive::compute_match_usefulness,
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
