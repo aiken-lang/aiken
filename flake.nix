@@ -35,6 +35,17 @@
 
           cargoLock.lockFile = ./Cargo.lock;
 
+          postInstall = ''
+            mkdir -p $out/share/zsh/site-functions
+            $out/bin/aiken completion zsh > $out/share/zsh/site-functions/_aiken
+
+            mkdir -p $out/share/bash-completion/completions
+            $out/bin/aiken completion bash > $out/share/bash-completion/completions/aiken
+
+            mkdir -p $out/share/fish/vendor_completions.d
+            $out/bin/aiken completion fish > $out/share/fish/vendor_completions.d/aiken.fish
+          '';
+
           meta = with pkgs.lib; {
             description = "Cardano smart contract language and toolchain";
             homepage = "https://github.com/aiken-lang/aiken";
