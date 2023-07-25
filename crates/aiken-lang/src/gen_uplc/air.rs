@@ -105,7 +105,6 @@ pub enum Air {
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
-        count: usize,
         complex_clause: bool,
     },
     ClauseGuard {
@@ -122,7 +121,6 @@ pub enum Air {
         subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
-        type_count: usize,
     },
     Finally,
     // If
