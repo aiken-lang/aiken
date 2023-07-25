@@ -8,6 +8,7 @@ use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
 mod environment;
 pub mod error;
+mod exhaustive;
 mod expr;
 pub mod fields;
 mod hydrator;
