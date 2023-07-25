@@ -119,8 +119,11 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
 
         let full_vec = full_tree.to_vec();
-
         println!("FULL VEC {:#?}", full_vec);
+
+        let mut term = self.uplc_code_gen(full_vec);
+
+        if let Some(other) = other_fun {}
 
         todo!()
     }
@@ -241,7 +244,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut arg_val = self.build(&arg.value);
 
                             if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                arg_val = AirTree::wrap_data(arg_val, arg.value.tipo())
+                                arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
                             }
                             arg_val
                         })
@@ -273,7 +276,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut arg_val = self.build(&arg.value);
 
                             if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                arg_val = AirTree::wrap_data(arg_val, arg.value.tipo())
+                                arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
                             }
                             arg_val
                         })
@@ -295,7 +298,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut arg_val = self.build(&arg.value);
 
                             if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                arg_val = AirTree::wrap_data(arg_val, arg.value.tipo())
+                                arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
                             }
                             arg_val
                         })
@@ -558,9 +561,9 @@ impl<'a> CodeGenerator<'a> {
         props: AssignmentProperties,
     ) -> AirTree {
         if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
-            value = AirTree::unwrap_data(value, tipo.clone());
+            value = AirTree::cast_from_data(value, tipo.clone());
         } else if !props.value_type.is_data() && tipo.is_data() {
-            value = AirTree::wrap_data(value, tipo.clone());
+            value = AirTree::cast_to_data(value, tipo.clone());
         }
 
         match pattern {
@@ -2802,7 +2805,7 @@ impl<'a> CodeGenerator<'a> {
         );
     }
 
-    fn uplc_code_gen(&mut self, ir_stack: &mut Vec<Air>) -> Term<Name> {
+    fn uplc_code_gen(&mut self, mut ir_stack: Vec<Air>) -> Term<Name> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
         while let Some(ir_element) = ir_stack.pop() {
@@ -3128,7 +3131,7 @@ impl<'a> CodeGenerator<'a> {
                             let name_module = format!("{module_name}_{function_name}");
                             let name = function_name.to_string();
                             if text == &name || text == &name_module {
-                                let mut term = self.uplc_code_gen(&mut ir.clone());
+                                let mut term = self.uplc_code_gen(ir.clone());
                                 term = term
                                     .constr_get_field()
                                     .constr_fields_exposer()
@@ -3391,14 +3394,14 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::UnWrapData { tipo, .. } => {
+            Air::CastFromData { tipo, .. } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = builder::convert_data_to_type(term, &tipo);
 
                 arg_stack.push(term);
             }
-            Air::WrapData { tipo, .. } => {
+            Air::CastToData { tipo, .. } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = builder::convert_type_to_data(term, &tipo);

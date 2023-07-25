@@ -14,7 +14,7 @@ use uplc::{
 };
 
 use crate::{
-    ast::{AssignmentKind, DataType, Pattern, Span, TypedClause, TypedDataType},
+    ast::{AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedDataType},
     builtins::bool,
     expr::TypedExpr,
     tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
@@ -1356,4 +1356,21 @@ pub fn get_list_elements_len_and_tail(
     } else {
         None
     }
+}
+
+pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Name> {
+    let mut term = term;
+    for arg in arguments.iter().rev() {
+        if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
+            term = term
+                .lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
+                .apply(convert_data_to_type(
+                    Term::var(arg.arg_name.get_variable_name().unwrap_or("_")),
+                    &arg.tipo,
+                ));
+        }
+
+        term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
+    }
+    term
 }
