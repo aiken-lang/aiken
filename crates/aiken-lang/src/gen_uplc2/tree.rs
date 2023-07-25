@@ -829,22 +829,13 @@ impl AirTree {
             ],
         );
 
-        let list_clause = AirTree::list_clause(
+        AirTree::list_clause(
             "__list_to_check",
             void(),
             AirTree::void(),
             assign.hoist_over(next_call),
             None,
             false,
-        );
-
-        AirTree::define_func(
-            EXPECT_ON_LIST,
-            "",
-            "",
-            vec!["__list_to_check".to_string(), "__check_with".to_string()],
-            true,
-            list_clause,
         )
     }
 
@@ -1758,7 +1749,7 @@ impl AirTree {
                 }
                 _ => {}
             },
-            _ => unreachable!(),
+            a => unreachable!("GOT THIS {:#?}", a),
         }
 
         tree_path.pop();

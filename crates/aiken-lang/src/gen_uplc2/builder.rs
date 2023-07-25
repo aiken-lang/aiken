@@ -18,7 +18,7 @@ use super::tree::{AirExpression, AirStatement, AirTree};
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
-    Function(AirTree, Vec<String>),
+    Function { body: AirTree, params: Vec<String> },
     Link(String),
 }
 
@@ -318,54 +318,49 @@ pub fn get_variant_name(t: &Arc<Type>) -> String {
 }
 
 pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>>) {
-    air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
-        let mut held_types = air_tree.mut_held_types();
+    let mut held_types = air_tree.mut_held_types();
 
-        while let Some(tipo) = held_types.pop() {
-            *tipo = find_and_replace_generics(tipo, mono_types)
-        }
-    });
+    while let Some(tipo) = held_types.pop() {
+        *tipo = find_and_replace_generics(tipo, mono_types);
+    }
 }
 
 pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) {
-    air_tree.traverse_tree_with(&mut |air_tree, _| {
-        if let AirTree::Expression(e) = air_tree {
-            match e {
-                AirExpression::Constr { tipo, args, .. } => {
-                    if check_replaceable_opaque_type(tipo, data_types) {
-                        *air_tree = args.pop().unwrap();
-                    }
+    if let AirTree::Expression(e) = air_tree {
+        match e {
+            AirExpression::Constr { tipo, args, .. } => {
+                if check_replaceable_opaque_type(tipo, data_types) {
+                    *air_tree = args.pop().unwrap();
                 }
-                AirExpression::RecordAccess { tipo, record, .. } => {
-                    if check_replaceable_opaque_type(tipo, data_types) {
-                        *air_tree = (**record).clone();
-                    }
+            }
+            AirExpression::RecordAccess { tipo, record, .. } => {
+                if check_replaceable_opaque_type(tipo, data_types) {
+                    *air_tree = (**record).clone();
                 }
-
-                _ => {}
             }
-        } else if let AirTree::Statement {
-            statement:
-                AirStatement::FieldsExpose {
-                    record, indices, ..
-                },
-            hoisted_over: Some(hoisted_over),
-        } = air_tree
-        {
-            if check_replaceable_opaque_type(&record.return_type(), data_types) {
-                let name = indices[0].1.clone();
-                *air_tree = AirTree::let_assignment(name, (**record).clone())
-                    .hoist_over((**hoisted_over).clone())
-            }
-        }
 
-        let mut held_types = air_tree.mut_held_types();
-
-        while let Some(tipo) = held_types.pop() {
-            *tipo = convert_opaque_type(tipo, data_types);
+            _ => {}
         }
-    });
+    } else if let AirTree::Statement {
+        statement: AirStatement::FieldsExpose {
+            record, indices, ..
+        },
+        hoisted_over: Some(hoisted_over),
+    } = air_tree
+    {
+        if check_replaceable_opaque_type(&record.return_type(), data_types) {
+            let name = indices[0].1.clone();
+            *air_tree = AirTree::let_assignment(name, (**record).clone())
+                .hoist_over((**hoisted_over).clone())
+        }
+    }
+
+    let mut held_types = air_tree.mut_held_types();
+
+    while let Some(tipo) = held_types.pop() {
+        *tipo = convert_opaque_type(tipo, data_types);
+    }
 }
