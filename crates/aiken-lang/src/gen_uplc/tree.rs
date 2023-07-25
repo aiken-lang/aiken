@@ -248,11 +248,11 @@ pub enum AirExpression {
         arg: Box<AirTree>,
     },
 
-    UnWrapData {
+    CastFromData {
         tipo: Arc<Type>,
         value: Box<AirTree>,
     },
-    WrapData {
+    CastToData {
         tipo: Arc<Type>,
         value: Box<AirTree>,
     },
@@ -478,14 +478,14 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn unwrap_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
-        AirTree::Expression(AirExpression::UnWrapData {
+    pub fn cast_from_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
+        AirTree::Expression(AirExpression::CastFromData {
             tipo,
             value: value.into(),
         })
     }
-    pub fn wrap_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
-        AirTree::Expression(AirExpression::WrapData {
+    pub fn cast_to_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
+        AirTree::Expression(AirExpression::CastToData {
             tipo,
             value: value.into(),
         })
@@ -1066,12 +1066,12 @@ impl AirTree {
                     air_vec.push(Air::UnOp { op: *op });
                     arg.create_air_vec(air_vec);
                 }
-                AirExpression::UnWrapData { tipo, value } => {
-                    air_vec.push(Air::UnWrapData { tipo: tipo.clone() });
+                AirExpression::CastFromData { tipo, value } => {
+                    air_vec.push(Air::CastFromData { tipo: tipo.clone() });
                     value.create_air_vec(air_vec);
                 }
-                AirExpression::WrapData { tipo, value } => {
-                    air_vec.push(Air::WrapData { tipo: tipo.clone() });
+                AirExpression::CastToData { tipo, value } => {
+                    air_vec.push(Air::CastToData { tipo: tipo.clone() });
                     value.create_air_vec(air_vec);
                 }
                 AirExpression::When {
@@ -1254,7 +1254,7 @@ impl AirTree {
                 | AirExpression::Call { tipo, .. }
                 | AirExpression::Builtin { tipo, .. }
                 | AirExpression::BinOp { tipo, .. }
-                | AirExpression::UnWrapData { tipo, .. }
+                | AirExpression::CastFromData { tipo, .. }
                 | AirExpression::When { tipo, .. }
                 | AirExpression::If { tipo, .. }
                 | AirExpression::Constr { tipo, .. }
@@ -1270,7 +1270,7 @@ impl AirTree {
                     UnOp::Not => bool(),
                     UnOp::Negate => int(),
                 },
-                AirExpression::WrapData { .. } => data(),
+                AirExpression::CastToData { .. } => data(),
                 AirExpression::Clause { then, .. }
                 | AirExpression::ListClause { then, .. }
                 | AirExpression::WrapClause { then, .. }
@@ -1303,8 +1303,8 @@ impl AirTree {
                 | AirExpression::Tuple { tipo, .. }
                 | AirExpression::Call { tipo, .. }
                 | AirExpression::Builtin { tipo, .. }
-                | AirExpression::UnWrapData { tipo, .. }
-                | AirExpression::WrapData { tipo, .. }
+                | AirExpression::CastFromData { tipo, .. }
+                | AirExpression::CastToData { tipo, .. }
                 | AirExpression::If { tipo, .. }
                 | AirExpression::RecordUpdate { tipo, .. }
                 | AirExpression::RecordAccess { tipo, .. }
@@ -1523,7 +1523,7 @@ impl AirTree {
                         with,
                     );
                 }
-                AirExpression::UnWrapData { value, .. } => {
+                AirExpression::CastFromData { value, .. } => {
                     value.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
@@ -1531,7 +1531,7 @@ impl AirTree {
                         with,
                     );
                 }
-                AirExpression::WrapData { value, .. } => {
+                AirExpression::CastToData { value, .. } => {
                     value.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
@@ -1912,14 +1912,14 @@ impl AirTree {
                             panic!("Tree Path index outside tree children nodes")
                         }
                     }
-                    AirExpression::UnWrapData { value, .. } => {
+                    AirExpression::CastFromData { value, .. } => {
                         if *index == 0 {
                             value.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else {
                             panic!("Tree Path index outside tree children nodes")
                         }
                     }
-                    AirExpression::WrapData { value, .. } => {
+                    AirExpression::CastToData { value, .. } => {
                         if *index == 0 {
                             value.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else {

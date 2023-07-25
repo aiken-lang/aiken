@@ -70,10 +70,10 @@ pub enum Air {
     Let {
         name: String,
     },
-    UnWrapData {
+    CastFromData {
         tipo: Arc<Type>,
     },
-    WrapData {
+    CastToData {
         tipo: Arc<Type>,
     },
     AssertConstr {
