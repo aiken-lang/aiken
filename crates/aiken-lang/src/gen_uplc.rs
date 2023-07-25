@@ -168,7 +168,6 @@ impl<'a> CodeGenerator<'a> {
         let mut air_tree = self.build(test_body);
 
         air_tree = AirTree::no_op().hoist_over(air_tree);
-        println!("{:#?}", air_tree.to_vec());
 
         let full_tree = self.hoist_functions_to_validator(air_tree);
 
@@ -810,7 +809,7 @@ impl<'a> CodeGenerator<'a> {
                 let names = elems.iter().map(|(name, _)| name.to_string()).collect_vec();
 
                 let list_access = if elements.is_empty() {
-                    AirTree::let_assignment("_", AirTree::list_empty(value))
+                    AirTree::list_empty(value)
                 } else {
                     AirTree::list_access(names, tipo.clone(), tail.is_some(), tail.is_none(), value)
                 };
@@ -1366,7 +1365,7 @@ impl<'a> CodeGenerator<'a> {
                                 tipo.clone(),
                             ));
 
-                            assigns.insert(0, AirTree::let_assignment("_", empty));
+                            assigns.insert(0, empty);
                         } else {
                             let expose = AirTree::fields_expose(
                                 indices,
@@ -3130,6 +3129,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
+
                 let list_id = self.id_gen.next();
 
                 let mut id_list = vec![];
@@ -3146,20 +3146,34 @@ impl<'a> CodeGenerator<'a> {
                     .take(names.len())
                     .collect_vec();
 
-                term = builder::list_access_to_uplc(
-                    &names,
-                    &id_list,
-                    tail,
-                    0,
-                    term,
-                    inner_types,
-                    check_last_item,
-                    true,
-                    self.tracing,
-                )
-                .apply(value);
+                if !names.is_empty() {
+                    term = builder::list_access_to_uplc(
+                        &names,
+                        &id_list,
+                        tail,
+                        0,
+                        term,
+                        inner_types,
+                        check_last_item,
+                        true,
+                        self.tracing,
+                    )
+                    .apply(value);
 
-                arg_stack.push(term);
+                    arg_stack.push(term);
+                } else if check_last_item {
+                    let trace_term = if self.tracing {
+                        Term::Error.trace(Term::string("Expected no items for List"))
+                    } else {
+                        Term::Error
+                    };
+
+                    term = value.delayed_choose_list(term, trace_term);
+
+                    arg_stack.push(term);
+                } else {
+                    arg_stack.push(term);
+                }
             }
             Air::ListExpose {
                 tail_head_names,
@@ -3170,13 +3184,13 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let mut term = arg_stack.pop().unwrap();
 
-                if let Some((tail_var, tail_name)) = tail {
+                if let Some((tail_var, tail_name)) = &tail {
                     term = term
                         .lambda(tail_name)
                         .apply(Term::tail_list().apply(Term::var(tail_var)));
                 }
 
-                for (tail_var, head_name) in tail_head_names.into_iter().rev() {
+                for (tail_var, head_name) in tail_head_names.iter().rev() {
                     let head_list = if tipo.is_map() {
                         Term::head_list().apply(Term::var(tail_var))
                     } else {
@@ -3679,8 +3693,8 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::WrapClause => {
                 // no longer need to pop off discard
-                let mut term = arg_stack.pop().unwrap();
                 let arg = arg_stack.pop().unwrap();
+                let mut term = arg_stack.pop().unwrap();
 
                 term = term.lambda("__other_clauses_delayed").apply(arg.delay());
 
@@ -3919,6 +3933,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 self.needs_field_access = true;
                 let mut id_list = vec![];
+
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
@@ -3934,8 +3949,8 @@ impl<'a> CodeGenerator<'a> {
                 let names = indices.iter().cloned().map(|item| item.1).collect_vec();
                 let inner_types = indices.iter().cloned().map(|item| item.2).collect_vec();
 
-                term = if !indices.is_empty() {
-                    builder::list_access_to_uplc(
+                if !indices.is_empty() {
+                    term = builder::list_access_to_uplc(
                         &names,
                         &id_list,
                         false,
@@ -3945,14 +3960,26 @@ impl<'a> CodeGenerator<'a> {
                         check_last_item,
                         false,
                         self.tracing,
-                    )
+                    );
+
+                    term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(value));
+
+                    arg_stack.push(term);
+                } else if check_last_item {
+                    let trace_term = if self.tracing {
+                        Term::Error.trace(Term::string("Expected no fields for Constr"))
+                    } else {
+                        Term::Error
+                    };
+
+                    term = Term::var(CONSTR_FIELDS_EXPOSER)
+                        .apply(value)
+                        .delayed_choose_list(term, trace_term);
+
+                    arg_stack.push(term);
                 } else {
-                    term
+                    arg_stack.push(term);
                 };
-
-                term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(value));
-
-                arg_stack.push(term);
             }
             Air::FieldsEmpty => {
                 self.needs_field_access = true;
@@ -4209,7 +4236,9 @@ impl<'a> CodeGenerator<'a> {
                         ))
                         .lambda(format!("__tuple_{list_id}"))
                         .apply(value);
-                } else {
+
+                    arg_stack.push(term);
+                } else if !names.is_empty() {
                     let mut id_list = vec![];
                     id_list.push(list_id);
 
@@ -4229,9 +4258,21 @@ impl<'a> CodeGenerator<'a> {
                         self.tracing,
                     )
                     .apply(value);
-                }
 
-                arg_stack.push(term);
+                    arg_stack.push(term);
+                } else if check_last_item {
+                    let trace_term = if self.tracing {
+                        Term::Error.trace(Term::string("Expected no items for Tuple"))
+                    } else {
+                        Term::Error
+                    };
+
+                    term = value.delayed_choose_list(term, trace_term);
+
+                    arg_stack.push(term);
+                } else {
+                    arg_stack.push(term);
+                }
             }
             Air::Trace { .. } => {
                 let text = arg_stack.pop().unwrap();
