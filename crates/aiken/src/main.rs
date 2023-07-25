@@ -1,11 +1,8 @@
-use aiken::{
-    cmd::{
-        Cmd,
-        blueprint::{self, address},
-        build, check, docs, fmt, lsp, new,
-        packages::{self, add},
-        tx, uplc, completion,
-    },
+use aiken::cmd::{
+    blueprint::{self, address},
+    build, check, completion, docs, fmt, lsp, new,
+    packages::{self, add},
+    tx, uplc, Cmd,
 };
 
 use owo_colors::OwoColorize;
@@ -26,7 +23,7 @@ fn main() -> miette::Result<()> {
         Cmd::Lsp(args) => lsp::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
-        Cmd::Completion(sub_cmd) => completion::exec(sub_cmd)
+        Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
     }
 }
 
