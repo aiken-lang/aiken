@@ -317,7 +317,6 @@ impl CheckedModules {
                             FunctionAccessKey {
                                 module_name: module.name.clone(),
                                 function_name: func.name.clone(),
-                                variant_name: String::new(),
                             },
                             func,
                         );
