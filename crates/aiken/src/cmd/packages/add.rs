@@ -22,7 +22,7 @@ pub struct Args {
     #[clap(long)]
     pub version: String,
 
-    #[clap(hide = true)]
+    #[clap(hide = true, long)]
     pub overwrite: bool,
 }
 
