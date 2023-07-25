@@ -36,6 +36,13 @@ impl ExBudget {
             cpu: 10000000000,
         }
     }
+
+    pub fn max() -> Self {
+        ExBudget {
+            mem: 14000000000,
+            cpu: 10000000000000,
+        }
+    }
 }
 
 impl Default for ExBudget {

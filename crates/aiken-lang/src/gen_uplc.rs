@@ -625,7 +625,7 @@ impl<'a> CodeGenerator<'a> {
         if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
             value = AirTree::cast_from_data(value, tipo.clone());
         } else if !props.value_type.is_data() && tipo.is_data() {
-            value = AirTree::cast_to_data(value, tipo.clone());
+            value = AirTree::cast_to_data(value, props.value_type.clone());
         }
 
         match pattern {
@@ -2877,24 +2877,24 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) {
+        // Going to mark the changes made to code gen after air tree implementation
         match ir {
-            Air::Int { value, .. } => {
+            Air::Int { value } => {
                 arg_stack.push(Term::integer(value.parse().unwrap()));
             }
-            Air::String { value, .. } => {
+            Air::String { value } => {
                 arg_stack.push(Term::string(value));
             }
-            Air::ByteArray { bytes, .. } => {
+            Air::ByteArray { bytes } => {
                 arg_stack.push(Term::byte_string(bytes));
             }
-            Air::Bool { value, .. } => {
+            Air::Bool { value } => {
                 arg_stack.push(Term::bool(value));
             }
             Air::Var {
                 name,
                 constructor,
                 variant_name,
-                ..
             } => {
                 match &constructor.variant {
                     ValueConstructorVariant::LocalVariable { .. } => arg_stack.push(Term::Var(
@@ -2906,6 +2906,40 @@ impl<'a> CodeGenerator<'a> {
                     )),
                     ValueConstructorVariant::ModuleConstant { .. } => {
                         unreachable!()
+                    }
+
+                    ValueConstructorVariant::ModuleFn {
+                        builtin: Some(builtin),
+                        ..
+                    } => {
+                        let term = match builtin {
+                            DefaultFunction::IfThenElse
+                            | DefaultFunction::ChooseUnit
+                            | DefaultFunction::Trace
+                            | DefaultFunction::ChooseList
+                            | DefaultFunction::ChooseData
+                            | DefaultFunction::UnConstrData => {
+                                builder::special_case_builtin(builtin, 0, vec![])
+                            }
+
+                            DefaultFunction::FstPair
+                            | DefaultFunction::SndPair
+                            | DefaultFunction::HeadList => {
+                                builder::undata_builtin(builtin, 0, &constructor.tipo, vec![])
+                            }
+
+                            DefaultFunction::MkCons | DefaultFunction::MkPairData => {
+                                unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
+                            }
+                            _ => {
+                                let mut term: Term<Name> = (*builtin).into();
+
+                                term = builder::apply_builtin_forces(term, builtin.force_count());
+
+                                term
+                            }
+                        };
+                        arg_stack.push(term);
                     }
                     ValueConstructorVariant::ModuleFn {
                         name: func_name,
@@ -3001,10 +3035,8 @@ impl<'a> CodeGenerator<'a> {
                     }
                 };
             }
-            Air::Void { .. } => arg_stack.push(Term::Constant(UplcConstant::Unit.into())),
-            Air::List {
-                count, tipo, tail, ..
-            } => {
+            Air::Void => arg_stack.push(Term::Constant(UplcConstant::Unit.into())),
+            Air::List { count, tipo, tail } => {
                 let mut args = vec![];
 
                 for _ in 0..count {
@@ -3017,8 +3049,6 @@ impl<'a> CodeGenerator<'a> {
                         constants.push(c.clone())
                     }
                 }
-
-                let list_type = tipo.get_inner_types()[0].clone();
 
                 if constants.len() == args.len() && !tail {
                     let list = if tipo.is_map() {
@@ -3075,11 +3105,14 @@ impl<'a> CodeGenerator<'a> {
                         Term::empty_list()
                     };
 
+                    // move this down here since the constant list path doesn't need to do this
+                    let list_element_type = tipo.get_inner_types()[0].clone();
+
                     for arg in args.into_iter().rev() {
                         let list_item = if tipo.is_map() {
                             arg
                         } else {
-                            builder::convert_type_to_data(arg, &list_type)
+                            builder::convert_type_to_data(arg, &list_element_type)
                         };
                         term = Term::mk_cons().apply(list_item).apply(term);
                     }
@@ -3089,9 +3122,11 @@ impl<'a> CodeGenerator<'a> {
             Air::ListAccessor {
                 names,
                 tail,
+                // TODO: rename tipo -
+                // tipo here refers to the list type while the actual return
+                // type is nothing since this is an assignment over some expression
                 tipo,
                 check_last_item,
-                ..
             } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
@@ -3129,8 +3164,9 @@ impl<'a> CodeGenerator<'a> {
             Air::ListExpose {
                 tail_head_names,
                 tail,
+                // TODO: another case where tipo is not the actual return type,
+                // but the list type
                 tipo,
-                ..
             } => {
                 let mut term = arg_stack.pop().unwrap();
 
@@ -3154,14 +3190,18 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Fn { params, .. } => {
+            Air::Fn { params } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 for param in params.iter().rev() {
                     term = term.lambda(param);
                 }
 
-                arg_stack.push(term);
+                if params.is_empty() {
+                    arg_stack.push(term.delay())
+                } else {
+                    arg_stack.push(term);
+                }
             }
             Air::Call { count, .. } => {
                 if count >= 1 {
@@ -3177,56 +3217,56 @@ impl<'a> CodeGenerator<'a> {
                     let term = arg_stack.pop().unwrap();
 
                     let zero_arg_functions = self.zero_arg_functions.clone();
-                    let mut anon_func = true;
 
-                    if let Term::Var(name) = term.clone() {
+                    // How we handle empty anon functions has changed
+                    // We now delay zero arg anon functions and force them on a call operation
+                    if let Term::Var(name) = &term {
                         let text = &name.text;
 
-                        for (
-                            FunctionAccessKey {
-                                module_name,
-                                function_name,
+                        if let Some((_, air_vec)) = zero_arg_functions.iter().find(
+                            |(
+                                FunctionAccessKey {
+                                    module_name,
+                                    function_name,
+                                },
+                                _,
+                            )| {
+                                let name_module = format!("{module_name}_{function_name}");
+                                let name = function_name.to_string();
+                                text == &name || text == &name_module
                             },
-                            ir,
-                        ) in zero_arg_functions.into_iter()
-                        {
-                            let name_module = format!("{module_name}_{function_name}");
-                            let name = function_name.to_string();
-                            if text == &name || text == &name_module {
-                                let mut term = self.uplc_code_gen(ir.clone());
-                                term = term
-                                    .constr_get_field()
-                                    .constr_fields_exposer()
-                                    .constr_index_exposer();
+                        ) {
+                            let mut term = self.uplc_code_gen(air_vec.clone());
 
-                                let mut program: Program<Name> = Program {
-                                    version: (1, 0, 0),
-                                    term,
-                                };
+                            term = term
+                                .constr_get_field()
+                                .constr_fields_exposer()
+                                .constr_index_exposer();
 
-                                let mut interner = Interner::new();
+                            let mut program: Program<Name> = Program {
+                                version: (1, 0, 0),
+                                term,
+                            };
 
-                                interner.program(&mut program);
+                            let mut interner = Interner::new();
 
-                                let eval_program: Program<NamedDeBruijn> =
-                                    program.try_into().unwrap();
+                            interner.program(&mut program);
 
-                                let evaluated_term: Term<NamedDeBruijn> =
-                                    eval_program.eval(ExBudget::default()).result().unwrap();
+                            let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
 
-                                arg_stack.push(evaluated_term.try_into().unwrap());
-                                anon_func = false;
-                            }
+                            let evaluated_term: Term<NamedDeBruijn> =
+                                eval_program.eval(ExBudget::max()).result().unwrap();
+
+                            arg_stack.push(evaluated_term.try_into().unwrap());
+                        } else {
+                            arg_stack.push(term.force())
                         }
-                    }
-                    if anon_func {
-                        arg_stack.push(term);
+                    } else {
+                        unreachable!("Shouldn't call anything other than var")
                     }
                 }
             }
-            Air::Builtin {
-                func, tipo, count, ..
-            } => {
+            Air::Builtin { func, tipo, count } => {
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
@@ -3254,7 +3294,7 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                        builder::to_data_builtin(&func, count, tipo, arg_vec)
+                        unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
                     }
                     _ => {
                         let mut term: Term<Name> = func.into();
@@ -3271,7 +3311,12 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::BinOp { name, tipo, .. } => {
+            Air::BinOp {
+                name,
+                // changed this to argument tipo
+                argument_tipo: tipo,
+                ..
+            } => {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
 
@@ -3416,7 +3461,6 @@ impl<'a> CodeGenerator<'a> {
                 recursive,
                 module_name,
                 variant_name,
-                ..
             } => {
                 let func_name = if module_name.is_empty() {
                     format!("{func_name}{variant_name}")
@@ -3447,7 +3491,7 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(term);
                 }
             }
-            Air::Let { name, .. } => {
+            Air::Let { name } => {
                 let arg = arg_stack.pop().unwrap();
 
                 let mut term = arg_stack.pop().unwrap();
@@ -3456,21 +3500,21 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::CastFromData { tipo, .. } => {
+            Air::CastFromData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = builder::convert_data_to_type(term, &tipo);
 
                 arg_stack.push(term);
             }
-            Air::CastToData { tipo, .. } => {
+            Air::CastToData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = builder::convert_type_to_data(term, &tipo);
 
                 arg_stack.push(term);
             }
-            Air::AssertConstr { constr_index, .. } => {
+            Air::AssertConstr { constr_index } => {
                 self.needs_field_access = true;
                 let constr = arg_stack.pop().unwrap();
 
@@ -3489,7 +3533,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::AssertBool { is_true, .. } => {
+            Air::AssertBool { is_true } => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
@@ -3507,7 +3551,10 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::When {
-                subject_name, tipo, ..
+                subject_name,
+                // using subject type here
+                subject_tipo: tipo,
+                ..
             } => {
                 let subject = arg_stack.pop().unwrap();
 
@@ -3534,7 +3581,6 @@ impl<'a> CodeGenerator<'a> {
                 subject_tipo: tipo,
                 subject_name,
                 complex_clause,
-                ..
             } => {
                 // clause to compare
                 let clause = arg_stack.pop().unwrap();
@@ -3608,9 +3654,7 @@ impl<'a> CodeGenerator<'a> {
                 complex_clause,
                 ..
             } => {
-                // discard to pop off
-                let _ = arg_stack.pop().unwrap();
-
+                // no longer need to pop off discard
                 let body = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
@@ -3633,9 +3677,8 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::WrapClause { .. } => {
-                let _ = arg_stack.pop().unwrap();
-
+            Air::WrapClause => {
+                // no longer need to pop off discard
                 let mut term = arg_stack.pop().unwrap();
                 let arg = arg_stack.pop().unwrap();
 
@@ -3643,10 +3686,55 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
+            Air::TupleClause {
+                subject_tipo: tipo,
+                indices,
+                subject_name,
+                complex_clause,
+                ..
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                let tuple_types = tipo.get_inner_types();
+
+                if complex_clause {
+                    let next_clause = arg_stack.pop().unwrap();
+
+                    term = term
+                        .lambda("__other_clauses_delayed")
+                        .apply(next_clause.delay());
+                }
+
+                if tuple_types.len() == 2 {
+                    for (index, name) in indices.iter() {
+                        let builtin = if *index == 0 {
+                            Term::fst_pair()
+                        } else {
+                            Term::snd_pair()
+                        };
+
+                        term = term.lambda(name).apply(builder::convert_data_to_type(
+                            builtin.apply(Term::var(subject_name.clone())),
+                            &tuple_types[*index].clone(),
+                        ));
+                    }
+                } else {
+                    for (index, name) in indices.iter() {
+                        term = term
+                            .lambda(name.clone())
+                            .apply(builder::convert_data_to_type(
+                                Term::head_list().apply(
+                                    Term::var(subject_name.clone()).repeat_tail_list(*index),
+                                ),
+                                &tuple_types[*index].clone(),
+                            ));
+                    }
+                }
+                arg_stack.push(term);
+            }
             Air::ClauseGuard {
                 subject_name,
                 subject_tipo: tipo,
-                ..
             } => {
                 let checker = arg_stack.pop().unwrap();
 
@@ -3695,8 +3783,7 @@ impl<'a> CodeGenerator<'a> {
                 inverse,
                 ..
             } => {
-                // discard to pop off
-                let _ = arg_stack.pop().unwrap();
+                // no longer need to pop off discard
 
                 // the body to be run if the clause matches
                 // the next branch in the when expression
@@ -3721,7 +3808,43 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Finally { .. } => {
+            Air::TupleGuard {
+                subject_tipo: tipo,
+                indices,
+                subject_name,
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                let tuple_types = tipo.get_inner_types();
+
+                if tuple_types.len() == 2 {
+                    for (index, name) in indices.iter() {
+                        let builtin = if *index == 0 {
+                            Term::fst_pair()
+                        } else {
+                            Term::snd_pair()
+                        };
+
+                        term = term.lambda(name).apply(builder::convert_data_to_type(
+                            builtin.apply(Term::var(subject_name.clone())),
+                            &tuple_types[*index].clone(),
+                        ));
+                    }
+                } else {
+                    for (index, name) in indices.iter() {
+                        term = term
+                            .lambda(name.clone())
+                            .apply(builder::convert_data_to_type(
+                                Term::head_list().apply(
+                                    Term::var(subject_name.clone()).repeat_tail_list(*index),
+                                ),
+                                &tuple_types[*index].clone(),
+                            ));
+                    }
+                }
+                arg_stack.push(term);
+            }
+            Air::Finally => {
                 let _clause = arg_stack.pop().unwrap();
             }
             Air::If { .. } => {
@@ -3737,7 +3860,6 @@ impl<'a> CodeGenerator<'a> {
                 tag: constr_index,
                 tipo,
                 count,
-                ..
             } => {
                 let mut arg_vec = vec![];
 
@@ -3779,9 +3901,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::RecordAccess {
-                record_index, tipo, ..
-            } => {
+            Air::RecordAccess { record_index, tipo } => {
                 self.needs_field_access = true;
                 let constr = arg_stack.pop().unwrap();
 
@@ -3796,7 +3916,6 @@ impl<'a> CodeGenerator<'a> {
             Air::FieldsExpose {
                 indices,
                 check_last_item,
-                ..
             } => {
                 self.needs_field_access = true;
                 let mut id_list = vec![];
@@ -3835,7 +3954,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::FieldsEmpty { .. } => {
+            Air::FieldsEmpty => {
                 self.needs_field_access = true;
 
                 let value = arg_stack.pop().unwrap();
@@ -3853,7 +3972,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::ListEmpty { .. } => {
+            Air::ListEmpty => {
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
@@ -3867,7 +3986,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Tuple { tipo, count, .. } => {
+            Air::Tuple { tipo, count } => {
                 let mut args = vec![];
 
                 for _ in 0..count {
@@ -3929,7 +4048,6 @@ impl<'a> CodeGenerator<'a> {
                 highest_index,
                 indices,
                 tipo,
-                ..
             } => {
                 self.needs_field_access = true;
                 let tail_name_prefix = "__tail_index";
@@ -4016,7 +4134,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::UnOp { op, .. } => {
+            Air::UnOp { op } => {
                 let value = arg_stack.pop().unwrap();
 
                 let term = match op {
@@ -4040,9 +4158,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::TupleIndex {
-                tipo, tuple_index, ..
-            } => {
+            Air::TupleIndex { tipo, tuple_index } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) {
@@ -4073,7 +4189,6 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 names,
                 check_last_item,
-                ..
             } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
@@ -4128,59 +4243,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::ErrorTerm { .. } => arg_stack.push(Term::Error),
-            Air::TupleClause {
-                subject_tipo: tipo,
-                indices,
-                subject_name,
-                complex_clause,
-                ..
-            } => {
-                let mut term = arg_stack.pop().unwrap();
-
-                let tuple_types = tipo.get_inner_types();
-
-                if complex_clause {
-                    let next_clause = arg_stack.pop().unwrap();
-
-                    term = term
-                        .lambda("__other_clauses_delayed")
-                        .apply(next_clause.delay());
-                }
-
-                if tuple_types.len() == 2 {
-                    for (index, name) in indices.iter() {
-                        let builtin = if *index == 0 {
-                            Term::fst_pair()
-                        } else {
-                            Term::snd_pair()
-                        };
-
-                        term = term.lambda(name).apply(builder::convert_data_to_type(
-                            builtin.apply(Term::var(subject_name.clone())),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
-                } else {
-                    for (index, name) in indices.iter() {
-                        term = term
-                            .lambda(name.clone())
-                            .apply(builder::convert_data_to_type(
-                                Term::head_list().apply(
-                                    Term::var(subject_name.clone()).repeat_tail_list(*index),
-                                ),
-                                &tuple_types[*index].clone(),
-                            ));
-                    }
-                }
-                arg_stack.push(term);
-            }
-            Air::NoOp { .. } => {}
-            Air::TupleGuard {
-                subject_tipo,
-                indices,
-                subject_name,
-                type_count,
-            } => todo!(),
+            Air::NoOp => {}
         }
     }
 }

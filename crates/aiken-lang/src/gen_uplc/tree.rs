@@ -157,7 +157,6 @@ pub enum AirStatement {
         subject_tipo: Arc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
-        type_count: usize,
     },
     // Field Access
     FieldsExpose {
@@ -290,7 +289,6 @@ pub enum AirExpression {
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
-        type_count: usize,
         complex_clause: bool,
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
@@ -566,14 +564,11 @@ impl AirTree {
         otherwise: AirTree,
         complex_clause: bool,
     ) -> AirTree {
-        let type_count = subject_tipo.get_inner_types().len();
-
         AirTree::Expression(AirExpression::TupleClause {
             subject_tipo,
             indices,
             predefined_indices,
             subject_name: subject_name.to_string(),
-            type_count,
             complex_clause,
             then: then.into(),
             otherwise: otherwise.into(),
@@ -624,7 +619,6 @@ impl AirTree {
             statement: AirStatement::TupleGuard {
                 indices,
                 subject_name: subject_name.to_string(),
-                type_count: subject_tipo.get_inner_types().len(),
                 subject_tipo,
             },
             hoisted_over: None,
@@ -915,13 +909,11 @@ impl AirTree {
                         subject_tipo,
                         indices,
                         subject_name,
-                        type_count,
                     } => {
                         air_vec.push(Air::TupleGuard {
                             subject_tipo: subject_tipo.clone(),
                             indices: indices.clone(),
                             subject_name: subject_name.clone(),
-                            type_count: *type_count,
                         });
                     }
                     AirStatement::FieldsExpose {
@@ -1133,7 +1125,6 @@ impl AirTree {
                     indices,
                     predefined_indices,
                     subject_name,
-                    type_count,
                     complex_clause,
                     then,
                     otherwise,
@@ -1143,7 +1134,6 @@ impl AirTree {
                         indices: indices.clone(),
                         predefined_indices: predefined_indices.clone(),
                         subject_name: subject_name.clone(),
-                        count: *type_count,
                         complex_clause: *complex_clause,
                     });
                     then.create_air_vec(air_vec);
