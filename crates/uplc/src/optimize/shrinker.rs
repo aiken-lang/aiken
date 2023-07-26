@@ -286,6 +286,15 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
                         *term =
                             substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
                     }
+                } else if occurrences == 0 {
+                    if let Term::Var(_)
+                    | Term::Constant(_)
+                    | Term::Delay(_)
+                    | Term::Lambda { .. }
+                    | Term::Builtin(_) = arg
+                    {
+                        *term = body.as_ref().clone();
+                    }
                 }
             }
         }
