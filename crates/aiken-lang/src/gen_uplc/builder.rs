@@ -38,7 +38,11 @@ pub enum CodeGenFunction {
 
 #[derive(Clone, Debug)]
 pub enum UserFunction {
-    Function(AirTree, Vec<(FunctionAccessKey, String)>),
+    Function {
+        body: AirTree,
+        deps: Vec<(FunctionAccessKey, String)>,
+        params: Vec<String>,
+    },
     Link(String),
 }
 
@@ -542,7 +546,7 @@ pub fn erase_opaque_type_operations(
                 }
             }
             AirExpression::RecordAccess { tipo, record, .. } => {
-                if check_replaceable_opaque_type(tipo, data_types) {
+                if check_replaceable_opaque_type(&record.return_type(), data_types) {
                     *air_tree = (**record).clone();
                 }
             }

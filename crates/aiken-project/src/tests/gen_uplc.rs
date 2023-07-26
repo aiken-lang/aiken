@@ -74,6 +74,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
             let expected = optimize::aiken_optimize_and_intern(expected);
 
+            // println!("expected: {}", expected.to_pretty());
+
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
             assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
@@ -477,7 +479,7 @@ fn acceptance_test_5_direct_2_heads() {
               when xs is {
                 [] -> None
                 [a] -> Some(xs)
-                [a, b, ..c] -> Some([a,b])
+                [a, b, ..] -> Some([a,b])
               }
             }
         
@@ -495,11 +497,58 @@ fn acceptance_test_5_direct_2_heads() {
                         Term::var("xs")
                             .delayed_choose_list(
                                 Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data().apply(Term::integer(0.into())).apply(
-                                    Term::mk_cons()
-                                        .apply(Term::head_list().apply(Term::var("xs")))
-                                        .apply(Term::empty_list()),
-                                ),
+                                Term::var("tail_1")
+                                    .delayed_choose_list(
+                                        Term::constr_data()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(Term::list_data().apply(Term::var("xs")))
+                                                    .apply(Term::empty_list()),
+                                            )
+                                            .lambda("a")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                ),
+                                            ),
+                                        Term::constr_data()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(
+                                                        Term::list_data().apply(
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("a")),
+                                                                )
+                                                                .apply(
+                                                                    Term::mk_cons()
+                                                                        .apply(
+                                                                            Term::i_data().apply(
+                                                                                Term::var("b"),
+                                                                            ),
+                                                                        )
+                                                                        .apply(Term::empty_list()),
+                                                                ),
+                                                        ),
+                                                    )
+                                                    .apply(Term::empty_list()),
+                                            )
+                                            .lambda("b")
+                                            .apply(Term::un_i_data().apply(
+                                                Term::head_list().apply(Term::var("tail_1")),
+                                            ))
+                                            .lambda("a")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("tail_1")
+                                    .apply(Term::tail_list().apply(Term::var("xs"))),
                             )
                             .lambda("xs"),
                     )
@@ -510,7 +559,14 @@ fn acceptance_test_5_direct_2_heads() {
                     ])),
             )
             .apply(Term::Constant(
-                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::list(vec![
+                        Data::integer(1.into()),
+                        Data::integer(2.into()),
+                    ])],
+                ))
+                .into(),
             )),
         false,
     );
@@ -749,13 +805,13 @@ fn acceptance_test_7_unzip() {
                                                         .apply(Term::var("unzip"))
                                                         .apply(Term::var("rest")),
                                                 )
-                                                .lambda("a")
-                                                .apply(Term::un_i_data().apply(
-                                                    Term::fst_pair().apply(Term::var("head_pair")),
-                                                ))
                                                 .lambda("b")
                                                 .apply(Term::un_b_data().apply(
                                                     Term::snd_pair().apply(Term::var("head_pair")),
+                                                ))
+                                                .lambda("a")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::fst_pair().apply(Term::var("head_pair")),
                                                 ))
                                                 .lambda("rest")
                                                 .apply(Term::tail_list().apply(Term::var("xs")))
