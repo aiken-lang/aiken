@@ -737,7 +737,7 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Assign { name, .. } => name.to_string(),
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
-                                    format!("__discard_{}", name)
+                                    format!("__discard_{}_{}", name, index)
                                 } else {
                                     "_".to_string()
                                 }
@@ -779,7 +779,7 @@ impl<'a> CodeGenerator<'a> {
                                 && props.value_type.is_data()
                                 && !tipo.is_data()
                             {
-                                format!("__discard_{}", name)
+                                format!("__discard_{}_tail", name)
                             } else {
                                 "_".to_string()
                             }
@@ -827,6 +827,7 @@ impl<'a> CodeGenerator<'a> {
                 arguments,
                 constructor,
                 name,
+                tipo: constr_tipo,
                 ..
             } => {
                 let mut sequence = vec![];
@@ -882,7 +883,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
-                    for (index, arg) in tipo.arg_types().unwrap().iter().enumerate() {
+                    for (index, arg) in constr_tipo.arg_types().unwrap().iter().enumerate() {
                         let field_type = arg.clone();
                         type_map.insert(index, field_type);
                     }
@@ -904,7 +905,7 @@ impl<'a> CodeGenerator<'a> {
                                 Pattern::Assign { name, .. } => name.to_string(),
                                 Pattern::Discard { name, .. } => {
                                     if props.full_check {
-                                        format!("__discard_{}", name)
+                                        format!("__discard_{}_{}", name, index)
                                     } else {
                                         "_".to_string()
                                     }
@@ -935,7 +936,7 @@ impl<'a> CodeGenerator<'a> {
                                     val,
                                     arg_type,
                                     AssignmentProperties {
-                                        value_type: props.value_type.clone(),
+                                        value_type: arg_type.clone(),
                                         kind: props.kind,
                                         remove_unused: true,
                                         full_check: props.full_check,
@@ -985,7 +986,7 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Assign { name, .. } => name.to_string(),
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
-                                    format!("__discard_{}", name)
+                                    format!("__discard_{}_{}", name, index)
                                 } else {
                                     "_".to_string()
                                 }
