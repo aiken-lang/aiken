@@ -262,6 +262,7 @@ impl<'a> CodeGenerator<'a> {
                                 ValueConstructorVariant::Record {
                                     name: constr_name, ..
                                 },
+                            tipo: constr_tipo,
                             ..
                         },
                     ..
@@ -269,7 +270,9 @@ impl<'a> CodeGenerator<'a> {
                 | TypedExpr::ModuleSelect {
                     constructor:
                         ModuleValueConstructor::Record {
-                            name: constr_name, ..
+                            name: constr_name,
+                            tipo: constr_tipo,
+                            ..
                         },
                     ..
                 } => {
@@ -285,7 +288,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let constr_args = args.iter().map(|arg| self.build(&arg.value)).collect_vec();
 
-                    AirTree::create_constr(constr_index, tipo.clone(), constr_args)
+                    AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
                 }
 
                 TypedExpr::Var {
