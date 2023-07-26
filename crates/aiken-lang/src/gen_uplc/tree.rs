@@ -817,9 +817,38 @@ impl AirTree {
         let assign = AirTree::let_assignment("_", expect_on_head);
 
         let next_call = AirTree::call(
-            AirTree::local_var(EXPECT_ON_LIST, void()),
+            AirTree::var(
+                ValueConstructor::public(
+                    void(),
+                    ValueConstructorVariant::ModuleFn {
+                        name: EXPECT_ON_LIST.to_string(),
+                        field_map: None,
+                        module: "".to_string(),
+                        arity: 1,
+                        location: Span::empty(),
+                        builtin: None,
+                    },
+                ),
+                EXPECT_ON_LIST,
+                "",
+            ),
             void(),
             vec![
+                AirTree::var(
+                    ValueConstructor::public(
+                        void(),
+                        ValueConstructorVariant::ModuleFn {
+                            name: EXPECT_ON_LIST.to_string(),
+                            field_map: None,
+                            module: "".to_string(),
+                            arity: 1,
+                            location: Span::empty(),
+                            builtin: None,
+                        },
+                    ),
+                    EXPECT_ON_LIST,
+                    "",
+                ),
                 AirTree::builtin(
                     DefaultFunction::TailList,
                     list(data()),
@@ -1289,6 +1318,13 @@ impl AirTree {
                 AirStatement::ListAccessor { tipo, .. }
                 | AirStatement::ListExpose { tipo, .. }
                 | AirStatement::TupleAccessor { tipo, .. } => vec![tipo],
+                AirStatement::FieldsExpose { indices, .. } => {
+                    let mut types = vec![];
+                    for (_, _, tipo) in indices {
+                        types.push(tipo);
+                    }
+                    types
+                }
                 _ => vec![],
             },
             AirTree::Expression(e) => match e {
@@ -1299,7 +1335,6 @@ impl AirTree {
                 | AirExpression::CastFromData { tipo, .. }
                 | AirExpression::CastToData { tipo, .. }
                 | AirExpression::If { tipo, .. }
-                | AirExpression::RecordUpdate { tipo, .. }
                 | AirExpression::RecordAccess { tipo, .. }
                 | AirExpression::Constr { tipo, .. }
                 | AirExpression::TupleIndex { tipo, .. }
@@ -1321,6 +1356,14 @@ impl AirTree {
                 AirExpression::Clause { subject_tipo, .. }
                 | AirExpression::ListClause { subject_tipo, .. }
                 | AirExpression::TupleClause { subject_tipo, .. } => vec![subject_tipo],
+
+                AirExpression::RecordUpdate { tipo, indices, .. } => {
+                    let mut types = vec![tipo];
+                    for (_, tipo) in indices {
+                        types.push(tipo);
+                    }
+                    types
+                }
                 _ => {
                     vec![]
                 }

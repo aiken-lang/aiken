@@ -52,7 +52,7 @@ pub struct CodeGenerator<'a> {
     module_types: IndexMap<&'a String, &'a TypeInfo>,
     needs_field_access: bool,
     code_gen_functions: IndexMap<String, CodeGenFunction>,
-    zero_arg_functions: IndexMap<FunctionAccessKey, Vec<Air>>,
+    zero_arg_functions: IndexMap<(FunctionAccessKey, String), Vec<Air>>,
     tracing: bool,
     id_gen: IdGenerator,
 }
@@ -144,6 +144,7 @@ impl<'a> CodeGenerator<'a> {
             // optimizations on air tree
 
             let full_vec_other = full_tree_other.to_vec();
+
             // println!("FULL VEC {:#?}", full_vec_other);
 
             let other_term = self.uplc_code_gen(full_vec_other);
@@ -175,7 +176,7 @@ impl<'a> CodeGenerator<'a> {
 
         let full_vec = full_tree.to_vec();
 
-        // println!("FULL VEC {:#?}", full_vec);
+        println!("FULL VEC {:#?}", full_vec);
 
         let term = self.uplc_code_gen(full_vec);
 
@@ -197,6 +198,7 @@ impl<'a> CodeGenerator<'a> {
         };
 
         program = aiken_optimize_and_intern(program);
+        println!("Program: {}", program.to_pretty());
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance
@@ -1048,7 +1050,8 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
         if tipo.is_primitive() {
-            AirTree::void()
+            // Since we would return void anyway and ignore then we can just return value here and ignore
+            value
         } else if tipo.is_map() {
             assert!(!tipo.get_inner_types().is_empty());
             let inner_list_type = &tipo.get_inner_types()[0];
@@ -1086,9 +1089,8 @@ impl<'a> CodeGenerator<'a> {
             let anon_func_body = AirTree::UnhoistedSequence(vec![
                 tuple_access,
                 AirTree::let_assignment("_", expect_fst),
-                AirTree::let_assignment("_", expect_snd),
             ])
-            .hoist_over(AirTree::void());
+            .hoist_over(expect_snd);
 
             let unwrap_function = AirTree::anon_func(vec![pair_name], anon_func_body);
 
@@ -1143,13 +1145,15 @@ impl<'a> CodeGenerator<'a> {
 
             let expect_item = self.expect_type_assign(
                 inner_list_type,
-                AirTree::local_var(&item_name, inner_list_type.clone()),
+                AirTree::cast_from_data(
+                    AirTree::local_var(&item_name, data()),
+                    inner_list_type.clone(),
+                ),
                 defined_data_types,
                 location,
             );
 
-            let anon_func_body =
-                AirTree::let_assignment("_", expect_item).hoist_over(AirTree::void());
+            let anon_func_body = expect_item;
 
             let unwrap_function = AirTree::anon_func(vec![item_name], anon_func_body);
 
@@ -1228,9 +1232,8 @@ impl<'a> CodeGenerator<'a> {
                 tuple_assign,
                 tuple_access,
                 AirTree::let_assignment("_", expect_fst),
-                AirTree::let_assignment("_", expect_snd),
             ])
-            .hoist_over(AirTree::void())
+            .hoist_over(expect_snd)
         } else if tipo.is_tuple() {
             let tuple_inner_types = tipo.get_inner_types();
 
@@ -1253,7 +1256,10 @@ impl<'a> CodeGenerator<'a> {
                         location,
                     );
 
-                    (tuple_index_name, expect_tuple_item)
+                    (
+                        tuple_index_name,
+                        AirTree::let_assignment("_", expect_tuple_item),
+                    )
                 })
                 .collect_vec();
 
@@ -2098,6 +2104,13 @@ impl<'a> CodeGenerator<'a> {
                 let mut sequence = tuple_name_assigns;
                 sequence.append(&mut tuple_item_assigns);
 
+                if props.final_clause {
+                    sequence.insert(
+                        0,
+                        todo!(), // AirTree::tuple_access(names, tipo, check_last_item, tuple),
+                    )
+                }
+
                 (AirTree::void(), AirTree::UnhoistedSequence(sequence))
             }
         }
@@ -2110,8 +2123,10 @@ impl<'a> CodeGenerator<'a> {
         props: &mut ClauseProperties,
     ) -> AirTree {
         if props.final_clause {
+            print!("FINAL CLAUSE PATTERN IS {:#?}", pattern);
             props.complex_clause = false;
             let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
+            println!("FINAL CLAUSE ASSIGN IS {:#?}", assign);
             assign
         } else {
             assert!(
@@ -2341,6 +2356,7 @@ impl<'a> CodeGenerator<'a> {
 
         while let Some((key, variant_name)) = used_functions.pop() {
             defined_functions.push((key.clone(), variant_name.clone()));
+
             let function_variants = functions_to_hoist
                 .get(&key)
                 .unwrap_or_else(|| panic!("Missing Function Definition"));
@@ -2370,7 +2386,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let (_, function) = function_variants
                     .get_mut(&variant_name)
-                    .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
+                    .expect("Missing Function Variant Definition");
 
                 *function = UserFunction::Function(hoist_body, hoist_deps);
             } else {
@@ -2506,6 +2522,12 @@ impl<'a> CodeGenerator<'a> {
             let deps = (tree_path, func_deps.clone());
 
             if !params_empty {
+                if is_recursive {
+                    body.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+                        modify_self_calls(air_tree, key, variant);
+                    });
+                }
+
                 body = AirTree::define_func(
                     &key.function_name,
                     &key.module_name,
@@ -2540,7 +2562,8 @@ impl<'a> CodeGenerator<'a> {
                     )
                     .hoist_over(body);
 
-                self.zero_arg_functions.insert(key.clone(), body.to_vec());
+                self.zero_arg_functions
+                    .insert((key.clone(), variant.clone()), body.to_vec());
             }
         } else {
             todo!()
@@ -2606,13 +2629,13 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .unwrap_or_else(|| {
                         let Some(CodeGenFunction::Function { params, .. }) =
-                            self.code_gen_functions.get(&key.function_name)
+                            self.code_gen_functions.get(&dep_key.function_name)
                         else { unreachable!() };
 
                         params.clone()
                     });
 
-                let UserFunction::Function(dep_air_tree, dependency_deps) =
+                let UserFunction::Function(mut dep_air_tree, dependency_deps) =
                         dep_function.clone()
                     else { unreachable!() };
 
@@ -2631,6 +2654,12 @@ impl<'a> CodeGenerator<'a> {
                     })
                     .cloned()
                     .collect_vec();
+
+                if is_dependent_recursive {
+                    dep_air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+                        modify_self_calls(air_tree, &dep_key, &dep_variant);
+                    });
+                }
 
                 dep_insertions.push(AirTree::define_func(
                     &dep_key.function_name,
@@ -2740,9 +2769,16 @@ impl<'a> CodeGenerator<'a> {
                             .get(&generic_function_key.function_name)
                             .unwrap_or_else(|| panic!("Missing Code Gen Function Definition"));
 
+                        if !dependency_functions
+                            .iter()
+                            .any(|(key, name)| key == &generic_function_key && name.is_empty())
+                        {
+                            dependency_functions
+                                .push((generic_function_key.clone(), "".to_string()));
+                        }
+
                         if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
                             let (path, _) = func_variants.get_mut("").unwrap();
-
                             *path = path.common_ancestor(tree_path);
                         } else {
                             let CodeGenFunction::Function{ body, .. } = code_gen_func
@@ -2758,7 +2794,6 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                             );
 
-                            dependency_functions.push((generic_function_key.clone(), "".to_string()));
                             function_usage.insert(generic_function_key, function_variant_path);
                         }
                         return;
@@ -2801,15 +2836,12 @@ impl<'a> CodeGenerator<'a> {
                         .join("");
 
                     *variant_name = variant.clone();
-                    let mut is_recursive = false;
 
                     if !dependency_functions
                         .iter()
                         .any(|(key, name)| key == &generic_function_key && name == &variant)
                     {
                         dependency_functions.push((generic_function_key.clone(), variant.clone()));
-                    } else {
-                        is_recursive = true;
                     }
 
                     if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
@@ -2822,10 +2854,6 @@ impl<'a> CodeGenerator<'a> {
                                 monomorphize(air_tree, &mono_types);
 
                                 erase_opaque_type_operations(air_tree, &self.data_types);
-
-                                if is_recursive{
-                                    modify_self_calls(air_tree, &generic_function_key, &variant);
-                                }
                             });
 
                             func_variants.insert(
@@ -2843,10 +2871,6 @@ impl<'a> CodeGenerator<'a> {
                             monomorphize(air_tree, &mono_types);
 
                             erase_opaque_type_operations(air_tree, &self.data_types);
-
-                            if is_recursive{
-                                modify_self_calls(air_tree, &generic_function_key, &variant);
-                            }
                         });
 
                         let mut function_variant_path = IndexMap::new();
@@ -3097,7 +3121,7 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(list);
                 } else {
                     let mut term = if tail {
-                        arg_stack.pop().unwrap()
+                        args.pop().unwrap()
                     } else if tipo.is_map() {
                         Term::empty_map()
                     } else {
@@ -3239,14 +3263,18 @@ impl<'a> CodeGenerator<'a> {
 
                         if let Some((_, air_vec)) = zero_arg_functions.iter().find(
                             |(
-                                FunctionAccessKey {
-                                    module_name,
-                                    function_name,
-                                },
+                                (
+                                    FunctionAccessKey {
+                                        module_name,
+                                        function_name,
+                                    },
+                                    variant,
+                                ),
                                 _,
                             )| {
-                                let name_module = format!("{module_name}_{function_name}");
-                                let name = function_name.to_string();
+                                let name_module = format!("{module_name}_{function_name}{variant}");
+                                let name = format!("{function_name}{variant}");
+
                                 text == &name || text == &name_module
                             },
                         ) {
