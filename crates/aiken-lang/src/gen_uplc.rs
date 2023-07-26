@@ -2707,6 +2707,7 @@ impl<'a> CodeGenerator<'a> {
                     variant,
                     func_params.clone(),
                     is_recursive,
+                    vec![],
                     body,
                 );
 
@@ -2841,6 +2842,7 @@ impl<'a> CodeGenerator<'a> {
                     &dep_variant,
                     dependent_params,
                     is_dependent_recursive,
+                    vec![],
                     dep_air_tree,
                 ));
 
@@ -3704,6 +3706,7 @@ impl<'a> CodeGenerator<'a> {
                 func_name,
                 params,
                 recursive,
+                recursive_static_params,
                 module_name,
                 variant_name,
             } => {
@@ -3732,6 +3735,8 @@ impl<'a> CodeGenerator<'a> {
                         .apply(Term::var(func_name.clone()).apply(Term::var(func_name.clone())))
                         .lambda(func_name)
                         .apply(func_body);
+
+                    // TODO: use recursive_static_params here
 
                     arg_stack.push(term);
                 }
