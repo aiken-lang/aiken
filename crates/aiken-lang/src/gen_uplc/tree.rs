@@ -834,21 +834,6 @@ impl AirTree {
             ),
             void(),
             vec![
-                AirTree::var(
-                    ValueConstructor::public(
-                        void(),
-                        ValueConstructorVariant::ModuleFn {
-                            name: EXPECT_ON_LIST.to_string(),
-                            field_map: None,
-                            module: "".to_string(),
-                            arity: 1,
-                            location: Span::empty(),
-                            builtin: None,
-                        },
-                    ),
-                    EXPECT_ON_LIST,
-                    "",
-                ),
                 AirTree::builtin(
                     DefaultFunction::TailList,
                     list(data()),
