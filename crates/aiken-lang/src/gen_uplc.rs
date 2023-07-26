@@ -174,6 +174,7 @@ impl<'a> CodeGenerator<'a> {
 
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
+        // println!("FULL VEC {:#?}", full_vec);
 
         let term = self.uplc_code_gen(full_vec);
 
@@ -194,8 +195,8 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
-        program = aiken_optimize_and_intern(program);
         // println!("PROGRAM {}", program.to_pretty());
+        program = aiken_optimize_and_intern(program);
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance
@@ -1586,7 +1587,7 @@ impl<'a> CodeGenerator<'a> {
                         );
                     };
 
-                    let tail_name = if *current_index == 0 {
+                    let mut tail_name = if *current_index == 0 {
                         props.original_subject_name.clone()
                     } else {
                         format!(
@@ -1620,15 +1621,16 @@ impl<'a> CodeGenerator<'a> {
                         }
                     };
 
-                    let mut use_wrap_clause = false;
-
                     if elements.len() - usize::from(tail.is_some() && !elements.is_empty())
                         >= *current_index as usize
                     {
                         *current_index += 1;
                         defined_tails.push(tail_name.clone());
                     } else if next_tail_name.is_none() {
-                        use_wrap_clause = true;
+                        tail_name = defined_tails
+                            .last()
+                            .cloned()
+                            .unwrap_or(props.original_subject_name.clone());
                     }
 
                     let mut next_clause_props = ClauseProperties {
@@ -1650,31 +1652,19 @@ impl<'a> CodeGenerator<'a> {
 
                     let complex_clause = props.complex_clause;
 
-                    if use_wrap_clause {
-                        AirTree::wrap_clause(
-                            clause_assign_hoisted,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                            ),
-                        )
-                    } else {
-                        AirTree::list_clause(
-                            tail_name,
-                            subject_tipo.clone(),
-                            clause_assign_hoisted,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                            ),
-                            next_tail_name,
-                            complex_clause,
-                        )
-                    }
+                    AirTree::list_clause(
+                        tail_name,
+                        subject_tipo.clone(),
+                        clause_assign_hoisted,
+                        self.handle_each_clause(
+                            rest_clauses,
+                            final_clause,
+                            subject_tipo,
+                            &mut next_clause_props,
+                        ),
+                        next_tail_name,
+                        complex_clause,
+                    )
                 }
                 SpecificClause::TupleClause {
                     defined_tuple_indices,
@@ -2197,6 +2187,8 @@ impl<'a> CodeGenerator<'a> {
                         } = props
                         else { unreachable!() };
 
+                        defined_tails.push(props.original_subject_name.clone());
+
                         for (index, _) in elements.iter().enumerate() {
                             let prev_tail_name = if index == 0 {
                                 props.original_subject_name.clone()
@@ -2243,6 +2235,7 @@ impl<'a> CodeGenerator<'a> {
                                 defined_tails.push(tail_name);
                             };
                         }
+
                         let (_, assigns) = self.clause_pattern(pattern, subject_tipo, props);
                         clause_assigns.push(assigns);
                         AirTree::UnhoistedSequence(clause_assigns)
@@ -3738,8 +3731,8 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::WrapClause => {
                 // no longer need to pop off discard
-                let arg = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
+                let arg = arg_stack.pop().unwrap();
 
                 term = term.lambda("__other_clauses_delayed").apply(arg.delay());
 

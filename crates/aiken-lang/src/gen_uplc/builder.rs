@@ -545,7 +545,7 @@ pub fn erase_opaque_type_operations(
                     *air_tree = args.pop().unwrap();
                 }
             }
-            AirExpression::RecordAccess { tipo, record, .. } => {
+            AirExpression::RecordAccess { record, .. } => {
                 if check_replaceable_opaque_type(&record.return_type(), data_types) {
                     *air_tree = (**record).clone();
                 }
