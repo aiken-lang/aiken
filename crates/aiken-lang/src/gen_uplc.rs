@@ -197,8 +197,8 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
-        program = aiken_optimize_and_intern(program);
         println!("Program: {}", program.to_pretty());
+        program = aiken_optimize_and_intern(program);
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance
@@ -1869,7 +1869,7 @@ impl<'a> CodeGenerator<'a> {
                     defined_heads.push(elem_name)
                 });
 
-                let list_assign = if props.final_clause {
+                let list_assign = if props.final_clause && defined_tails.is_empty() {
                     AirTree::list_access(
                         defined_heads,
                         subject_tipo.clone(),
@@ -1882,6 +1882,7 @@ impl<'a> CodeGenerator<'a> {
                         defined_heads
                             .into_iter()
                             .zip(defined_tails.into_iter())
+                            .map(|(head, tail)| (tail, head))
                             .collect_vec(),
                         list_tail,
                         subject_tipo.clone(),
@@ -2062,6 +2063,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 let mut previous_defined_names = vec![];
+                let mut names_to_define = vec![];
                 name_index_assigns.iter().for_each(|(name, index, _)| {
                     if let Some((index, prev_name)) = defined_indices
                         .iter()
@@ -2070,6 +2072,7 @@ impl<'a> CodeGenerator<'a> {
                         previous_defined_names.push((*index, prev_name.clone(), name.clone()));
                     } else if name != "_" {
                         assert!(defined_indices.insert((*index, name.clone())));
+                        names_to_define.push((*index, name.clone()));
                     }
                 });
 
@@ -2104,12 +2107,30 @@ impl<'a> CodeGenerator<'a> {
                 let mut sequence = tuple_name_assigns;
                 sequence.append(&mut tuple_item_assigns);
 
-                if props.final_clause {
+                if props.final_clause && !names_to_define.is_empty() {
+                    names_to_define.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+
+                    let names =
+                        names_to_define
+                            .into_iter()
+                            .fold(vec![], |mut names, (index, name)| {
+                                while names.len() < index {
+                                    names.push("_".to_string());
+                                }
+                                names.push(name);
+                                names
+                            });
                     sequence.insert(
                         0,
-                        todo!(), // AirTree::tuple_access(names, tipo, check_last_item, tuple),
-                    )
+                        AirTree::tuple_access(
+                            names,
+                            subject_tipo.clone(),
+                            false,
+                            AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                        ),
+                    );
                 }
+                println!("WE GOT SEQUENCE {:#?}", sequence);
 
                 (AirTree::void(), AirTree::UnhoistedSequence(sequence))
             }
@@ -2123,10 +2144,8 @@ impl<'a> CodeGenerator<'a> {
         props: &mut ClauseProperties,
     ) -> AirTree {
         if props.final_clause {
-            print!("FINAL CLAUSE PATTERN IS {:#?}", pattern);
             props.complex_clause = false;
             let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
-            println!("FINAL CLAUSE ASSIGN IS {:#?}", assign);
             assign
         } else {
             assert!(
