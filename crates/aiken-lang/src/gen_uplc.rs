@@ -1672,8 +1672,13 @@ impl<'a> CodeGenerator<'a> {
                             None
                         } else {
                             let next_clause = &rest_clauses[0];
+                            let mut next_clause_pattern = &rest_clauses[0].pattern;
 
-                            let next_elements_len = match &next_clause.pattern {
+                            if let Pattern::Assign { pattern, .. } = next_clause_pattern {
+                                next_clause_pattern = pattern;
+                            }
+
+                            let next_elements_len = match next_clause_pattern {
                                 Pattern::List { elements, tail, .. } => {
                                     elements.len() - usize::from(tail.is_some())
                                 }
@@ -1686,8 +1691,8 @@ impl<'a> CodeGenerator<'a> {
                                 defined_tails.push(format!(
                                     "tail_index_{}_span_{}_{}",
                                     *current_index,
-                                    clause.pattern.location().start,
-                                    clause.pattern.location().end
+                                    next_clause.pattern.location().start,
+                                    next_clause.pattern.location().end
                                 ));
 
                                 Some(format!(
@@ -1706,12 +1711,14 @@ impl<'a> CodeGenerator<'a> {
                     for elements in elements.iter() {
                         if let Pattern::Constructor { .. }
                         | Pattern::Tuple { .. }
-                        | Pattern::List { .. } = elements
+                        | Pattern::List { .. }
+                        | Pattern::Assign { .. } = elements
                         {
                             is_wild_card_elems_clause = false;
                         }
                     }
                     let elements_len = elements.len() - usize::from(tail.is_some());
+                    let current_checked_index = *checked_index;
 
                     if *checked_index < elements_len.try_into().unwrap()
                         && is_wild_card_elems_clause
@@ -1739,20 +1746,31 @@ impl<'a> CodeGenerator<'a> {
 
                     let complex_clause = props.complex_clause;
 
-                    // TODO: stuff
-                    AirTree::list_clause(
-                        tail_name,
-                        subject_tipo.clone(),
-                        clause_assign_hoisted,
-                        self.handle_each_clause(
-                            rest_clauses,
-                            final_clause,
-                            subject_tipo,
-                            &mut next_clause_props,
-                        ),
-                        next_tail_name,
-                        complex_clause,
-                    )
+                    if current_checked_index < elements_len.try_into().unwrap() {
+                        AirTree::list_clause(
+                            tail_name,
+                            subject_tipo.clone(),
+                            clause_assign_hoisted,
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                            next_tail_name,
+                            complex_clause,
+                        )
+                    } else {
+                        AirTree::wrap_clause(
+                            clause_assign_hoisted,
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                        )
+                    }
                 }
                 SpecificClause::TupleClause {
                     defined_tuple_indices,
@@ -1946,7 +1964,9 @@ impl<'a> CodeGenerator<'a> {
                         list_tail = Some((tail, elem_name.to_string()));
                     }
 
-                    defined_heads.push(elem_name)
+                    if props.final_clause && defined_tails.is_empty() {
+                        defined_heads.push(elem_name);
+                    }
                 });
 
                 let list_assign = if props.final_clause && defined_tails.is_empty() {
@@ -1958,6 +1978,8 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
                     )
                 } else {
+                    assert!(defined_tails.len() >= defined_heads.len());
+
                     AirTree::list_expose(
                         defined_heads
                             .into_iter()
@@ -2272,7 +2294,8 @@ impl<'a> CodeGenerator<'a> {
                                 SpecificClause::ListClause {
                                     current_index,
                                     defined_tails,
-                                    ..      
+                                    checked_index: _,
+
                                 },
                             ..
                         } = props
