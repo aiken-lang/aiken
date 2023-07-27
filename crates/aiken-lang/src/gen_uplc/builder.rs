@@ -100,6 +100,7 @@ pub enum SpecificClause {
     ListClause {
         current_index: i64,
         defined_tails: Vec<String>,
+        checked_index: i64,
     },
     TupleClause {
         defined_tuple_indices: IndexSet<(usize, String)>,
@@ -118,6 +119,7 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::ListClause {
                     current_index: 0,
                     defined_tails: vec![],
+                    checked_index: -1,
                 },
             }
         } else if t.is_tuple() {
@@ -159,6 +161,7 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::ListClause {
                     current_index: 0,
                     defined_tails: vec![],
+                    checked_index: -1,
                 },
             }
         } else if t.is_tuple() {
@@ -598,7 +601,8 @@ pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, v
     }
 }
 
-pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
+// TODO: write some tests
+pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
@@ -610,7 +614,7 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
         .sorted_by(|(index1, clause1), (index2, clause2)| {
             let clause1_len = match &clause1.pattern {
                 Pattern::List { elements, tail, .. } => {
-                    Some(elements.len() + usize::from(tail.is_some()))
+                    Some(elements.len() + usize::from(tail.is_some() && clause1.guard.is_none()))
                 }
                 _ if clause1.guard.is_none() => Some(100000),
                 _ => None,
@@ -618,7 +622,7 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
             let clause2_len = match &clause2.pattern {
                 Pattern::List { elements, tail, .. } => {
-                    Some(elements.len() + usize::from(tail.is_some()))
+                    Some(elements.len() + usize::from(tail.is_some() && clause2.guard.is_none()))
                 }
                 _ if clause2.guard.is_none() => Some(100001),
                 _ => None,
@@ -635,15 +639,15 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
         .map(|(_, item)| item)
         .collect_vec();
 
-    let mut elems_len = 0;
     let mut final_clauses = sorted_clauses.clone();
     let mut holes_to_fill = vec![];
     let mut last_clause_index = 0;
     let mut last_clause_set = false;
+    let mut wild_card_clause_elems = 0;
 
     // If we have a catch all, use that. Otherwise use todo which will result in error
     // TODO: fill in todo label with description
-    let plug_in_then = |index: usize, last_clause: &TypedClause| {
+    let plug_in_then = &|index: usize, last_clause: &TypedClause| {
         if last_clause.guard.is_none() {
             match &last_clause.pattern {
                 Pattern::Var { .. } | Pattern::Discard { .. } => last_clause.clone().then,
@@ -692,14 +696,29 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     };
 
     for (index, clause) in sorted_clauses.iter().enumerate() {
-        if let Pattern::List { elements, .. } = &clause.pattern {
+        if last_clause_set {
+            continue;
+        }
+
+        let mut clause_pattern = &clause.pattern;
+
+        if let Pattern::Assign { pattern, .. } = clause_pattern {
+            clause_pattern = pattern;
+        }
+
+        assert!(matches!(
+            clause_pattern,
+            Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
+        ));
+
+        if let Pattern::List { elements, tail, .. } = &clause.pattern {
             // found a hole and now we plug it
-            while elems_len < elements.len() {
+            while wild_card_clause_elems < elements.len() - usize::from(tail.is_some()) {
                 let mut discard_elems = vec![];
 
-                for _ in 0..elems_len {
+                for _ in 0..wild_card_clause_elems {
                     discard_elems.push(Pattern::Discard {
-                        name: "_".to_string(),
+                        name: "__fill".to_string(),
                         location: Span::empty(),
                     });
                 }
@@ -719,7 +738,7 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                             .into(),
                         },
                         guard: None,
-                        then: plug_in_then(elems_len, last_clause),
+                        then: plug_in_then(wild_card_clause_elems, last_clause),
                     }
                 } else {
                     TypedClause {
@@ -730,44 +749,38 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                             tail: None,
                         },
                         guard: None,
-                        then: plug_in_then(elems_len, last_clause),
+                        then: plug_in_then(wild_card_clause_elems, last_clause),
                     }
                 };
 
                 holes_to_fill.push((index, clause_to_fill));
-                elems_len += 1;
+                wild_card_clause_elems += 1;
             }
-        }
 
-        // if we have a pattern with no clause guards and a tail then no lists will get past here to other clauses
-        if clause.guard.is_none() {
-            match &clause.pattern {
-                Pattern::Var { .. } => {
-                    last_clause_index = index + 1;
-                    last_clause_set = true;
+            let mut is_wild_card_elems_clause = clause.guard.is_none();
+
+            for elements in elements.iter() {
+                if let Pattern::Constructor { .. } | Pattern::Tuple { .. } | Pattern::List { .. } =
+                    elements
+                {
+                    is_wild_card_elems_clause = false;
                 }
-                Pattern::Discard { .. } => {
-                    last_clause_index = index + 1;
-                    last_clause_set = true;
-                }
-                Pattern::List {
-                    elements,
-                    tail: Some(tail),
-                    ..
-                } => {
-                    let mut elements = elements.clone();
-                    elements.push(*tail.clone());
-                    if elements.iter().all(|element| {
-                        matches!(element, Pattern::Var { .. } | Pattern::Discard { .. })
-                    }) && !last_clause_set
-                        && !elements.is_empty()
-                    {
-                        last_clause_index = index + 1;
-                        last_clause_set = true;
-                    }
-                }
-                _ => {}
             }
+
+            if is_wild_card_elems_clause {
+                wild_card_clause_elems += 1;
+                if clause.guard.is_none() && tail.is_some() {
+                    last_clause_index = index;
+                    last_clause_set = true;
+                }
+            }
+        } else if let Pattern::Var { .. } | Pattern::Discard { .. } = &clause.pattern {
+            if clause.guard.is_none() {
+                last_clause_set = true;
+                last_clause_index = index;
+            }
+        } else {
+            unreachable!("Found a clause that is not a list or var or discard");
         }
 
         // If the last condition doesn't have a catch all or tail then add a catch all with a todo
@@ -784,8 +797,6 @@ pub fn rearrange_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                 });
             }
         }
-
-        elems_len += 1;
     }
 
     // Encountered a tail so stop there with that as last clause
