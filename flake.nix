@@ -69,6 +69,8 @@
               pkg-config
               openssl
 
+              cargo-insta
+
               (pkgs.rust-bin.stable.latest.default.override {
                 extensions = [ "rust-src" "clippy" "rustfmt" ];
               })
