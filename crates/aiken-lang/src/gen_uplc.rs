@@ -428,12 +428,14 @@ impl<'a> CodeGenerator<'a> {
 
                     let clause_then = self.build(&last_clause.then);
 
+                    let subject_type = subject.tipo();
+
                     let subject_val = self.build(subject);
 
                     let assignment = self.assignment(
                         &last_clause.pattern,
                         subject_val,
-                        tipo,
+                        &subject_type,
                         AssignmentProperties {
                             value_type: subject.tipo(),
                             kind: AssignmentKind::Let,
@@ -976,6 +978,8 @@ impl<'a> CodeGenerator<'a> {
                     let field_type = arg.clone();
                     type_map.insert(index, field_type);
                 }
+
+                println!("TIPO {:#?}", tipo);
 
                 let elems = elems
                     .iter()
