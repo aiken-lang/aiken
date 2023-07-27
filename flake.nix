@@ -27,7 +27,6 @@
 
           buildInputs = with pkgs; [ openssl ] ++ osxDependencies;
           nativeBuildInputs = with pkgs; [ pkg-config openssl.dev ];
-          cargoBuildFlags = [ "--package aiken" ];
 
           src = pkgs.lib.cleanSourceWith { src = self; };
 
