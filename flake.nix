@@ -17,8 +17,6 @@
           lib.optionals stdenv.isDarwin
           [ darwin.apple_sdk.frameworks.Security ];
 
-        deno = nixpkgs.legacyPackages.${system}.deno;
-
         cargoTomlContents = builtins.readFile ./crates/aiken/Cargo.toml;
         version = (builtins.fromTOML cargoTomlContents).package.version;
 
@@ -54,8 +52,6 @@
           };
         };
 
-        commonCategory = y: builtins.map (x: x // { category = y; });
-
         packages = {
           aiken = aiken;
           default = packages.aiken;
@@ -70,8 +66,6 @@
         devShell = pkgs.mkShell {
           buildInputs = with pkgs;
             [
-              deno
-
               pkg-config
               openssl
 
