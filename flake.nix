@@ -63,30 +63,22 @@
 
         overlays.default = final: prev: { aiken = packages.aiken; };
 
-        aikenCmds = commonCategory "Aiken Development" [{
-          name = "aiken";
-          help = "Aiken toolchain";
-          package = packages.aiken;
-        }];
-
         gitRev = if (builtins.hasAttr "rev" self) then self.rev else "dirty";
       in {
         inherit packages overlays;
 
-        devShells.aiken = pkgs.mkShell {
-          name = "aiken";
-          motd = ''
-            Aiken
-            $(type -p menu &>/dev/null && menu)'';
-          commands = aikenCmds;
+        devShell = pkgs.mkShell {
+          buildInputs = with pkgs;
+            [
+              deno
 
-          packages = [
-            deno
+              pkg-config
+              openssl
 
-            (pkgs.rust-bin.stable.latest.default.override {
-              extensions = [ "rust-src" "clippy" "rustfmt" ];
-            })
-          ] ++ osxDependencies;
+              (pkgs.rust-bin.stable.latest.default.override {
+                extensions = [ "rust-src" "clippy" "rustfmt" ];
+              })
+            ] ++ osxDependencies;
 
           shellHook = ''
             export GIT_REVISION=${gitRev}
