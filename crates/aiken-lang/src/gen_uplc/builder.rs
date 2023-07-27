@@ -113,12 +113,12 @@ impl ClauseProperties {
             ClauseProperties {
                 clause_var_name: constr_var,
                 complex_clause: false,
-                original_subject_name: subject_name,
+                original_subject_name: subject_name.clone(),
                 final_clause: false,
                 needs_constr_var: false,
                 specific_clause: SpecificClause::ListClause {
                     current_index: 0,
-                    defined_tails: vec![],
+                    defined_tails: vec![subject_name],
                     checked_index: -1,
                 },
             }
@@ -695,6 +695,8 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
         None
     };
 
+    println!("sorted clauses: {:#?}", sorted_clauses);
+
     for (index, clause) in sorted_clauses.iter().enumerate() {
         if last_clause_set {
             continue;
@@ -708,7 +710,10 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
         assert!(matches!(
             clause_pattern,
-            Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
+            Pattern::List { .. }
+                | Pattern::Var { .. }
+                | Pattern::Discard { .. }
+                | Pattern::Assign { .. }
         ));
 
         if let Pattern::List { elements, tail, .. } = &clause.pattern {
@@ -760,8 +765,10 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
             let mut is_wild_card_elems_clause = clause.guard.is_none();
 
             for elements in elements.iter() {
-                if let Pattern::Constructor { .. } | Pattern::Tuple { .. } | Pattern::List { .. } =
-                    elements
+                if let Pattern::Constructor { .. }
+                | Pattern::Tuple { .. }
+                | Pattern::List { .. }
+                | Pattern::Assign { .. } = elements
                 {
                     is_wild_card_elems_clause = false;
                 }
@@ -769,7 +776,7 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
             if is_wild_card_elems_clause {
                 wild_card_clause_elems += 1;
-                if clause.guard.is_none() && tail.is_some() {
+                if clause.guard.is_none() && tail.is_some() && !elements.is_empty() {
                     last_clause_index = index;
                     last_clause_set = true;
                 }
@@ -801,13 +808,14 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
     // Encountered a tail so stop there with that as last clause
     if last_clause_set {
-        final_clauses = final_clauses[0..last_clause_index].to_vec();
+        final_clauses = final_clauses[0..last_clause_index + 1].to_vec();
     }
 
     // insert hole fillers into clauses
     for (index, clause) in holes_to_fill.into_iter().rev() {
         final_clauses.insert(index, clause);
     }
+    assert!(final_clauses.len() > 1);
 
     final_clauses
 }
