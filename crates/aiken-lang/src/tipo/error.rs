@@ -540,6 +540,22 @@ Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
         leaked: Type,
     },
 
+    #[error(
+        "{}\n",
+        format!(
+            "I discovered a '{keyword_when}/{keyword_is}' expression with a redundant clause.",
+            keyword_is = "is".if_supports_color(Stdout, |s| s.purple()),
+            keyword_when = "when".if_supports_color(Stdout, |s| s.purple())
+        )
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#matching"))]
+    #[diagnostic(code("redundant_pattern_match"))]
+    #[diagnostic(help("You can safely remove this clause."))]
+    RedundantMatchClause {
+        #[label]
+        location: Span,
+    },
+
     #[error("I couldn't figure out the type of a record you're trying to access.\n")]
     #[diagnostic(url(
         "https://aiken-lang.org/language-tour/variables-and-constants#type-annotations"
