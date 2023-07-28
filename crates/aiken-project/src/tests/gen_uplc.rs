@@ -71,9 +71,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
                 version: (1, 0, 0),
                 term: expected,
             };
-
+            
             let expected = optimize::aiken_optimize_and_intern(expected);
-
             // println!("expected: {}", expected.to_pretty());
 
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
@@ -103,7 +102,6 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
                 term: expected,
             };
 
-            println!("expected: {}", expected.to_pretty());
 
             let expected = optimize::aiken_optimize_and_intern(expected);
 
@@ -4212,10 +4210,7 @@ fn expect_head_cast_data_with_tail() {
                     )
                     .apply(Term::var("tail_2"))
                     .apply(
-                        Term::unit()
-                            .lambda("_")
-                            .apply(Term::un_i_data().apply(Term::var("list_item")))
-                            .lambda("list_item"),
+                        Term::un_i_data().apply(Term::var("list_item")).lambda("list_item")
                     ),
             )
             .lambda("tail_2")
