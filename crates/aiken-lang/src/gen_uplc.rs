@@ -38,9 +38,9 @@ use crate::{
 use self::{
     air::Air,
     builder::{
-        cast_validator_args, constants_ir, convert_type_to_data, lookup_data_type_by_tipo,
-        modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
-        DataTypeKey, FunctionAccessKey, UserFunction,
+        cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
+        lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
+        ClauseProperties, DataTypeKey, FunctionAccessKey, UserFunction,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -3226,8 +3226,9 @@ impl<'a> CodeGenerator<'a> {
                 }
                 let mut constants = vec![];
                 for arg in &args {
-                    if let Term::Constant(c) = arg {
-                        constants.push(c.clone())
+                    let maybe_const = extract_constant(arg);
+                    if let Some(c) = maybe_const {
+                        constants.push(c);
                     }
                 }
 
@@ -3695,14 +3696,52 @@ impl<'a> CodeGenerator<'a> {
             Air::CastFromData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
 
-                term = builder::convert_data_to_type(term, &tipo);
+                if extract_constant(&term).is_some() {
+                    term = builder::convert_data_to_type(term, &tipo);
+
+                    let mut program: Program<Name> = Program {
+                        version: (1, 0, 0),
+                        term,
+                    };
+
+                    let mut interner = Interner::new();
+
+                    interner.program(&mut program);
+
+                    let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+                    let evaluated_term: Term<NamedDeBruijn> =
+                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    term = evaluated_term.try_into().unwrap();
+                } else {
+                    term = builder::convert_data_to_type(term, &tipo);
+                }
 
                 arg_stack.push(term);
             }
             Air::CastToData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
 
-                term = builder::convert_type_to_data(term, &tipo);
+                if extract_constant(&term).is_some() {
+                    term = builder::convert_type_to_data(term, &tipo);
+
+                    let mut program: Program<Name> = Program {
+                        version: (1, 0, 0),
+                        term,
+                    };
+
+                    let mut interner = Interner::new();
+
+                    interner.program(&mut program);
+
+                    let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+                    let evaluated_term: Term<NamedDeBruijn> =
+                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    term = evaluated_term.try_into().unwrap();
+                } else {
+                    term = builder::convert_type_to_data(term, &tipo);
+                }
 
                 arg_stack.push(term);
             }
@@ -4069,7 +4108,10 @@ impl<'a> CodeGenerator<'a> {
                     .apply(Term::integer(constr_index.into()))
                     .apply(term);
 
-                if arg_vec.iter().all(|item| matches!(item, Term::Constant(_))) {
+                if arg_vec.iter().all(|item| {
+                    let maybe_const = extract_constant(item);
+                    maybe_const.is_some()
+                }) {
                     let mut program: Program<Name> = Program {
                         version: (1, 0, 0),
                         term,
@@ -4195,8 +4237,9 @@ impl<'a> CodeGenerator<'a> {
                 }
                 let mut constants = vec![];
                 for arg in &args {
-                    if let Term::Constant(c) = arg {
-                        constants.push(c.clone())
+                    let maybe_const = extract_constant(arg);
+                    if let Some(c) = maybe_const {
+                        constants.push(c);
                     }
                 }
 
