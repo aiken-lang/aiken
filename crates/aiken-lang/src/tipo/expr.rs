@@ -48,7 +48,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         subject: &Type,
         typed_clauses: &[TypedClause],
         _location: Span,
-    ) -> Result<(), Vec<String>> {
+    ) -> Result<(), Error> {
         let _value_typ = collapse_links(Arc::new(subject.clone()));
 
         // Currently guards in exhaustiveness checking are assumed that they can fail,
@@ -66,7 +66,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
         }
 
-        let _ = dbg!(compute_match_usefulness(self.environment, &patterns));
+        compute_match_usefulness(self.environment, &patterns)?;
 
         // self.environment
         // .check_exhaustiveness(patterns, value_typ, location)
@@ -1881,15 +1881,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
         }
 
-        if let Err(unmatched) =
-            self.check_when_exhaustiveness(&subject_type, &typed_clauses, location)
-        {
-            return Err(Error::NotExhaustivePatternMatch {
-                location,
-                unmatched,
-                is_let: false,
-            });
-        }
+        self.check_when_exhaustiveness(&subject_type, &typed_clauses, location)?;
 
         Ok(TypedExpr::When {
             location,

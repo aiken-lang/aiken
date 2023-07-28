@@ -428,7 +428,15 @@ fn simplify(environment: &mut Environment, value: &ast::TypedPattern) -> Result<
 
             Ok(Pattern::Constructor(name.to_string(), alts, args))
         }
-        ast::Pattern::Tuple { .. } => todo!(),
+        ast::Pattern::Tuple { elems, .. } =>  {
+            let mut p = Pattern::Constructor(NIL_NAME.to_string(), list_constructors(), vec![]);
+
+            for hd in elems.iter().rev() {
+                p = Pattern::Constructor(CONS_NAME.to_string(), list_constructors(), vec![simplify(environment, hd)?, p]);
+            }
+
+            Ok(p)
+        },
         ast::Pattern::Var { .. } | ast::Pattern::Discard { .. } => Ok(Pattern::Wildcard),
     }
 }
@@ -452,8 +460,7 @@ pub(crate) fn compute_match_usefulness(
         if matrix.is_useful(&pattern_stack) {
             matrix.push(pattern_stack);
         } else {
-            dbg!(&pattern_stack);
-            todo!("redudant")
+            return Err(Error::RedundantMatchClause { location: unchecked_pattern.location() })
         }
     }
 
