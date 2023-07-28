@@ -2,8 +2,11 @@ use std::{collections::BTreeMap, iter, ops::Deref};
 
 use crate::{
     ast::{self, Span, TypedPattern},
-    tipo::{self, environment::Environment, error::Error},
+    tipo::{self, environment::Environment, error::Error}, builtins,
 };
+
+const NIL_NAME: &str = "[]";
+const CONS_NAME: &str = "::";
 
 #[derive(Debug, Clone)]
 pub(crate) struct PatternStack(Vec<Pattern>);
@@ -333,11 +336,55 @@ pub(crate) enum Literal {
     Int(String),
 }
 
+fn list_constructors() -> Vec<tipo::ValueConstructor> {
+    let list_parameter = builtins::generic_var(0);
+    let list_type = builtins::list(list_parameter);
+
+    vec![
+        tipo::ValueConstructor {
+            public: true,
+            tipo: list_type.clone(),
+            variant: tipo::ValueConstructorVariant::Record {
+                name: CONS_NAME.to_string(),
+                arity: 2,
+                field_map: None,
+                location: ast::Span::empty(),
+                module: "".to_string(),
+                constructors_count: 2
+            }
+        },
+        tipo::ValueConstructor {
+            public: true,
+            tipo: list_type,
+            variant: tipo::ValueConstructorVariant::Record {
+                name: NIL_NAME.to_string(),
+                arity: 0,
+                field_map: None,
+                location: ast::Span::empty(),
+                module: "".to_string(),
+                constructors_count: 2
+            }
+        },
+    ]
+}
+
 fn simplify(environment: &mut Environment, value: &ast::TypedPattern) -> Result<Pattern, Error> {
     match value {
         ast::Pattern::Int { value, .. } => Ok(Pattern::Literal(Literal::Int(value.clone()))),
         ast::Pattern::Assign { pattern, .. } => simplify(environment, pattern.as_ref()),
-        ast::Pattern::List { .. } => todo!(),
+        ast::Pattern::List { elements, tail, .. } => {
+            let mut p = if let Some(t) = tail {
+                simplify(environment, t)?
+            } else {
+                Pattern::Constructor(NIL_NAME.to_string(), list_constructors(), vec![])
+            };
+
+            for hd in elements.iter().rev() {
+                p = Pattern::Constructor(CONS_NAME.to_string(), list_constructors(), vec![simplify(environment, hd)?, p]);
+            }
+
+            Ok(p)
+        },
         ast::Pattern::Constructor {
             name,
             arguments,
