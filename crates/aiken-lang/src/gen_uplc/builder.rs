@@ -784,10 +784,11 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                     is_wild_card_elems_clause && !pattern_has_conditions(element);
             }
 
-            if is_wild_card_elems_clause
-                && wild_card_clause_elems < elements.len() + usize::from(tail.is_none())
-            {
-                wild_card_clause_elems += 1;
+            if is_wild_card_elems_clause {
+                if wild_card_clause_elems < elements.len() + usize::from(tail.is_none()) {
+                    wild_card_clause_elems += 1;
+                }
+
                 if clause.guard.is_none() && tail.is_some() && !elements.is_empty() {
                     last_clause_index = index;
                     last_clause_set = true;
@@ -820,7 +821,9 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
     // Encountered a tail so stop there with that as last clause
     if last_clause_set {
-        final_clauses = final_clauses[0..last_clause_index].to_vec();
+        for _ in 0..(sorted_clauses.len() - 1 - last_clause_index) {
+            final_clauses.pop();
+        }
     }
 
     // insert hole fillers into clauses

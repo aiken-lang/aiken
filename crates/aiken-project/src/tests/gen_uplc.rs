@@ -73,7 +73,6 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             };
 
             let expected = optimize::aiken_optimize_and_intern(expected);
-            // println!("expected: {}", expected.to_pretty());
 
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
@@ -2858,8 +2857,7 @@ fn when_tuple_deconstruction() {
                                 Term::un_i_data().apply(
                                     Term::var(CONSTR_GET_FIELD)
                                         .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("a")),
+                                            Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("a")),
                                         )
                                         .apply(Term::integer(0.into())),
                                 ),
@@ -2897,135 +2895,137 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("red")),
             )
             .delayed_if_else(Term::unit(), Term::Error)
-            .lambda("red")
+            .lambda("_")
             .apply(
-                Term::var("red").lambda("_").apply(
-                    Term::var("expect_RedSpend")
-                        .lambda("expect_RedSpend")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("red_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("field_1")
-                                        .apply(Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("red_constr_fields")),
-                                        ))
-                                        .lambda("red_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("red")),
+                Term::var("expect_RedSpend")
+                    .lambda("expect_RedSpend")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("red_constr_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(
+                                            "List/Tuple/Constr contains more items than expected",
+                                        )),
+                                    )
+                                    .lambda("field_1")
+                                    .apply(Term::un_i_data().apply(
+                                        Term::head_list().apply(Term::var("red_constr_fields")),
+                                    ))
+                                    .lambda("red_constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("red")),
+                                    ),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject"))
+                                    .delayed_if_else(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("red"))
+                                            .delayed_choose_list(
+                                                Term::unit(),
+                                                Term::Error.trace(Term::string(
+                                                    "Expected no fields for Constr",
+                                                )),
+                                            ),
+                                        Term::Error.trace(Term::string(
+                                            "Constr index did not match any type variant",
+                                        )),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
+                            .lambda("red"),
+                    )
+                    .apply(Term::var("red")),
+            )
+            .lambda("red")
+            .apply(Term::var("red"))
+            .lambda("_")
+            .apply(
+                Term::var("expect_Datum")
+                    .lambda("expect_Datum")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("dat_constr_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit().lambda("_").apply(
+                                            Term::var("expect_Thing").apply(Term::var("field_1")),
                                         ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("red"))
-                                                .delayed_choose_list(
-                                                    Term::unit(),
-                                                    Term::Error
-                                                        .trace(Term::string("Expected no fields for Constr"))
-                                                ),
-                                            Term::Error.trace(Term::string("Constr index did not match any type variant")),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
-                                .lambda("red"),
-                        )
-                        .apply(Term::var("red")),
-                ),
+                                        Term::Error.trace(Term::string(
+                                            "List/Tuple/Constr contains more items than expected",
+                                        )),
+                                    )
+                                    .lambda("field_1")
+                                    .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
+                                    .lambda("dat_constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")),
+                                    ),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject"))
+                                    .delayed_if_else(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("dat"))
+                                            .delayed_choose_list(
+                                                Term::unit(),
+                                                Term::Error.trace(Term::string(
+                                                    "Expected no fields for Constr",
+                                                )),
+                                            ),
+                                        Term::Error.trace(Term::string(
+                                            "Constr index did not match any type variant",
+                                        )),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
+                            .lambda("dat"),
+                    )
+                    .lambda("expect_Thing")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("field_1_constr_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(
+                                            "List/Tuple/Constr contains more items than expected",
+                                        )),
+                                    )
+                                    .lambda("idx")
+                                    .apply(Term::un_i_data().apply(
+                                        Term::head_list().apply(Term::var("field_1_constr_fields")),
+                                    ))
+                                    .lambda("field_1_constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("field_1")),
+                                    ),
+                                Term::Error.trace(Term::string(
+                                    "Constr index did not match any type variant",
+                                )),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")))
+                            .lambda("field_1"),
+                    )
+                    .apply(Term::var("dat")),
             )
             .lambda("dat")
-            .apply(
-                Term::var("dat").lambda("_").apply(
-                    Term::var("expect_Datum")
-                        .lambda("expect_Datum")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("dat_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit().lambda("_").apply(
-                                                Term::var("expect_Thing")
-                                                    .apply(Term::var("field_1")),
-                                            ),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("field_1")
-                                        .apply(
-                                            Term::head_list().apply(Term::var("dat_constr_fields")),
-                                        )
-                                        .lambda("dat_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("dat")),
-                                        ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("dat"))
-                                                .delayed_choose_list(
-                                                    Term::unit(),
-                                                    Term::Error
-                                                        .trace(Term::string("Expected no fields for Constr"))
-                                                ),
-                                            Term::Error.trace(Term::string("Constr index did not match any type variant")),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
-                                .lambda("dat"),
-                        )
-                        .lambda("expect_Thing")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("field_1_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("idx")
-                                        .apply(
-                                            Term::un_i_data().apply(
-                                                Term::head_list()
-                                                    .apply(Term::var("field_1_constr_fields")),
-                                            ),
-                                        )
-                                        .lambda("field_1_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("field_1")),
-                                        ),
-                                    Term::Error.trace(Term::string(
-                                        "Constr index did not match any type variant",
-                                    )),
-                                )
-                                .lambda("subject")
-                                .apply(
-                                    Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")),
-                                )
-                                .lambda("field_1"),
-                        )
-                        .apply(Term::var("dat")),
-                ),
-            )
+            .apply(Term::var("dat"))
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
@@ -3211,114 +3211,115 @@ fn generic_validator_type_test() {
             .lambda("subject")
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
             .delayed_if_else(Term::unit(), Term::Error)
-            .lambda("r")
-            .apply(
-                Term::var("r").lambda("_").apply(
-                    Term::var("__expect_A")
-                        .lambda("__expect_A")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::var(CONSTR_FIELDS_EXPOSER)
-                                        .apply(Term::var("r"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string(
-                                                "Expected no fields for Constr",
-                                            )),
-                                        ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::tail_list()
-                                                .apply(Term::var("tail_1"))
-                                                .delayed_choose_list(
-                                                    Term::unit().lambda("_").apply(
-                                                        Term::var("__expect_B")
-                                                            .apply(Term::var("field_B")),
-                                                    ),
-                                                    Term::Error
-                                                        .trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                                )
-                                                .lambda("field_B")
-                                                .apply(Term::head_list().apply(Term::var("tail_1")))
-                                                .lambda("tail_1")
-                                                .apply(
-                                                    Term::tail_list().apply(Term::var("r_fields")),
-                                                )
-                                                .lambda("field_0")
-                                                .apply(
-                                                    Term::equals_integer()
-                                                        .apply(Term::integer(0.into()))
-                                                        .apply(
-                                                            Term::fst_pair().apply(
-                                                                Term::unconstr_data().apply(
-                                                                    Term::head_list().apply(
-                                                                        Term::var("r_fields"),
-                                                                    ),
+            .lambda("_").apply(
+                Term::var("__expect_A")
+                    .lambda("__expect_A")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                    .apply(Term::var("r"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(
+                                            "Expected no fields for Constr",
+                                        )),
+                                    ),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject"))
+                                    .delayed_if_else(
+                                        Term::tail_list()
+                                            .apply(Term::var("tail_1"))
+                                            .delayed_choose_list(
+                                                Term::unit().lambda("_").apply(
+                                                    Term::var("__expect_B")
+                                                        .apply(Term::var("field_B")),
+                                                ),
+                                                Term::Error
+                                                    .trace(Term::string("List/Tuple/Constr contains more items than expected")),
+                                            )
+                                            .lambda("field_B")
+                                            .apply(Term::head_list().apply(Term::var("tail_1")))
+                                            .lambda("tail_1")
+                                            .apply(
+                                                Term::tail_list().apply(Term::var("r_fields")),
+                                            )
+                                            .lambda("field_0")
+                                            .apply(
+                                                Term::equals_integer()
+                                                    .apply(Term::integer(0.into()))
+                                                    .apply(
+                                                        Term::fst_pair().apply(
+                                                            Term::unconstr_data().apply(
+                                                                Term::head_list().apply(
+                                                                    Term::var("r_fields"),
                                                                 ),
                                                             ),
-                                                        )
-                                                        .delayed_if_else(Term::unit(), Term::Error),
-                                                )
-                                                .lambda("r_fields")
-                                                .apply(
-                                                    Term::var(CONSTR_FIELDS_EXPOSER)
-                                                        .apply(Term::var("r")),
-                                                ),
-                                            Term::Error.trace(Term::string(
-                                                "Constr index did not match any type variant",
-                                            )),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
-                                .lambda("r"),
-                        )
-                        .lambda("__expect_B")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("B_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string(error_string)),
-                                        )
-                                        .lambda("something")
-                                        .apply(
-                                            Term::equals_integer()
-                                                .apply(Term::integer(0.into()))
-                                                .apply(
-                                                    Term::fst_pair().apply(
-                                                        Term::unconstr_data().apply(
-                                                            Term::head_list()
-                                                                .apply(Term::var("B_fields")),
                                                         ),
+                                                    )
+                                                    .delayed_if_else(Term::unit(), Term::Error),
+                                            )
+                                            .lambda("r_fields")
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("r")),
+                                            ),
+                                        Term::Error.trace(Term::string(
+                                            "Constr index did not match any type variant",
+                                        )),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
+                            .lambda("r"),
+                    )
+                    .lambda("__expect_B")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("B_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(error_string)),
+                                    )
+                                    .lambda("something")
+                                    .apply(
+                                        Term::equals_integer()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::fst_pair().apply(
+                                                    Term::unconstr_data().apply(
+                                                        Term::head_list()
+                                                            .apply(Term::var("B_fields")),
                                                     ),
-                                                )
-                                                .delayed_if_else(Term::unit(), Term::Error),
-                                        )
-                                        .lambda("B_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("field_B")),
-                                        ),
-                                    Term::Error.trace(Term::string(
-                                        "Constr index did not match any type variant",
-                                    )),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
-                                .lambda("field_B"),
-                        )
-                        .apply(Term::var("r")),
-                ),
+                                                ),
+                                            )
+                                            .delayed_if_else(Term::unit(), Term::Error),
+                                    )
+                                    .lambda("B_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("field_B")),
+                                    ),
+                                Term::Error.trace(Term::string(
+                                    "Constr index did not match any type variant",
+                                )),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
+                            .lambda("field_B"),
+                    )
+                    .apply(Term::var("r")),
+            )
+            .lambda("r")
+            .apply(
+                Term::var("r"),
             )
             .lambda("_ctx")
             .lambda("r")
