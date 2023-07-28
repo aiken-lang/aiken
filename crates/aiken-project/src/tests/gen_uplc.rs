@@ -71,7 +71,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
                 version: (1, 0, 0),
                 term: expected,
             };
-            
+
             let expected = optimize::aiken_optimize_and_intern(expected);
             // println!("expected: {}", expected.to_pretty());
 
@@ -101,7 +101,6 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
                 version: (1, 0, 0),
                 term: expected,
             };
-
 
             let expected = optimize::aiken_optimize_and_intern(expected);
 
@@ -3026,7 +3025,7 @@ fn when_tuple_deconstruction() {
                         )
                         .apply(Term::var("dat")),
                 ),
-            ) 
+            )
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
@@ -3770,8 +3769,7 @@ fn list_fields_unwrap() {
                     .lambda("item_1_fields")
                     .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("item_1")))
                     .lambda("item_1")
-                    .apply(Term::head_list().apply(Term::var("field_list")))
-                    
+                    .apply(Term::head_list().apply(Term::var("field_list"))),
             )
             .lambda("field_list")
             .apply(Term::list_values(vec![
@@ -4210,7 +4208,9 @@ fn expect_head_cast_data_with_tail() {
                     )
                     .apply(Term::var("tail_2"))
                     .apply(
-                        Term::un_i_data().apply(Term::var("list_item")).lambda("list_item")
+                        Term::un_i_data()
+                            .apply(Term::var("list_item"))
+                            .lambda("list_item"),
                     ),
             )
             .lambda("tail_2")
