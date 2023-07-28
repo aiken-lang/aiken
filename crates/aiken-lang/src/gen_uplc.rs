@@ -38,9 +38,9 @@ use crate::{
 use self::{
     air::Air,
     builder::{
-        cast_validator_args, convert_type_to_data, lookup_data_type_by_tipo, modify_self_calls,
-        rearrange_list_clauses, AssignmentProperties, ClauseProperties, DataTypeKey,
-        FunctionAccessKey, UserFunction,
+        cast_validator_args, constants_ir, convert_type_to_data, lookup_data_type_by_tipo,
+        modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
+        DataTypeKey, FunctionAccessKey, UserFunction,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -176,6 +176,7 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
         // println!("FULL VEC {:#?}", full_vec);
+        // println!("ZERO ARGS {:#?}", self.zero_arg_functions);
 
         let term = self.uplc_code_gen(full_vec);
 
@@ -236,7 +237,10 @@ impl<'a> CodeGenerator<'a> {
 
             TypedExpr::Var {
                 constructor, name, ..
-            } => AirTree::var(constructor.clone(), name, ""),
+            } => match &constructor.variant {
+                ValueConstructorVariant::ModuleConstant { literal, .. } => constants_ir(literal),
+                _ => AirTree::var(constructor.clone(), name, ""),
+            },
 
             TypedExpr::Fn { args, body, .. } => AirTree::anon_func(
                 args.iter()
@@ -251,7 +255,16 @@ impl<'a> CodeGenerator<'a> {
                 tail,
                 ..
             } => AirTree::list(
-                elements.iter().map(|elem| self.build(elem)).collect_vec(),
+                elements
+                    .iter()
+                    .map(|elem| {
+                        if tipo.is_map() {
+                            self.build(elem)
+                        } else {
+                            AirTree::cast_to_data(self.build(elem), elem.tipo())
+                        }
+                    })
+                    .collect_vec(),
                 tipo.clone(),
                 tail.as_ref().map(|tail| self.build(tail)),
             ),
@@ -290,7 +303,10 @@ impl<'a> CodeGenerator<'a> {
                         .find(|(_, dt)| &dt.name == constr_name)
                         .unwrap();
 
-                    let constr_args = args.iter().map(|arg| self.build(&arg.value)).collect_vec();
+                    let constr_args = args
+                        .iter()
+                        .map(|arg| AirTree::cast_to_data(self.build(&arg.value), arg.value.tipo()))
+                        .collect_vec();
 
                     AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
                 }
@@ -593,7 +609,10 @@ impl<'a> CodeGenerator<'a> {
             },
 
             TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
-                elems.iter().map(|elem| self.build(elem)).collect_vec(),
+                elems
+                    .iter()
+                    .map(|elem| AirTree::cast_to_data(self.build(elem), elem.tipo()))
+                    .collect_vec(),
                 tipo.clone(),
             ),
 
@@ -2779,7 +2798,10 @@ impl<'a> CodeGenerator<'a> {
                     dep_air_tree,
                 ));
 
-                deps_vec.extend(dependency_deps_to_add);
+                let temp_vec = deps_vec;
+                deps_vec = dependency_deps_to_add;
+
+                deps_vec.extend(temp_vec);
 
                 if !params_empty {
                     hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
@@ -3064,7 +3086,7 @@ impl<'a> CodeGenerator<'a> {
                         .into(),
                     )),
                     ValueConstructorVariant::ModuleConstant { .. } => {
-                        unreachable!()
+                        unreachable!("{:#?}, {}", constructor, name)
                     }
 
                     ValueConstructorVariant::ModuleFn {
@@ -3264,16 +3286,8 @@ impl<'a> CodeGenerator<'a> {
                         Term::empty_list()
                     };
 
-                    // move this down here since the constant list path doesn't need to do this
-                    let list_element_type = tipo.get_inner_types()[0].clone();
-
                     for arg in args.into_iter().rev() {
-                        let list_item = if tipo.is_map() {
-                            arg
-                        } else {
-                            builder::convert_type_to_data(arg, &list_element_type)
-                        };
-                        term = Term::mk_cons().apply(list_item).apply(term);
+                        term = Term::mk_cons().apply(arg).apply(term);
                     }
                     arg_stack.push(term);
                 }
@@ -4036,8 +4050,8 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::Constr {
                 tag: constr_index,
-                tipo,
                 count,
+                ..
             } => {
                 let mut arg_vec = vec![];
 
@@ -4047,13 +4061,8 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = Term::empty_list();
 
-                for (index, arg) in arg_vec.iter().enumerate().rev() {
-                    term = Term::mk_cons()
-                        .apply(builder::convert_type_to_data(
-                            arg.clone(),
-                            &tipo.arg_types().unwrap()[index],
-                        ))
-                        .apply(term);
+                for arg in arg_vec.iter().rev() {
+                    term = Term::mk_cons().apply(arg.clone()).apply(term);
                 }
 
                 term = Term::constr_data()
@@ -4177,7 +4186,7 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Tuple { tipo, count } => {
+            Air::Tuple { count, .. } => {
                 let mut args = vec![];
 
                 for _ in 0..count {
@@ -4190,8 +4199,6 @@ impl<'a> CodeGenerator<'a> {
                         constants.push(c.clone())
                     }
                 }
-
-                let tuple_sub_types = tipo.get_inner_types();
 
                 if constants.len() == args.len() {
                     let data_constants = builder::convert_constants_to_data(constants);
@@ -4215,22 +4222,14 @@ impl<'a> CodeGenerator<'a> {
                     }
                 } else if count == 2 {
                     let term = Term::mk_pair_data()
-                        .apply(builder::convert_type_to_data(
-                            args[0].clone(),
-                            &tuple_sub_types[0],
-                        ))
-                        .apply(builder::convert_type_to_data(
-                            args[1].clone(),
-                            &tuple_sub_types[1],
-                        ));
+                        .apply(args[0].clone())
+                        .apply(args[1].clone());
 
                     arg_stack.push(term);
                 } else {
                     let mut term = Term::empty_list();
-                    for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()).rev() {
-                        term = Term::mk_cons()
-                            .apply(builder::convert_type_to_data(arg, &tipo))
-                            .apply(term);
+                    for arg in args.into_iter().rev() {
+                        term = Term::mk_cons().apply(arg).apply(term);
                     }
                     arg_stack.push(term);
                 }

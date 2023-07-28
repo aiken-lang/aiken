@@ -546,7 +546,12 @@ pub fn erase_opaque_type_operations(
         match e {
             AirExpression::Constr { tipo, args, .. } => {
                 if check_replaceable_opaque_type(tipo, data_types) {
-                    *air_tree = args.pop().unwrap();
+                    let arg = args.pop().unwrap();
+                    if let AirTree::Expression(AirExpression::CastToData { value, .. }) = arg {
+                        *air_tree = *value;
+                    } else {
+                        *air_tree = arg;
+                    }
                 }
             }
             AirExpression::RecordAccess { record, .. } => {
