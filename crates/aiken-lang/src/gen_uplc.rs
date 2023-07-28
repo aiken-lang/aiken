@@ -727,7 +727,7 @@ impl<'a> CodeGenerator<'a> {
                     let val = AirTree::local_var(name, tipo.clone());
 
                     if non_opaque_tipo.is_primitive() {
-                        assignment.hoist_over(val)
+                        assignment
                     } else {
                         let expect = self.expect_type_assign(
                             &non_opaque_tipo,
@@ -1569,7 +1569,20 @@ impl<'a> CodeGenerator<'a> {
                         props.original_subject_name.clone(),
                     );
 
-                    if let Some(data_type) = data_type {
+                    if matches!(
+                        &clause.pattern,
+                        Pattern::Var { .. } | Pattern::Discard { .. }
+                    ) {
+                        AirTree::wrap_clause(
+                            clause_assign_hoisted,
+                            self.handle_each_clause(
+                                rest_clauses,
+                                final_clause,
+                                subject_tipo,
+                                &mut next_clause_props,
+                            ),
+                        )
+                    } else if let Some(data_type) = data_type {
                         if data_type.constructors.len() > 1 {
                             AirTree::clause(
                                 &props.original_subject_name,
@@ -1679,7 +1692,8 @@ impl<'a> CodeGenerator<'a> {
 
                             let next_elements_len = match next_clause_pattern {
                                 Pattern::List { elements, tail, .. } => {
-                                    elements.len() + usize::from(tail.is_none())
+                                    assert!(!elements.is_empty() || tail.is_none());
+                                    elements.len() + usize::from(tail.is_none()) - 1
                                 }
                                 _ => 0,
                             };
@@ -1711,7 +1725,8 @@ impl<'a> CodeGenerator<'a> {
                         is_wild_card_elems_clause =
                             is_wild_card_elems_clause && !pattern_has_conditions(element);
                     }
-                    let elements_len = elements.len() + usize::from(tail.is_none());
+                    assert!(!elements.is_empty() || tail.is_none());
+                    let elements_len = elements.len() + usize::from(tail.is_none()) - 1;
                     let current_checked_index = *checked_index;
 
                     if *checked_index < elements_len.try_into().unwrap()
