@@ -25,7 +25,8 @@ use crate::{
     gen_uplc::builder::{
         convert_opaque_type, erase_opaque_type_operations, find_and_replace_generics,
         get_arg_type_name, get_generic_id_and_type, get_variant_name, monomorphize,
-        wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction, SpecificClause,
+        pattern_has_conditions, wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction,
+        SpecificClause,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -1680,7 +1681,7 @@ impl<'a> CodeGenerator<'a> {
 
                             let next_elements_len = match next_clause_pattern {
                                 Pattern::List { elements, tail, .. } => {
-                                    elements.len() - usize::from(tail.is_some())
+                                    elements.len() + usize::from(tail.is_none())
                                 }
                                 _ => 0,
                             };
@@ -1708,16 +1709,11 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     let mut is_wild_card_elems_clause = clause.guard.is_none();
-                    for elements in elements.iter() {
-                        if let Pattern::Constructor { .. }
-                        | Pattern::Tuple { .. }
-                        | Pattern::List { .. }
-                        | Pattern::Assign { .. } = elements
-                        {
-                            is_wild_card_elems_clause = false;
-                        }
+                    for element in elements.iter() {
+                        is_wild_card_elems_clause =
+                            is_wild_card_elems_clause && !pattern_has_conditions(element);
                     }
-                    let elements_len = elements.len() - usize::from(tail.is_some());
+                    let elements_len = elements.len() + usize::from(tail.is_none());
                     let current_checked_index = *checked_index;
 
                     if *checked_index < elements_len.try_into().unwrap()
@@ -2360,8 +2356,8 @@ impl<'a> CodeGenerator<'a> {
                     is_record,
                     ..
                 } => {
-                    props.complex_clause = true;
                     if subject_tipo.is_bool() {
+                        props.complex_clause = true;
                         AirTree::clause_guard(
                             &props.original_subject_name,
                             AirTree::bool(constr_name == "True"),
@@ -2373,6 +2369,7 @@ impl<'a> CodeGenerator<'a> {
                         if *is_record {
                             assign
                         } else {
+                            props.complex_clause = true;
                             AirTree::UnhoistedSequence(vec![
                                 AirTree::clause_guard(
                                     &props.original_subject_name,
@@ -2385,7 +2382,6 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 Pattern::Tuple { .. } => {
-                    props.complex_clause = true;
                     let (_, assign) = self.clause_pattern(pattern, subject_tipo, props);
 
                     let defined_indices = match &props.specific_clause {

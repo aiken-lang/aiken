@@ -103,6 +103,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
                 term: expected,
             };
 
+            println!("expected: {}", expected.to_pretty());
+
             let expected = optimize::aiken_optimize_and_intern(expected);
 
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
@@ -2898,6 +2900,52 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("red")),
             )
             .delayed_if_else(Term::unit(), Term::Error)
+            .lambda("red")
+            .apply(
+                Term::var("red").lambda("_").apply(
+                    Term::var("expect_RedSpend")
+                        .lambda("expect_RedSpend")
+                        .apply(
+                            Term::equals_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(Term::var("subject"))
+                                .delayed_if_else(
+                                    Term::tail_list()
+                                        .apply(Term::var("red_constr_fields"))
+                                        .delayed_choose_list(
+                                            Term::unit(),
+                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
+                                        )
+                                        .lambda("field_1")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("red_constr_fields")),
+                                        ))
+                                        .lambda("red_constr_fields")
+                                        .apply(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("red")),
+                                        ),
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(Term::var("subject"))
+                                        .delayed_if_else(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("red"))
+                                                .delayed_choose_list(
+                                                    Term::unit(),
+                                                    Term::Error
+                                                        .trace(Term::string("Expected no fields for Constr"))
+                                                ),
+                                            Term::Error.trace(Term::string("Constr index did not match any type variant")),
+                                        ),
+                                )
+                                .lambda("subject")
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
+                                .lambda("red"),
+                        )
+                        .apply(Term::var("red")),
+                ),
+            )
             .lambda("dat")
             .apply(
                 Term::var("dat").lambda("_").apply(
@@ -2980,53 +3028,7 @@ fn when_tuple_deconstruction() {
                         )
                         .apply(Term::var("dat")),
                 ),
-            )
-            .lambda("red")
-            .apply(
-                Term::var("red").lambda("_").apply(
-                    Term::var("expect_RedSpend")
-                        .lambda("expect_RedSpend")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("red_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("field_1")
-                                        .apply(Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("red_constr_fields")),
-                                        ))
-                                        .lambda("red_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("red")),
-                                        ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("red"))
-                                                .delayed_choose_list(
-                                                    Term::unit(),
-                                                    Term::Error
-                                                        .trace(Term::string("Expected no fields for Constr"))
-                                                ),
-                                            Term::Error.trace(Term::string("Constr index did not match any type variant")),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
-                                .lambda("red"),
-                        )
-                        .apply(Term::var("red")),
-                ),
-            )
+            ) 
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
@@ -3771,10 +3773,7 @@ fn list_fields_unwrap() {
                     .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("item_1")))
                     .lambda("item_1")
                     .apply(Term::head_list().apply(Term::var("field_list")))
-                    .lambda("clauses_delayed")
-                    .apply(Term::bool(false).delay())
-                    .lambda("tail_1")
-                    .apply(Term::tail_list().apply(Term::var("field_list"))),
+                    
             )
             .lambda("field_list")
             .apply(Term::list_values(vec![

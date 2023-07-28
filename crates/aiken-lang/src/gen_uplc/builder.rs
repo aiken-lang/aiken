@@ -14,7 +14,9 @@ use uplc::{
 };
 
 use crate::{
-    ast::{AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedDataType},
+    ast::{
+        AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedDataType, TypedPattern,
+    },
     builtins::{bool, void},
     expr::TypedExpr,
     tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
@@ -521,7 +523,6 @@ pub fn get_variant_name(t: &Arc<Type>) -> String {
         let full_type = "_data".to_string();
 
         if t.is_generic() {
-            println!("FULL TYPE: {:#?}", t);
             panic!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE");
         }
 
@@ -598,6 +599,25 @@ pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, v
                 *args = new_args;
             }
         }
+    }
+}
+
+pub fn pattern_has_conditions(pattern: &TypedPattern) -> bool {
+    match pattern {
+        Pattern::Constructor {
+            is_record: false, ..
+        }
+        | Pattern::List { .. }
+        | Pattern::Int { .. } => true,
+        Pattern::Tuple { elems, .. } => elems.iter().any(pattern_has_conditions),
+        Pattern::Constructor {
+            is_record: true,
+            arguments,
+            ..
+        } => arguments
+            .iter()
+            .any(|arg| pattern_has_conditions(&arg.value)),
+        Pattern::Var { .. } | Pattern::Discard { .. } | Pattern::Assign { .. } => false,
     }
 }
 
@@ -695,8 +715,6 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
         None
     };
 
-    println!("sorted clauses: {:#?}", sorted_clauses);
-
     for (index, clause) in sorted_clauses.iter().enumerate() {
         if last_clause_set {
             continue;
@@ -710,15 +728,12 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
         assert!(matches!(
             clause_pattern,
-            Pattern::List { .. }
-                | Pattern::Var { .. }
-                | Pattern::Discard { .. }
-                | Pattern::Assign { .. }
+            Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
         ));
 
-        if let Pattern::List { elements, tail, .. } = &clause.pattern {
+        if let Pattern::List { elements, tail, .. } = clause_pattern {
             // found a hole and now we plug it
-            while wild_card_clause_elems < elements.len() - usize::from(tail.is_some()) {
+            while wild_card_clause_elems < elements.len() {
                 let mut discard_elems = vec![];
 
                 for _ in 0..wild_card_clause_elems {
@@ -764,17 +779,14 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
             let mut is_wild_card_elems_clause = clause.guard.is_none();
 
-            for elements in elements.iter() {
-                if let Pattern::Constructor { .. }
-                | Pattern::Tuple { .. }
-                | Pattern::List { .. }
-                | Pattern::Assign { .. } = elements
-                {
-                    is_wild_card_elems_clause = false;
-                }
+            for element in elements.iter() {
+                is_wild_card_elems_clause =
+                    is_wild_card_elems_clause && !pattern_has_conditions(element);
             }
 
-            if is_wild_card_elems_clause {
+            if is_wild_card_elems_clause
+                && wild_card_clause_elems < elements.len() + usize::from(tail.is_none())
+            {
                 wild_card_clause_elems += 1;
                 if clause.guard.is_none() && tail.is_some() && !elements.is_empty() {
                     last_clause_index = index;
@@ -808,7 +820,7 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
     // Encountered a tail so stop there with that as last clause
     if last_clause_set {
-        final_clauses = final_clauses[0..last_clause_index + 1].to_vec();
+        final_clauses = final_clauses[0..last_clause_index].to_vec();
     }
 
     // insert hole fillers into clauses
