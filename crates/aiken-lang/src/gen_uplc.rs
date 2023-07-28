@@ -597,9 +597,9 @@ impl<'a> CodeGenerator<'a> {
                 tipo.clone(),
             ),
 
-            TypedExpr::TupleIndex {
-                tipo, index, tuple, ..
-            } => AirTree::tuple_index(*index, tipo.clone(), self.build(tuple)),
+            TypedExpr::TupleIndex { index, tuple, .. } => {
+                AirTree::tuple_index(*index, tuple.tipo(), self.build(tuple))
+            }
 
             TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone()),
 
@@ -2765,7 +2765,10 @@ impl<'a> CodeGenerator<'a> {
                 ));
 
                 deps_vec.extend(dependency_deps_to_add);
-                hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+
+                if !params_empty {
+                    hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+                }
             }
         }
 
