@@ -4120,17 +4120,19 @@ fn expect_head3_cast_data_no_tail() {
             .lambda("i")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_1"))))
             .lambda("tail_1")
-            .apply(Term::tail_list().apply(Term::var("unwrap_a")))
-            .lambda("h")
-            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
-            .lambda("unwrap_a")
-            .apply(Term::unlist_data().apply(Term::var("a")))
-            .lambda("a")
-            .apply(Term::list_data().apply(Term::list_values(vec![
+            .apply(Term::tail_list().apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
+            ])))
+            .lambda("h")
+            .apply(
+                Term::un_i_data().apply(Term::head_list().apply(Term::list_values(vec![
+                    Constant::Data(Data::integer(1.into())),
+                    Constant::Data(Data::integer(2.into())),
+                    Constant::Data(Data::integer(3.into())),
+                ]))),
+            ),
         false,
     );
 }
@@ -4160,13 +4162,11 @@ fn expect_head_cast_data_no_tail() {
             .lambda("h")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
             .lambda("unwrap_a")
-            .apply(Term::unlist_data().apply(Term::var("a")))
-            .lambda("a")
-            .apply(Term::list_data().apply(Term::list_values(vec![
+            .apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
+            ])),
         true,
     );
 }
@@ -4225,13 +4225,11 @@ fn expect_head_cast_data_with_tail() {
             .lambda("h")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
             .lambda("unwrap_a")
-            .apply(Term::unlist_data().apply(Term::var("a")))
-            .lambda("a")
-            .apply(Term::list_data().apply(Term::list_values(vec![
+            .apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
+            ])),
         false,
     );
 }
