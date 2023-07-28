@@ -1302,7 +1302,7 @@ impl<'a> CodeGenerator<'a> {
                     );
 
                     let expect_tuple_item = self.expect_type_assign(
-                        tipo,
+                        arg,
                         AirTree::local_var(&tuple_index_name, arg.clone()),
                         defined_data_types,
                         location,
