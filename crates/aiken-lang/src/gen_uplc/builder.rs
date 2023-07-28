@@ -1424,3 +1424,26 @@ pub fn wrap_validator_condition(air_tree: AirTree) -> AirTree {
 
     AirTree::if_branches(success_branch, void(), otherwise)
 }
+
+pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
+    let mut constant = None;
+
+    if let Term::Constant(c) = term {
+        constant = Some(c.clone());
+    } else if let Term::Apply { function, argument } = term {
+        if let Term::Constant(c) = argument.as_ref() {
+            if let Term::Builtin(b) = function.as_ref() {
+                if matches!(
+                    b,
+                    DefaultFunction::BData
+                        | DefaultFunction::IData
+                        | DefaultFunction::MapData
+                        | DefaultFunction::ListData
+                ) {
+                    constant = Some(c.clone());
+                }
+            }
+        }
+    }
+    constant
+}

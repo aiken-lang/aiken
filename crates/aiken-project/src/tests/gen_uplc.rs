@@ -1391,7 +1391,9 @@ fn acceptance_test_14_list_creation() {
                                 )
                                 .apply(
                                     Term::mk_cons()
-                                        .apply(Term::i_data().apply(Term::integer(0.into())))
+                                        .apply(Term::Constant(
+                                            Constant::Data(Data::integer(0.into())).into(),
+                                        ))
                                         .apply(Term::empty_list()),
                                 ),
                         ),
