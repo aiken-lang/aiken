@@ -14,9 +14,10 @@ pub struct PackageName {
 
 impl PackageName {
     fn validate(&self) -> Result<(), Error> {
-        let r = regex::Regex::new("^[a-z0-9_-]+$").expect("regex could not be compiled");
+        let owner_regex = regex::Regex::new("^[a-z0-9_-]+$").expect("regex could not be compiled");
+        let repo_regex = regex::Regex::new("^[a-z0-9_]+$").expect("regex could not be compiled");
 
-        if !(r.is_match(&self.owner) && r.is_match(&self.repo)) {
+        if !(owner_regex.is_match(&self.owner) && repo_regex.is_match(&self.repo)) {
             return Err(Error::InvalidProjectName {
                 reason: InvalidProjectNameReason::Format,
                 name: self.to_string(),
@@ -138,9 +139,10 @@ impl fmt::Display for InvalidProjectNameReason {
             InvalidProjectNameReason::Format => write!(
                 f,
                 "It is malformed.\n\nProjects must be named as:\n\n\t\
-                {}/{}\n\nEach part must start with a lowercase letter \
-                and may only contain lowercase letters, numbers, hyphens or underscores.\
-                \nFor example,\n\n\t{}",
+                {}/{}\n\nOwner name may only contain lowercase letters, numbers, hyphens or underscores, \
+                while repository name may only contain lowercase letters, numbers, \
+                or underscores.\
+                \n\nFor example,\n\n\t{}",
                 "{owner}".if_supports_color(Stdout, |s| s.bright_blue()),
                 "{project}".if_supports_color(Stdout, |s| s.bright_blue()),
                 "aiken-lang/stdlib".if_supports_color(Stdout, |s| s.bright_blue()),
