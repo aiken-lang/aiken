@@ -687,22 +687,21 @@ impl<'a> CodeGenerator<'a> {
 
                     let val = AirTree::local_var(name, tipo.clone());
 
-                    if tipo.is_primitive() {
-                        AirTree::let_assignment(name, assignment.hoist_over(val))
+                    if non_opaque_tipo.is_primitive() {
+                        assignment
                     } else {
                         let expect = self.expect_type_assign(
                             &non_opaque_tipo,
-                            val.clone(),
+                            val,
                             &mut index_map,
                             pattern.location(),
                         );
 
                         let assign_expect = AirTree::let_assignment("_", expect);
 
-                        AirTree::let_assignment(
-                            name,
-                            assignment.hoist_over(assign_expect.hoist_over(val)),
-                        )
+                        let sequence = vec![assignment, assign_expect];
+
+                        AirTree::UnhoistedSequence(sequence)
                     }
                 } else {
                     AirTree::let_assignment(name, value)
@@ -721,28 +720,27 @@ impl<'a> CodeGenerator<'a> {
                     let name = &format!("__discard_expect_{}", name);
                     let mut index_map = IndexMap::new();
 
-                    let tipo = convert_opaque_type(tipo, &self.data_types);
+                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types);
 
                     let assignment = AirTree::let_assignment(name, value);
 
                     let val = AirTree::local_var(name, tipo.clone());
 
-                    if tipo.is_primitive() {
-                        AirTree::let_assignment(name, assignment.hoist_over(val))
+                    if non_opaque_tipo.is_primitive() {
+                        assignment.hoist_over(val)
                     } else {
                         let expect = self.expect_type_assign(
-                            &tipo,
-                            val.clone(),
+                            &non_opaque_tipo,
+                            val,
                             &mut index_map,
                             pattern.location(),
                         );
 
                         let assign_expect = AirTree::let_assignment("_", expect);
 
-                        AirTree::let_assignment(
-                            name,
-                            assignment.hoist_over(assign_expect.hoist_over(val)),
-                        )
+                        let sequence = vec![assignment, assign_expect];
+
+                        AirTree::UnhoistedSequence(sequence)
                     }
                 } else if !props.remove_unused {
                     AirTree::let_assignment(name, value)
