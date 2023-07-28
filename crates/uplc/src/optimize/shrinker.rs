@@ -2,9 +2,10 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
+use pallas_primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
-    ast::{Name, Program, Term},
+    ast::{Constant, Data, Name, Program, Term, Type},
     builtins::DefaultFunction,
 };
 
@@ -324,34 +325,105 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
                 return;
             };
 
-            let Term::Apply { function: inner_func, argument: inner_arg } = Rc::make_mut(argument)
-            else {
-                wrap_data_reduce(Rc::make_mut(argument));
-                return;
-            };
-
-            let Term::Builtin(second_action) = inner_func.as_ref()
-            else {
-                wrap_data_reduce(Rc::make_mut(argument));
-                return;
-            };
-
-            match (first_action, second_action) {
-                (DefaultFunction::UnIData, DefaultFunction::IData)
-                | (DefaultFunction::IData, DefaultFunction::UnIData)
-                | (DefaultFunction::BData, DefaultFunction::UnBData)
-                | (DefaultFunction::UnBData, DefaultFunction::BData)
-                | (DefaultFunction::ListData, DefaultFunction::UnListData)
-                | (DefaultFunction::UnListData, DefaultFunction::ListData)
-                | (DefaultFunction::MapData, DefaultFunction::UnMapData)
-                | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
-                    wrap_data_reduce(Rc::make_mut(inner_arg));
-                    *term = inner_arg.as_ref().clone();
-                }
-                _ => {
+            if let Term::Apply {
+                function: inner_func,
+                argument: inner_arg,
+            } = Rc::make_mut(argument)
+            {
+                let Term::Builtin(second_action) = inner_func.as_ref()
+                else {
                     wrap_data_reduce(Rc::make_mut(argument));
+                    return;
+                };
+
+                match (first_action, second_action) {
+                    (DefaultFunction::UnIData, DefaultFunction::IData)
+                    | (DefaultFunction::IData, DefaultFunction::UnIData)
+                    | (DefaultFunction::BData, DefaultFunction::UnBData)
+                    | (DefaultFunction::UnBData, DefaultFunction::BData)
+                    | (DefaultFunction::ListData, DefaultFunction::UnListData)
+                    | (DefaultFunction::UnListData, DefaultFunction::ListData)
+                    | (DefaultFunction::MapData, DefaultFunction::UnMapData)
+                    | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
+                        wrap_data_reduce(Rc::make_mut(inner_arg));
+                        *term = inner_arg.as_ref().clone();
+                    }
+                    _ => {
+                        wrap_data_reduce(Rc::make_mut(argument));
+                    }
                 }
-            }
+            } else if let Term::Constant(c) = Rc::make_mut(argument) {
+                match (first_action, Rc::make_mut(c)) {
+                    (
+                        DefaultFunction::UnIData,
+                        Constant::Data(PlutusData::BigInt(BigInt::Int(i))),
+                    ) => {
+                        *term = Term::integer(i128::from(*i).into());
+                    }
+                    (DefaultFunction::IData, Constant::Integer(i)) => {
+                        *term = Term::data(Data::integer(i.clone()));
+                    }
+                    (DefaultFunction::UnBData, Constant::Data(PlutusData::BoundedBytes(b))) => {
+                        *term = Term::byte_string(b.clone().into());
+                    }
+                    (DefaultFunction::BData, Constant::ByteString(b)) => {
+                        *term = Term::data(Data::bytestring(b.clone()));
+                    }
+                    (DefaultFunction::UnListData, Constant::Data(PlutusData::Array(l))) => {
+                        *term = Term::list_values(
+                            l.iter()
+                                .map(|item| Constant::Data(item.clone()))
+                                .collect_vec(),
+                        );
+                    }
+                    (DefaultFunction::ListData, Constant::ProtoList(_, l)) => {
+                        *term = Term::data(Data::list(
+                            l.iter()
+                                .map(|item| match item {
+                                    Constant::Data(d) => d.clone(),
+                                    _ => unreachable!(),
+                                })
+                                .collect_vec(),
+                        ));
+                    }
+                    (DefaultFunction::MapData, Constant::ProtoList(_, m)) => {
+                        *term = Term::data(Data::map(
+                            m.iter()
+                                .map(|m| match m {
+                                    Constant::ProtoPair(_, _, f, s) => {
+                                        match (f.as_ref(), s.as_ref()) {
+                                            (Constant::Data(d), Constant::Data(d2)) => {
+                                                (d.clone(), d2.clone())
+                                            }
+                                            _ => unreachable!(),
+                                        }
+                                    }
+                                    _ => unreachable!(),
+                                })
+                                .collect_vec(),
+                        ));
+                    }
+                    (DefaultFunction::UnMapData, Constant::Data(PlutusData::Map(m))) => {
+                        *term = Term::map_values(
+                            m.iter()
+                                .map(|item| {
+                                    Constant::ProtoPair(
+                                        Type::Data,
+                                        Type::Data,
+                                        Constant::Data(item.0.clone()).into(),
+                                        Constant::Data(item.1.clone()).into(),
+                                    )
+                                })
+                                .collect_vec(),
+                        );
+                    }
+                    _ => {
+                        wrap_data_reduce(Rc::make_mut(argument));
+                    }
+                }
+            } else {
+                wrap_data_reduce(Rc::make_mut(argument));
+            };
         }
         Term::Force(f) => {
             wrap_data_reduce(Rc::make_mut(f));
