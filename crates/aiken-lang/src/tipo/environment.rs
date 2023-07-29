@@ -4,12 +4,10 @@ use std::{
     sync::Arc,
 };
 
-use itertools::Itertools;
-
 use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind, Pattern,
-        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
+        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedPattern,
         UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
     builtins::{self, function, generic_var, tuple, unbound_var},
@@ -19,6 +17,7 @@ use crate::{
 
 use super::{
     error::{Error, Snippet, Warning},
+    exhaustive::{simplify, Matrix, PatternStack},
     hydrator::Hydrator,
     AccessorsMap, PatternConstructor, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar,
     ValueConstructor, ValueConstructorVariant,
@@ -1439,64 +1438,42 @@ impl<'a> Environment<'a> {
     /// only at the top level (without recursing into constructor arguments).
     pub fn check_exhaustiveness(
         &mut self,
-        patterns: Vec<Pattern<PatternConstructor, Arc<Type>>>,
-        value_typ: Arc<Type>,
+        unchecked_patterns: &[&TypedPattern],
         location: Span,
-    ) -> Result<(), Vec<String>> {
-        match &*value_typ {
-            Type::App {
-                name: type_name,
-                module,
-                ..
-            } => {
-                let m = if module.is_empty() || module == self.current_module {
-                    None
-                } else {
-                    Some(module.clone())
-                };
+        is_let: bool,
+    ) -> Result<(), Error> {
+        let mut matrix = Matrix::new();
 
-                if type_name == "List" && module.is_empty() {
-                    return self.check_list_pattern_exhaustiveness(patterns);
-                }
+        for unchecked_pattern in unchecked_patterns {
+            let pattern = simplify(self, unchecked_pattern)?;
+            let pattern_stack = PatternStack::from(pattern);
 
-                if let Ok(constructors) = self.get_constructors_for_type(&m, type_name, location) {
-                    let mut unmatched_constructors: HashSet<String> =
-                        constructors.iter().cloned().collect();
-
-                    for p in &patterns {
-                        // ignore Assign patterns
-                        let mut pattern = p;
-                        while let Pattern::Assign {
-                            pattern: assign_pattern,
-                            ..
-                        } = pattern
-                        {
-                            pattern = assign_pattern;
-                        }
-
-                        match pattern {
-                            // If the pattern is a Discard or Var, all constructors are covered by it
-                            Pattern::Discard { .. } => return Ok(()),
-                            Pattern::Var { .. } => return Ok(()),
-                            // If the pattern is a constructor, remove it from unmatched patterns
-                            Pattern::Constructor {
-                                constructor: PatternConstructor::Record { name, .. },
-                                ..
-                            } => {
-                                unmatched_constructors.remove(name);
-                            }
-                            _ => return Ok(()),
-                        }
-                    }
-
-                    if !unmatched_constructors.is_empty() {
-                        return Err(unmatched_constructors.into_iter().sorted().collect());
-                    }
-                }
-                Ok(())
+            if matrix.is_useful(&pattern_stack) {
+                matrix.push(pattern_stack);
+            } else {
+                return Err(Error::RedundantMatchClause {
+                    location: unchecked_pattern.location(),
+                });
             }
-            _ => Ok(()),
         }
+
+        let missing_patterns = matrix.collect_missing_patterns(1).flatten();
+
+        for missing in &missing_patterns {
+            dbg!(missing);
+        }
+
+        if !missing_patterns.is_empty() {
+            let unmatched = missing_patterns.into_iter().map(|p| p.pretty()).collect();
+
+            return Err(Error::NotExhaustivePatternMatch {
+                location,
+                unmatched,
+                is_let,
+            });
+        }
+
+        Ok(())
     }
 
     pub fn check_list_pattern_exhaustiveness(
