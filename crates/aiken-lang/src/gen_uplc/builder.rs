@@ -583,7 +583,7 @@ pub fn erase_opaque_type_operations(
     }
 }
 
-pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, variant: &String) {
+pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, variant: &String, static_recursive_params: &Vec<usize>) {
     if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
         if let AirTree::Expression(AirExpression::Var {
             constructor:
@@ -599,6 +599,11 @@ pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, v
                 && module == &func_key.module_name
                 && variant == variant_name
             {
+                // Remove any static-recursive-parameters, because they'll be bound statically
+                // above the recursive part of the function
+                for arg in static_recursive_params.iter().rev() {
+                    args.remove(*arg);
+                }
                 let mut new_args = vec![func.as_ref().clone()];
                 new_args.append(args);
                 *args = new_args;

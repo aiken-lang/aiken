@@ -129,7 +129,7 @@ pub enum AirStatement {
         module_name: String,
         params: Vec<String>,
         recursive: bool,
-        recursive_static_params: Vec<String>,
+        recursive_nonstatic_params: Vec<String>,
         variant_name: String,
         func_body: Box<AirTree>,
     },
@@ -424,7 +424,7 @@ impl AirTree {
         variant_name: impl ToString,
         params: Vec<String>,
         recursive: bool,
-        recursive_static_params: Vec<String>,
+        recursive_nonstatic_params: Vec<String>,
         func_body: AirTree,
     ) -> AirTree {
         AirTree::Statement {
@@ -433,7 +433,7 @@ impl AirTree {
                 module_name: module_name.to_string(),
                 params,
                 recursive,
-                recursive_static_params,
+                recursive_nonstatic_params,
                 variant_name: variant_name.to_string(),
                 func_body: func_body.into(),
             },
@@ -878,7 +878,7 @@ impl AirTree {
                         module_name,
                         params,
                         recursive,
-                        recursive_static_params,
+                        recursive_nonstatic_params,
                         variant_name,
                         func_body,
                     } => {
@@ -887,7 +887,7 @@ impl AirTree {
                             module_name: module_name.clone(),
                             params: params.clone(),
                             recursive: *recursive,
-                            recursive_static_params: recursive_static_params.clone(),
+                            recursive_nonstatic_params: recursive_nonstatic_params.clone(),
                             variant_name: variant_name.clone(),
                         });
                         func_body.create_air_vec(air_vec);
