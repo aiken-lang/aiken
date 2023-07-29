@@ -9,6 +9,7 @@ use crate::{
 
 const NIL_NAME: &str = "[]";
 const CONS_NAME: &str = "::";
+const TUPLE_NAME: &str = "__Tuple";
 
 #[derive(Debug, Clone)]
 pub(crate) struct PatternStack(Vec<Pattern>);
@@ -116,8 +117,8 @@ impl PatternStack {
             }
             Pattern::Wildcard => Some(self.tail()),
             Pattern::Constructor(_, _, _) => unreachable!(
-            "constructors and literals should never align in pattern match exhaustiveness checks."
-        ),
+                "constructors and literals should never align in pattern match exhaustiveness checks."
+            ),
         }
     }
 
@@ -401,6 +402,16 @@ impl Pattern {
         match self {
             Pattern::Wildcard => "_".to_string(),
             Pattern::Literal(_) => unreachable!("maybe never happens?"),
+            Pattern::Constructor(name, _alts, args) if name.contains(TUPLE_NAME) => {
+                let mut pretty_pattern = "(".to_string();
+
+                pretty_pattern.push_str(&args.into_iter().map(Pattern::pretty).join(", "));
+
+                pretty_pattern.push(')');
+
+                pretty_pattern
+            }
+
             Pattern::Constructor(name, _alts, args) if name == CONS_NAME => {
                 let mut pretty_pattern = "[".to_string();
 
@@ -604,17 +615,28 @@ pub(super) fn simplify(
             Ok(Pattern::Constructor(name.to_string(), alts, args))
         }
         ast::Pattern::Tuple { elems, .. } => {
-            let mut p = Pattern::Constructor(NIL_NAME.to_string(), list_constructors(), vec![]);
+            let mut args = vec![];
 
-            for hd in elems.iter().rev() {
-                p = Pattern::Constructor(
-                    CONS_NAME.to_string(),
-                    list_constructors(),
-                    vec![simplify(environment, hd)?, p],
-                );
+            for elem in elems {
+                args.push(simplify(environment, elem)?);
             }
 
-            Ok(p)
+            Ok(Pattern::Constructor(
+                TUPLE_NAME.to_string(),
+                vec![tipo::ValueConstructor {
+                    tipo: tipo::Type::Tuple { elems: vec![] }.into(),
+                    public: true,
+                    variant: tipo::ValueConstructorVariant::Record {
+                        name: TUPLE_NAME.to_string(),
+                        arity: elems.len(),
+                        field_map: None,
+                        location: ast::Span::empty(),
+                        module: "".to_string(),
+                        constructors_count: 1,
+                    },
+                }],
+                args,
+            ))
         }
         ast::Pattern::Var { .. } | ast::Pattern::Discard { .. } => Ok(Pattern::Wildcard),
     }
