@@ -3023,6 +3023,9 @@ impl<'a> CodeGenerator<'a> {
                             function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                                 erase_opaque_type_operations(air_tree, &self.data_types);
                                 monomorphize(air_tree, &mono_types);
+                            });
+
+                            function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                                 remove_tuple_data_casts(air_tree);
                             });
 
@@ -3050,6 +3053,9 @@ impl<'a> CodeGenerator<'a> {
                         function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                             erase_opaque_type_operations(air_tree, &self.data_types);
                             monomorphize(air_tree, &mono_types);
+                        });
+
+                        function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                             remove_tuple_data_casts(air_tree);
                         });
 

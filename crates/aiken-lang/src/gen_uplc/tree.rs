@@ -1381,7 +1381,7 @@ impl AirTree {
     ) {
         let mut index_count = IndexCounter::new();
         tree_path.push(current_depth, depth_index);
-
+        with(self, tree_path);
         match self {
             AirTree::Statement {
                 statement,
@@ -1772,7 +1772,6 @@ impl AirTree {
             },
             a => unreachable!("GOT THIS {:#?}", a),
         }
-        with(self, tree_path);
         tree_path.pop();
     }
 
