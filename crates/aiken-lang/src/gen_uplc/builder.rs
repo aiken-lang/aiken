@@ -622,7 +622,8 @@ pub fn pattern_has_conditions(pattern: &TypedPattern) -> bool {
         } => arguments
             .iter()
             .any(|arg| pattern_has_conditions(&arg.value)),
-        Pattern::Var { .. } | Pattern::Discard { .. } | Pattern::Assign { .. } => false,
+        Pattern::Assign { pattern, .. } => pattern_has_conditions(pattern),
+        Pattern::Var { .. } | Pattern::Discard { .. } => false,
     }
 }
 
