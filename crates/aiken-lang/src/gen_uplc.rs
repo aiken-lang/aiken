@@ -39,8 +39,9 @@ use self::{
     air::Air,
     builder::{
         cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
-        ClauseProperties, DataTypeKey, FunctionAccessKey, UserFunction,
+        lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses,
+        remove_tuple_data_casts, AssignmentProperties, ClauseProperties, DataTypeKey,
+        FunctionAccessKey, UserFunction,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -124,7 +125,6 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
 
         let full_vec = full_tree.to_vec();
-        // println!("FULL VEC {:#?}", full_vec);
 
         let mut term = self.uplc_code_gen(full_vec);
 
@@ -145,8 +145,6 @@ impl<'a> CodeGenerator<'a> {
             // optimizations on air tree
 
             let full_vec_other = full_tree_other.to_vec();
-
-            // println!("FULL VEC {:#?}", full_vec_other);
 
             let other_term = self.uplc_code_gen(full_vec_other);
 
@@ -175,8 +173,6 @@ impl<'a> CodeGenerator<'a> {
 
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
-        // println!("FULL VEC {:#?}", full_vec);
-        // println!("ZERO ARGS {:#?}", self.zero_arg_functions);
 
         let term = self.uplc_code_gen(full_vec);
 
@@ -197,7 +193,6 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
-        // println!("PROGRAM {}", program.to_pretty());
         program = aiken_optimize_and_intern(program);
 
         // This is very important to call here.
@@ -2560,29 +2555,24 @@ impl<'a> CodeGenerator<'a> {
         // First we need to sort functions by dependencies
         // here's also where we deal with mutual recursion
         let mut sorted_function_vec = vec![];
+        let mut validator_hoistable_mut = validator_hoistable.clone();
 
-        while let Some((generic_func, variant)) = validator_hoistable.pop() {
+        while let Some((generic_func, variant)) = validator_hoistable_mut.pop() {
             let function_variants = functions_to_hoist
                 .get(&generic_func)
                 .unwrap_or_else(|| panic!("Missing Function Definition"));
-
-            let function_has_params = self
-                .functions
-                .get(&generic_func)
-                .map(|func| !func.arguments.is_empty())
-                .unwrap_or_else(|| true);
 
             let (_, function) = function_variants
                 .get(&variant)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             // TODO: change this part to handle mutual recursion
-            if let UserFunction::Function { deps, .. } = function {
-                if function_has_params {
+            if let UserFunction::Function { deps, params, .. } = function {
+                if !params.is_empty() {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                            validator_hoistable
-                                .push((dep_generic_func.clone(), dep_variant.clone()));
+                            validator_hoistable_mut
+                                .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
                             let remove_index =
                                 sorted_function_vec
                                     .iter()
@@ -2602,6 +2592,22 @@ impl<'a> CodeGenerator<'a> {
             sorted_function_vec.push((generic_func, variant));
         }
         sorted_function_vec.dedup();
+
+        // Fix dependencies path to be updated to common ancestor
+        for (_, variant_map) in functions_to_hoist.clone().iter() {
+            for (_, (path, function)) in variant_map {
+                if let UserFunction::Function { deps, .. } = function {
+                    for (dep_key, dep_variant) in deps {
+                        let (dep_path, _) = functions_to_hoist
+                            .get_mut(dep_key)
+                            .unwrap()
+                            .get_mut(dep_variant)
+                            .unwrap();
+                        *dep_path = path.common_ancestor(dep_path);
+                    }
+                }
+            }
+        }
 
         // Now we need to hoist the functions to the top of the validator
         for (key, variant) in sorted_function_vec {
@@ -2732,11 +2738,46 @@ impl<'a> CodeGenerator<'a> {
         let (func_path, func_deps) = deps;
 
         let mut deps_vec = func_deps;
+        let mut sorted_dep_vec = vec![];
 
         let mut dep_insertions = vec![];
 
+        while let Some(dep) = deps_vec.pop() {
+            let function_variants = functions_to_hoist
+                .get(&dep.0)
+                .unwrap_or_else(|| panic!("Missing Function Definition"));
+
+            let (_, function) = function_variants
+                .get(&dep.1)
+                .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
+
+            if let UserFunction::Function { deps, params, .. } = function {
+                if !params.is_empty() {
+                    for (dep_generic_func, dep_variant) in deps.iter() {
+                        if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
+                            let remove_index =
+                                sorted_dep_vec.iter().position(|(generic_func, variant)| {
+                                    generic_func == dep_generic_func && variant == dep_variant
+                                });
+
+                            if let Some(index) = remove_index {
+                                sorted_dep_vec.remove(index);
+                            }
+                            deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
+                        }
+                    }
+                }
+            } else {
+                todo!("Deal with Link later")
+            }
+            sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
+        }
+
+        sorted_dep_vec.dedup();
+        sorted_dep_vec.reverse();
+
         // This part handles hoisting dependencies
-        while let Some((dep_key, dep_variant)) = deps_vec.pop() {
+        while let Some((dep_key, dep_variant)) = sorted_dep_vec.pop() {
             if (!params_empty
             // if the dependency is the same as the function we're hoisting
             // or we hoisted it, then skip it
@@ -2771,18 +2812,6 @@ impl<'a> CodeGenerator<'a> {
                     .iter()
                     .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
 
-                let dependency_deps_to_add = dependency_deps
-                    .iter()
-                    .filter(|(dep_k, dep_v)| !(dep_k == &dep_key && dep_v == &dep_variant))
-                    .filter(|(dep_k, dep_v)| {
-                        params_empty
-                            || !hoisted_functions
-                                .iter()
-                                .any(|(generic, variant)| generic == dep_k && variant == dep_v)
-                    })
-                    .cloned()
-                    .collect_vec();
-
                 if is_dependent_recursive {
                     dep_air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
                         modify_self_calls(air_tree, &dep_key, &dep_variant);
@@ -2797,11 +2826,6 @@ impl<'a> CodeGenerator<'a> {
                     is_dependent_recursive,
                     dep_air_tree,
                 ));
-
-                let temp_vec = deps_vec;
-                deps_vec = dependency_deps_to_add;
-
-                deps_vec.extend(temp_vec);
 
                 if !params_empty {
                     hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
@@ -2999,6 +3023,7 @@ impl<'a> CodeGenerator<'a> {
                             function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                                 erase_opaque_type_operations(air_tree, &self.data_types);
                                 monomorphize(air_tree, &mono_types);
+                                remove_tuple_data_casts(air_tree);
                             });
 
                             func_variants.insert(
@@ -3025,6 +3050,7 @@ impl<'a> CodeGenerator<'a> {
                         function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                             erase_opaque_type_operations(air_tree, &self.data_types);
                             monomorphize(air_tree, &mono_types);
+                            remove_tuple_data_casts(air_tree);
                         });
 
                         let mut function_variant_path = IndexMap::new();
