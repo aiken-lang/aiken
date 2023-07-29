@@ -1,8 +1,10 @@
 use std::{collections::BTreeMap, iter, ops::Deref};
 
+use itertools::Itertools;
+
 use crate::{
-    ast::{self, Span, TypedPattern},
-    tipo::{self, environment::Environment, error::Error}, builtins,
+    ast, builtins,
+    tipo::{self, environment::Environment, error::Error},
 };
 
 const NIL_NAME: &str = "[]";
@@ -33,7 +35,7 @@ impl PatternStack {
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-    
+
     fn insert(&mut self, index: usize, element: Pattern) {
         self.0.insert(index, element);
     }
@@ -65,11 +67,7 @@ impl PatternStack {
 
     fn chain_tail_into_iter(&self, front: impl Iterator<Item = Pattern>) -> PatternStack {
         front
-            .chain(
-                self.iter()
-                    .skip(1)
-                    .cloned()
-            )
+            .chain(self.iter().skip(1).cloned())
             .collect::<Vec<Pattern>>()
             .into()
     }
@@ -138,7 +136,7 @@ impl PatternStack {
 pub(super) struct Matrix(Vec<PatternStack>);
 
 impl Matrix {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Matrix(vec![])
     }
 
@@ -216,28 +214,28 @@ impl Matrix {
             .collect()
     }
 
-    fn is_useful(&self, vector: &PatternStack) -> bool {
+    pub(super) fn is_useful(&self, vector: &PatternStack) -> bool {
         // No rows are the same as the new vector! The vector is useful!
         if self.is_empty() {
             return true;
         }
-    
+
         // There is nothing left in the new vector, but we still have
         // rows that match the same things. This is not a useful vector!
         if vector.is_empty() {
             return false;
         }
-    
+
         let first_pattern = vector.head();
-    
+
         match first_pattern {
             Pattern::Constructor(name, _, args) => {
                 let arity = args.len();
-    
+
                 let new_matrix = self.specialize_rows_by_ctor(name, arity);
-    
+
                 let new_vector: PatternStack = vector.chain_tail_to_iter(args.iter());
-    
+
                 new_matrix.is_useful(&new_vector)
             }
             Pattern::Wildcard => {
@@ -248,36 +246,135 @@ impl Matrix {
                         // But what if a previous row has a Wildcard?
                         // If so, this one is not useful.
                         let new_matrix = self.specialize_rows_by_wildcard();
-    
+
                         let new_vector = vector.tail();
-    
-                        new_matrix.is_useful( &new_vector)
+
+                        new_matrix.is_useful(&new_vector)
                     }
                     Complete::Yes(alts) => alts.into_iter().any(|alt| {
                         let tipo::ValueConstructor { variant, .. } = alt;
-                        let tipo::ValueConstructorVariant::Record {
-                            name,
-                            arity,
-                            ..
-                        } = variant else {unreachable!("variant should be a ValueConstructorVariant")};
-    
+                        let (name, arity) = match variant {
+                            tipo::ValueConstructorVariant::Record { name, arity, .. } => {
+                                (name, arity)
+                            }
+                            _ => unreachable!("variant should be a ValueConstructorVariant"),
+                        };
+
                         let new_matrix = self.specialize_rows_by_ctor(&name, arity);
-    
+
                         let new_vector =
                             vector.chain_tail_into_iter(vec![Pattern::Wildcard; arity].into_iter());
-    
+
                         new_matrix.is_useful(&new_vector)
                     }),
                 }
             }
             Pattern::Literal(literal) => {
                 let new_matrix: Matrix = self.specialize_rows_by_literal(literal);
-    
+
                 let new_vector = vector.tail();
-    
+
                 new_matrix.is_useful(&new_vector)
             }
         }
+    }
+
+    pub(super) fn flatten(self) -> Vec<Pattern> {
+        self.into_iter().fold(vec![], |mut acc, p_stack| {
+            acc.extend(p_stack.0);
+
+            acc
+        })
+    }
+
+    // INVARIANTS:
+    //
+    //   The initial rows "matrix" are all of length 1
+    //   The initial count of items per row "n" is also 1
+    //   The resulting rows are examples of missing patterns
+    //
+    pub(super) fn collect_missing_patterns(self, n: usize) -> Matrix {
+        if self.is_empty() {
+            return Matrix(vec![vec![Pattern::Wildcard; n].into()]);
+        }
+
+        if n == 0 {
+            return Matrix::new();
+        }
+
+        let ctors = self.collect_ctors();
+        let num_seen = ctors.len();
+
+        if num_seen == 0 {
+            let new_matrix = self.specialize_rows_by_wildcard();
+
+            let new_matrix = new_matrix.collect_missing_patterns(n - 1);
+
+            let new_matrix = new_matrix
+                .iter()
+                .map(|p_stack| {
+                    let mut new_p_stack = p_stack.clone();
+                    new_p_stack.insert(0, Pattern::Wildcard);
+                    new_p_stack
+                })
+                .collect::<Matrix>();
+
+            return new_matrix;
+        }
+
+        let (_, alts) = ctors.first_key_value().unwrap();
+
+        if num_seen < alts.len() {
+            let new_matrix = self.specialize_rows_by_wildcard();
+
+            let new_matrix = new_matrix.collect_missing_patterns(n - 1);
+
+            let prefix = alts.iter().filter_map(|alt| is_missing(alts, &ctors, alt));
+
+            let mut m = Matrix::new();
+
+            for p_stack in new_matrix.into_iter() {
+                for p in prefix.clone() {
+                    let mut p_stack = p_stack.clone();
+                    p_stack.insert(0, p);
+                    m.push(p_stack);
+                }
+            }
+
+            // (:)
+            //     <$> Maybe.mapMaybe (isMissing alts ctors) altList
+            //     <*> isExhaustive (Maybe.mapMaybe specializeRowByAnything matrix) (n - 1)
+            return m;
+        }
+
+        // let
+        //   isAltExhaustive (Can.Ctor name _ arity _) =
+        //     recoverCtor alts name arity <$>
+        //     isExhaustive
+        //       (Maybe.mapMaybe (specializeRowByCtor name arity) matrix)
+        //       (arity + n - 1)
+        // in
+        // concatMap isAltExhaustive altList
+        //
+
+        alts.iter()
+            .map(|ctor| {
+                let tipo::ValueConstructor { variant, .. } = ctor;
+                let (name, arity) = match variant {
+                    tipo::ValueConstructorVariant::Record { name, arity, .. } => (name, arity),
+                    _ => unreachable!("variant should be a ValueConstructorVariant"),
+                };
+
+                let new_matrix = self.specialize_rows_by_ctor(name, *arity);
+
+                let new_matrix = new_matrix.collect_missing_patterns(*arity + n - 1);
+
+                new_matrix
+                    .into_iter()
+                    .map(|p_stack| recover_ctor(alts.clone(), name, *arity, p_stack))
+                    .collect()
+            })
+            .fold(Matrix::new(), |acc, m| acc.concat(m))
     }
 }
 
@@ -285,43 +382,6 @@ impl Matrix {
 pub(crate) enum Complete {
     Yes(Vec<tipo::ValueConstructor>),
     No,
-}
-
-#[derive(Debug)]
-pub(crate) struct Witness(Vec<TypedPattern>);
-
-#[derive(Debug)]
-enum Usefulness {
-    /// If we don't care about witnesses, simply remember if the pattern was useful.
-    NoWitnesses { useful: bool },
-    /// Carries a list of witnesses of non-exhaustiveness. If empty, indicates that the whole
-    /// pattern is unreachable.
-    WithWitnesses(Vec<Witness>),
-}
-
-#[derive(Copy, Clone, Debug)]
-enum ArmType {
-    FakeExtraWildcard,
-    RealArm,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum Reachability {
-    /// The arm is reachable. This additionally carries a set of or-pattern branches that have been
-    /// found to be unreachable despite the overall arm being reachable. Used only in the presence
-    /// of or-patterns, otherwise it stays empty.
-    Reachable(Vec<Span>),
-    /// The arm is unreachable.
-    Unreachable,
-}
-
-#[derive(Debug)]
-pub(crate) struct UsefulnessReport {
-    /// For each arm of the input, whether that arm is reachable after the arms above it.
-    pub(crate) arm_usefulness: Vec<(ast::TypedClause, Reachability)>,
-    /// If the match is exhaustive, this is empty. If not, this contains witnesses for the lack of
-    /// exhaustiveness.
-    pub(crate) non_exhaustiveness_witnesses: Vec<TypedPattern>,
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +394,106 @@ pub(crate) enum Pattern {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Literal {
     Int(String),
+}
+
+impl Pattern {
+    pub(super) fn pretty(self) -> String {
+        match self {
+            Pattern::Wildcard => "_".to_string(),
+            Pattern::Literal(_) => unreachable!("maybe never happens?"),
+            Pattern::Constructor(name, _alts, args) if name == CONS_NAME => {
+                let mut pretty_pattern = "[".to_string();
+
+                let args = args
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, p)| {
+                        if index == 1 {
+                            pretty_tail(p)
+                        } else {
+                            p.pretty()
+                        }
+                    })
+                    .join(", ");
+
+                pretty_pattern.push_str(&args);
+
+                pretty_pattern.push(']');
+
+                pretty_pattern
+            }
+            Pattern::Constructor(mut name, alts, args) => {
+                let field_map = alts.into_iter().find_map(|alt| {
+                    let tipo::ValueConstructor { variant, .. } = alt;
+
+                    match variant {
+                        tipo::ValueConstructorVariant::Record {
+                            name: r_name,
+                            field_map,
+                            ..
+                        } if r_name == name => field_map,
+                        _ => None,
+                    }
+                });
+
+                if let Some(field_map) = field_map {
+                    name.push_str(" { ");
+
+                    let labels = field_map
+                        .fields
+                        .into_iter()
+                        .sorted_by(|(_, (index_a, _)), (_, (index_b, _))| index_a.cmp(index_b))
+                        .map(|(label, _)| label)
+                        .zip(args)
+                        .map(|(label, arg)| match arg {
+                            Pattern::Wildcard => label,
+                            rest => format!("{label}: {}", rest.pretty()),
+                        })
+                        .join(", ");
+
+                    name.push_str(&labels);
+
+                    name.push_str(" }");
+
+                    name
+                } else {
+                    if !args.is_empty() {
+                        name.push('(');
+                        name.push_str(&args.into_iter().map(Pattern::pretty).join(", "));
+                        name.push(')');
+                    }
+
+                    name
+                }
+            }
+        }
+    }
+}
+
+fn pretty_tail(tail: Pattern) -> String {
+    match tail {
+        Pattern::Constructor(name, _alts, args) if name == CONS_NAME => {
+            let mut pretty_pattern = "".to_string();
+
+            let args = args
+                .into_iter()
+                .enumerate()
+                .map(|(index, p)| {
+                    if index == 1 {
+                        pretty_tail(p)
+                    } else {
+                        p.pretty()
+                    }
+                })
+                .join(", ");
+
+            pretty_pattern.push_str(&args);
+
+            pretty_pattern
+        }
+        Pattern::Wildcard => "..".to_string(),
+        rest => rest.pretty(),
+    }
 }
 
 fn list_constructors() -> Vec<tipo::ValueConstructor> {
@@ -350,8 +510,8 @@ fn list_constructors() -> Vec<tipo::ValueConstructor> {
                 field_map: None,
                 location: ast::Span::empty(),
                 module: "".to_string(),
-                constructors_count: 2
-            }
+                constructors_count: 2,
+            },
         },
         tipo::ValueConstructor {
             public: true,
@@ -362,13 +522,16 @@ fn list_constructors() -> Vec<tipo::ValueConstructor> {
                 field_map: None,
                 location: ast::Span::empty(),
                 module: "".to_string(),
-                constructors_count: 2
-            }
+                constructors_count: 2,
+            },
         },
     ]
 }
 
-fn simplify(environment: &mut Environment, value: &ast::TypedPattern) -> Result<Pattern, Error> {
+pub(super) fn simplify(
+    environment: &mut Environment,
+    value: &ast::TypedPattern,
+) -> Result<Pattern, Error> {
     match value {
         ast::Pattern::Int { value, .. } => Ok(Pattern::Literal(Literal::Int(value.clone()))),
         ast::Pattern::Assign { pattern, .. } => simplify(environment, pattern.as_ref()),
@@ -380,30 +543,36 @@ fn simplify(environment: &mut Environment, value: &ast::TypedPattern) -> Result<
             };
 
             for hd in elements.iter().rev() {
-                p = Pattern::Constructor(CONS_NAME.to_string(), list_constructors(), vec![simplify(environment, hd)?, p]);
+                p = Pattern::Constructor(
+                    CONS_NAME.to_string(),
+                    list_constructors(),
+                    vec![simplify(environment, hd)?, p],
+                );
             }
 
             Ok(p)
-        },
+        }
         ast::Pattern::Constructor {
             name,
             arguments,
             module,
             location,
             tipo,
+            with_spread,
             ..
         } => {
-            let type_name = match tipo.deref() {
+            let (type_name, arity) = match tipo.deref() {
                 tipo::Type::App {
                     name: type_name, ..
-                } => type_name,
-                tipo::Type::Fn { ret, .. } => {
-                    let tipo::Type::App {
+                } => (type_name, 0),
+                tipo::Type::Fn { ret, args, .. } => match ret.deref() {
+                    tipo::Type::App {
                         name: type_name, ..
-                    } = ret.deref() else {unreachable!("ret should be a Type::App")};
-
-                    type_name
-                }
+                    } => (type_name, args.len()),
+                    _ => {
+                        unreachable!("ret should be a Type::App")
+                    }
+                },
                 _ => unreachable!("tipo should be a Type::App"),
             };
 
@@ -426,17 +595,27 @@ fn simplify(environment: &mut Environment, value: &ast::TypedPattern) -> Result<
                 args.push(simplify(environment, &argument.value)?);
             }
 
+            if *with_spread {
+                for _ in 0..(arity - arguments.len()) {
+                    args.push(Pattern::Wildcard)
+                }
+            }
+
             Ok(Pattern::Constructor(name.to_string(), alts, args))
         }
-        ast::Pattern::Tuple { elems, .. } =>  {
+        ast::Pattern::Tuple { elems, .. } => {
             let mut p = Pattern::Constructor(NIL_NAME.to_string(), list_constructors(), vec![]);
 
             for hd in elems.iter().rev() {
-                p = Pattern::Constructor(CONS_NAME.to_string(), list_constructors(), vec![simplify(environment, hd)?, p]);
+                p = Pattern::Constructor(
+                    CONS_NAME.to_string(),
+                    list_constructors(),
+                    vec![simplify(environment, hd)?, p],
+                );
             }
 
             Ok(p)
-        },
+        }
         ast::Pattern::Var { .. } | ast::Pattern::Discard { .. } => Ok(Pattern::Wildcard),
     }
 }
@@ -445,126 +624,6 @@ impl iter::FromIterator<PatternStack> for Matrix {
     fn from_iter<T: IntoIterator<Item = PatternStack>>(iter: T) -> Self {
         Matrix(iter.into_iter().collect())
     }
-}
-
-pub(crate) fn compute_match_usefulness(
-    environment: &mut Environment,
-    unchecked_patterns: &[&ast::TypedPattern],
-) -> Result<UsefulnessReport, Error> {
-    let mut matrix = Matrix::new();
-
-    for unchecked_pattern in unchecked_patterns {
-        let pattern = simplify(environment, unchecked_pattern)?;
-        let pattern_stack = PatternStack::from(pattern);
-
-        if matrix.is_useful(&pattern_stack) {
-            matrix.push(pattern_stack);
-        } else {
-            return Err(Error::RedundantMatchClause { location: unchecked_pattern.location() })
-        }
-    }
-
-    dbg!(&matrix);
-
-    let bad_patterns = is_exhaustive(matrix, 1);
-
-    dbg!(bad_patterns);
-
-    Ok(UsefulnessReport {
-        arm_usefulness: vec![],
-        non_exhaustiveness_witnesses: vec![],
-    })
-}
-
-// INVARIANTS:
-//
-//   The initial rows "matrix" are all of length 1
-//   The initial count of items per row "n" is also 1
-//   The resulting rows are examples of missing patterns
-//
-fn is_exhaustive(matrix: Matrix, n: usize) -> Matrix {
-    if matrix.is_empty() {
-        return Matrix(vec![vec![Pattern::Wildcard; n].into()]);
-    }
-
-    if n == 0 {
-        return Matrix::new();
-    }
-
-    let ctors = matrix.collect_ctors();
-    let num_seen = ctors.len();
-
-    if num_seen == 0 {
-        let new_matrix = matrix.specialize_rows_by_wildcard();
-
-        let new_matrix = is_exhaustive(new_matrix, n - 1);
-
-        let new_matrix = new_matrix
-            .iter()
-            .map(|p_stack| {
-                let mut new_p_stack = p_stack.clone();
-                new_p_stack.insert(0, Pattern::Wildcard);
-                new_p_stack
-            })
-            .collect::<Matrix>();
-
-        return new_matrix;
-    }
-
-    let (_, alts) = ctors.first_key_value().unwrap();
-
-    if num_seen < alts.len() {
-        let new_matrix = matrix.specialize_rows_by_wildcard();
-
-        let new_matrix = is_exhaustive(new_matrix, n - 1);
-
-        let prefix = alts.iter().filter_map(|alt| is_missing(alts, &ctors, alt));
-
-        let mut m = Matrix::new();
-
-        for p_stack in new_matrix.into_iter() {
-            for p in prefix.clone() {
-                let mut p_stack = p_stack.clone();
-                p_stack.insert(0, p);
-                m.push(p_stack);
-            }
-        }
-
-        // (:)
-        //     <$> Maybe.mapMaybe (isMissing alts ctors) altList
-        //     <*> isExhaustive (Maybe.mapMaybe specializeRowByAnything matrix) (n - 1)
-        return m;
-    }
-
-    // let
-    //   isAltExhaustive (Can.Ctor name _ arity _) =
-    //     recoverCtor alts name arity <$>
-    //     isExhaustive
-    //       (Maybe.mapMaybe (specializeRowByCtor name arity) matrix)
-    //       (arity + n - 1)
-    // in
-    // concatMap isAltExhaustive altList
-    //
-
-    alts.iter()
-        .map(|ctor| {
-            let tipo::ValueConstructor { variant, .. } = ctor;
-            let tipo::ValueConstructorVariant::Record {
-                name,
-                arity,
-                ..
-            } = variant else {unreachable!("variant should be a ValueConstructorVariant")};
-
-            let new_matrix = matrix.specialize_rows_by_ctor(name, *arity);
-
-            let new_matrix = is_exhaustive(new_matrix, *arity + n - 1);
-
-            new_matrix
-                .into_iter()
-                .map(|p_stack| recover_ctor(alts.clone(), name, *arity, p_stack))
-                .collect()
-        })
-        .fold(Matrix::new(), |acc, m| acc.concat(m))
 }
 
 fn recover_ctor(
@@ -586,11 +645,10 @@ fn is_missing(
     ctor: &tipo::ValueConstructor,
 ) -> Option<Pattern> {
     let tipo::ValueConstructor { variant, .. } = ctor;
-    let tipo::ValueConstructorVariant::Record {
-        name,
-        arity,
-        ..
-    } = variant else {unreachable!("variant should be a ValueConstructorVariant")};
+    let (name, arity) = match variant {
+        tipo::ValueConstructorVariant::Record { name, arity, .. } => (name, arity),
+        _ => unreachable!("variant should be a ValueConstructorVariant"),
+    };
 
     if ctors.contains_key(name) {
         None
@@ -602,5 +660,3 @@ fn is_missing(
         ))
     }
 }
-
-

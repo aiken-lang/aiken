@@ -18,7 +18,6 @@ use crate::{
 use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
     error::{Error, Warning},
-    exhaustive::compute_match_usefulness,
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
@@ -45,12 +44,9 @@ pub(crate) struct ExprTyper<'a, 'b> {
 impl<'a, 'b> ExprTyper<'a, 'b> {
     fn check_when_exhaustiveness(
         &mut self,
-        subject: &Type,
         typed_clauses: &[TypedClause],
-        _location: Span,
+        location: Span,
     ) -> Result<(), Error> {
-        let _value_typ = collapse_links(Arc::new(subject.clone()));
-
         // Currently guards in exhaustiveness checking are assumed that they can fail,
         // so we go through all clauses and pluck out only the patterns
         // for clauses that don't have guards.
@@ -66,10 +62,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
         }
 
-        compute_match_usefulness(self.environment, &patterns)?;
-
-        // self.environment
-        // .check_exhaustiveness(patterns, value_typ, location)
+        self.environment
+            .check_exhaustiveness(&patterns, location, false)?;
 
         Ok(())
     }
@@ -919,35 +913,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             )?
         };
 
-        // We currently only do limited exhaustiveness checking of custom types
-        // at the top level of patterns.
         // Do not perform exhaustiveness checking if user explicitly used `assert`.
         match kind {
             AssignmentKind::Let => {
-                if let Err(unmatched) = self.environment.check_exhaustiveness(
-                    vec![pattern.clone()],
-                    collapse_links(value_typ.clone()),
-                    location,
-                ) {
-                    return Err(Error::NotExhaustivePatternMatch {
-                        location,
-                        unmatched,
-                        is_let: true,
-                    });
-                }
+                self.environment
+                    .check_exhaustiveness(&[&pattern], location, true)?
             }
 
             AssignmentKind::Expect => {
                 let is_exaustive_pattern = self
                     .environment
-                    .check_exhaustiveness(
-                        vec![pattern.clone()],
-                        collapse_links(value_typ.clone()),
-                        location,
-                    )
+                    .check_exhaustiveness(&[&pattern], location, false)
                     .is_ok();
 
-                if !value_is_data && !value_typ.is_list() && is_exaustive_pattern {
+                if !value_is_data && is_exaustive_pattern {
                     self.environment
                         .warnings
                         .push(Warning::SingleConstructorExpect {
@@ -1881,7 +1860,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
         }
 
-        self.check_when_exhaustiveness(&subject_type, &typed_clauses, location)?;
+        self.check_when_exhaustiveness(&typed_clauses, location)?;
 
         Ok(TypedExpr::When {
             location,

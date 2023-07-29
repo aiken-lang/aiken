@@ -942,6 +942,7 @@ impl<'comments> Formatter<'comments> {
         if args.is_empty() && with_spread {
             if is_record {
                 name.append(" { .. }")
+            // TODO: not possible
             } else {
                 name.append("(..)")
             }
