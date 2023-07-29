@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::Arc, collections::HashMap};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -29,7 +29,7 @@ use crate::{
 
 use super::{
     air::Air,
-    tree::{AirExpression, AirStatement, AirTree},
+    tree::{AirExpression, AirStatement, AirTree, TreePath},
 };
 
 #[derive(Clone, Debug)]
@@ -583,6 +583,71 @@ pub fn erase_opaque_type_operations(
     }
 }
 
+pub fn identify_recursive_static_params(
+    air_tree: &mut AirTree,
+    tree_path: &TreePath,
+    func_params: &Vec<String>,
+    func_key: &FunctionAccessKey,
+    variant: &String,
+    shadowed_parameters: &mut HashMap<String, TreePath>,
+    potential_recursive_statics: &mut Vec<String>
+) {
+    match air_tree {
+        AirTree::Statement { statement: AirStatement::Let { name, .. }, .. } => {
+            if potential_recursive_statics.contains(name) {
+                shadowed_parameters.insert(name.clone(), tree_path.clone());
+            }
+        },
+        AirTree::Expression(AirExpression::Call { func, args, .. }) => {
+            if let AirTree::Expression(AirExpression::Var {
+                constructor:
+                    ValueConstructor {
+                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                        ..
+                    },
+                variant_name,
+                ..
+            }) = func.as_ref() {
+                if name == &func_key.function_name
+                    && module == &func_key.module_name
+                    && variant == variant_name
+                {
+                    for (param, arg) in func_params.iter().zip(args) {
+                        if let Some((idx, _)) = potential_recursive_statics.iter().find_position(|&p| p == param) {
+                            // Check if we pass something different in this recursive call site
+                            // by different, we mean
+                            // - a variable that is bound to a different name
+                            // - a variable with the same name, but that was shadowed in an ancestor scope
+                            // - any other type of expression
+                            let param_is_different = match arg {
+                                AirTree::Expression(AirExpression::Var { name, .. }) => {
+                                    // "shadowed in an ancestor scope" means "the definition scope is a prefix of our scope"
+                                    name != param || if let Some(p) = shadowed_parameters.get(param) {
+                                        println!("param: {:?}", param);
+                                        println!("arg: {:?}", arg);
+                                        println!("p: {:?}", *p);
+                                        println!("tree_path: {:?}", tree_path);
+                                        println!("common_ancestor: {:?}", p.common_ancestor(tree_path));
+                                        p.common_ancestor(tree_path) == *p
+                                    } else {
+                                        false
+                                    }
+                                },
+                                _ => true
+                            };
+                            // If so, then we disqualify this parameter from being a recursive static parameter
+                            if param_is_different {
+                                potential_recursive_statics.remove(idx);
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        _ => ()
+    }
+}
+
 pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, variant: &String, static_recursive_params: &Vec<usize>) {
     if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
         if let AirTree::Expression(AirExpression::Var {
@@ -601,6 +666,7 @@ pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, v
             {
                 // Remove any static-recursive-parameters, because they'll be bound statically
                 // above the recursive part of the function
+                // note: assumes that static_recursive_params is sorted
                 for arg in static_recursive_params.iter().rev() {
                     args.remove(*arg);
                 }

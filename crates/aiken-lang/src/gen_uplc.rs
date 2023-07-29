@@ -2,7 +2,7 @@ pub mod air;
 pub mod builder;
 pub mod tree;
 
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -26,7 +26,7 @@ use crate::{
         convert_opaque_type, erase_opaque_type_operations, find_and_replace_generics,
         get_arg_type_name, get_generic_id_and_type, get_variant_name, monomorphize,
         pattern_has_conditions, wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction,
-        SpecificClause,
+        SpecificClause, identify_recursive_static_params,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -2690,30 +2690,41 @@ impl<'a> CodeGenerator<'a> {
             // first grab dependencies
             let func_params = params;
 
-            // HACK: partition params into the "static recursives" and otherwise
-            // for now, we just do this based on the name, but it should be detected
-            // as an optimization pass
-            let recursive_static_indexes: Vec<usize> = func_params.iter().enumerate().filter(|(idx, p)| {
-                p.starts_with("pi_recursive_hack_")
-            }).map(|(idx, _)| idx).collect();
-            let recursive_nonstatics: Vec<String> = func_params.iter().cloned().filter(|p| {
-                !p.starts_with("pi_recursive_hack_")
-            }).collect();
-
-            println!("~~ recursive_nonstatics: {:?}", recursive_nonstatics);
-            println!("~~ func_params: {:?}", func_params);
-
             let params_empty = func_params.is_empty();
 
             let deps = (tree_path, func_deps.clone());
 
             if !params_empty {
+                let mut potential_recursive_statics = vec![];
                 if is_recursive {
+                    potential_recursive_statics = func_params.clone();
+                    // identify which parameters are recursively nonstatic (i.e. get modified before the self-call)
+                    // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
+                    // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
+                    let mut shadowed_parameters: HashMap<String, TreePath> = HashMap::new();
+                    body.traverse_tree_with(&mut |air_tree: &mut AirTree, tree_path| {
+                        identify_recursive_static_params(air_tree, tree_path, &func_params, key, variant, &mut shadowed_parameters, &mut potential_recursive_statics)
+                    });
+
+                    // Find the index of any recursively static parameters,
+                    // so we can remove them from the call-site of each recursive call
+                    let recursive_static_indexes = func_params
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, p)| potential_recursive_statics.contains(p))
+                        .map(|(idx, _)| idx)
+                        .collect();
+
                     body.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
                         modify_self_calls(air_tree, key, variant, &recursive_static_indexes);
                     });
+
+                    if recursive_static_indexes.len() > 0 {
+                        println!("~~ {}: {:?}", key.function_name, recursive_static_indexes.iter().map(|i| func_params[*i].clone()).collect::<Vec<String>>());
+                    }
                 }
 
+                let recursive_nonstatics = func_params.iter().filter(|p| !potential_recursive_statics.contains(p)).cloned().collect();
                 body = AirTree::define_func(
                     &key.function_name,
                     &key.module_name,
@@ -3758,18 +3769,20 @@ impl<'a> CodeGenerator<'a> {
                         // If we have parameters that remain static in each recursive call,
                         // we can construct an *outer* function to take those in
                         // and simplify the recursive part to only accept the non-static arguments
-                        let mut outer_func_body = Term::var(&func_name).apply(Term::var(&func_name));
+                        let mut recursive_func_body = Term::var(&func_name).apply(Term::var(&func_name));
                         for param in recursive_nonstatic_params.iter() {
-                            outer_func_body = outer_func_body.apply(Term::var(param));
+                            recursive_func_body = recursive_func_body.apply(Term::var(param));
                         }
 
-                        outer_func_body = outer_func_body.lambda(&func_name).apply(func_body);
+                        // Then construct an outer function with *all* parameters, not just the nonstatic ones.
+                        let mut outer_func_body = recursive_func_body.lambda(&func_name).apply(func_body);
 
                         // Now, add *all* parameters, so that other call sites don't know the difference
                         for param in params.iter().rev() {
                             outer_func_body = outer_func_body.lambda(param);
                         }
 
+                        // And finally, fold that definition into the rest of our program
                         term = term.lambda(&func_name).apply(outer_func_body);
                     }
 
@@ -4191,7 +4204,6 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
             } => {
                 let mut arg_vec = vec![];
-
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
