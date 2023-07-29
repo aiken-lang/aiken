@@ -3105,9 +3105,12 @@ impl<'a> CodeGenerator<'a> {
 
                             DefaultFunction::FstPair
                             | DefaultFunction::SndPair
-                            | DefaultFunction::HeadList => {
-                                builder::undata_builtin(builtin, 0, &constructor.tipo, vec![])
-                            }
+                            | DefaultFunction::HeadList => builder::undata_builtin(
+                                builtin,
+                                0,
+                                &constructor.tipo.return_type().unwrap(),
+                                vec![],
+                            ),
 
                             DefaultFunction::MkCons | DefaultFunction::MkPairData => {
                                 unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
