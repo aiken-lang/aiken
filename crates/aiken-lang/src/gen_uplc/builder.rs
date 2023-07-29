@@ -608,7 +608,7 @@ pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, v
 }
 
 pub fn remove_tuple_data_casts(air_tree: &mut AirTree) {
-    if let AirTree::Expression(AirExpression::List { items, tipo, .. }) = air_tree {
+    if let AirTree::Expression(AirExpression::List { items, .. }) = air_tree {
         for item in items {
             if let AirTree::Expression(AirExpression::CastToData { value, tipo }) = item {
                 if tipo.is_2_tuple() {
