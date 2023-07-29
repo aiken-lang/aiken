@@ -3928,9 +3928,9 @@ impl<'a> CodeGenerator<'a> {
 
                 let tuple_types = tipo.get_inner_types();
 
-                if complex_clause {
-                    let next_clause = arg_stack.pop().unwrap();
+                let next_clause = arg_stack.pop().unwrap();
 
+                if complex_clause {
                     term = term
                         .lambda("__other_clauses_delayed")
                         .apply(next_clause.delay());
