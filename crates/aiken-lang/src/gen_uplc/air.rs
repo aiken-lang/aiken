@@ -47,7 +47,7 @@ pub enum Air {
         module_name: String,
         params: Vec<String>,
         recursive: bool,
-        recursive_static_params: Vec<String>,
+        recursive_nonstatic_params: Vec<String>,
         variant_name: String,
     },
     Fn {
