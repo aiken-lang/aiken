@@ -2597,15 +2597,10 @@ impl<'a> CodeGenerator<'a> {
                         if !(dep_generic_func == &generic_func && dep_variant == &variant) {
                             validator_hoistable
                                 .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
-                            let remove_index =
-                                sorted_function_vec
-                                    .iter()
-                                    .position(|(generic_func, variant)| {
-                                        generic_func == dep_generic_func && variant == dep_variant
-                                    });
-                            if let Some(index) = remove_index {
-                                sorted_function_vec.remove(index);
-                            }
+
+                            sorted_function_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
                         }
                     }
                 }
@@ -2781,14 +2776,10 @@ impl<'a> CodeGenerator<'a> {
                 if !params.is_empty() {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
-                            let remove_index =
-                                sorted_dep_vec.iter().position(|(generic_func, variant)| {
-                                    generic_func == dep_generic_func && variant == dep_variant
-                                });
+                            sorted_dep_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
 
-                            if let Some(index) = remove_index {
-                                sorted_dep_vec.remove(index);
-                            }
                             deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
                         }
                     }
