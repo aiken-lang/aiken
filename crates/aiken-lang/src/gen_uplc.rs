@@ -1971,7 +1971,7 @@ impl<'a> CodeGenerator<'a> {
 
                 tail.iter().for_each(|elem| {
                     assert!(!elements.is_empty());
-                    let tail = &defined_tails[elements.len() - 1];
+                    let tail = defined_tails.get(elements.len() - 1);
                     let elem_name = match elem.as_ref() {
                         Pattern::Var { name, .. } => name.to_string(),
                         Pattern::Assign { name, .. } => name.to_string(),
@@ -1999,8 +1999,8 @@ impl<'a> CodeGenerator<'a> {
                     *complex_clause = *complex_clause || elem_props.complex_clause;
 
                     air_elems.push(statement);
-                    if &elem_name != "_" {
-                        list_tail = Some((tail.to_string(), elem_name.to_string()));
+                    if &elem_name != "_" && !defined_tails.is_empty() {
+                        list_tail = Some((tail.unwrap().to_string(), elem_name.to_string()));
                     }
 
                     if props.final_clause && defined_tails.is_empty() {
