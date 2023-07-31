@@ -607,18 +607,6 @@ pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, v
     }
 }
 
-pub fn remove_tuple_data_casts(air_tree: &mut AirTree) {
-    if let AirTree::Expression(AirExpression::List { items, .. }) = air_tree {
-        for item in items {
-            if let AirTree::Expression(AirExpression::CastToData { value, tipo }) = item {
-                if tipo.is_2_tuple() {
-                    *item = (**value).clone();
-                }
-            }
-        }
-    }
-}
-
 pub fn pattern_has_conditions(pattern: &TypedPattern) -> bool {
     match pattern {
         Pattern::Constructor {

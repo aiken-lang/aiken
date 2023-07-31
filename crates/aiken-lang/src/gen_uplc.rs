@@ -39,9 +39,8 @@ use self::{
     air::Air,
     builder::{
         cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses,
-        remove_tuple_data_casts, AssignmentProperties, ClauseProperties, DataTypeKey,
-        FunctionAccessKey, UserFunction,
+        lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
+        ClauseProperties, DataTypeKey, FunctionAccessKey, UserFunction,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -250,16 +249,7 @@ impl<'a> CodeGenerator<'a> {
                 tail,
                 ..
             } => AirTree::list(
-                elements
-                    .iter()
-                    .map(|elem| {
-                        if tipo.is_map() {
-                            self.build(elem)
-                        } else {
-                            AirTree::cast_to_data(self.build(elem), elem.tipo())
-                        }
-                    })
-                    .collect_vec(),
+                elements.iter().map(|elem| self.build(elem)).collect_vec(),
                 tipo.clone(),
                 tail.as_ref().map(|tail| self.build(tail)),
             ),
@@ -300,7 +290,14 @@ impl<'a> CodeGenerator<'a> {
 
                     let constr_args = args
                         .iter()
-                        .map(|arg| AirTree::cast_to_data(self.build(&arg.value), arg.value.tipo()))
+                        .zip(constr_tipo.arg_types().unwrap())
+                        .map(|(arg, tipo)| {
+                            if tipo.is_data() {
+                                AirTree::cast_to_data(self.build(&arg.value), arg.value.tipo())
+                            } else {
+                                self.build(&arg.value)
+                            }
+                        })
                         .collect_vec();
 
                     AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
@@ -604,10 +601,7 @@ impl<'a> CodeGenerator<'a> {
             },
 
             TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
-                elems
-                    .iter()
-                    .map(|elem| AirTree::cast_to_data(self.build(elem), elem.tipo()))
-                    .collect_vec(),
+                elems.iter().map(|elem| self.build(elem)).collect_vec(),
                 tipo.clone(),
             ),
 
@@ -2196,7 +2190,7 @@ impl<'a> CodeGenerator<'a> {
                         .find(|(defined_index, _nm)| defined_index == index)
                     {
                         previous_defined_names.push((*index, prev_name.clone(), name.clone()));
-                    } else if name != "_" {
+                    } else {
                         assert!(defined_indices.insert((*index, name.clone())));
                         names_to_define.push((*index, name.clone()));
                     }
@@ -2246,6 +2240,7 @@ impl<'a> CodeGenerator<'a> {
                                 names.push(name);
                                 names
                             });
+
                     sequence.insert(
                         0,
                         AirTree::tuple_access(
@@ -2555,10 +2550,11 @@ impl<'a> CodeGenerator<'a> {
         // First we need to sort functions by dependencies
         // here's also where we deal with mutual recursion
         let mut sorted_function_vec = vec![];
-        let mut validator_hoistable_mut = validator_hoistable.clone();
 
-        while let Some((generic_func, variant)) = validator_hoistable_mut.pop() {
-            let function_variants = functions_to_hoist
+        let functions_to_hoist_cloned = functions_to_hoist.clone();
+
+        while let Some((generic_func, variant)) = validator_hoistable.pop() {
+            let function_variants = functions_to_hoist_cloned
                 .get(&generic_func)
                 .unwrap_or_else(|| panic!("Missing Function Definition"));
 
@@ -2571,7 +2567,7 @@ impl<'a> CodeGenerator<'a> {
                 if !params.is_empty() {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                            validator_hoistable_mut
+                            validator_hoistable
                                 .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
                             let remove_index =
                                 sorted_function_vec
@@ -2585,6 +2581,24 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 }
+
+                // Fix dependencies path to be updated to common ancestor
+                for (dep_key, dep_variant) in deps {
+                    let (func_tree_path, _) = functions_to_hoist
+                        .get(&generic_func)
+                        .unwrap()
+                        .get(&variant)
+                        .unwrap()
+                        .clone();
+
+                    let (dep_path, _) = functions_to_hoist
+                        .get_mut(dep_key)
+                        .unwrap()
+                        .get_mut(dep_variant)
+                        .unwrap();
+
+                    *dep_path = func_tree_path.common_ancestor(dep_path);
+                }
             } else {
                 todo!("Deal with Link later")
             }
@@ -2592,22 +2606,6 @@ impl<'a> CodeGenerator<'a> {
             sorted_function_vec.push((generic_func, variant));
         }
         sorted_function_vec.dedup();
-
-        // Fix dependencies path to be updated to common ancestor
-        for (_, variant_map) in functions_to_hoist.clone().iter() {
-            for (_, (path, function)) in variant_map {
-                if let UserFunction::Function { deps, .. } = function {
-                    for (dep_key, dep_variant) in deps {
-                        let (dep_path, _) = functions_to_hoist
-                            .get_mut(dep_key)
-                            .unwrap()
-                            .get_mut(dep_variant)
-                            .unwrap();
-                        *dep_path = path.common_ancestor(dep_path);
-                    }
-                }
-            }
-        }
 
         // Now we need to hoist the functions to the top of the validator
         for (key, variant) in sorted_function_vec {
@@ -3025,10 +3023,6 @@ impl<'a> CodeGenerator<'a> {
                                 monomorphize(air_tree, &mono_types);
                             });
 
-                            function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
-                                remove_tuple_data_casts(air_tree);
-                            });
-
                             func_variants.insert(
                                 variant,
                                 (
@@ -3053,10 +3047,6 @@ impl<'a> CodeGenerator<'a> {
                         function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                             erase_opaque_type_operations(air_tree, &self.data_types);
                             monomorphize(air_tree, &mono_types);
-                        });
-
-                        function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
-                            remove_tuple_data_casts(air_tree);
                         });
 
                         let mut function_variant_path = IndexMap::new();
@@ -3322,8 +3312,16 @@ impl<'a> CodeGenerator<'a> {
                         Term::empty_list()
                     };
 
+                    // move this down here since the constant list path doesn't need to do this
+                    let list_element_type = tipo.get_inner_types()[0].clone();
+
                     for arg in args.into_iter().rev() {
-                        term = Term::mk_cons().apply(arg).apply(term);
+                        let list_item = if tipo.is_map() {
+                            arg
+                        } else {
+                            builder::convert_type_to_data(arg, &list_element_type)
+                        };
+                        term = Term::mk_cons().apply(list_item).apply(term);
                     }
                     arg_stack.push(term);
                 }
@@ -4125,7 +4123,7 @@ impl<'a> CodeGenerator<'a> {
             Air::Constr {
                 tag: constr_index,
                 count,
-                ..
+                tipo,
             } => {
                 let mut arg_vec = vec![];
 
@@ -4135,8 +4133,13 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut term = Term::empty_list();
 
-                for arg in arg_vec.iter().rev() {
-                    term = Term::mk_cons().apply(arg.clone()).apply(term);
+                for (index, arg) in arg_vec.iter().enumerate().rev() {
+                    term = Term::mk_cons()
+                        .apply(builder::convert_type_to_data(
+                            arg.clone(),
+                            &tipo.arg_types().unwrap()[index],
+                        ))
+                        .apply(term);
                 }
 
                 term = Term::constr_data()
@@ -4263,8 +4266,10 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::Tuple { count, .. } => {
+            Air::Tuple { count, tipo } => {
                 let mut args = vec![];
+
+                let tuple_sub_types = tipo.get_inner_types();
 
                 for _ in 0..count {
                     let arg = arg_stack.pop().unwrap();
@@ -4300,14 +4305,22 @@ impl<'a> CodeGenerator<'a> {
                     }
                 } else if count == 2 {
                     let term = Term::mk_pair_data()
-                        .apply(args[0].clone())
-                        .apply(args[1].clone());
+                        .apply(builder::convert_type_to_data(
+                            args[0].clone(),
+                            &tuple_sub_types[0],
+                        ))
+                        .apply(builder::convert_type_to_data(
+                            args[1].clone(),
+                            &tuple_sub_types[1],
+                        ));
 
                     arg_stack.push(term);
                 } else {
                     let mut term = Term::empty_list();
-                    for arg in args.into_iter().rev() {
-                        term = Term::mk_cons().apply(arg).apply(term);
+                    for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()).rev() {
+                        term = Term::mk_cons()
+                            .apply(builder::convert_type_to_data(arg, &tipo))
+                            .apply(term);
                     }
                     arg_stack.push(term);
                 }
@@ -4463,7 +4476,8 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
 
-                if names.len() == 2 {
+                if tipo.is_2_tuple() {
+                    assert!(names.len() == 2);
                     term = term
                         .lambda(names[1].clone())
                         .apply(builder::convert_data_to_type(
@@ -4502,15 +4516,7 @@ impl<'a> CodeGenerator<'a> {
 
                     arg_stack.push(term);
                 } else if check_last_item {
-                    let trace_term = if self.tracing {
-                        Term::Error.trace(Term::string("Expected no items for Tuple"))
-                    } else {
-                        Term::Error
-                    };
-
-                    term = value.delayed_choose_list(term, trace_term);
-
-                    arg_stack.push(term);
+                    unreachable!("HOW DID YOU DO THIS");
                 } else {
                     arg_stack.push(term);
                 }
