@@ -1470,12 +1470,11 @@ impl<'a> Environment<'a> {
 
         let missing_patterns = matrix.collect_missing_patterns(1).flatten();
 
-        for missing in &missing_patterns {
-            dbg!(missing);
-        }
-
         if !missing_patterns.is_empty() {
-            let unmatched = missing_patterns.into_iter().map(|p| p.pretty()).collect();
+            let unmatched = missing_patterns
+                .into_iter()
+                .map(|pattern| pattern.pretty())
+                .collect();
 
             return Err(Error::NotExhaustivePatternMatch {
                 location,

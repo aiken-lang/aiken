@@ -566,20 +566,24 @@ pub(super) fn simplify(
         ast::Pattern::Constructor {
             name,
             arguments,
-            module,
             location,
             tipo,
             with_spread,
+            module,
             ..
         } => {
-            let (type_name, arity) = match tipo.deref() {
+            let (type_module, type_name, arity) = match tipo.deref() {
                 tipo::Type::App {
-                    name: type_name, ..
-                } => (type_name, 0),
+                    name: type_name,
+                    module,
+                    ..
+                } => (module, type_name, 0),
                 tipo::Type::Fn { ret, args, .. } => match ret.deref() {
                     tipo::Type::App {
-                        name: type_name, ..
-                    } => (type_name, args.len()),
+                        name: type_name,
+                        module,
+                        ..
+                    } => (module, type_name, args.len()),
                     _ => {
                         unreachable!("ret should be a Type::App")
                     }
@@ -587,8 +591,15 @@ pub(super) fn simplify(
                 _ => unreachable!("tipo should be a Type::App"),
             };
 
+            let module_opt = if type_module.is_empty() || environment.current_module == type_module
+            {
+                None
+            } else {
+                Some(type_module.clone())
+            };
+
             let constructors = environment
-                .get_constructors_for_type(module, type_name, *location)?
+                .get_constructors_for_type(&module_opt, type_name, *location)?
                 .clone();
 
             let mut alts = Vec::new();

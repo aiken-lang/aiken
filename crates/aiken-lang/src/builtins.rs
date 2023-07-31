@@ -290,6 +290,10 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     );
 
     // Void
+    prelude
+        .types_constructors
+        .insert(VOID.to_string(), vec![VOID.to_string()]);
+
     prelude.values.insert(
         VOID.to_string(),
         ValueConstructor::public(
