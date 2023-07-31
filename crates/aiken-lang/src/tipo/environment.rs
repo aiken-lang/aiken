@@ -1434,8 +1434,8 @@ impl<'a> Environment<'a> {
     }
 
     /// Checks that the given patterns are exhaustive for given type.
-    /// Currently only performs exhaustiveness checking for custom types,
-    /// only at the top level (without recursing into constructor arguments).
+    /// https://github.com/elm/compiler/blob/047d5026fe6547c842db65f7196fed3f0b4743ee/compiler/src/Nitpick/PatternMatches.hs#L397-L475
+    /// http://moscova.inria.fr/~maranget/papers/warn/index.html
     pub fn check_exhaustiveness(
         &mut self,
         unchecked_patterns: &[&TypedPattern],
@@ -1451,8 +1451,19 @@ impl<'a> Environment<'a> {
             if matrix.is_useful(&pattern_stack) {
                 matrix.push(pattern_stack);
             } else {
+                let index = matrix
+                    .flatten()
+                    .into_iter()
+                    .enumerate()
+                    .find(|(_, p)| p == pattern_stack.head())
+                    .map(|(i, _)| i)
+                    .expect("should find index");
+
+                let typed_pattern = unchecked_patterns[index];
+
                 return Err(Error::RedundantMatchClause {
-                    location: unchecked_pattern.location(),
+                    original: typed_pattern.location(),
+                    redundant: unchecked_pattern.location(),
                 });
             }
         }
