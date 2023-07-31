@@ -653,6 +653,13 @@ impl<'a> CodeGenerator<'a> {
         tipo: &Arc<Type>,
         props: AssignmentProperties,
     ) -> AirTree {
+        assert!(
+            if let AirTree::Expression(AirExpression::Var { name, .. }) = &value {
+                name != "_"
+            } else {
+                true
+            }
+        );
         if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
             value = AirTree::cast_from_data(value, tipo.clone());
         } else if !props.value_type.is_data() && tipo.is_data() {
@@ -790,8 +797,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let val = AirTree::local_var(&elem_name, list_elem_type.clone());
 
-                        (
-                            elem_name,
+                        let assign = if elem_name != "_" {
                             self.assignment(
                                 elem,
                                 val,
@@ -802,8 +808,12 @@ impl<'a> CodeGenerator<'a> {
                                     remove_unused: true,
                                     full_check: props.full_check,
                                 },
-                            ),
-                        )
+                            )
+                        } else {
+                            AirTree::no_op()
+                        };
+
+                        (elem_name, assign)
                     })
                     .collect_vec();
 
@@ -813,10 +823,7 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Var { name, .. } => name.to_string(),
                         Pattern::Assign { name, .. } => name.to_string(),
                         Pattern::Discard { name, .. } => {
-                            if props.kind.is_expect()
-                                && props.value_type.is_data()
-                                && !tipo.is_data()
-                            {
+                            if props.full_check {
                                 format!("__discard_{}_tail", name)
                             } else {
                                 "_".to_string()
@@ -831,8 +838,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let val = AirTree::local_var(&tail_name, tipo.clone());
 
-                    elems.push((
-                        tail_name,
+                    let assign = if tail_name != "_" {
                         self.assignment(
                             tail,
                             val,
@@ -843,8 +849,12 @@ impl<'a> CodeGenerator<'a> {
                                 remove_unused: true,
                                 full_check: props.full_check,
                             },
-                        ),
-                    ));
+                        )
+                    } else {
+                        AirTree::no_op()
+                    };
+
+                    elems.push((tail_name, assign));
                 });
 
                 let names = elems.iter().map(|(name, _)| name.to_string()).collect_vec();
@@ -975,10 +985,7 @@ impl<'a> CodeGenerator<'a> {
 
                             let val = AirTree::local_var(field_name.to_string(), arg_type.clone());
 
-                            (
-                                field_index,
-                                field_name,
-                                arg_type.clone(),
+                            let assign = if field_name != "_" {
                                 self.assignment(
                                     &arg.value,
                                     val,
@@ -989,8 +996,12 @@ impl<'a> CodeGenerator<'a> {
                                         remove_unused: true,
                                         full_check: props.full_check,
                                     },
-                                ),
-                            )
+                                )
+                            } else {
+                                AirTree::no_op()
+                            };
+
+                            (field_index, field_name, arg_type.clone(), assign)
                         })
                         .collect_vec();
 
@@ -1058,20 +1069,23 @@ impl<'a> CodeGenerator<'a> {
 
                         let val = AirTree::local_var(tuple_name.to_string(), arg_type.clone());
 
-                        (
-                            tuple_name,
+                        let assign = if "_" != tuple_name {
                             self.assignment(
                                 arg,
                                 val,
                                 arg_type,
                                 AssignmentProperties {
-                                    value_type: props.value_type.clone(),
+                                    value_type: arg_type.clone(),
                                     kind: props.kind,
                                     remove_unused: true,
                                     full_check: props.full_check,
                                 },
-                            ),
-                        )
+                            )
+                        } else {
+                            AirTree::no_op()
+                        };
+
+                        (tuple_name, assign)
                     })
                     .collect_vec();
 
@@ -1933,8 +1947,11 @@ impl<'a> CodeGenerator<'a> {
                             props.final_clause,
                         );
 
-                        let statement =
-                            self.nested_clause_condition(elem, list_elem_type, &mut elem_props);
+                        let statement = if elem_name != "_" {
+                            self.nested_clause_condition(elem, list_elem_type, &mut elem_props)
+                        } else {
+                            AirTree::no_op()
+                        };
 
                         *complex_clause = *complex_clause || elem_props.complex_clause;
 
@@ -1953,7 +1970,8 @@ impl<'a> CodeGenerator<'a> {
                 let mut list_tail = None;
 
                 tail.iter().for_each(|elem| {
-                    let tail = defined_tails.last().cloned().unwrap_or_default();
+                    assert!(!elements.is_empty());
+                    let tail = &defined_tails[elements.len() - 1];
                     let elem_name = match elem.as_ref() {
                         Pattern::Var { name, .. } => name.to_string(),
                         Pattern::Assign { name, .. } => name.to_string(),
@@ -1972,13 +1990,17 @@ impl<'a> CodeGenerator<'a> {
                         props.final_clause,
                     );
 
-                    let statement =
-                        self.nested_clause_condition(elem, subject_tipo, &mut elem_props);
+                    let statement = if elem_name != "_" {
+                        self.nested_clause_condition(elem, subject_tipo, &mut elem_props)
+                    } else {
+                        AirTree::no_op()
+                    };
+
                     *complex_clause = *complex_clause || elem_props.complex_clause;
 
                     air_elems.push(statement);
                     if &elem_name != "_" {
-                        list_tail = Some((tail, elem_name.to_string()));
+                        list_tail = Some((tail.to_string(), elem_name.to_string()));
                     }
 
                     if props.final_clause && defined_tails.is_empty() {
@@ -2095,11 +2117,11 @@ impl<'a> CodeGenerator<'a> {
                                 props.final_clause,
                             );
 
-                            let statement = self.nested_clause_condition(
-                                &arg.value,
-                                arg_type,
-                                &mut field_props,
-                            );
+                            let statement = if field_name != "_" {
+                                self.nested_clause_condition(&arg.value, arg_type, &mut field_props)
+                            } else {
+                                AirTree::no_op()
+                            };
 
                             props.complex_clause =
                                 props.complex_clause || field_props.complex_clause;
@@ -2159,11 +2181,15 @@ impl<'a> CodeGenerator<'a> {
                             props.final_clause,
                         );
 
-                        let elem = self.nested_clause_condition(
-                            element,
-                            &items_type[index],
-                            &mut tuple_props,
-                        );
+                        let elem = if elem_name != "_" {
+                            self.nested_clause_condition(
+                                element,
+                                &items_type[index],
+                                &mut tuple_props,
+                            )
+                        } else {
+                            AirTree::no_op()
+                        };
 
                         props.complex_clause = props.complex_clause || tuple_props.complex_clause;
 
@@ -2190,8 +2216,10 @@ impl<'a> CodeGenerator<'a> {
                         .find(|(defined_index, _nm)| defined_index == index)
                     {
                         previous_defined_names.push((*index, prev_name.clone(), name.clone()));
-                    } else {
+                    } else if name != "_" {
                         assert!(defined_indices.insert((*index, name.clone())));
+                        names_to_define.push((*index, name.clone()));
+                    } else {
                         names_to_define.push((*index, name.clone()));
                     }
                 });
@@ -3969,8 +3997,11 @@ impl<'a> CodeGenerator<'a> {
                         .apply(next_clause.delay());
                 }
 
-                if tuple_types.len() == 2 {
+                if tipo.is_2_tuple() {
                     for (index, name) in indices.iter() {
+                        if name == "_" {
+                            continue;
+                        }
                         let builtin = if *index == 0 {
                             Term::fst_pair()
                         } else {
@@ -4083,6 +4114,9 @@ impl<'a> CodeGenerator<'a> {
 
                 if tuple_types.len() == 2 {
                     for (index, name) in indices.iter() {
+                        if name == "_" {
+                            continue;
+                        }
                         let builtin = if *index == 0 {
                             Term::fst_pair()
                         } else {
@@ -4478,19 +4512,26 @@ impl<'a> CodeGenerator<'a> {
 
                 if tipo.is_2_tuple() {
                     assert!(names.len() == 2);
-                    term = term
-                        .lambda(names[1].clone())
-                        .apply(builder::convert_data_to_type(
-                            Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                            &inner_types[1],
-                        ))
-                        .lambda(names[0].clone())
-                        .apply(builder::convert_data_to_type(
-                            Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                            &inner_types[0],
-                        ))
-                        .lambda(format!("__tuple_{list_id}"))
-                        .apply(value);
+
+                    if names[1] != "_" {
+                        term = term
+                            .lambda(names[1].clone())
+                            .apply(builder::convert_data_to_type(
+                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                &inner_types[1],
+                            ));
+                    }
+
+                    if names[0] != "_" {
+                        term = term
+                            .lambda(names[0].clone())
+                            .apply(builder::convert_data_to_type(
+                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                &inner_types[0],
+                            ))
+                    }
+
+                    term = term.lambda(format!("__tuple_{list_id}")).apply(value);
 
                     arg_stack.push(term);
                 } else if !names.is_empty() {
