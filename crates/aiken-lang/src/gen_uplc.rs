@@ -135,7 +135,7 @@ impl<'a> CodeGenerator<'a> {
             air_tree_fun_other = wrap_validator_condition(air_tree_fun_other);
 
             let mut validator_args_tree_other =
-                self.check_validator_args(&fun.arguments, true, air_tree_fun_other);
+                self.check_validator_args(&other.arguments, true, air_tree_fun_other);
 
             validator_args_tree_other = AirTree::no_op().hoist_over(validator_args_tree_other);
 
