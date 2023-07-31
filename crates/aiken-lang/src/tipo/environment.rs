@@ -320,7 +320,7 @@ impl<'a> Environment<'a> {
                     self.imported_modules
                         .get(m)
                         .ok_or_else(|| Error::UnknownModule {
-                            name: name.to_string(),
+                            name: m.to_string(),
                             imported_modules: self
                                 .importable_modules
                                 .keys()
