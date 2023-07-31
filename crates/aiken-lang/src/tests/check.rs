@@ -176,7 +176,7 @@ fn expect_sugar_incorrect_type() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
     ))
 }
