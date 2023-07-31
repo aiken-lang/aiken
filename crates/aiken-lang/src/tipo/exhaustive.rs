@@ -41,7 +41,7 @@ impl PatternStack {
         self.0.insert(index, element);
     }
 
-    fn head(&self) -> &Pattern {
+    pub(super) fn head(&self) -> &Pattern {
         &self.0[0]
     }
 
@@ -385,7 +385,7 @@ pub(crate) enum Complete {
     No,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Pattern {
     Wildcard,
     Literal(Literal),
