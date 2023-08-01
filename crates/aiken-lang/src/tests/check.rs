@@ -155,6 +155,349 @@ fn multi_validator_warning() {
 }
 
 #[test]
+fn exhaustiveness_simple() {
+    let source_code = r#"
+        type Foo {
+          Bar
+          Baz
+        }
+
+        fn foo() {
+          let thing = Bar
+          when thing is {
+            Bar -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "Baz"
+    ))
+}
+
+#[test]
+fn exhaustiveness_missing_empty_list() {
+    let source_code = r#"
+        fn foo() {
+          let thing = [1, 2] 
+          when thing is {
+            [a, ..] -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "[]"
+    ))
+}
+
+#[test]
+fn exhaustiveness_missing_list_wildcards() {
+    let source_code = r#"
+        fn foo() {
+          let thing = [1, 2] 
+          when thing is {
+            [] -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "[_, ..]"
+    ))
+}
+
+#[test]
+fn exhaustiveness_missing_list_wildcards_2() {
+    let source_code = r#"
+        fn foo() {
+          let thing = [1, 2] 
+          when thing is {
+            [] -> True
+            [a] -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "[_, _, ..]"
+    ))
+}
+
+#[test]
+fn exhaustiveness_int() {
+    let source_code = r#"
+        fn foo() {
+          let thing = 1 
+          when thing is {
+            1 -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "_"
+    ))
+}
+
+#[test]
+fn exhaustiveness_int_redundant() {
+    let source_code = r#"
+        fn foo() {
+          let thing = 1 
+          when thing is {
+            1 -> True
+            1 -> True
+            _ -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::RedundantMatchClause {
+                original: Some(_),
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn exhaustiveness_let_binding() {
+    let source_code = r#"
+        fn foo() {
+          let Some(x) = None 
+          True
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                is_let,
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "None" && is_let
+    ))
+}
+
+#[test]
+fn exhaustiveness_expect() {
+    let source_code = r#"
+        fn foo() {
+          expect Some(x) = None 
+          True
+        }
+    "#;
+
+    assert!(matches!(check(parse(source_code)), Ok(_)))
+}
+
+#[test]
+fn exhaustiveness_expect_no_warning() {
+    let source_code = r#"
+        pub type A {
+          int: Int,
+          b: B,
+        }
+
+        pub type B {
+          B0(Int)
+          B1(Int)
+        }
+
+        pub fn bad_let(x: A, _: A) {
+          expect A { b: B0(int), .. } = x
+          int > 0
+        }
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert_eq!(warnings.len(), 0)
+}
+
+#[test]
+fn exhaustiveness_expect_warning() {
+    let source_code = r#"
+        pub type A {
+          int: Int,
+          b: Int,
+        }
+
+        pub fn thing(x: A, _: A) {
+          expect A { b, .. } = x
+          b > 0
+        }
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::SingleConstructorExpect { .. }
+    ))
+}
+
+#[test]
+fn exhaustiveness_missing_constr_with_args() {
+    let source_code = r#"
+        type Foo {
+          Bar
+          Why(Int)
+          Baz { other: Int }
+        }
+
+        fn foo() {
+          let thing = Bar 
+          when thing is {
+            Bar -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "Why(_)" && unmatched[1] == "Baz { other }"
+    ))
+}
+
+#[test]
+fn exhaustiveness_redundant_pattern() {
+    let source_code = r#"
+        type Foo {
+          A
+          B
+        }
+
+        fn foo(a: Foo) {
+          when a is {
+            A -> todo
+            B -> todo
+            _ -> todo
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::RedundantMatchClause { original: None, .. }))
+    ))
+}
+
+#[test]
+fn exhaustiveness_redundant_pattern_2() {
+    let source_code = r#"
+        type Foo {
+          A
+          B
+        }
+
+        fn foo(a: Foo) {
+          when a is {
+            A -> todo
+            B -> todo
+            A -> todo
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::RedundantMatchClause {
+                original: Some(_),
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn exhaustiveness_complex() {
+    let source_code = r#"
+        type Foo {
+          Bar
+          Why(Int)
+          Baz { other: Int }
+        }
+
+        type Hello {
+          Yes
+          No { idk: Int, thing: Foo }
+        }
+
+        fn foo() {
+          let thing = ((Yes, 1), (Yes, [1, 2])) 
+          when thing is {
+            ((Yes, _), (Yes, [])) -> True
+            ((Yes, _), (No { .. }, _)) -> True
+            ((No { .. }, _), (No { .. }, _)) -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if  unmatched[0] == "((Yes, _), (Yes, [_, ..]))" && unmatched[1] == "((No { idk, thing }, _), (Yes, _))"
+    ))
+}
+
+#[test]
 fn expect_sugar_correct_type() {
     let source_code = r#"
         fn foo() {
