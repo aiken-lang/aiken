@@ -553,7 +553,7 @@ Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
     #[diagnostic(help("Double check these patterns and then remove one of the clauses."))]
     RedundantMatchClause {
         #[label("first found here")]
-        original: Span,
+        original: Option<Span>,
         #[label("redundant")]
         redundant: Span,
     },
