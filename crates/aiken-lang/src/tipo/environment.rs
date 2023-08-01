@@ -1451,18 +1451,16 @@ impl<'a> Environment<'a> {
             if matrix.is_useful(&pattern_stack) {
                 matrix.push(pattern_stack);
             } else {
-                let index = matrix
+                let original = matrix
                     .flatten()
                     .into_iter()
                     .enumerate()
                     .find(|(_, p)| p == pattern_stack.head())
-                    .map(|(i, _)| i)
-                    .expect("should find index");
-
-                let typed_pattern = unchecked_patterns[index];
+                    .and_then(|(index, _)| unchecked_patterns.get(index))
+                    .map(|typed_pattern| typed_pattern.location());
 
                 return Err(Error::RedundantMatchClause {
-                    original: typed_pattern.location(),
+                    original,
                     redundant: unchecked_pattern.location(),
                 });
             }
