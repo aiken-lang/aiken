@@ -58,6 +58,8 @@ pub fn exec(
                 Program::from_flat(&bytes).into_diagnostic()?
             };
 
+            let program: Program<Name> = program.try_into().unwrap();
+
             program.to_pretty()
         }
         Format::Debruijn => {
@@ -67,6 +69,8 @@ pub fn exec(
             } else {
                 Program::from_flat(&bytes).into_diagnostic()?
             };
+
+            let program: Program<Name> = program.try_into().unwrap();
 
             program.to_pretty()
         }
