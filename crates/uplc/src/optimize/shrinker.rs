@@ -590,7 +590,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        ast::{Constant, Name, NamedDeBruijn, Program, Term},
+        ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
         parser::interner::Interner,
     };
@@ -767,7 +767,7 @@ mod tests {
                 .apply(Term::Constant(
                     Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
                 ))
-                .apply(Term::i_data().apply(Term::integer(1.into())))
+                .apply(Term::data(Data::integer(1.into())))
                 .lambda("x"),
         };
 
@@ -804,9 +804,7 @@ mod tests {
             version: (1, 0, 0),
             term: Term::equals_integer()
                 .apply(Term::integer(1.into()))
-                .apply(Term::un_i_data().apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
-                )))
+                .apply(Term::integer(5.into()))
                 .lambda("x"),
         };
 
