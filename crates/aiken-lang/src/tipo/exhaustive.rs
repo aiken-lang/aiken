@@ -405,11 +405,16 @@ impl Pattern {
                 let args = args
                     .into_iter()
                     .enumerate()
-                    .map(|(index, p)| {
+                    .filter_map(|(index, p)| {
                         if index == 1 {
-                            pretty_tail(p)
+                            let tail = pretty_tail(p);
+                            if tail == "[]" {
+                                None
+                            } else {
+                                Some(tail)
+                            }
                         } else {
-                            p.pretty()
+                            Some(p.pretty())
                         }
                     })
                     .join(", ");

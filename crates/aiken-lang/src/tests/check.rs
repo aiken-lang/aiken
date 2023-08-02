@@ -493,8 +493,122 @@ fn exhaustiveness_complex() {
                 unmatched,
                 ..
             }
-        )) if  unmatched[0] == "((Yes, _), (Yes, [_, ..]))" && unmatched[1] == "((No { idk, thing }, _), (Yes, _))"
+        )) if unmatched[0] == "((Yes, _), (Yes, [_, ..]))" && unmatched[1] == "((No { idk, thing }, _), (Yes, _))"
     ))
+}
+
+#[test]
+fn exhaustiveness_tuple() {
+    let source_code = r#"
+        fn foo() {
+            when (14, True) is {
+                (14, True) -> Void
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "(_, _)"
+    ))
+}
+
+#[test]
+fn exhaustiveness_nested_list_and_tuples() {
+    fn assert_step(step: &str, expected: &str) {
+        let result = check(parse(step));
+        println!("{result:#?}");
+        assert!(matches!(
+            result,
+            Err((
+                _,
+                Error::NotExhaustivePatternMatch {
+                    unmatched,
+                    ..
+                }
+            )) if unmatched[0] == expected
+        ));
+    }
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                      ] -> Void
+                [([(14, True)], 42), ..] -> Void
+            }
+        }
+        "#,
+        "[([], _), ..]",
+    );
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                     ] -> Void
+                [([(_, True)], 42), ..] -> Void
+                [([         ],  _), ..] -> Void
+            }
+        }
+        "#,
+        "[([(_, False), ..], _), ..]",
+    );
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                          ] -> Void
+                [([(_, True )    ], 42), ..] -> Void
+                [([              ],  _), ..] -> Void
+                [([(_, False), ..],  _), ..] -> Void
+            }
+        }
+        "#,
+        "[([(_, True), _, ..], _), ..]",
+    );
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                             ] -> Void
+                [([(_, True )       ], 42), ..] -> Void
+                [([                 ],  _), ..] -> Void
+                [([(_, False)   , ..],  _), ..] -> Void
+                [([(_, True ), _, ..],  _), ..] -> Void
+            }
+        }
+        "#,
+        "[([(_, True)], _), ..]",
+    );
+
+    let source_code = r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                             ] -> Void
+                [([(_, True )       ], 42), ..] -> Void
+                [([                 ],  _), ..] -> Void
+                [([(_, False)   , ..],  _), ..] -> Void
+                [([(_, True ), _, ..],  _), ..] -> Void
+                [([(_, True )       ],  _), ..] -> Void
+            }
+        }
+    "#;
+
+    assert!(matches!(check(parse(source_code)), Ok(_)))
 }
 
 #[test]
