@@ -145,8 +145,15 @@ impl MachineCosts {
                 mem: 100,
                 cpu: 23000,
             },
-            constr: todo!(),
-            case: todo!(),
+            // Placeholder values
+            constr: ExBudget {
+                mem: 40000000,
+                cpu: 400000000000,
+            },
+            case: ExBudget {
+                mem: 40000000,
+                cpu: 400000000000,
+            },
         }
     }
 }
@@ -184,8 +191,15 @@ impl Default for MachineCosts {
                 mem: 100,
                 cpu: 23000,
             },
-            constr: todo!(),
-            case: todo!(),
+            // Placeholder values
+            constr: ExBudget {
+                mem: 40000000,
+                cpu: 400000000000,
+            },
+            case: ExBudget {
+                mem: 40000000,
+                cpu: 400000000000,
+            },
         }
     }
 }
@@ -2238,8 +2252,22 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     .get("cek_builtin_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
-            constr: todo!(),
-            case: todo!(),
+            constr: ExBudget {
+                mem: *cost_map
+                    .get("cek_constr_cost-exBudgetmem")
+                    .unwrap_or(&30000000000),
+                cpu: *cost_map
+                    .get("cek_constr_cost-exBudgetCPU")
+                    .unwrap_or(&30000000000),
+            },
+            case: ExBudget {
+                mem: *cost_map
+                    .get("cek_case_cost-exBudgetmem")
+                    .unwrap_or(&30000000000),
+                cpu: *cost_map
+                    .get("cek_case_cost-exBudgetCPU")
+                    .unwrap_or(&30000000000),
+            },
         },
         builtin_costs: BuiltinCosts {
             add_integer: CostingFun {
