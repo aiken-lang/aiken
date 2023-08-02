@@ -91,6 +91,8 @@ pub struct MachineCosts {
     delay: ExBudget,
     force: ExBudget,
     apply: ExBudget,
+    constr: ExBudget,
+    case: ExBudget,
     /// Just the cost of evaluating a Builtin node, not the builtin itself.
     builtin: ExBudget,
 }
@@ -106,6 +108,8 @@ impl MachineCosts {
             StepKind::Delay => self.delay,
             StepKind::Force => self.force,
             StepKind::Builtin => self.builtin,
+            StepKind::Constr => self.constr,
+            StepKind::Case => self.case,
             StepKind::StartUp => self.startup,
         }
     }
@@ -141,6 +145,8 @@ impl MachineCosts {
                 mem: 100,
                 cpu: 23000,
             },
+            constr: todo!(),
+            case: todo!(),
         }
     }
 }
@@ -178,6 +184,8 @@ impl Default for MachineCosts {
                 mem: 100,
                 cpu: 23000,
             },
+            constr: todo!(),
+            case: todo!(),
         }
     }
 }
@@ -2230,6 +2238,8 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     .get("cek_builtin_cost-exBudgetCPU")
                     .unwrap_or(&30000000000),
             },
+            constr: todo!(),
+            case: todo!(),
         },
         builtin_costs: BuiltinCosts {
             add_integer: CostingFun {
@@ -3198,8 +3208,10 @@ pub enum StepKind {
     Delay = 4,
     Force = 5,
     Builtin = 6,
+    Constr = 7,
+    Case = 8,
     // DO NOT USE THIS IN `step_and_maybe_spend`
-    StartUp = 7,
+    StartUp = 9,
 }
 
 impl TryFrom<u8> for StepKind {

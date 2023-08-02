@@ -26,6 +26,10 @@ pub enum Value {
         fun: DefaultFunction,
         runtime: BuiltinRuntime,
     },
+    Constr {
+        tag: usize,
+        fields: Vec<Value>,
+    },
 }
 
 impl Value {
@@ -190,6 +194,7 @@ impl Value {
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,
             Value::Builtin { .. } => 1,
+            Value::Constr { .. } => 1,
         }
     }
 

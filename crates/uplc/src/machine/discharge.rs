@@ -35,6 +35,10 @@ pub(super) fn value_as_term(value: Value) -> Term<NamedDeBruijn> {
                 body,
             },
         ),
+        Value::Constr { tag, fields } => Term::Constr {
+            tag,
+            fields: fields.into_iter().map(value_as_term).collect(),
+        },
     }
 }
 

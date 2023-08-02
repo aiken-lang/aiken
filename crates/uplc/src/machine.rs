@@ -27,9 +27,18 @@ enum MachineState {
 
 #[derive(Clone)]
 enum Context {
-    FrameApplyFun(Value, Box<Context>),
-    FrameApplyArg(Env, Term<NamedDeBruijn>, Box<Context>),
+    FrameAwaitArg(Value, Box<Context>),
+    FrameAwaitFunTerm(Env, Term<NamedDeBruijn>, Box<Context>),
+    FrameAwaitFunValue(Value, Box<Context>),
     FrameForce(Box<Context>),
+    FrameConstr(
+        Env,
+        usize,
+        Vec<Term<NamedDeBruijn>>,
+        Vec<Value>,
+        Box<Context>,
+    ),
+    FrameCases(Env, Vec<Term<NamedDeBruijn>>, Box<Context>),
     NoFrame,
 }
 
@@ -37,7 +46,7 @@ pub struct Machine {
     costs: CostModel,
     pub ex_budget: ExBudget,
     slippage: u32,
-    unbudgeted_steps: [u32; 8],
+    unbudgeted_steps: [u32; 10],
     pub logs: Vec<String>,
     version: Language,
 }
@@ -53,7 +62,7 @@ impl Machine {
             costs,
             ex_budget: initial_budget,
             slippage,
-            unbudgeted_steps: [0; 8],
+            unbudgeted_steps: [0; 10],
             logs: vec![],
             version,
         }
@@ -117,7 +126,11 @@ impl Machine {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 Ok(MachineState::Compute(
-                    Context::FrameApplyArg(env.clone(), argument.as_ref().clone(), context.into()),
+                    Context::FrameAwaitFunTerm(
+                        env.clone(),
+                        argument.as_ref().clone(),
+                        context.into(),
+                    ),
                     env,
                     function.as_ref().clone(),
                 ))
@@ -147,22 +160,43 @@ impl Machine {
                     Value::Builtin { fun, runtime },
                 ))
             }
-            Term::Constr { .. } => todo!(),
-            Term::Case { .. } => todo!(),
+            Term::Constr { tag, mut fields } => {
+                self.step_and_maybe_spend(StepKind::Constr)?;
+
+                if !fields.is_empty() {
+                    let popped_field = fields.remove(0);
+
+                    Ok(MachineState::Compute(
+                        Context::FrameConstr(env.clone(), tag, fields, vec![], context.into()),
+                        env,
+                        popped_field,
+                    ))
+                } else {
+                    Ok(MachineState::Return(
+                        context,
+                        Value::Constr {
+                            tag,
+                            fields: vec![],
+                        },
+                    ))
+                }
+            }
+            Term::Case { constr, branches } => {
+                self.step_and_maybe_spend(StepKind::Case)?;
+
+                Ok(MachineState::Compute(
+                    Context::FrameCases(env.clone(), branches, context.into()),
+                    env,
+                    constr.as_ref().clone(),
+                ))
+            }
         }
     }
 
     fn return_compute(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
         match context {
-            Context::FrameApplyFun(function, ctx) => self.apply_evaluate(*ctx, function, value),
-            Context::FrameApplyArg(arg_var_env, arg, ctx) => Ok(MachineState::Compute(
-                Context::FrameApplyFun(value, ctx),
-                arg_var_env,
-                arg,
-            )),
-            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
             Context::NoFrame => {
-                if self.unbudgeted_steps[7] > 0 {
+                if self.unbudgeted_steps[9] > 0 {
                     self.spend_unbudgeted_steps()?;
                 }
 
@@ -170,6 +204,46 @@ impl Machine {
 
                 Ok(MachineState::Done(term))
             }
+            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
+            Context::FrameAwaitFunTerm(arg_env, arg, ctx) => Ok(MachineState::Compute(
+                Context::FrameAwaitArg(value, ctx),
+                arg_env,
+                arg,
+            )),
+            Context::FrameAwaitArg(fun, ctx) => self.apply_evaluate(*ctx, fun, value),
+            Context::FrameAwaitFunValue(arg, ctx) => self.apply_evaluate(*ctx, value, arg),
+            Context::FrameConstr(env, tag, mut fields, mut resolved_fields, ctx) => {
+                resolved_fields.insert(0, value);
+
+                if !fields.is_empty() {
+                    let popped_field = fields.remove(0);
+
+                    Ok(MachineState::Compute(
+                        Context::FrameConstr(env.clone(), tag, fields, resolved_fields, ctx),
+                        env,
+                        popped_field,
+                    ))
+                } else {
+                    Ok(MachineState::Return(
+                        *ctx,
+                        Value::Constr {
+                            tag,
+                            fields: resolved_fields,
+                        },
+                    ))
+                }
+            }
+            Context::FrameCases(env, branches, ctx) => match value {
+                Value::Constr { tag, fields } => match branches.get(tag) {
+                    Some(t) => Ok(MachineState::Compute(
+                        transfer_arg_stack(fields, *ctx),
+                        env,
+                        t.clone(),
+                    )),
+                    None => todo!(),
+                },
+                _ => todo!(),
+            },
         }
     }
 
@@ -260,9 +334,9 @@ impl Machine {
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
         let index = step as u8;
         self.unbudgeted_steps[index as usize] += 1;
-        self.unbudgeted_steps[7] += 1;
+        self.unbudgeted_steps[9] += 1;
 
-        if self.unbudgeted_steps[7] >= self.slippage {
+        if self.unbudgeted_steps[9] >= self.slippage {
             self.spend_unbudgeted_steps()?;
         }
 
@@ -281,7 +355,7 @@ impl Machine {
             self.unbudgeted_steps[i] = 0;
         }
 
-        self.unbudgeted_steps[7] = 0;
+        self.unbudgeted_steps[9] = 0;
 
         Ok(())
     }
@@ -295,6 +369,16 @@ impl Machine {
         } else {
             Ok(())
         }
+    }
+}
+
+fn transfer_arg_stack(mut args: Vec<Value>, ctx: Context) -> Context {
+    if args.is_empty() {
+        ctx
+    } else {
+        let popped_field = args.remove(0);
+
+        transfer_arg_stack(args, Context::FrameAwaitFunValue(popped_field, ctx.into()))
     }
 }
 
