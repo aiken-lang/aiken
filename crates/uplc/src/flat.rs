@@ -165,6 +165,20 @@ where
 
                 builtin.encode(e)?;
             }
+            Term::Constr { tag, fields } => {
+                encode_term_tag(8, e)?;
+
+                tag.encode(e)?;
+
+                e.encode_list_with(fields, |term, e| (*term).encode(e))?;
+            }
+            Term::Case { constr, branches } => {
+                encode_term_tag(9, e)?;
+
+                constr.encode(e)?;
+
+                e.encode_list_with(branches, |term, e| (*term).encode(e))?;
+            }
         }
 
         Ok(())
@@ -192,6 +206,24 @@ where
             5 => Ok(Term::Force(Rc::new(Term::decode(d)?))),
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
+            8 => {
+                let fields = d.decode_list_with(|d| Term::<T>::decode(d))?;
+
+                Ok(Term::Constr {
+                    tag: usize::decode(d)?,
+                    fields,
+                })
+            }
+            9 => {
+                let constr = Term::<T>::decode(d)?;
+
+                let branches = d.decode_list_with(|d| Term::<T>::decode(d))?;
+
+                Ok(Term::Case {
+                    constr: Rc::new(constr),
+                    branches,
+                })
+            }
             x => {
                 let buffer_slice: Vec<u8> = d
                     .buffer

@@ -81,8 +81,8 @@ peg::parser! {
         rule comma() = _* "," _*
 
         rule version() -> (usize, usize, usize)
-          = major:number() "." minor:number() "." patch:number()  {
-            (major as usize, minor as usize, patch as usize)
+          = major:decimal() "." minor:decimal() "." patch:decimal()  {
+            (major, minor, patch)
           }
 
         pub rule term() -> Term<Name>
@@ -94,6 +94,8 @@ peg::parser! {
           / delay()
           / force()
           / error()
+          / constr()
+          / case()
 
         rule constant() -> Term<Name>
           = "(" _* "con" _+ con:(
@@ -142,6 +144,17 @@ peg::parser! {
         rule error() -> Term<Name>
           = "(" _* "error" _* ")" { Term::Error }
 
+        rule constr() -> Term<Name>
+          = "(" _* "constr" _+ tag:decimal() _+ fields:(t:term() _* { t })+ ")" {
+            Term::Constr { tag, fields }
+          }
+
+        #[cache_left_rec]
+        rule case() -> Term<Name>
+          = "(" _* "case" _+ constr:term() _* branches:(t:term() _* { t })+ ")" {
+            Term::Case { constr: constr.into(), branches }
+          }
+
         rule constant_integer() -> Constant
           = "integer" _+ i:big_number() { Constant::Integer(i) }
 
@@ -173,6 +186,9 @@ peg::parser! {
         rule pair(type_info: Option<(&Type, &Type)>) -> (Constant, Constant)
           = "(" _* x:typed_constant(type_info.map(|t| t.0)) comma() y:typed_constant(type_info.map(|t| t.1)) _* ")" { (x, y) }
 
+        rule decimal() -> usize
+          = n:$(['0'..='9']+) {? n.parse().or(Err("usize")) }
+
         rule number() -> isize
           = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
@@ -199,7 +215,7 @@ peg::parser! {
           / expected!("or any valid ascii character")
 
         rule data() -> PlutusData
-          = _* "Constr" _+ t:number() _+ fs:plutus_list() {?
+          = _* "Constr" _+ t:decimal() _+ fs:plutus_list() {?
             Ok(PlutusData::Constr(pallas_primitives::babbage::Constr {
                 tag: u64::try_from(t).or(Err("tag"))?,
                 any_constructor: None,

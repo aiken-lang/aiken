@@ -145,6 +145,32 @@ where
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
+            Term::Constr { tag, fields } => RcDoc::text("(")
+                .append(
+                    RcDoc::text("constr")
+                        .append(RcDoc::line())
+                        .append(RcDoc::as_string(tag))
+                        .nest(2),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::intersperse(
+                    fields.iter().map(|f| f.to_doc()),
+                    RcDoc::line_(),
+                ))
+                .append(RcDoc::text(")")),
+            Term::Case { constr, branches } => RcDoc::text("(")
+                .append(
+                    RcDoc::text("case")
+                        .append(RcDoc::line())
+                        .append(constr.to_doc())
+                        .nest(2),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::intersperse(
+                    branches.iter().map(|f| f.to_doc()),
+                    RcDoc::line_(),
+                ))
+                .append(RcDoc::text(")")),
         }
         .group()
     }
