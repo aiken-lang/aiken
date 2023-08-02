@@ -196,6 +196,14 @@ pub enum Term<T> {
     Error,
     // tag: 7
     Builtin(DefaultFunction),
+    Constr {
+        tag: usize,
+        fields: Vec<Term<T>>,
+    },
+    Case {
+        constr: Rc<Term<T>>,
+        branches: Vec<Term<T>>,
+    },
 }
 
 impl<T> Term<T> {

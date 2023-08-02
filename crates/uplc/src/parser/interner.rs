@@ -48,6 +48,18 @@ impl Interner {
             Term::Force(term) => self.term(Rc::make_mut(term)),
             Term::Error => (),
             Term::Builtin(_) => (),
+            Term::Constr { fields, .. } => {
+                for field in fields {
+                    self.term(field);
+                }
+            }
+            Term::Case { constr, branches } => {
+                self.term(Rc::make_mut(constr));
+
+                for branch in branches {
+                    self.term(branch);
+                }
+            }
         }
     }
 

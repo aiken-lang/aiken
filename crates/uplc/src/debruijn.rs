@@ -79,6 +79,20 @@ impl Converter {
             Term::Force(term) => Term::Force(Rc::new(self.name_to_named_debruijn(term)?)),
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.name_to_named_debruijn(field))
+                    .collect::<Result<_, _>>()?,
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.name_to_named_debruijn(constr)?),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.name_to_named_debruijn(branch))
+                    .collect::<Result<_, _>>()?,
+            },
         };
 
         Ok(converted_term)
@@ -117,6 +131,20 @@ impl Converter {
             Term::Force(term) => Term::Force(Rc::new(self.name_to_debruijn(term)?)),
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.name_to_debruijn(field))
+                    .collect::<Result<_, _>>()?,
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.name_to_debruijn(constr)?),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.name_to_debruijn(branch))
+                    .collect::<Result<_, _>>()?,
+            },
         };
 
         Ok(converted_term)
@@ -167,6 +195,20 @@ impl Converter {
             Term::Force(term) => Term::Force(Rc::new(self.named_debruijn_to_name(term)?)),
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.named_debruijn_to_name(field))
+                    .collect::<Result<_, _>>()?,
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.named_debruijn_to_name(constr)?),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.named_debruijn_to_name(branch))
+                    .collect::<Result<_, _>>()?,
+            },
         };
 
         Ok(converted_term)
@@ -218,6 +260,20 @@ impl Converter {
             Term::Force(term) => Term::Force(Rc::new(self.debruijn_to_name(term)?)),
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.debruijn_to_name(field))
+                    .collect::<Result<_, _>>()?,
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.debruijn_to_name(constr)?),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.debruijn_to_name(branch))
+                    .collect::<Result<_, _>>()?,
+            },
         };
 
         Ok(converted_term)
@@ -243,6 +299,20 @@ impl Converter {
             Term::Force(term) => Term::Force(Rc::new(self.named_debruijn_to_debruijn(term))),
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.named_debruijn_to_debruijn(field))
+                    .collect(),
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.named_debruijn_to_debruijn(constr)),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.named_debruijn_to_debruijn(branch))
+                    .collect(),
+            },
         }
     }
 
@@ -272,6 +342,20 @@ impl Converter {
             Term::Force(term) => Term::Force(Rc::new(self.debruijn_to_named_debruijn(term))),
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.debruijn_to_named_debruijn(field))
+                    .collect(),
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.debruijn_to_named_debruijn(constr)),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.debruijn_to_named_debruijn(branch))
+                    .collect(),
+            },
         }
     }
 
@@ -302,6 +386,20 @@ impl Converter {
             }
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.fake_named_debruijn_to_named_debruijn(field))
+                    .collect(),
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.fake_named_debruijn_to_named_debruijn(constr)),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.fake_named_debruijn_to_named_debruijn(branch))
+                    .collect(),
+            },
         }
     }
 
@@ -332,6 +430,20 @@ impl Converter {
             }
             Term::Error => Term::Error,
             Term::Builtin(builtin) => Term::Builtin(*builtin),
+            Term::Constr { tag, fields } => Term::Constr {
+                tag: *tag,
+                fields: fields
+                    .iter()
+                    .map(|field| self.named_debruijn_to_fake_named_debruijn(field))
+                    .collect(),
+            },
+            Term::Case { constr, branches } => Term::Case {
+                constr: Rc::new(self.named_debruijn_to_fake_named_debruijn(constr)),
+                branches: branches
+                    .iter()
+                    .map(|branch| self.named_debruijn_to_fake_named_debruijn(branch))
+                    .collect(),
+            },
         }
     }
 

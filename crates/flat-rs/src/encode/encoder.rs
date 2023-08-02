@@ -196,10 +196,7 @@ impl Encoder {
         &mut self,
         list: &[T],
         encoder_func: for<'r> fn(&T, &'r mut Encoder) -> Result<(), Error>,
-    ) -> Result<&mut Self, Error>
-    where
-        T: Encode,
-    {
+    ) -> Result<&mut Self, Error> {
         for item in list {
             self.one();
             encoder_func(item, self)?;

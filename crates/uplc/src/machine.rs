@@ -147,6 +147,8 @@ impl Machine {
                     Value::Builtin { fun, runtime },
                 ))
             }
+            Term::Constr { .. } => todo!(),
+            Term::Case { .. } => todo!(),
         }
     }
 
