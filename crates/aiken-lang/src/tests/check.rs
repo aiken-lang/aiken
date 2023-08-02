@@ -612,6 +612,30 @@ fn exhaustiveness_nested_list_and_tuples() {
 }
 
 #[test]
+fn exhaustiveness_guard() {
+    let source_code = r#"
+        fn foo() {
+            when [(True, 42)] is {
+                [(True,  x), ..] if x == 42 -> Void
+                [(False, x), ..] -> Void
+                [] -> Void
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "[(True, _), ..]"
+    ));
+}
+
+#[test]
 fn expect_sugar_correct_type() {
     let source_code = r#"
         fn foo() {
