@@ -342,21 +342,8 @@ impl Matrix {
                 }
             }
 
-            // (:)
-            //     <$> Maybe.mapMaybe (isMissing alts ctors) altList
-            //     <*> isExhaustive (Maybe.mapMaybe specializeRowByAnything matrix) (n - 1)
             return m;
         }
-
-        // let
-        //   isAltExhaustive (Can.Ctor name _ arity _) =
-        //     recoverCtor alts name arity <$>
-        //     isExhaustive
-        //       (Maybe.mapMaybe (specializeRowByCtor name arity) matrix)
-        //       (arity + n - 1)
-        // in
-        // concatMap isAltExhaustive altList
-        //
 
         alts.iter()
             .map(|ctor| {

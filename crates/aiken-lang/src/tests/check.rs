@@ -186,7 +186,7 @@ fn exhaustiveness_simple() {
 fn exhaustiveness_missing_empty_list() {
     let source_code = r#"
         fn foo() {
-          let thing = [1, 2] 
+          let thing = [1, 2]
           when thing is {
             [a, ..] -> True
           }
@@ -209,7 +209,7 @@ fn exhaustiveness_missing_empty_list() {
 fn exhaustiveness_missing_list_wildcards() {
     let source_code = r#"
         fn foo() {
-          let thing = [1, 2] 
+          let thing = [1, 2]
           when thing is {
             [] -> True
           }
@@ -232,7 +232,7 @@ fn exhaustiveness_missing_list_wildcards() {
 fn exhaustiveness_missing_list_wildcards_2() {
     let source_code = r#"
         fn foo() {
-          let thing = [1, 2] 
+          let thing = [1, 2]
           when thing is {
             [] -> True
             [a] -> True
@@ -256,7 +256,7 @@ fn exhaustiveness_missing_list_wildcards_2() {
 fn exhaustiveness_int() {
     let source_code = r#"
         fn foo() {
-          let thing = 1 
+          let thing = 1
           when thing is {
             1 -> True
           }
@@ -279,7 +279,7 @@ fn exhaustiveness_int() {
 fn exhaustiveness_int_redundant() {
     let source_code = r#"
         fn foo() {
-          let thing = 1 
+          let thing = 1
           when thing is {
             1 -> True
             1 -> True
@@ -304,7 +304,7 @@ fn exhaustiveness_int_redundant() {
 fn exhaustiveness_let_binding() {
     let source_code = r#"
         fn foo() {
-          let Some(x) = None 
+          let Some(x) = None
           True
         }
     "#;
@@ -326,7 +326,7 @@ fn exhaustiveness_let_binding() {
 fn exhaustiveness_expect() {
     let source_code = r#"
         fn foo() {
-          expect Some(x) = None 
+          expect Some(x) = None
           True
         }
     "#;
@@ -476,7 +476,7 @@ fn exhaustiveness_complex() {
         }
 
         fn foo() {
-          let thing = ((Yes, 1), (Yes, [1, 2])) 
+          let thing = ((Yes, 1), (Yes, [1, 2]))
           when thing is {
             ((Yes, _), (Yes, [])) -> True
             ((Yes, _), (No { .. }, _)) -> True
