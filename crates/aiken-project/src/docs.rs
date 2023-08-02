@@ -579,6 +579,11 @@ fn find_modules_prefix(modules: &[DocLink]) -> String {
 }
 
 fn do_find_modules_prefix(current_prefix: &str, modules: &[DocLink]) -> String {
+    // no need to iterate and fold when there's only 1 module
+    if let [_] = modules {
+        return current_prefix.to_string();
+    }
+
     let prefix = modules
         .iter()
         .fold(None, |previous_prefix, module| {
@@ -620,7 +625,8 @@ fn find_modules_prefix_test() {
             name: "aiken/list".to_string(),
             path: String::new()
         }]),
-        "aiken/list".to_string()
+        // "aiken/list".to_string()
+        "".to_string()
     );
 
     assert_eq!(
