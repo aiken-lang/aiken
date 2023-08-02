@@ -147,12 +147,12 @@ impl MachineCosts {
             },
             // Placeholder values
             constr: ExBudget {
-                mem: 40000000,
-                cpu: 400000000000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
             case: ExBudget {
-                mem: 40000000,
-                cpu: 400000000000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
         }
     }
@@ -193,12 +193,12 @@ impl Default for MachineCosts {
             },
             // Placeholder values
             constr: ExBudget {
-                mem: 40000000,
-                cpu: 400000000000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
             case: ExBudget {
-                mem: 40000000,
-                cpu: 400000000000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
         }
     }
@@ -3254,6 +3254,8 @@ impl TryFrom<u8> for StepKind {
             4 => Ok(StepKind::Delay),
             5 => Ok(StepKind::Force),
             6 => Ok(StepKind::Builtin),
+            7 => Ok(StepKind::Constr),
+            8 => Ok(StepKind::Case),
             v => Err(super::error::Error::InvalidStepKind(v)),
         }
     }
