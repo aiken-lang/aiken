@@ -556,11 +556,11 @@ pub(super) fn simplify(
             Ok(p)
         }
         ast::Pattern::Constructor {
-            name,
             arguments,
             location,
             tipo,
             with_spread,
+            constructor: super::PatternConstructor::Record { name, .. },
             ..
         } => {
             let (module, type_name, arity) = match tipo.deref() {
