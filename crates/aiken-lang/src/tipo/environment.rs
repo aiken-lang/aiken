@@ -1488,36 +1488,52 @@ impl<'a> Environment<'a> {
     ///
     pub fn get_constructors_for_type(
         &mut self,
-        full_module_name: &Option<String>,
+        full_module_name: &String,
         name: &str,
         location: Span,
-    ) -> Result<&Vec<String>, Error> {
-        match full_module_name {
-            None => self
-                .module_types_constructors
+    ) -> Result<Vec<ValueConstructor>, Error> {
+        if full_module_name.is_empty() || full_module_name == self.current_module {
+            self.module_types_constructors
                 .get(name)
                 .ok_or_else(|| Error::UnknownType {
                     name: name.to_string(),
                     types: self.module_types.keys().map(|t| t.to_string()).collect(),
                     location,
-                }),
-
-            Some(m) => {
-                let module =
-                    self.importable_modules
-                        .get(m)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location,
+                })?
+                .iter()
+                .map(|constructor| {
+                    self.scope
+                        .get(constructor)
+                        .cloned()
+                        .ok_or_else(|| Error::UnknownModuleValue {
                             name: name.to_string(),
-                            imported_modules: self
-                                .importable_modules
+                            module_name: self.current_module.clone(),
+                            value_constructors: self
+                                .module_values
                                 .keys()
                                 .map(|t| t.to_string())
                                 .collect(),
-                        })?;
+                            location,
+                        })
+                })
+                .collect()
+        } else {
+            let module = self
+                .importable_modules
+                .get(full_module_name)
+                .ok_or_else(|| Error::UnknownModule {
+                    location,
+                    name: name.to_string(),
+                    imported_modules: self
+                        .importable_modules
+                        .keys()
+                        .map(|t| t.to_string())
+                        .collect(),
+                })?;
 
-                self.unused_modules.remove(m);
+            self.unused_modules.remove(full_module_name);
 
+            let constructors =
                 module
                     .types_constructors
                     .get(name)
@@ -1526,8 +1542,25 @@ impl<'a> Environment<'a> {
                         name: name.to_string(),
                         module_name: module.name.clone(),
                         type_constructors: module.types.keys().map(|t| t.to_string()).collect(),
+                    })?;
+
+            constructors
+                .iter()
+                .map(|constructor| {
+                    module.values.get(constructor).cloned().ok_or_else(|| {
+                        Error::UnknownModuleValue {
+                            name: name.to_string(),
+                            module_name: module.name.clone(),
+                            value_constructors: module
+                                .values
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                            location,
+                        }
                     })
-            }
+                })
+                .collect()
         }
     }
 }

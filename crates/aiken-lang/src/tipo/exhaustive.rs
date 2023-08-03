@@ -561,10 +561,9 @@ pub(super) fn simplify(
             location,
             tipo,
             with_spread,
-            module,
             ..
         } => {
-            let (type_module, type_name, arity) = match tipo.deref() {
+            let (module, type_name, arity) = match tipo.deref() {
                 tipo::Type::App {
                     name: type_name,
                     module,
@@ -583,25 +582,7 @@ pub(super) fn simplify(
                 _ => unreachable!("tipo should be a Type::App"),
             };
 
-            let module_opt = if type_module.is_empty() || environment.current_module == type_module
-            {
-                None
-            } else {
-                Some(type_module.clone())
-            };
-
-            let constructors = environment
-                .get_constructors_for_type(&module_opt, type_name, *location)?
-                .clone();
-
-            let mut alts = Vec::new();
-
-            for constructor in constructors {
-                let value_constructor =
-                    environment.get_value_constructor(module.as_ref(), &constructor, *location)?;
-
-                alts.push(value_constructor.clone());
-            }
+            let alts = environment.get_constructors_for_type(module, type_name, *location)?;
 
             let mut args = Vec::new();
 

@@ -523,7 +523,6 @@ fn exhaustiveness_tuple() {
 fn exhaustiveness_nested_list_and_tuples() {
     fn assert_step(step: &str, expected: &str) {
         let result = check(parse(step));
-        println!("{result:#?}");
         assert!(matches!(
             result,
             Err((
