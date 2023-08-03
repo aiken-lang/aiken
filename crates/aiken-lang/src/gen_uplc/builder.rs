@@ -623,11 +623,6 @@ pub fn identify_recursive_static_params(
                                 AirTree::Expression(AirExpression::Var { name, .. }) => {
                                     // "shadowed in an ancestor scope" means "the definition scope is a prefix of our scope"
                                     name != param || if let Some(p) = shadowed_parameters.get(param) {
-                                        println!("param: {:?}", param);
-                                        println!("arg: {:?}", arg);
-                                        println!("p: {:?}", *p);
-                                        println!("tree_path: {:?}", tree_path);
-                                        println!("common_ancestor: {:?}", p.common_ancestor(tree_path));
                                         p.common_ancestor(tree_path) == *p
                                     } else {
                                         false
@@ -648,34 +643,57 @@ pub fn identify_recursive_static_params(
     }
 }
 
-pub fn modify_self_calls(air_tree: &mut AirTree, func_key: &FunctionAccessKey, variant: &String, static_recursive_params: &Vec<usize>) {
-    if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
-        if let AirTree::Expression(AirExpression::Var {
-            constructor:
-                ValueConstructor {
-                    variant: ValueConstructorVariant::ModuleFn { name, module, .. },
-                    ..
-                },
-            variant_name,
-            ..
-        }) = func.as_ref()
-        {
-            if name == &func_key.function_name
-                && module == &func_key.module_name
-                && variant == variant_name
+pub fn modify_self_calls(body: &mut AirTree, func_key: &FunctionAccessKey, variant: &String, func_params: &Vec<String>) -> Vec<String> {
+    let mut potential_recursive_statics = func_params.clone();
+    // identify which parameters are recursively nonstatic (i.e. get modified before the self-call)
+    // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
+    // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
+    let mut shadowed_parameters: HashMap<String, TreePath> = HashMap::new();
+    body.traverse_tree_with(&mut |air_tree: &mut AirTree, tree_path| {
+        identify_recursive_static_params(air_tree, tree_path, &func_params, func_key, variant, &mut shadowed_parameters, &mut potential_recursive_statics);
+    });
+
+    // Find the index of any recursively static parameters,
+    // so we can remove them from the call-site of each recursive call
+    let recursive_static_indexes: Vec<_> = func_params
+        .iter()
+        .enumerate()
+        .filter(|&(_, p)| potential_recursive_statics.contains(p))
+        .map(|(idx, _)| idx)
+        .collect();
+
+    // Modify any self calls to remove recursive static parameters and append `self` as a parameter for the recursion
+    body.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+        if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
+            if let AirTree::Expression(AirExpression::Var {
+                constructor:
+                    ValueConstructor {
+                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                        ..
+                    },
+                variant_name,
+                ..
+            }) = func.as_ref()
             {
-                // Remove any static-recursive-parameters, because they'll be bound statically
-                // above the recursive part of the function
-                // note: assumes that static_recursive_params is sorted
-                for arg in static_recursive_params.iter().rev() {
-                    args.remove(*arg);
+                if name == &func_key.function_name
+                    && module == &func_key.module_name
+                    && variant == variant_name
+                {
+                    // Remove any static-recursive-parameters, because they'll be bound statically
+                    // above the recursive part of the function
+                    // note: assumes that static_recursive_params is sorted
+                    for arg in recursive_static_indexes.iter().rev() {
+                        args.remove(*arg);
+                    }
+                    let mut new_args = vec![func.as_ref().clone()];
+                    new_args.append(args);
+                    *args = new_args;
                 }
-                let mut new_args = vec![func.as_ref().clone()];
-                new_args.append(args);
-                *args = new_args;
             }
         }
-    }
+    });
+    let recursive_nonstatics = func_params.iter().filter(|p| !potential_recursive_statics.contains(p)).cloned().collect();
+    recursive_nonstatics
 }
 
 pub fn pattern_has_conditions(pattern: &TypedPattern) -> bool {
