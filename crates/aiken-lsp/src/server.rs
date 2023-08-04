@@ -634,9 +634,6 @@ impl Server {
                     data: None,
                 };
 
-                #[cfg(target_os = "windows")]
-                let path = path;
-
                 #[cfg(not(target_os = "windows"))]
                 let path = path.canonicalize()?;
 
