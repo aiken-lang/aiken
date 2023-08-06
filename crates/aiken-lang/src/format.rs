@@ -860,7 +860,7 @@ impl<'comments> Formatter<'comments> {
                     .append(suffix)
             }
 
-            UntypedExpr::ErrorTerm { .. } => "error".to_doc(),
+            UntypedExpr::ErrorTerm { .. } => "fail".to_doc(),
 
             UntypedExpr::TraceIfFalse { value, .. } => self.trace_if_false(value),
         };

@@ -2,14 +2,6 @@
 source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
 description: "Code:\n\nfail\n"
 ---
-Trace {
-    kind: Error,
+ErrorTerm {
     location: 0..4,
-    then: ErrorTerm {
-        location: 0..4,
-    },
-    text: String {
-        location: 0..4,
-        value: "aiken::error",
-    },
 }
