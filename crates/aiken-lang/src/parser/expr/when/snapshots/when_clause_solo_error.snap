@@ -24,16 +24,8 @@ When {
                 },
             ],
             guard: None,
-            then: Trace {
-                kind: Error,
+            then: ErrorTerm {
                 location: 28..32,
-                then: ErrorTerm {
-                    location: 28..32,
-                },
-                text: String {
-                    location: 28..32,
-                    value: "aiken::error",
-                },
             },
         },
     ],

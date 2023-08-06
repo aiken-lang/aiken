@@ -27,6 +27,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
     let mut project = TestProject::new();
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
+
     let mut generator = modules.new_generator(
         &project.functions,
         &project.data_types,
@@ -2865,6 +2866,10 @@ fn when_tuple_deconstruction() {
                                 ),
                             )
                             .apply(Term::var("x"))
+                            .delayed_if_else(
+                                Term::bool(true),
+                                Term::bool(false).trace(Term::string("a.idx == x ? False")),
+                            )
                             .lambda("x")
                             .apply(
                                 Term::un_i_data()
@@ -4230,6 +4235,105 @@ fn expect_head_cast_data_with_tail() {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
             ])),
+        false,
+    );
+}
+
+#[test]
+fn init_3() {
+    let src = r#"
+      
+      pub fn init(self: List<a>) -> Option<List<a>> {
+        when self is {
+          [] -> None
+          _ -> Some(do_init(self))
+        }
+      }
+      
+      fn do_init(self: List<a>) -> List<a> {
+        when self is {
+          [] -> fail @"unreachable"
+          [_] ->
+            []
+          [x, ..xs] ->
+            [x, ..do_init(xs)]
+        }
+      }
+      
+      test init_3() {
+        init([1, 2, 3, 4]) == Some([1, 2, 3])
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("init")
+                    .lambda("init")
+                    .apply(
+                        Term::var("self")
+                            .delayed_choose_list(
+                                Term::data(Data::constr(1, vec![])),
+                                Term::constr_data().apply(Term::integer(0.into())).apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::list_data().apply(
+                                                Term::var("do_init").apply(Term::var("self")),
+                                            ),
+                                        )
+                                        .apply(Term::empty_list()),
+                                ),
+                            )
+                            .lambda("self"),
+                    )
+                    .lambda("do_init")
+                    .apply(Term::var("do_init").apply(Term::var("do_init")))
+                    .lambda("do_init")
+                    .apply(
+                        Term::var("self")
+                            .delayed_choose_list(
+                                Term::Error.trace(Term::string("unreachable")),
+                                Term::var("tail_1")
+                                    .delayed_choose_list(
+                                        Term::empty_list(),
+                                        Term::mk_cons()
+                                            .apply(Term::i_data().apply(Term::var("x")))
+                                            .apply(
+                                                Term::var("do_init")
+                                                    .apply(Term::var("do_init"))
+                                                    .apply(Term::var("xs")),
+                                            )
+                                            .lambda("xs")
+                                            .apply(Term::tail_list().apply(Term::var("self")))
+                                            .lambda("x")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("self")),
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("tail_1")
+                                    .apply(Term::tail_list().apply(Term::var("self"))),
+                            )
+                            .lambda("self")
+                            .lambda("do_init"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
+                        Constant::Data(Data::integer(4.into())),
+                    ])),
+            )
+            .apply(Term::data(Data::constr(
+                0,
+                vec![Data::list(vec![
+                    Data::integer(1.into()),
+                    Data::integer(2.into()),
+                    Data::integer(3.into()),
+                ])],
+            ))),
         false,
     );
 }
