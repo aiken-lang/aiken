@@ -181,13 +181,15 @@ fn inline_direct_reduce(term: &mut Term<Name>) {
             inline_direct_reduce(func);
             inline_direct_reduce(arg);
 
-            let Term::Lambda { parameter_name, body } = func
-            else{
+            let Term::Lambda {
+                parameter_name,
+                body,
+            } = func
+            else {
                 return;
             };
 
-            let Term::Var(name) = body.as_ref()
-            else {
+            let Term::Var(name) = body.as_ref() else {
                 return;
             };
 
@@ -220,18 +222,23 @@ fn inline_identity_reduce(term: &mut Term<Name>) {
             inline_identity_reduce(func);
             inline_identity_reduce(arg);
 
-            let Term::Lambda { parameter_name, body } = func
+            let Term::Lambda {
+                parameter_name,
+                body,
+            } = func
             else {
                 return;
             };
 
-            let Term::Lambda { parameter_name: identity_name, body: identity_body } = arg
+            let Term::Lambda {
+                parameter_name: identity_name,
+                body: identity_body,
+            } = arg
             else {
                 return;
             };
 
-            let Term::Var(identity_var) = Rc::make_mut(identity_body)
-            else {
+            let Term::Var(identity_var) = Rc::make_mut(identity_body) else {
                 return;
             };
 
@@ -316,10 +323,7 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
             wrap_data_reduce(Rc::make_mut(body));
         }
         Term::Apply { function, argument } => {
-            let Term::Builtin(
-                first_action
-            ) = function.as_ref()
-            else {
+            let Term::Builtin(first_action) = function.as_ref() else {
                 wrap_data_reduce(Rc::make_mut(function));
                 wrap_data_reduce(Rc::make_mut(argument));
                 return;
@@ -330,8 +334,7 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
                 argument: inner_arg,
             } = Rc::make_mut(argument)
             {
-                let Term::Builtin(second_action) = inner_func.as_ref()
-                else {
+                let Term::Builtin(second_action) = inner_func.as_ref() else {
                     wrap_data_reduce(Rc::make_mut(argument));
                     return;
                 };
@@ -564,9 +567,11 @@ fn replace_identity_usage(term: &Term<Name>, original: Rc<Name>) -> Term<Name> {
             let func = replace_identity_usage(func, original.clone());
             let arg = replace_identity_usage(arg, original.clone());
 
-            let Term::Var(f) = function.as_ref()
-            else {
-                return Term::Apply { function: func.into(), argument: arg.into() }
+            let Term::Var(f) = function.as_ref() else {
+                return Term::Apply {
+                    function: func.into(),
+                    argument: arg.into(),
+                };
             };
 
             if f.as_ref() == original.as_ref() {

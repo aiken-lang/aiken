@@ -712,8 +712,12 @@ impl DefaultFunction {
                 Ok(value)
             }
             DefaultFunction::HeadList => {
-                let c @ Value::Con(inner) = &args[0] else {unreachable!()};
-                let Constant::ProtoList(_, list) = inner.as_ref() else {unreachable!()};
+                let c @ Value::Con(inner) = &args[0] else {
+                    unreachable!()
+                };
+                let Constant::ProtoList(_, list) = inner.as_ref() else {
+                    unreachable!()
+                };
 
                 if list.is_empty() {
                     Err(Error::EmptyList(c.clone()))
@@ -724,8 +728,12 @@ impl DefaultFunction {
                 }
             }
             DefaultFunction::TailList => {
-                let c @ Value::Con(inner) = &args[0] else {unreachable!()};
-                let Constant::ProtoList(r#type, list) = inner.as_ref() else {unreachable!()};
+                let c @ Value::Con(inner) = &args[0] else {
+                    unreachable!()
+                };
+                let Constant::ProtoList(r#type, list) = inner.as_ref() else {
+                    unreachable!()
+                };
 
                 if list.is_empty() {
                     Err(Error::EmptyList(c.clone()))
@@ -784,12 +792,9 @@ impl DefaultFunction {
                 let mut map = Vec::new();
 
                 for item in list {
-                    let Constant::ProtoPair(
-                        Type::Data,
-                        Type::Data,
-                        left,
-                        right
-                    ) = item else {unreachable!()};
+                    let Constant::ProtoPair(Type::Data, Type::Data, left, right) = item else {
+                        unreachable!()
+                    };
 
                     match (left.as_ref(), right.as_ref()) {
                         (Constant::Data(key), Constant::Data(value)) => {
@@ -838,7 +843,7 @@ impl DefaultFunction {
                         return Err(Error::DeserialisationError(
                             "UnConstrData".to_string(),
                             v.clone(),
-                        ))
+                        ));
                     };
 
                     let constant = Constant::ProtoPair(
@@ -876,7 +881,7 @@ impl DefaultFunction {
                         return Err(Error::DeserialisationError(
                             "UnMapData".to_string(),
                             v.clone(),
-                        ))
+                        ));
                     };
 
                     let constant = Constant::ProtoList(
@@ -909,7 +914,7 @@ impl DefaultFunction {
                         return Err(Error::DeserialisationError(
                             "UnListData".to_string(),
                             v.clone(),
-                        ))
+                        ));
                     };
 
                     let value = Value::list(
@@ -933,7 +938,7 @@ impl DefaultFunction {
                         return Err(Error::DeserialisationError(
                             "UnIData".to_string(),
                             v.clone(),
-                        ))
+                        ));
                     };
 
                     let value = Value::integer(from_pallas_bigint(b));
@@ -951,7 +956,7 @@ impl DefaultFunction {
                         return Err(Error::DeserialisationError(
                             "UnBData".to_string(),
                             v.clone(),
-                        ))
+                        ));
                     };
 
                     let value = Value::byte_string(b.to_vec());
@@ -964,18 +969,28 @@ impl DefaultFunction {
                 )),
             },
             DefaultFunction::EqualsData => {
-                let (Value::Con(inner1), Value::Con(inner2)) = (&args[0], &args[1]) else {unreachable!()};
+                let (Value::Con(inner1), Value::Con(inner2)) = (&args[0], &args[1]) else {
+                    unreachable!()
+                };
 
-                let Constant::Data(d1) = inner1.as_ref() else {unreachable!()};
-                let Constant::Data(d2) = inner2.as_ref() else {unreachable!()};
+                let Constant::Data(d1) = inner1.as_ref() else {
+                    unreachable!()
+                };
+                let Constant::Data(d2) = inner2.as_ref() else {
+                    unreachable!()
+                };
 
                 let value = Value::bool(d1.eq(d2));
 
                 Ok(value)
             }
             DefaultFunction::SerialiseData => {
-                let Value::Con(inner) = &args[0] else {unreachable!()};
-                let Constant::Data(d) = inner.as_ref() else {unreachable!()};
+                let Value::Con(inner) = &args[0] else {
+                    unreachable!()
+                };
+                let Constant::Data(d) = inner.as_ref() else {
+                    unreachable!()
+                };
 
                 let serialized_data = plutus_data_to_bytes(d).unwrap();
 
@@ -984,10 +999,16 @@ impl DefaultFunction {
                 Ok(value)
             }
             DefaultFunction::MkPairData => {
-                let (Value::Con(inner1), Value::Con(inner2)) = (&args[0], &args[1]) else {unreachable!()};
+                let (Value::Con(inner1), Value::Con(inner2)) = (&args[0], &args[1]) else {
+                    unreachable!()
+                };
 
-                let Constant::Data(d1) = inner1.as_ref() else {unreachable!()};
-                let Constant::Data(d2) = inner2.as_ref() else {unreachable!()};
+                let Constant::Data(d1) = inner1.as_ref() else {
+                    unreachable!()
+                };
+                let Constant::Data(d2) = inner2.as_ref() else {
+                    unreachable!()
+                };
 
                 let constant = Constant::ProtoPair(
                     Type::Data,
