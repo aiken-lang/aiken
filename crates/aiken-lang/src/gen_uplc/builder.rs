@@ -597,9 +597,7 @@ pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
         | AirTree::Expression(AirExpression::TupleClause { indices, .. }) => {
             indices.iter().map(|(_, name)| name).cloned().collect()
         }
-        AirTree::Expression(AirExpression::Fn { params, .. }) => {
-            params.iter().map(|name| name).cloned().collect()
-        }
+        AirTree::Expression(AirExpression::Fn { params, .. }) => params.to_vec(),
         AirTree::Statement {
             statement: AirStatement::ListAccessor { names, .. },
             ..
@@ -660,13 +658,13 @@ pub fn is_recursive_function_call<'a>(
             }
         }
     }
-    return (false, None);
+    (false, None)
 }
 
 pub fn identify_recursive_static_params(
     air_tree: &mut AirTree,
     tree_path: &TreePath,
-    func_params: &Vec<String>,
+    func_params: &[String],
     func_key: &FunctionAccessKey,
     variant: &String,
     shadowed_parameters: &mut HashMap<String, TreePath>,
@@ -715,9 +713,9 @@ pub fn modify_self_calls(
     body: &mut AirTree,
     func_key: &FunctionAccessKey,
     variant: &String,
-    func_params: &Vec<String>,
+    func_params: &[String],
 ) -> Vec<String> {
-    let mut potential_recursive_statics = func_params.clone();
+    let mut potential_recursive_statics = func_params.to_vec();
     // identify which parameters are recursively nonstatic (i.e. get modified before the self-call)
     // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
     // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
@@ -726,7 +724,7 @@ pub fn modify_self_calls(
         identify_recursive_static_params(
             air_tree,
             tree_path,
-            &func_params,
+            func_params,
             func_key,
             variant,
             &mut shadowed_parameters,

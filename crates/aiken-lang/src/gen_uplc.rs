@@ -2708,7 +2708,7 @@ impl<'a> CodeGenerator<'a> {
 
             if !params_empty {
                 let recursive_nonstatics = if is_recursive {
-                    modify_self_calls(&mut body, key, variant, &func_params)
+                    modify_self_calls(&mut body, key, variant, func_params)
                 } else {
                     func_params.clone()
                 };
