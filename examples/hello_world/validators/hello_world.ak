@@ -21,32 +21,3 @@ validator {
     must_say_hello && must_be_signed
   }
 }
-
-type ABC {
-  a: ByteArray,
-  b: Int,
-  c: ByteArray,
-}
-
-type XYZ {
-  a: ByteArray,
-  b: ByteArray,
-  c: ByteArray,
-  d: Int,
-  e: ABC,
-}
-
-fn recursive(a: ByteArray, b: Int, c: XYZ, d: Int, e: Int) -> ByteArray {
-  if c.e.a == "a" {
-    "d"
-  } else if b == 0 {
-    a
-  } else {
-    recursive(a, b - 1, c, d, e)
-  }
-}
-
-test hah() {
-  expect "a" == recursive("a", 30, XYZ("", "", "", 1, ABC("", 1, "")), 2, 5)
-  True
-}

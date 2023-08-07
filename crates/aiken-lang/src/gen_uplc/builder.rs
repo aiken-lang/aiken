@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc, collections::HashMap};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -586,18 +586,33 @@ pub fn erase_opaque_type_operations(
 /// Determine whether this air_tree node introduces any shadowing over `potential_matches`
 pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
     match air_tree {
-        AirTree::Statement { statement: AirStatement::Let { name, .. }, .. } => vec![name.clone()],
-        AirTree::Statement { statement: AirStatement::TupleGuard { indices, .. }, .. } |
-        AirTree::Expression(AirExpression::TupleClause { indices, .. }) => {
+        AirTree::Statement {
+            statement: AirStatement::Let { name, .. },
+            ..
+        } => vec![name.clone()],
+        AirTree::Statement {
+            statement: AirStatement::TupleGuard { indices, .. },
+            ..
+        }
+        | AirTree::Expression(AirExpression::TupleClause { indices, .. }) => {
             indices.iter().map(|(_, name)| name).cloned().collect()
-        },
+        }
         AirTree::Expression(AirExpression::Fn { params, .. }) => {
             params.iter().map(|name| name).cloned().collect()
-        },
-        AirTree::Statement { statement: AirStatement::ListAccessor { names, .. }, ..} => {
-            names.clone()
         }
-        AirTree::Statement { statement: AirStatement::ListExpose { tail, tail_head_names, .. }, .. } => {
+        AirTree::Statement {
+            statement: AirStatement::ListAccessor { names, .. },
+            ..
+        } => names.clone(),
+        AirTree::Statement {
+            statement:
+                AirStatement::ListExpose {
+                    tail,
+                    tail_head_names,
+                    ..
+                },
+            ..
+        } => {
             let mut ret = vec![];
             if let Some((_, head)) = tail {
                 ret.push(head.clone())
@@ -607,19 +622,25 @@ pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
                 ret.push(name.clone());
             }
             ret
-        },
-        AirTree::Statement { statement: AirStatement::TupleAccessor { names, .. }, .. } => {
-            names.clone()
-        },
-        AirTree::Statement { statement: AirStatement::FieldsExpose { indices, .. }, ..} => {
-            indices.iter().map(|(_, name, _)| name).cloned().collect()
         }
-        _ => vec![]
+        AirTree::Statement {
+            statement: AirStatement::TupleAccessor { names, .. },
+            ..
+        } => names.clone(),
+        AirTree::Statement {
+            statement: AirStatement::FieldsExpose { indices, .. },
+            ..
+        } => indices.iter().map(|(_, name, _)| name).cloned().collect(),
+        _ => vec![],
     }
 }
 
 /// Determine whether a function is recursive, and if so, get the arguments
-pub fn is_recursive_function_call<'a>(air_tree: &'a AirTree, func_key: &FunctionAccessKey, variant: &String) -> (bool, Option<&'a Vec<AirTree>>) {
+pub fn is_recursive_function_call<'a>(
+    air_tree: &'a AirTree,
+    func_key: &FunctionAccessKey,
+    variant: &String,
+) -> (bool, Option<&'a Vec<AirTree>>) {
     if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
         if let AirTree::Expression(AirExpression::Var {
             constructor:
@@ -629,15 +650,17 @@ pub fn is_recursive_function_call<'a>(air_tree: &'a AirTree, func_key: &Function
                 },
             variant_name,
             ..
-        }) = func.as_ref() {
+        }) = func.as_ref()
+        {
             if name == &func_key.function_name
                 && module == &func_key.module_name
-                && variant == variant_name {
-                    return (true, Some(args))
+                && variant == variant_name
+            {
+                return (true, Some(args));
             }
         }
     }
-    return (false, None)
+    return (false, None);
 }
 
 pub fn identify_recursive_static_params(
@@ -647,7 +670,7 @@ pub fn identify_recursive_static_params(
     func_key: &FunctionAccessKey,
     variant: &String,
     shadowed_parameters: &mut HashMap<String, TreePath>,
-    potential_recursive_statics: &mut Vec<String>
+    potential_recursive_statics: &mut Vec<String>,
 ) {
     // Find whether any of the potential recursive statics get shadowed (because even if we pass in the same referenced name, it might not be static)
     for introduced_variable in find_introduced_variables(air_tree) {
@@ -658,7 +681,10 @@ pub fn identify_recursive_static_params(
     // Otherwise, if this is a recursive call site, disqualify anything that is different (or the same, but shadowed)
     if let (true, Some(args)) = is_recursive_function_call(air_tree, func_key, variant) {
         for (param, arg) in func_params.iter().zip(args) {
-            if let Some((idx, _)) = potential_recursive_statics.iter().find_position(|&p| p == param) {
+            if let Some((idx, _)) = potential_recursive_statics
+                .iter()
+                .find_position(|&p| p == param)
+            {
                 // Check if we pass something different in this recursive call site
                 // by different, we mean
                 // - a variable that is bound to a different name
@@ -667,13 +693,14 @@ pub fn identify_recursive_static_params(
                 let param_is_different = match arg {
                     AirTree::Expression(AirExpression::Var { name, .. }) => {
                         // "shadowed in an ancestor scope" means "the definition scope is a prefix of our scope"
-                        name != param || if let Some(p) = shadowed_parameters.get(param) {
-                            p.common_ancestor(tree_path) == *p
-                        } else {
-                            false
-                        }
-                    },
-                    _ => true
+                        name != param
+                            || if let Some(p) = shadowed_parameters.get(param) {
+                                p.common_ancestor(tree_path) == *p
+                            } else {
+                                false
+                            }
+                    }
+                    _ => true,
                 };
                 // If so, then we disqualify this parameter from being a recursive static parameter
                 if param_is_different {
@@ -684,14 +711,27 @@ pub fn identify_recursive_static_params(
     }
 }
 
-pub fn modify_self_calls(body: &mut AirTree, func_key: &FunctionAccessKey, variant: &String, func_params: &Vec<String>) -> Vec<String> {
+pub fn modify_self_calls(
+    body: &mut AirTree,
+    func_key: &FunctionAccessKey,
+    variant: &String,
+    func_params: &Vec<String>,
+) -> Vec<String> {
     let mut potential_recursive_statics = func_params.clone();
     // identify which parameters are recursively nonstatic (i.e. get modified before the self-call)
     // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
     // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
     let mut shadowed_parameters: HashMap<String, TreePath> = HashMap::new();
     body.traverse_tree_with(&mut |air_tree: &mut AirTree, tree_path| {
-        identify_recursive_static_params(air_tree, tree_path, &func_params, func_key, variant, &mut shadowed_parameters, &mut potential_recursive_statics);
+        identify_recursive_static_params(
+            air_tree,
+            tree_path,
+            &func_params,
+            func_key,
+            variant,
+            &mut shadowed_parameters,
+            &mut potential_recursive_statics,
+        );
     });
 
     // Find the index of any recursively static parameters,
@@ -733,7 +773,11 @@ pub fn modify_self_calls(body: &mut AirTree, func_key: &FunctionAccessKey, varia
             }
         }
     });
-    let recursive_nonstatics = func_params.iter().filter(|p| !potential_recursive_statics.contains(p)).cloned().collect();
+    let recursive_nonstatics = func_params
+        .iter()
+        .filter(|p| !potential_recursive_statics.contains(p))
+        .cloned()
+        .collect();
     recursive_nonstatics
 }
 
