@@ -3897,30 +3897,36 @@ fn foldl_type_mismatch() {
             .apply(
                 Term::var("foldl")
                     .lambda("foldl")
-                    .apply(Term::var("foldl").apply(Term::var("foldl")))
-                    .lambda("foldl")
                     .apply(
-                        Term::var("self")
-                            .delayed_choose_list(
-                                Term::var("zero"),
-                                Term::var("foldl")
-                                    .apply(Term::var("foldl"))
-                                    .apply(Term::var("xs"))
-                                    .apply(Term::var("with"))
-                                    .apply(
-                                        Term::var("with")
-                                            .apply(Term::var("x"))
-                                            .apply(Term::var("zero")),
+                        Term::var("foldl")
+                            .apply(Term::var("foldl"))
+                            .apply(Term::var("self"))
+                            .apply(Term::var("zero"))
+                            .lambda("foldl")
+                            .apply(
+                                Term::var("self")
+                                    .delayed_choose_list(
+                                        Term::var("zero"),
+                                        Term::var("foldl")
+                                            .apply(Term::var("foldl"))
+                                            .apply(Term::var("xs"))
+                                            .apply(
+                                                Term::var("with")
+                                                    .apply(Term::var("x"))
+                                                    .apply(Term::var("zero")),
+                                            )
+                                            .lambda("xs")
+                                            .apply(Term::tail_list().apply(Term::var("self")))
+                                            .lambda("x")
+                                            .apply(Term::head_list().apply(Term::var("self"))),
                                     )
-                                    .lambda("xs")
-                                    .apply(Term::tail_list().apply(Term::var("self")))
-                                    .lambda("x")
-                                    .apply(Term::head_list().apply(Term::var("self"))),
+                                    .lambda("zero")
+                                    .lambda("self")
+                                    .lambda("foldl"),
                             )
                             .lambda("zero")
                             .lambda("with")
-                            .lambda("self")
-                            .lambda("foldl"),
+                            .lambda("self"),
                     )
                     .apply(Term::var("outputs"))
                     .apply(
@@ -4230,24 +4236,30 @@ fn expect_head_cast_data_with_tail() {
             .apply(
                 Term::var("expect_on_list")
                     .lambda("expect_on_list")
-                    .apply(Term::var("expect_on_list").apply(Term::var("expect_on_list")))
-                    .lambda("expect_on_list")
                     .apply(
-                        Term::var("list_to_check")
-                            .delayed_choose_list(
-                                Term::unit(),
-                                Term::var("expect_on_list")
-                                    .apply(Term::var("expect_on_list"))
-                                    .apply(Term::tail_list().apply(Term::var("list_to_check")))
-                                    .apply(Term::var("check_with"))
-                                    .lambda("_")
-                                    .apply(Term::var("check_with").apply(
-                                        Term::head_list().apply(Term::var("list_to_check")),
-                                    )),
+                        Term::var("expect_on_list")
+                            .apply(Term::var("expect_on_list"))
+                            .apply(Term::var("list_to_check"))
+                            .lambda("expect_on_list")
+                            .apply(
+                                Term::var("list_to_check")
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::var("expect_on_list")
+                                            .apply(Term::var("expect_on_list"))
+                                            .apply(
+                                                Term::tail_list().apply(Term::var("list_to_check")),
+                                            )
+                                            .lambda("_")
+                                            .apply(Term::var("check_with").apply(
+                                                Term::head_list().apply(Term::var("list_to_check")),
+                                            )),
+                                    )
+                                    .lambda("list_to_check")
+                                    .lambda("expect_on_list"),
                             )
                             .lambda("check_with")
-                            .lambda("list_to_check")
-                            .lambda("expect_on_list"),
+                            .lambda("list_to_check"),
                     )
                     .apply(Term::var("tail_2"))
                     .apply(
