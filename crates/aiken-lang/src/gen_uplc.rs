@@ -2835,8 +2835,6 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     dependent_params.clone()
                 };
-                
-
 
                 dep_insertions.push(AirTree::define_func(
                     &dep_key.function_name,
@@ -3747,13 +3745,15 @@ impl<'a> CodeGenerator<'a> {
                         // If we have parameters that remain static in each recursive call,
                         // we can construct an *outer* function to take those in
                         // and simplify the recursive part to only accept the non-static arguments
-                        let mut recursive_func_body = Term::var(&func_name).apply(Term::var(&func_name));
+                        let mut recursive_func_body =
+                            Term::var(&func_name).apply(Term::var(&func_name));
                         for param in recursive_nonstatic_params.iter() {
                             recursive_func_body = recursive_func_body.apply(Term::var(param));
                         }
 
                         // Then construct an outer function with *all* parameters, not just the nonstatic ones.
-                        let mut outer_func_body = recursive_func_body.lambda(&func_name).apply(func_body);
+                        let mut outer_func_body =
+                            recursive_func_body.lambda(&func_name).apply(func_body);
 
                         // Now, add *all* parameters, so that other call sites don't know the difference
                         for param in params.iter().rev() {
