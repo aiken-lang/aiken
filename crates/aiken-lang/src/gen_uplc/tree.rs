@@ -1386,99 +1386,103 @@ impl AirTree {
     ) {
         let mut index_count = IndexCounter::new();
         tree_path.push(current_depth, depth_index);
+
+        if let AirTree::Statement { statement, .. } = self {
+            match statement {
+                AirStatement::Let { value, .. } => {
+                    value.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::DefineFunc { func_body, .. } => {
+                    func_body.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::AssertConstr { constr, .. } => {
+                    constr.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::AssertBool { value, .. } => {
+                    value.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::ClauseGuard { pattern, .. } => {
+                    pattern.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::ListClauseGuard { .. } => {}
+                AirStatement::TupleGuard { .. } => {}
+                AirStatement::FieldsExpose { record, .. } => {
+                    record.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::ListAccessor { list, .. } => {
+                    list.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::ListExpose { .. } => {}
+                AirStatement::TupleAccessor { tuple, .. } => {
+                    tuple.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::NoOp => {}
+                AirStatement::FieldsEmpty { constr } => {
+                    constr.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+                AirStatement::ListEmpty { list } => {
+                    list.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                    );
+                }
+            };
+        }
+
         with(self, tree_path);
+
         match self {
             AirTree::Statement {
-                statement,
                 hoisted_over: Some(hoisted_over),
+                ..
             } => {
-                match statement {
-                    AirStatement::Let { value, .. } => {
-                        value.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::DefineFunc { func_body, .. } => {
-                        func_body.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::AssertConstr { constr, .. } => {
-                        constr.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::AssertBool { value, .. } => {
-                        value.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::ClauseGuard { pattern, .. } => {
-                        pattern.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::ListClauseGuard { .. } => {}
-                    AirStatement::TupleGuard { .. } => {}
-                    AirStatement::FieldsExpose { record, .. } => {
-                        record.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::ListAccessor { list, .. } => {
-                        list.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::ListExpose { .. } => {}
-                    AirStatement::TupleAccessor { tuple, .. } => {
-                        tuple.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::NoOp => {}
-                    AirStatement::FieldsEmpty { constr } => {
-                        constr.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                    AirStatement::ListEmpty { list } => {
-                        list.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                        );
-                    }
-                };
-
                 hoisted_over.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
