@@ -66,56 +66,86 @@ impl Value {
     }
 
     pub(super) fn unwrap_integer(&self) -> &BigInt {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::Integer(integer) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::Integer(integer) = inner.as_ref() else {
+            unreachable!()
+        };
 
         integer
     }
 
     pub(super) fn unwrap_byte_string(&self) -> &Vec<u8> {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::ByteString(byte_string) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::ByteString(byte_string) = inner.as_ref() else {
+            unreachable!()
+        };
 
         byte_string
     }
 
     pub(super) fn unwrap_string(&self) -> &String {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::String(string) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::String(string) = inner.as_ref() else {
+            unreachable!()
+        };
 
         string
     }
 
     pub(super) fn unwrap_bool(&self) -> &bool {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::Bool(condition) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::Bool(condition) = inner.as_ref() else {
+            unreachable!()
+        };
 
         condition
     }
 
     pub(super) fn unwrap_pair(&self) -> (&Type, &Type, &Rc<Constant>, &Rc<Constant>) {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::ProtoPair(t1, t2, first, second) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::ProtoPair(t1, t2, first, second) = inner.as_ref() else {
+            unreachable!()
+        };
 
         (t1, t2, first, second)
     }
 
     pub(super) fn unwrap_list(&self) -> (&Type, &Vec<Constant>) {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::ProtoList(t, list) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::ProtoList(t, list) = inner.as_ref() else {
+            unreachable!()
+        };
 
         (t, list)
     }
 
     pub(super) fn unwrap_constant(&self) -> &Constant {
-        let Value::Con(item) = self else {unreachable!()};
+        let Value::Con(item) = self else {
+            unreachable!()
+        };
 
         item.as_ref()
     }
 
     pub(super) fn unwrap_data_list(&self) -> &Vec<Constant> {
-        let Value::Con(inner) = self else {unreachable!()};
-        let Constant::ProtoList(Type::Data, list) = inner.as_ref() else {unreachable!()};
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+        let Constant::ProtoList(Type::Data, list) = inner.as_ref() else {
+            unreachable!()
+        };
 
         list
     }

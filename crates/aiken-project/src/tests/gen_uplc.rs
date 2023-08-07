@@ -35,9 +35,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
         true,
     );
 
-    let Some(checked_module) = modules.values().next()
-    else {
-      unreachable!("There's got to be one right?")
+    let Some(checked_module) = modules.values().next() else {
+        unreachable!("There's got to be one right?")
     };
 
     let mut scripts = vec![];

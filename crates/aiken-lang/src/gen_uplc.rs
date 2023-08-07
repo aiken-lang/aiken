@@ -346,7 +346,9 @@ impl<'a> CodeGenerator<'a> {
                     let type_info = self.module_types.get(module_name).unwrap();
                     let value = type_info.values.get(name).unwrap();
 
-                    let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant else {unreachable!("Missing module function definition")};
+                    let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant else {
+                        unreachable!("Missing module function definition")
+                    };
 
                     let fun_arg_types = fun
                         .tipo()
@@ -589,8 +591,10 @@ impl<'a> CodeGenerator<'a> {
                         )
                     } else {
                         let ValueConstructorVariant::ModuleFn {
-                            builtin: Some(builtin), ..
-                        } = &value.variant else {
+                            builtin: Some(builtin),
+                            ..
+                        } = &value.variant
+                        else {
                             unreachable!("Didn't find the function definition.")
                         };
 
@@ -1665,8 +1669,7 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
                     ));
 
-                    let Pattern::List { elements, tail, .. } = &clause.pattern
-                    else {
+                    let Pattern::List { elements, tail, .. } = &clause.pattern else {
                         let mut next_clause_props = ClauseProperties {
                             clause_var_name: props.clause_var_name.clone(),
                             complex_clause: false,
@@ -1811,7 +1814,13 @@ impl<'a> CodeGenerator<'a> {
                     let (_, pattern_assigns) =
                         self.clause_pattern(&clause.pattern, subject_tipo, props);
 
-                    let ClauseProperties{ specific_clause: SpecificClause::TupleClause { defined_tuple_indices }, ..} = props
+                    let ClauseProperties {
+                        specific_clause:
+                            SpecificClause::TupleClause {
+                                defined_tuple_indices,
+                            },
+                        ..
+                    } = props
                     else {
                         unreachable!()
                     };
@@ -1914,7 +1923,9 @@ impl<'a> CodeGenerator<'a> {
                     complex_clause,
                     ..
                 } = props
-                else { unreachable!() };
+                else {
+                    unreachable!()
+                };
 
                 let list_elem_types = subject_tipo.get_inner_types();
 
@@ -2341,11 +2352,12 @@ impl<'a> CodeGenerator<'a> {
                                     current_index,
                                     defined_tails,
                                     checked_index: _,
-
                                 },
                             ..
                         } = props
-                        else { unreachable!() };
+                        else {
+                            unreachable!()
+                        };
 
                         defined_tails.push(props.original_subject_name.clone());
 
@@ -2817,9 +2829,14 @@ impl<'a> CodeGenerator<'a> {
 
             // In the case of zero args, we need to hoist the dependency function to the top of the zero arg function
             if &dep_path.common_ancestor(func_path) == func_path || params_empty {
-                let UserFunction::Function { body: mut dep_air_tree, deps: dependency_deps, params: dependent_params } =
-                        dep_function.clone()
-                    else { unreachable!() };
+                let UserFunction::Function {
+                    body: mut dep_air_tree,
+                    deps: dependency_deps,
+                    params: dependent_params,
+                } = dep_function.clone()
+                else {
+                    unreachable!()
+                };
 
                 if dependent_params.is_empty() {
                     // continue for zero arg functions. They are treated like global hoists.
@@ -2869,8 +2886,9 @@ impl<'a> CodeGenerator<'a> {
         current_function_deps: &mut Vec<(FunctionAccessKey, String)>,
         validator_tree_path: &mut TreePath,
     ) {
-        let Some((depth, index)) = validator_tree_path.pop()
-        else { return };
+        let Some((depth, index)) = validator_tree_path.pop() else {
+            return;
+        };
 
         validator_tree_path.push(depth, index);
 
@@ -2925,7 +2943,9 @@ impl<'a> CodeGenerator<'a> {
                         builtin: None,
                         ..
                     } = &constructor.variant
-                    else { return };
+                    else {
+                        return;
+                    };
 
                     let function_var_tipo = &constructor.tipo;
 
@@ -2936,8 +2956,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let function_def = self.functions.get(&generic_function_key);
 
-                    let Some(function_def) = function_def
-                    else {
+                    let Some(function_def) = function_def else {
                         let code_gen_func = self
                             .code_gen_functions
                             .get(&generic_function_key.function_name)
@@ -2955,8 +2974,9 @@ impl<'a> CodeGenerator<'a> {
                             let (path, _) = func_variants.get_mut("").unwrap();
                             *path = path.common_ancestor(tree_path);
                         } else {
-                            let CodeGenFunction::Function{ body, params } = code_gen_func
-                            else { unreachable!() };
+                            let CodeGenFunction::Function { body, params } = code_gen_func else {
+                                unreachable!()
+                            };
 
                             let mut function_variant_path = IndexMap::new();
 
