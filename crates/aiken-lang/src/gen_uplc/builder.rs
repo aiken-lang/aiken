@@ -100,7 +100,7 @@ pub struct ClauseProperties {
 pub enum SpecificClause {
     ConstrClause,
     ListClause {
-        current_index: i64,
+        defined_tails_index: i64,
         defined_tails: Vec<String>,
         checked_index: i64,
     },
@@ -119,7 +119,7 @@ impl ClauseProperties {
                 final_clause: false,
                 needs_constr_var: false,
                 specific_clause: SpecificClause::ListClause {
-                    current_index: 0,
+                    defined_tails_index: 0,
                     defined_tails: vec![subject_name],
                     checked_index: -1,
                 },
@@ -161,7 +161,7 @@ impl ClauseProperties {
                 final_clause,
                 needs_constr_var: false,
                 specific_clause: SpecificClause::ListClause {
-                    current_index: 0,
+                    defined_tails_index: 0,
                     defined_tails: vec![],
                     checked_index: -1,
                 },

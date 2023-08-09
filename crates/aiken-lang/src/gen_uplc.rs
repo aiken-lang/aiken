@@ -1654,7 +1654,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 SpecificClause::ListClause {
-                    current_index,
+                    defined_tails_index,
                     defined_tails,
                     checked_index,
                 } => {
@@ -1677,7 +1677,7 @@ impl<'a> CodeGenerator<'a> {
                             original_subject_name: props.original_subject_name.clone(),
                             final_clause: false,
                             specific_clause: SpecificClause::ListClause {
-                                current_index: *current_index,
+                                defined_tails_index: *defined_tails_index,
                                 defined_tails: defined_tails.clone(),
                                 checked_index: *checked_index,
                             },
@@ -1723,19 +1723,19 @@ impl<'a> CodeGenerator<'a> {
                                 _ => 0,
                             };
 
-                            if (*current_index as usize) < next_elements_len {
-                                *current_index += 1;
+                            if (*defined_tails_index as usize) < next_elements_len {
+                                *defined_tails_index += 1;
 
                                 defined_tails.push(format!(
                                     "tail_index_{}_span_{}_{}",
-                                    *current_index,
+                                    *defined_tails_index,
                                     next_clause.pattern.location().start,
                                     next_clause.pattern.location().end
                                 ));
 
                                 Some(format!(
                                     "tail_index_{}_span_{}_{}",
-                                    *current_index,
+                                    *defined_tails_index,
                                     next_clause.pattern.location().start,
                                     next_clause.pattern.location().end
                                 ))
@@ -1767,7 +1767,7 @@ impl<'a> CodeGenerator<'a> {
                         original_subject_name: props.original_subject_name.clone(),
                         final_clause: false,
                         specific_clause: SpecificClause::ListClause {
-                            current_index: *current_index,
+                            defined_tails_index: *defined_tails_index,
                             defined_tails: defined_tails.clone(),
                             checked_index: *checked_index,
                         },
@@ -2349,7 +2349,7 @@ impl<'a> CodeGenerator<'a> {
                         let ClauseProperties {
                             specific_clause:
                                 SpecificClause::ListClause {
-                                    current_index,
+                                    defined_tails_index: current_index,
                                     defined_tails,
                                     checked_index: _,
                                 },
