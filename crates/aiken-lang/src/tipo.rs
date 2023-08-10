@@ -39,6 +39,7 @@ pub enum Type {
     Fn {
         args: Vec<Arc<Type>>,
         ret: Arc<Type>,
+        is_pure: bool,
     },
 
     /// A type variable. See the contained `TypeVar` enum for more information.
@@ -214,7 +215,7 @@ impl Type {
                 }
                 is_a_generic
             }
-            Type::Fn { args, ret } => {
+            Type::Fn { args, ret, .. } => {
                 let mut is_a_generic = false;
                 for arg in args {
                     is_a_generic = is_a_generic || arg.is_generic();
@@ -256,7 +257,7 @@ impl Type {
         } else if matches!(self.get_uplc_type(), UplcType::Data) {
             match self {
                 Type::App { args, .. } => args.clone(),
-                Type::Fn { args, ret } => {
+                Type::Fn { args, ret, .. } => {
                     let mut args = args.clone();
                     args.push(ret.clone());
                     args

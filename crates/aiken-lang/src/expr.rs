@@ -436,6 +436,7 @@ pub enum UntypedExpr {
         arguments: Vec<Arg<()>>,
         body: Box<Self>,
         return_annotation: Option<Annotation>,
+        is_pure: bool,
     },
 
     List {
@@ -643,6 +644,7 @@ impl UntypedExpr {
                 arguments: holes,
                 body: Box::new(call),
                 return_annotation: None,
+                is_pure: todo!(),
             }
         }
     }

@@ -16,15 +16,17 @@ pub fn parser(
                 .allow_trailing()
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
         )
+        .then(just(Token::Pure).ignored().or_not())
         .then(just(Token::RArrow).ignore_then(annotation()).or_not())
         .then(sequence.delimited_by(just(Token::LeftBrace), just(Token::RightBrace)))
         .map_with_span(
-            |((arguments, return_annotation), body), span| UntypedExpr::Fn {
+            |(((arguments, pure_opt), return_annotation), body), span| UntypedExpr::Fn {
                 arguments,
                 body: Box::new(body),
                 location: span,
                 fn_style: FnStyle::Plain,
                 return_annotation,
+                is_pure: pure_opt.is_some(),
             },
         )
 }

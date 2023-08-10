@@ -242,6 +242,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "type" => Token::Type,
         "when" => Token::When,
         "validator" => Token::Validator,
+        "pure" => Token::Pure,
         _ => {
             if s.chars().next().map_or(false, |c| c.is_uppercase()) {
                 Token::UpName {

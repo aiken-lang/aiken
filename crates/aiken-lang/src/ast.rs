@@ -116,7 +116,8 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "type" => Some(Token::Type),
         "trace" => Some(Token::Trace),
         "test" => Some(Token::Test),
-        "error" => Some(Token::Fail),
+        "error" | "fail" => Some(Token::Fail),
+        "pure" => Some(Token::Pure),
         "validator" => Some(Token::Validator),
         _ => None,
     }
@@ -619,6 +620,7 @@ pub enum Annotation {
         location: Span,
         arguments: Vec<Self>,
         ret: Box<Self>,
+        is_pure: bool,
     },
 
     Var {
@@ -707,11 +709,13 @@ impl Annotation {
                 arguments,
                 ret,
                 location: _,
+                is_pure,
             } => match other {
                 Annotation::Fn {
                     arguments: o_arguments,
                     ret: o_return,
                     location: _,
+                    is_pure: o_is_pure,
                 } => {
                     arguments.len() == o_arguments.len()
                         && arguments
@@ -719,6 +723,7 @@ impl Annotation {
                             .zip(o_arguments)
                             .all(|a| a.0.is_logically_equal(a.1))
                         && ret.is_logically_equal(o_return)
+                        && is_pure == o_is_pure
                 }
                 _ => false,
             },

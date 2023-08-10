@@ -191,7 +191,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude.values.insert(
         "not".to_string(),
         ValueConstructor::public(
-            function(vec![bool()], bool()),
+            function(vec![bool()], bool(), true),
             ValueConstructorVariant::ModuleFn {
                 name: "not".to_string(),
                 field_map: None,
@@ -208,7 +208,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude.values.insert(
         "identity".to_string(),
         ValueConstructor::public(
-            function(vec![identity_var.clone()], identity_var),
+            function(vec![identity_var.clone()], identity_var, true),
             ValueConstructorVariant::ModuleFn {
                 name: "identity".to_string(),
                 field_map: None,
@@ -226,7 +226,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude.values.insert(
         "always".to_string(),
         ValueConstructor::public(
-            function(vec![always_a_var.clone(), always_b_var], always_a_var),
+            function(vec![always_a_var.clone(), always_b_var], always_a_var, true),
             ValueConstructorVariant::ModuleFn {
                 name: "always".to_string(),
                 field_map: None,
@@ -246,13 +246,14 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     let input_type = function(
         vec![flip_a_var.clone(), flip_b_var.clone()],
         flip_c_var.clone(),
+        true,
     );
-    let return_type = function(vec![flip_b_var, flip_a_var], flip_c_var);
+    let return_type = function(vec![flip_b_var, flip_a_var], flip_c_var, true);
 
     prelude.values.insert(
         "flip".to_string(),
         ValueConstructor::public(
-            function(vec![input_type], return_type),
+            function(vec![input_type], return_type, true),
             ValueConstructorVariant::ModuleFn {
                 name: "flip".to_string(),
                 field_map: None,
@@ -344,7 +345,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude.values.insert(
         "Some".to_string(),
         ValueConstructor::public(
-            function(vec![some.clone()], option(some)),
+            function(vec![some.clone()], option(some), true),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Some".to_string(),
@@ -403,183 +404,199 @@ pub fn from_default_function(
     let info = match builtin {
         DefaultFunction::AddInteger
         | DefaultFunction::SubtractInteger
-        | DefaultFunction::MultiplyInteger
-        | DefaultFunction::DivideInteger
-        | DefaultFunction::QuotientInteger
-        | DefaultFunction::RemainderInteger
-        | DefaultFunction::ModInteger => {
-            let tipo = function(vec![int(), int()], int());
+        | DefaultFunction::MultiplyInteger => {
+            let tipo = function(vec![int(), int()], int(), true);
 
             Some((tipo, 2))
         }
 
+        DefaultFunction::DivideInteger
+        | DefaultFunction::QuotientInteger
+        | DefaultFunction::RemainderInteger
+        | DefaultFunction::ModInteger => {
+            let tipo = function(vec![int(), int()], int(), false);
+
+            Some((tipo, 2))
+        }
         DefaultFunction::EqualsInteger
         | DefaultFunction::LessThanInteger
         | DefaultFunction::LessThanEqualsInteger => {
-            let tipo = function(vec![int(), int()], bool());
+            let tipo = function(vec![int(), int()], bool(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::AppendByteString => {
-            let tipo = function(vec![byte_array(), byte_array()], byte_array());
+            let tipo = function(vec![byte_array(), byte_array()], byte_array(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::ConsByteString => {
-            let tipo = function(vec![int(), byte_array()], byte_array());
+            let tipo = function(vec![int(), byte_array()], byte_array(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::SliceByteString => {
-            let tipo = function(vec![int(), int(), byte_array()], byte_array());
+            let tipo = function(vec![int(), int(), byte_array()], byte_array(), true);
 
             Some((tipo, 3))
         }
         DefaultFunction::LengthOfByteString => {
-            let tipo = function(vec![byte_array()], int());
+            let tipo = function(vec![byte_array()], int(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::IndexByteString => {
-            let tipo = function(vec![byte_array(), int()], int());
+            let tipo = function(vec![byte_array(), int()], int(), false);
 
             Some((tipo, 2))
         }
         DefaultFunction::EqualsByteString
         | DefaultFunction::LessThanByteString
         | DefaultFunction::LessThanEqualsByteString => {
-            let tipo = function(vec![byte_array(), byte_array()], bool());
+            let tipo = function(vec![byte_array(), byte_array()], bool(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::Sha2_256 | DefaultFunction::Sha3_256 | DefaultFunction::Blake2b_256 => {
-            let tipo = function(vec![byte_array()], byte_array());
+            let tipo = function(vec![byte_array()], byte_array(), true);
 
             Some((tipo, 1))
         }
 
         DefaultFunction::VerifyEd25519Signature => {
-            let tipo = function(vec![byte_array(), byte_array(), byte_array()], bool());
+            let tipo = function(
+                vec![byte_array(), byte_array(), byte_array()],
+                bool(),
+                false,
+            );
 
             Some((tipo, 3))
         }
 
         DefaultFunction::VerifyEcdsaSecp256k1Signature => {
-            let tipo = function(vec![byte_array(), byte_array(), byte_array()], bool());
+            let tipo = function(
+                vec![byte_array(), byte_array(), byte_array()],
+                bool(),
+                false,
+            );
 
             Some((tipo, 3))
         }
         DefaultFunction::VerifySchnorrSecp256k1Signature => {
-            let tipo = function(vec![byte_array(), byte_array(), byte_array()], bool());
+            let tipo = function(
+                vec![byte_array(), byte_array(), byte_array()],
+                bool(),
+                false,
+            );
 
             Some((tipo, 3))
         }
 
         DefaultFunction::AppendString => {
-            let tipo = function(vec![string(), string()], string());
+            let tipo = function(vec![string(), string()], string(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::EqualsString => {
-            let tipo = function(vec![string(), string()], bool());
+            let tipo = function(vec![string(), string()], bool(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::EncodeUtf8 => {
-            let tipo = function(vec![string()], byte_array());
+            let tipo = function(vec![string()], byte_array(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::DecodeUtf8 => {
-            let tipo = function(vec![byte_array()], string());
+            let tipo = function(vec![byte_array()], string(), false);
 
             Some((tipo, 1))
         }
         DefaultFunction::IfThenElse => {
             let ret = generic_var(id_gen.next());
 
-            let tipo = function(vec![bool(), ret.clone(), ret.clone()], ret);
+            let tipo = function(vec![bool(), ret.clone(), ret.clone()], ret, true);
 
             Some((tipo, 3))
         }
         DefaultFunction::HeadList => {
             let ret = generic_var(id_gen.next());
 
-            let tipo = function(vec![list(ret.clone())], ret);
+            let tipo = function(vec![list(ret.clone())], ret, false);
 
             Some((tipo, 1))
         }
         DefaultFunction::TailList => {
             let ret = list(generic_var(id_gen.next()));
 
-            let tipo = function(vec![ret.clone()], ret);
+            let tipo = function(vec![ret.clone()], ret, false);
 
             Some((tipo, 1))
         }
         DefaultFunction::NullList => {
             let ret = list(generic_var(id_gen.next()));
 
-            let tipo = function(vec![ret], bool());
+            let tipo = function(vec![ret], bool(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::ConstrData => {
-            let tipo = function(vec![int(), list(data())], data());
+            let tipo = function(vec![int(), list(data())], data(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::MapData => {
-            let tipo = function(vec![list(tuple(vec![data(), data()]))], data());
+            let tipo = function(vec![list(tuple(vec![data(), data()]))], data(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::ListData => {
-            let tipo = function(vec![list(data())], data());
+            let tipo = function(vec![list(data())], data(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::IData => {
-            let tipo = function(vec![int()], data());
+            let tipo = function(vec![int()], data(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::BData => {
-            let tipo = function(vec![byte_array()], data());
+            let tipo = function(vec![byte_array()], data(), true);
 
             Some((tipo, 1))
         }
         DefaultFunction::UnConstrData => {
-            let tipo = function(vec![data()], tuple(vec![int(), list(data())]));
+            let tipo = function(vec![data()], tuple(vec![int(), list(data())]), false);
 
             Some((tipo, 1))
         }
         DefaultFunction::UnMapData => {
-            let tipo = function(vec![data()], list(tuple(vec![data(), data()])));
+            let tipo = function(vec![data()], list(tuple(vec![data(), data()])), false);
 
             Some((tipo, 1))
         }
         DefaultFunction::UnListData => {
-            let tipo = function(vec![data()], list(data()));
+            let tipo = function(vec![data()], list(data()), false);
 
             Some((tipo, 1))
         }
         DefaultFunction::UnIData => {
-            let tipo = function(vec![data()], int());
+            let tipo = function(vec![data()], int(), false);
 
             Some((tipo, 1))
         }
         DefaultFunction::UnBData => {
-            let tipo = function(vec![data()], byte_array());
+            let tipo = function(vec![data()], byte_array(), false);
 
             Some((tipo, 1))
         }
         DefaultFunction::EqualsData => {
-            let tipo = function(vec![data(), data()], bool());
+            let tipo = function(vec![data(), data()], bool(), true);
 
             Some((tipo, 2))
         }
         DefaultFunction::SerialiseData => {
-            let tipo = function(vec![data()], byte_array());
+            let tipo = function(vec![data()], byte_array(), true);
 
             Some((tipo, 1))
         }
@@ -595,52 +612,53 @@ pub fn from_default_function(
                     a.clone(),
                 ],
                 a,
+                true,
             );
             Some((tipo, 6))
         }
         DefaultFunction::MkPairData => {
-            let tipo = function(vec![data(), data()], tuple(vec![data(), data()]));
+            let tipo = function(vec![data(), data()], tuple(vec![data(), data()]), true);
             Some((tipo, 2))
         }
         DefaultFunction::MkNilData => {
-            let tipo = function(vec![], list(data()));
+            let tipo = function(vec![], list(data()), true);
             Some((tipo, 0))
         }
         DefaultFunction::MkNilPairData => {
-            let tipo = function(vec![], list(tuple(vec![data(), data()])));
+            let tipo = function(vec![], list(tuple(vec![data(), data()])), true);
             Some((tipo, 0))
         }
         DefaultFunction::ChooseUnit => {
             let a = generic_var(id_gen.next());
-            let tipo = function(vec![data(), a.clone()], a);
+            let tipo = function(vec![data(), a.clone()], a, true);
             Some((tipo, 2))
         }
         DefaultFunction::Trace => {
             let a = generic_var(id_gen.next());
-            let tipo = function(vec![string(), a.clone()], a);
+            let tipo = function(vec![string(), a.clone()], a, true);
             Some((tipo, 2))
         }
         DefaultFunction::FstPair => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![tuple(vec![a.clone(), b])], a);
+            let tipo = function(vec![tuple(vec![a.clone(), b])], a, true);
             Some((tipo, 1))
         }
         DefaultFunction::SndPair => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![tuple(vec![a, b.clone()])], b);
+            let tipo = function(vec![tuple(vec![a, b.clone()])], b, true);
             Some((tipo, 1))
         }
         DefaultFunction::ChooseList => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![list(a), b.clone(), b.clone()], b);
+            let tipo = function(vec![list(a), b.clone(), b.clone()], b, true);
             Some((tipo, 3))
         }
         DefaultFunction::MkCons => {
             let a = generic_var(id_gen.next());
-            let tipo = function(vec![a.clone(), list(a.clone())], list(a));
+            let tipo = function(vec![a.clone(), list(a.clone())], list(a), true);
             Some((tipo, 2))
         }
     };
@@ -822,8 +840,8 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
     let b_var = generic_var(id_gen.next());
     let c_var = generic_var(id_gen.next());
 
-    let input_type = function(vec![a_var.clone(), b_var.clone()], c_var.clone());
-    let return_type = function(vec![b_var.clone(), a_var.clone()], c_var.clone());
+    let input_type = function(vec![a_var.clone(), b_var.clone()], c_var.clone(), true);
+    let return_type = function(vec![b_var.clone(), a_var.clone()], c_var.clone(), true);
 
     functions.insert(
         FunctionAccessKey {
@@ -1053,8 +1071,8 @@ pub fn ordering() -> Arc<Type> {
     })
 }
 
-pub fn function(args: Vec<Arc<Type>>, ret: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::Fn { ret, args })
+pub fn function(args: Vec<Arc<Type>>, ret: Arc<Type>, is_pure: bool) -> Arc<Type> {
+    Arc::new(Type::Fn { ret, args, is_pure })
 }
 
 pub fn generic_var(id: u64) -> Arc<Type> {

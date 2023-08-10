@@ -5,7 +5,7 @@ use crate::ast;
 use super::{error::ParseError, token::Token};
 
 pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
-    recursive(|expression| {
+    recursive(|r_annotation| {
         choice((
             // Type hole
             select! {Token::DiscardName { name } => name}.map_with_span(|name, span| {
@@ -15,7 +15,7 @@ pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
                 }
             }),
             // Tuple
-            expression
+            r_annotation
                 .clone()
                 .separated_by(just(Token::Comma))
                 .at_least(2)
@@ -31,23 +31,25 @@ pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
             // Function
             just(Token::Fn)
                 .ignore_then(
-                    expression
+                    r_annotation
                         .clone()
                         .separated_by(just(Token::Comma))
                         .allow_trailing()
                         .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
                 )
+                .then(just(Token::Pure).ignored().or_not())
                 .then_ignore(just(Token::RArrow))
-                .then(expression.clone())
-                .map_with_span(|(arguments, ret), span| ast::Annotation::Fn {
+                .then(r_annotation.clone())
+                .map_with_span(|((arguments, pure_opt), ret), span| ast::Annotation::Fn {
                     location: span,
                     arguments,
                     ret: Box::new(ret),
+                    is_pure: pure_opt.is_some(),
                 }),
             // Constructor function
             select! {Token::UpName { name } => name}
                 .then(
-                    expression
+                    r_annotation
                         .clone()
                         .separated_by(just(Token::Comma))
                         .allow_trailing()
@@ -66,7 +68,7 @@ pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
                     just(Token::Dot)
                         .ignore_then(select! {Token::UpName {name} => name})
                         .then(
-                            expression
+                            r_annotation
                                 .separated_by(just(Token::Comma))
                                 .allow_trailing()
                                 .delimited_by(just(Token::Less), just(Token::Greater))

@@ -184,7 +184,12 @@ impl Hydrator {
                 Ok(return_type)
             }
 
-            Annotation::Fn { arguments, ret, .. } => {
+            Annotation::Fn {
+                arguments,
+                ret,
+                is_pure,
+                ..
+            } => {
                 let mut args = Vec::with_capacity(arguments.len());
 
                 for arg in arguments {
@@ -195,7 +200,7 @@ impl Hydrator {
 
                 let ret = self.do_type_from_annotation(ret, environment, unbounds)?;
 
-                Ok(function(args, ret))
+                Ok(function(args, ret, *is_pure))
             }
 
             Annotation::Var { name, location, .. } => match self.created_type_variables.get(name) {

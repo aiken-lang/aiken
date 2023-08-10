@@ -302,7 +302,7 @@ pub fn convert_opaque_type(
                 }
                 .into()
             }
-            Type::Fn { args, ret } => {
+            Type::Fn { args, ret, is_pure } => {
                 let mut new_args = vec![];
                 for arg in args {
                     let arg = convert_opaque_type(arg, data_types);
@@ -314,6 +314,7 @@ pub fn convert_opaque_type(
                 Type::Fn {
                     args: new_args,
                     ret,
+                    is_pure: *is_pure,
                 }
                 .into()
             }
@@ -379,7 +380,7 @@ pub fn find_and_replace_generics(
                 };
                 t.into()
             }
-            Type::Fn { args, ret } => {
+            Type::Fn { args, ret, is_pure } => {
                 let mut new_args = vec![];
                 for arg in args {
                     let arg = find_and_replace_generics(arg, mono_types);
@@ -391,6 +392,7 @@ pub fn find_and_replace_generics(
                 let t = Type::Fn {
                     args: new_args,
                     ret,
+                    is_pure: *is_pure,
                 };
 
                 t.into()

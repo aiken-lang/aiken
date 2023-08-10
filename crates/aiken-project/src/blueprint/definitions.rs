@@ -158,7 +158,7 @@ impl Reference {
                 }
             },
 
-            Type::Fn { args, ret } => Self {
+            Type::Fn { args, ret, .. } => Self {
                 inner: format!(
                     "Fn{args}_{ret}",
                     args = Self::from_types(args, type_parameters),

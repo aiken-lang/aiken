@@ -221,6 +221,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 arguments: args,
                 body,
                 return_annotation,
+                is_pure,
                 ..
             } => self.infer_fn(
                 args,
@@ -228,6 +229,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 *body,
                 fn_style == FnStyle::Capture,
                 return_annotation,
+                is_pure,
                 location,
             ),
 
@@ -993,6 +995,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             (
                 Type::Fn {
                     args: expected_arguments,
+                    is_pure,
                     ..
                 },
                 UntypedExpr::Fn {
@@ -1010,6 +1013,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     *body,
                     false,
                     return_annotation,
+                    *is_pure,
                     location,
                 )
             }
@@ -1410,6 +1414,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn infer_fn(
         &mut self,
         args: Vec<UntypedArg>,
@@ -1417,13 +1422,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         body: UntypedExpr,
         is_capture: bool,
         return_annotation: Option<Annotation>,
+        is_pure: bool,
         location: Span,
     ) -> Result<TypedExpr, Error> {
         let (args, body) = self.do_infer_fn(args, expected_args, body, &return_annotation)?;
 
         let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
-        let tipo = function(args_types, body.tipo());
+        let tipo = function(args_types, body.tipo(), is_pure);
 
         Ok(TypedExpr::Fn {
             location,

@@ -266,7 +266,11 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
             .environment
             .unify(
                 func.tipo(),
-                function(vec![self.argument_type.clone()], return_type.clone()),
+                function(
+                    vec![self.argument_type.clone()],
+                    return_type.clone(),
+                    todo!(),
+                ),
                 func.location(),
                 if let Type::Fn { args, .. } = func.tipo().deref() {
                     if let Some(typ) = args.get(0) {

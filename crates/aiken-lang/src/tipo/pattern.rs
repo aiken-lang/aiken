@@ -396,7 +396,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     self.hydrator,
                 );
                 match instantiated_constructor_type.deref() {
-                    Type::Fn { args, ret } => {
+                    Type::Fn { args, ret, .. } => {
                         if args.len() == pattern_args.len() {
                             let pattern_args = pattern_args
                                 .into_iter()

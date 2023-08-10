@@ -67,10 +67,11 @@ impl Printer {
                 }
             }
 
-            Type::Fn { args, ret } => "fn("
+            Type::Fn { args, ret, is_pure } => "fn("
                 .to_doc()
                 .append(self.args_to_aiken_doc(args))
-                .append(") ->")
+                .append(") ")
+                .append(if *is_pure { "pure ->" } else { "->" })
                 .append(break_("", " ").append(self.print(ret)).nest(INDENT).group()),
 
             Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
@@ -322,6 +323,7 @@ mod tests {
                     name: "Bool".to_string(),
                     public: true,
                 }),
+                is_pure: false
             },
             "fn(Int, Bool) -> Bool",
         );
@@ -352,8 +354,9 @@ mod tests {
                 Arc::new(Type::Var {
                     tipo: Arc::new(RefCell::new(TypeVar::Unbound { id: 2 })),
                 }),
+                true
             ),
-            "fn(a) -> b",
+            "fn(a) pure -> b",
         );
         assert_string!(
             function(
@@ -363,6 +366,7 @@ mod tests {
                 Arc::new(Type::Var {
                     tipo: Arc::new(RefCell::new(TypeVar::Generic { id: 2 })),
                 }),
+                false
             ),
             "fn(a) -> b",
         );
@@ -370,11 +374,11 @@ mod tests {
 
     #[test]
     fn function_test() {
-        assert_eq!(pretty_print(function(vec![], int())), "fn() -> Int");
+        assert_eq!(pretty_print(function(vec![], int(), false)), "fn() -> Int");
 
         assert_eq!(
-            pretty_print(function(vec![int(), int(), int()], int())),
-            "fn(Int, Int, Int) -> Int"
+            pretty_print(function(vec![int(), int(), int()], int(), true)),
+            "fn(Int, Int, Int) pure -> Int"
         );
     }
 

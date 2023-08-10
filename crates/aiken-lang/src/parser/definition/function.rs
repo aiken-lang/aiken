@@ -17,6 +17,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .delimited_by(just(Token::LeftParen), just(Token::RightParen))
                 .map_with_span(|arguments, span| (arguments, span)),
         )
+        .then(just(Token::Pure).ignored().or_not())
         .then(just(Token::RArrow).ignore_then(annotation()).or_not())
         .then(
             expr::sequence()
@@ -24,7 +25,8 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(
-            |((((public, name), (arguments, args_span)), return_annotation), body), span| {
+            |(((((public, name), (arguments, args_span)), pure_opt), return_annotation), body),
+             span| {
                 ast::UntypedDefinition::Fn(ast::Function {
                     arguments,
                     body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
@@ -41,7 +43,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                     public,
                     return_annotation,
                     return_type: (),
-                    can_error: true,
+                    can_error: pure_opt.is_none(),
                 })
             },
         )

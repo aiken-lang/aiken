@@ -204,7 +204,7 @@ fn infer_definition(
 
                     let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
-                    let tipo = function(args_types, body.tipo());
+                    let tipo = function(args_types, body.tipo(), !can_error);
 
                     let safe_to_generalise = !expr_typer.ungeneralised_function_used;
 

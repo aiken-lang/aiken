@@ -84,6 +84,7 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
             return_annotation,
             fn_style: FnStyle::BinOp(name),
             location,
+            is_pure: true,
         }
     })
 }

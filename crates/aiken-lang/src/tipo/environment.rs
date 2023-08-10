@@ -128,14 +128,14 @@ impl<'a> Environment<'a> {
 
             if let Some((args, ret)) = new_value {
                 *tipo.borrow_mut() = TypeVar::Link {
-                    tipo: function(args.clone(), ret.clone()),
+                    tipo: function(args.clone(), ret.clone(), todo!()),
                 };
 
                 return Ok((args, ret));
             }
         }
 
-        if let Type::Fn { args, ret } = tipo.deref() {
+        if let Type::Fn { args, ret, .. } = tipo.deref() {
             return if args.len() != arity {
                 Err(Error::IncorrectFunctionCallArity {
                     expected: args.len(),
@@ -553,11 +553,12 @@ impl<'a> Environment<'a> {
                 Arc::new(Type::Var { tipo: tipo.clone() })
             }
 
-            Type::Fn { args, ret, .. } => function(
+            Type::Fn { args, ret, is_pure } => function(
                 args.iter()
                     .map(|t| self.instantiate(t.clone(), ids, hydrator))
                     .collect(),
                 self.instantiate(ret.clone(), ids, hydrator),
+                *is_pure,
             ),
 
             Type::Tuple { elems } => tuple(
@@ -1018,6 +1019,7 @@ impl<'a> Environment<'a> {
         hydrators: &mut HashMap<String, Hydrator>,
         names: &mut HashMap<&'a str, &'a Span>,
         location: &'a Span,
+        is_pure: bool,
     ) -> Result<(), Error> {
         assert_unique_value_name(names, name, location)?;
 
@@ -1044,7 +1046,7 @@ impl<'a> Environment<'a> {
 
         let return_type = hydrator.type_from_option_annotation(return_annotation, self)?;
 
-        let tipo = function(arg_types, return_type);
+        let tipo = function(arg_types, return_type, is_pure);
 
         // Keep track of which types we create from annotations so we can know
         // which generic types not to instantiate later when performing
@@ -1086,6 +1088,7 @@ impl<'a> Environment<'a> {
                     hydrators,
                     names,
                     &fun.location,
+                    !fun.can_error,
                 )?;
 
                 if !fun.public && kind.is_lib() {
@@ -1113,6 +1116,7 @@ impl<'a> Environment<'a> {
                     hydrators,
                     names,
                     &fun.location,
+                    !fun.can_error,
                 )?;
 
                 if let Some(other) = other_fun {
@@ -1130,6 +1134,7 @@ impl<'a> Environment<'a> {
                         hydrators,
                         names,
                         &other.location,
+                        !other.can_error,
                     )?;
                 }
             }
@@ -1140,7 +1145,12 @@ impl<'a> Environment<'a> {
                 })
             }
 
-            Definition::Test(Function { name, location, .. }) => {
+            Definition::Test(Function {
+                name,
+                location,
+                can_error,
+                ..
+            }) => {
                 assert_unique_value_name(names, name, location)?;
                 hydrators.insert(name.clone(), Hydrator::new());
                 let arg_types = vec![];
@@ -1155,7 +1165,7 @@ impl<'a> Environment<'a> {
                         location: *location,
                         builtin: None,
                     },
-                    function(arg_types, return_type),
+                    function(arg_types, return_type, !can_error),
                 );
             }
 
@@ -1225,7 +1235,12 @@ impl<'a> Environment<'a> {
                     // Insert constructor function into module scope
                     let typ = match constructor.arguments.len() {
                         0 => typ.clone(),
-                        _ => function(args_types, typ.clone()),
+                        _ => function(
+                            args_types,
+                            typ.clone(),
+                            // constructors are always pure
+                            true,
+                        ),
                     };
 
                     let constructor_info = ValueConstructorVariant::Record {
@@ -1618,7 +1633,7 @@ fn unify_unbound_type(tipo: Arc<Type>, own_id: u64, location: Span) -> Result<()
             Ok(())
         }
 
-        Type::Fn { args, ret } => {
+        Type::Fn { args, ret, .. } => {
             for arg in args {
                 unify_unbound_type(arg.clone(), own_id, location)?;
             }
@@ -1784,11 +1799,12 @@ pub(crate) fn generalise(t: Arc<Type>, ctx_level: usize) -> Arc<Type> {
             })
         }
 
-        Type::Fn { args, ret } => function(
+        Type::Fn { args, ret, is_pure } => function(
             args.iter()
                 .map(|t| generalise(t.clone(), ctx_level))
                 .collect(),
             generalise(ret.clone(), ctx_level),
+            *is_pure,
         ),
 
         Type::Tuple { elems } => tuple(
