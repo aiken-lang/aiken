@@ -160,7 +160,6 @@ fn infer_definition(
             body,
             return_annotation,
             end_position,
-            can_error,
             ..
         }) => {
             if public && kind.is_validator() {
@@ -180,13 +179,13 @@ fn infer_definition(
 
             let preregistered_type = preregistered_fn.tipo.clone();
 
-            let (args_types, return_type) = preregistered_type
+            let (args_types, return_type, is_pure) = preregistered_type
                 .function_types()
                 .expect("Preregistered type for fn was not a fn");
 
             // Infer the type using the preregistered args + return types as a starting point
             let (tipo, args, body, safe_to_generalise) =
-                environment.in_new_scope(|environment| {
+                environment.in_new_function_scope(is_pure, |environment| {
                     let args = args
                         .into_iter()
                         .zip(&args_types)
@@ -199,14 +198,18 @@ fn infer_definition(
                         .remove(&name)
                         .expect("Could not find hydrator for fn");
 
-                    let (args, body) =
-                        expr_typer.infer_fn_with_known_types(args, body, Some(return_type))?;
+                    let (args, body, is_pure) = expr_typer.infer_fn_with_known_types(
+                        args,
+                        body,
+                        Some(return_type),
+                        is_pure,
+                    )?;
 
                     let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
-                    let tipo = function(args_types, body.tipo(), !can_error);
-
                     let safe_to_generalise = !expr_typer.ungeneralised_function_used;
+
+                    let tipo = function(args_types, body.tipo(), is_pure);
 
                     Ok::<_, Error>((tipo, args, body, safe_to_generalise))
                 })?;
@@ -247,7 +250,7 @@ fn infer_definition(
                     .return_type()
                     .expect("Could not find return type for fn"),
                 body,
-                can_error,
+                can_error: tipo.is_impure_function(),
                 end_position,
             }))
         }
@@ -271,7 +274,7 @@ fn infer_definition(
 
                 let preregistered_type = preregistered_fn.tipo.clone();
 
-                let (args_types, _return_type) = preregistered_type
+                let (args_types, _return_type, _is_pure) = preregistered_type
                     .function_types()
                     .expect("Preregistered type for fn was not a fn");
 
@@ -499,7 +502,7 @@ fn infer_definition(
 
                         let preregistered_type = preregistered_fn.tipo.clone();
 
-                        let args = if let Some((args_types, _return_type)) =
+                        let args = if let Some((args_types, _return_type, _is_pure)) =
                             preregistered_type.function_types()
                         {
                             args.into_iter()

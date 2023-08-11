@@ -76,6 +76,10 @@ impl Type {
         matches!(self, Self::Fn { .. })
     }
 
+    pub fn is_impure_function(&self) -> bool {
+        matches!(self, Self::Fn { is_pure, .. } if !is_pure)
+    }
+
     pub fn return_type(&self) -> Option<Arc<Self>> {
         match self {
             Self::Fn { ret, .. } => Some(ret.clone()),
@@ -83,9 +87,9 @@ impl Type {
         }
     }
 
-    pub fn function_types(&self) -> Option<(Vec<Arc<Self>>, Arc<Self>)> {
+    pub fn function_types(&self) -> Option<(Vec<Arc<Self>>, Arc<Self>, bool)> {
         match self {
-            Self::Fn { args, ret, .. } => Some((args.clone(), ret.clone())),
+            Self::Fn { args, ret, is_pure } => Some((args.clone(), ret.clone(), *is_pure)),
             _ => None,
         }
     }

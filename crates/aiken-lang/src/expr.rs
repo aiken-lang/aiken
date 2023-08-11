@@ -5,8 +5,8 @@ use vec1::Vec1;
 use crate::{
     ast::{
         self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        DefinitionLocation, IfBranch, ParsedCallArg, Pattern, RecordUpdateSpread, Span, TraceKind,
-        TypedClause, TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
+        DefinitionLocation, ErrorKind, IfBranch, ParsedCallArg, Pattern, RecordUpdateSpread, Span,
+        TraceKind, TypedClause, TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -519,6 +519,7 @@ pub enum UntypedExpr {
     },
 
     ErrorTerm {
+        kind: ErrorKind,
         location: Span,
     },
 
@@ -545,7 +546,10 @@ impl UntypedExpr {
         UntypedExpr::Trace {
             location,
             kind: TraceKind::Todo,
-            then: Box::new(UntypedExpr::ErrorTerm { location }),
+            then: Box::new(UntypedExpr::ErrorTerm {
+                kind: ErrorKind::Todo,
+                location,
+            }),
             text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
                 location,
                 value: DEFAULT_TODO_STR.to_string(),
@@ -558,11 +562,17 @@ impl UntypedExpr {
             UntypedExpr::Trace {
                 location,
                 kind: TraceKind::Error,
-                then: Box::new(UntypedExpr::ErrorTerm { location }),
+                then: Box::new(UntypedExpr::ErrorTerm {
+                    kind: ErrorKind::Fail,
+                    location,
+                }),
                 text: Box::new(reason),
             }
         } else {
-            UntypedExpr::ErrorTerm { location }
+            UntypedExpr::ErrorTerm {
+                kind: ErrorKind::Fail,
+                location,
+            }
         }
     }
 

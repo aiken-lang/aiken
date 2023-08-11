@@ -1129,6 +1129,12 @@ pub enum TraceKind {
     Error,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErrorKind {
+    Todo,
+    Fail,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tracing {
     NoTraces,

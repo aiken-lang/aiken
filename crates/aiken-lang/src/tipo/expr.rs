@@ -4,8 +4,8 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg,
-        TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
+        ClauseGuard, Constant, ErrorKind, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing,
+        TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
         TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
         UntypedPattern, UntypedRecordUpdateArg,
     },
@@ -130,7 +130,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         expected_args: &[Arc<Type>],
         body: UntypedExpr,
         return_annotation: &Option<Annotation>,
-    ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
+        is_pure: bool,
+    ) -> Result<(Vec<TypedArg>, TypedExpr, bool), Error> {
         // Construct an initial type for each argument of the function- either an unbound
         // type variable or a type provided by an annotation.
 
@@ -147,7 +148,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             None => None,
         };
 
-        self.infer_fn_with_known_types(arguments, body, return_type)
+        self.infer_fn_with_known_types(arguments, body, return_type, is_pure)
     }
 
     fn get_field_map(
@@ -173,6 +174,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .field_map())
     }
 
+    pub fn in_new_function_scope<T>(
+        &mut self,
+        is_pure: bool,
+        process_scope: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        // Create new scope
+        let environment_reset_data = self.environment.open_new_scope();
+        let hydrator_reset_data = self.hydrator.open_new_scope();
+
+        self.environment.is_pure = is_pure;
+        self.environment.failiable_expression_used = false;
+
+        // Process the scope
+        let result = process_scope(self);
+
+        // Close scope, discarding any scope local state
+        self.environment.close_scope(environment_reset_data);
+        self.hydrator.close_scope(hydrator_reset_data);
+
+        result
+    }
+
     pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
         // Create new scope
         let environment_reset_data = self.environment.open_new_scope();
@@ -192,7 +215,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     /// returning an error.
     pub fn infer(&mut self, expr: UntypedExpr) -> Result<TypedExpr, Error> {
         match expr {
-            UntypedExpr::ErrorTerm { location } => Ok(self.infer_error_term(location)),
+            UntypedExpr::ErrorTerm { kind, location } => self.infer_error_term(kind, location),
 
             UntypedExpr::Var { location, name, .. } => self.infer_var(name, location),
 
@@ -923,6 +946,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             }
 
             AssignmentKind::Expect => {
+                self.check_purity(location)?;
+
                 let is_exaustive_pattern = self
                     .environment
                     .check_exhaustiveness(&[&pattern], location, false)
@@ -1425,7 +1450,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         is_pure: bool,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let (args, body) = self.do_infer_fn(args, expected_args, body, &return_annotation)?;
+        let (args, body, is_pure) =
+            self.do_infer_fn(args, expected_args, body, &return_annotation, is_pure)?;
 
         let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
@@ -1446,50 +1472,57 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         args: Vec<TypedArg>,
         body: UntypedExpr,
         return_type: Option<Arc<Type>>,
-    ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
+        is_pure: bool,
+    ) -> Result<(Vec<TypedArg>, TypedExpr, bool), Error> {
         assert_no_assignment(&body)?;
 
-        let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
-            let mut argument_names = HashMap::with_capacity(args.len());
+        let (body_rigid_names, body, is_pure) =
+            self.in_new_function_scope(is_pure, |body_typer| {
+                let mut argument_names = HashMap::with_capacity(args.len());
 
-            for arg in &args {
-                match &arg.arg_name {
-                    ArgName::Named {
-                        name,
-                        is_validator_param,
-                        location,
-                        ..
-                    } if !is_validator_param => {
-                        if let Some(duplicate_location) = argument_names.insert(name, location) {
-                            return Err(Error::DuplicateArgument {
-                                location: *location,
-                                duplicate_location: *duplicate_location,
-                                label: name.to_string(),
-                            });
+                for arg in &args {
+                    match &arg.arg_name {
+                        ArgName::Named {
+                            name,
+                            is_validator_param,
+                            location,
+                            ..
+                        } if !is_validator_param => {
+                            if let Some(duplicate_location) = argument_names.insert(name, location)
+                            {
+                                return Err(Error::DuplicateArgument {
+                                    location: *location,
+                                    duplicate_location: *duplicate_location,
+                                    label: name.to_string(),
+                                });
+                            }
+
+                            body_typer.environment.insert_variable(
+                                name.to_string(),
+                                ValueConstructorVariant::LocalVariable {
+                                    location: arg.location,
+                                },
+                                arg.tipo.clone(),
+                            );
+
+                            body_typer.environment.init_usage(
+                                name.to_string(),
+                                EntityKind::Variable,
+                                arg.location,
+                            );
                         }
+                        ArgName::Named { .. } | ArgName::Discarded { .. } => (),
+                    };
+                }
 
-                        body_typer.environment.insert_variable(
-                            name.to_string(),
-                            ValueConstructorVariant::LocalVariable {
-                                location: arg.location,
-                            },
-                            arg.tipo.clone(),
-                        );
+                let rigid_names = body_typer.hydrator.rigid_names();
+                let body = body_typer
+                    .infer(body)
+                    .map_err(|e| e.with_unify_error_rigid_names(&rigid_names))?;
+                let is_pure = !body_typer.environment.failiable_expression_used;
 
-                        body_typer.environment.init_usage(
-                            name.to_string(),
-                            EntityKind::Variable,
-                            arg.location,
-                        );
-                    }
-                    ArgName::Named { .. } | ArgName::Discarded { .. } => (),
-                };
-            }
-
-            Ok((body_typer.hydrator.rigid_names(), body_typer.infer(body)))
-        })?;
-
-        let body = body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names))?;
+                Ok((rigid_names, body, is_pure))
+            })?;
 
         // Check that any return type is accurate.
         if let Some(return_type) = return_type {
@@ -1505,7 +1538,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })?;
         }
 
-        Ok((args, body))
+        Ok((args, body, is_pure))
     }
 
     fn infer_uint(&mut self, value: String, location: Span) -> TypedExpr {
@@ -1695,10 +1728,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn infer_error_term(&mut self, location: Span) -> TypedExpr {
+    fn infer_error_term(&mut self, kind: ErrorKind, location: Span) -> Result<TypedExpr, Error> {
         let tipo = self.new_unbound_var();
 
-        TypedExpr::ErrorTerm { location, tipo }
+        if matches!(kind, ErrorKind::Fail) {
+            self.check_purity(location)?
+        }
+
+        Ok(TypedExpr::ErrorTerm { location, tipo })
     }
 
     fn infer_trace(
@@ -1878,6 +1915,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn instantiate(&mut self, t: Arc<Type>, ids: &mut HashMap<u64, Arc<Type>>) -> Arc<Type> {
         self.environment.instantiate(t, ids, &self.hydrator)
+    }
+
+    fn check_purity(&mut self, location: Span) -> Result<(), Error> {
+        if self.environment.is_pure_scope() {
+            return Err(Error::FailiableInPureContext { location });
+        }
+
+        self.environment.failiable_expression_used = true;
+
+        Ok(())
     }
 
     pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {

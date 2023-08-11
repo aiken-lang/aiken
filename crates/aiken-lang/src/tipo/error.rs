@@ -243,6 +243,14 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
+    #[error("I found an expression that can fail in a scope that was declared pure. This is not allowed.\n")]
+    #[diagnostic(code("purity"))]
+    #[diagnostic(help("TODO"))]
+    FailiableInPureContext {
+        #[label]
+        location: Span,
+    },
+
     #[error("I found a data type that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
     #[diagnostic(help("Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."))]

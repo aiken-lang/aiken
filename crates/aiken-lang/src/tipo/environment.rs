@@ -26,6 +26,8 @@ use super::{
 #[derive(Debug)]
 pub struct ScopeResetData {
     local_values: HashMap<String, ValueConstructor>,
+    is_pure: bool,
+    failiable_expression_used: bool,
 }
 
 #[derive(Debug)]
@@ -73,9 +75,17 @@ pub struct Environment<'a> {
 
     /// Warnings
     pub warnings: &'a mut Vec<Warning>,
+
+    /// Is Pure Context
+    pub is_pure: bool,
+    pub failiable_expression_used: bool,
 }
 
 impl<'a> Environment<'a> {
+    pub fn is_pure_scope(&self) -> bool {
+        self.is_pure
+    }
+
     pub fn close_scope(&mut self, data: ScopeResetData) {
         let unused = self
             .entity_usages
@@ -85,6 +95,9 @@ impl<'a> Environment<'a> {
         self.handle_unused(unused);
 
         self.scope = data.local_values;
+
+        self.is_pure = data.is_pure;
+        self.failiable_expression_used = data.failiable_expression_used;
     }
 
     /// Converts entities with a usage count of 0 to warnings
@@ -386,9 +399,16 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
+    pub fn in_new_function_scope<T>(
+        &mut self,
+        is_pure: bool,
+        process_scope: impl FnOnce(&mut Self) -> T,
+    ) -> T {
         // Record initial scope state
         let initial = self.open_new_scope();
+
+        self.is_pure = is_pure;
+        self.failiable_expression_used = false;
 
         // Process scope
         let result = process_scope(self);
@@ -397,6 +417,10 @@ impl<'a> Environment<'a> {
 
         // Return result of typing the scope
         result
+    }
+
+    pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {
+        self.in_new_function_scope(self.is_pure, process_scope)
     }
 
     /// Increments an entity's usage in the current or nearest enclosing scope
@@ -627,6 +651,8 @@ impl<'a> Environment<'a> {
             current_module,
             warnings,
             entity_usages: vec![HashMap::new()],
+            is_pure: false,
+            failiable_expression_used: false,
         }
     }
 
@@ -652,7 +678,11 @@ impl<'a> Environment<'a> {
 
         self.entity_usages.push(HashMap::new());
 
-        ScopeResetData { local_values }
+        ScopeResetData {
+            local_values,
+            is_pure: self.is_pure,
+            failiable_expression_used: self.failiable_expression_used,
+        }
     }
 
     pub fn previous_uid(&self) -> u64 {
@@ -1410,14 +1440,14 @@ impl<'a> Environment<'a> {
                 Type::Fn {
                     args: args1,
                     ret: retrn1,
-                    ..
+                    is_pure: is_pure1,
                 },
                 Type::Fn {
                     args: args2,
                     ret: retrn2,
-                    ..
+                    is_pure: is_pure2,
                 },
-            ) if args1.len() == args2.len() => {
+            ) if args1.len() == args2.len() && (*is_pure2 || !is_pure1) => {
                 for (a, b) in args1.iter().zip(args2) {
                     self.unify(a.clone(), b.clone(), location, allow_cast)
                         .map_err(|_| Error::CouldNotUnify {
