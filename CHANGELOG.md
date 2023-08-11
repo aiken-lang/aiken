@@ -11,8 +11,10 @@
   tree abstraction.
 - **aiken-lang**: Zero argument anonymous functions now are implemted as a
   delayed function body and calling them simply does force
-- **aiken-lang**: Matching on int in expect and when cases is now implemented.
-- **aiken-lang**: Using assign in nested pattern matches is now implemented.
+- **aiken-lang**: Matching on int in expect and when cases is now implemented
+- **aiken-lang**: Using assign in nested pattern matches is now implemented
+- **aiken-lang**: Using List<Data> as a validator params only checks the type is
+  a list and does not attempt to check each item
 
 ### Optimization
 

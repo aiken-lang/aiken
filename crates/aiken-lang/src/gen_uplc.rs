@@ -1212,65 +1212,69 @@ impl<'a> CodeGenerator<'a> {
 
             let inner_list_type = &tipo.get_inner_types()[0];
 
-            let list_name = format!("__list_span_{}_{}", location.start, location.end);
-            let item_name = format!("__item_span_{}_{}", location.start, location.end);
-
-            let assign = AirTree::let_assignment(&list_name, value);
-
-            let expect_item = self.expect_type_assign(
-                inner_list_type,
-                AirTree::cast_from_data(
-                    AirTree::local_var(&item_name, data()),
-                    inner_list_type.clone(),
-                ),
-                defined_data_types,
-                location,
-            );
-
-            let anon_func_body = expect_item;
-
-            let unwrap_function = AirTree::anon_func(vec![item_name], anon_func_body);
-
-            let function = self.code_gen_functions.get(EXPECT_ON_LIST);
-
-            if function.is_none() {
-                let expect_list_func = AirTree::expect_on_list();
-                self.code_gen_functions.insert(
-                    EXPECT_ON_LIST.to_string(),
-                    CodeGenFunction::Function {
-                        body: expect_list_func,
-                        params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
-                    },
-                );
-            }
-
-            if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
-                *counter += 1
+            if inner_list_type.is_data() {
+                value
             } else {
-                defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
-            }
+                let list_name = format!("__list_span_{}_{}", location.start, location.end);
+                let item_name = format!("__item_span_{}_{}", location.start, location.end);
 
-            let func_call = AirTree::call(
-                AirTree::var(
-                    ValueConstructor::public(
-                        void(),
-                        ValueConstructorVariant::ModuleFn {
-                            name: EXPECT_ON_LIST.to_string(),
-                            field_map: None,
-                            module: "".to_string(),
-                            arity: 1,
-                            location,
-                            builtin: None,
-                        },
+                let assign = AirTree::let_assignment(&list_name, value);
+
+                let expect_item = self.expect_type_assign(
+                    inner_list_type,
+                    AirTree::cast_from_data(
+                        AirTree::local_var(&item_name, data()),
+                        inner_list_type.clone(),
                     ),
-                    EXPECT_ON_LIST,
-                    "",
-                ),
-                void(),
-                vec![AirTree::local_var(list_name, tipo.clone()), unwrap_function],
-            );
+                    defined_data_types,
+                    location,
+                );
 
-            assign.hoist_over(func_call)
+                let anon_func_body = expect_item;
+
+                let unwrap_function = AirTree::anon_func(vec![item_name], anon_func_body);
+
+                let function = self.code_gen_functions.get(EXPECT_ON_LIST);
+
+                if function.is_none() {
+                    let expect_list_func = AirTree::expect_on_list();
+                    self.code_gen_functions.insert(
+                        EXPECT_ON_LIST.to_string(),
+                        CodeGenFunction::Function {
+                            body: expect_list_func,
+                            params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
+                        },
+                    );
+                }
+
+                if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
+                    *counter += 1
+                } else {
+                    defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
+                }
+
+                let func_call = AirTree::call(
+                    AirTree::var(
+                        ValueConstructor::public(
+                            void(),
+                            ValueConstructorVariant::ModuleFn {
+                                name: EXPECT_ON_LIST.to_string(),
+                                field_map: None,
+                                module: "".to_string(),
+                                arity: 1,
+                                location,
+                                builtin: None,
+                            },
+                        ),
+                        EXPECT_ON_LIST,
+                        "",
+                    ),
+                    void(),
+                    vec![AirTree::local_var(list_name, tipo.clone()), unwrap_function],
+                );
+
+                assign.hoist_over(func_call)
+            }
         } else if tipo.is_2_tuple() {
             let tuple_inner_types = tipo.get_inner_types();
 
