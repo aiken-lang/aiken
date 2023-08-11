@@ -81,6 +81,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -174,6 +175,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -267,6 +269,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -360,6 +363,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -439,6 +443,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -518,6 +523,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -611,6 +617,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -704,6 +711,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -797,6 +805,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -890,6 +899,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -983,6 +993,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -1076,6 +1087,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {
@@ -1169,6 +1181,7 @@ Sequence {
                                 arguments: [],
                             },
                         ),
+                        is_pure: true,
                     },
                 },
                 CallArg {

@@ -48,4 +48,5 @@ Fn {
             arguments: [],
         },
     ),
+    is_pure: false,
 }

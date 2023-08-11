@@ -644,7 +644,7 @@ impl UntypedExpr {
                 arguments: holes,
                 body: Box::new(call),
                 return_annotation: None,
-                is_pure: todo!(),
+                is_pure: false,
             }
         }
     }
