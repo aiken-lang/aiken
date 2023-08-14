@@ -116,7 +116,11 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "type" => Some(Token::Type),
         "trace" => Some(Token::Trace),
         "test" => Some(Token::Test),
+        // TODO: remove this in a future release
         "error" => Some(Token::Fail),
+        "fail" => Some(Token::Fail),
+        "and" => Some(Token::And),
+        "or" => Some(Token::Or),
         "validator" => Some(Token::Validator),
         _ => None,
     }
@@ -779,6 +783,15 @@ pub enum BinOp {
     ModInt,
 }
 
+impl From<LogicalOpChainKind> for BinOp {
+    fn from(value: LogicalOpChainKind) -> Self {
+        match value {
+            LogicalOpChainKind::And => BinOp::And,
+            LogicalOpChainKind::Or => BinOp::Or,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp {
     // !
@@ -1222,6 +1235,21 @@ impl chumsky::Span for Span {
 
     fn end(&self) -> Self::Offset {
         self.end
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogicalOpChainKind {
+    And,
+    Or,
+}
+
+impl Display for LogicalOpChainKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogicalOpChainKind::And => write!(f, "and"),
+            LogicalOpChainKind::Or => write!(f, "or"),
+        }
     }
 }
 

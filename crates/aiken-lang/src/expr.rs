@@ -533,6 +533,12 @@ pub enum UntypedExpr {
         location: Span,
         value: Box<Self>,
     },
+
+    LogicalOpChain {
+        kind: LogicalOpChainKind,
+        expressions: Vec<Self>,
+        location: Span,
+    },
 }
 
 pub const DEFAULT_TODO_STR: &str = "aiken::todo";
@@ -716,6 +722,7 @@ impl UntypedExpr {
             | Self::FieldAccess { location, .. }
             | Self::RecordUpdate { location, .. }
             | Self::UnOp { location, .. }
+            | Self::LogicalOpChain { location, .. }
             | Self::If { location, .. } => *location,
             Self::Sequence {
                 location,

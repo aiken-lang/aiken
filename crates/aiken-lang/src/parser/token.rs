@@ -56,6 +56,8 @@ pub enum Token {
     Vbar,        // '|'
     VbarVbar,    // '||'
     AmperAmper,  // '&&'
+    And,         // and
+    Or,          // or
     NewLinePipe, // '↳|>'
     Pipe,        // '|>'
     Dot,         // '.'
@@ -143,6 +145,8 @@ impl fmt::Display for Token {
             Token::Vbar => "|",
             Token::VbarVbar => "||",
             Token::AmperAmper => "&&",
+            Token::And => "and",
+            Token::Or => "or",
             Token::NewLinePipe => "↳|>",
             Token::Pipe => "|>",
             Token::Dot => ".",
