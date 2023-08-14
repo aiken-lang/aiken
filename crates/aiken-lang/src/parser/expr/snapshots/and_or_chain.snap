@@ -1,0 +1,60 @@
+---
+source: crates/aiken-lang/src/parser/expr/and_or_chain.rs
+description: "Code:\n\nor {\n  1 == 2,\n  something,\n  and {\n    1 == 2,\n    something,\n  },\n}\n"
+---
+LogicalOpChain {
+    kind: Or,
+    expressions: [
+        BinOp {
+            location: 7..13,
+            name: Eq,
+            left: UInt {
+                location: 7..8,
+                value: "1",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+            right: UInt {
+                location: 12..13,
+                value: "2",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+        Var {
+            location: 17..26,
+            name: "something",
+        },
+        LogicalOpChain {
+            kind: And,
+            expressions: [
+                BinOp {
+                    location: 40..46,
+                    name: Eq,
+                    left: UInt {
+                        location: 40..41,
+                        value: "1",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                    right: UInt {
+                        location: 45..46,
+                        value: "2",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                },
+                Var {
+                    location: 52..61,
+                    name: "something",
+                },
+            ],
+            location: 30..66,
+        },
+    ],
+    location: 0..69,
+}
