@@ -1,6 +1,5 @@
 use chumsky::prelude::*;
 
-use super::anonymous_binop::parser as anonymous_binop;
 use super::anonymous_function::parser as anonymous_function;
 use super::assignment;
 use super::block::parser as block;
@@ -14,6 +13,7 @@ use super::string::parser as string;
 use super::tuple::parser as tuple;
 use super::var::parser as var;
 use super::when::parser as when;
+use super::{and_or_chain, anonymous_binop::parser as anonymous_binop};
 
 use crate::{
     expr::UntypedExpr,
@@ -33,6 +33,7 @@ pub fn parser<'a>(
         field_access::parser(),
         call(expression.clone()),
     ));
+
     chain_start(sequence, expression)
         .then(chain.repeated())
         .foldl(|expr, chain| match chain {
@@ -60,6 +61,7 @@ pub fn chain_start<'a>(
         record_update(expression.clone()),
         record(expression.clone()),
         field_access::constructor(),
+        and_or_chain(expression.clone()),
         var(),
         tuple(expression.clone()),
         bytearray(),

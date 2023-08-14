@@ -250,7 +250,7 @@ fn format_nested_function_calls() {
               _ -> fail "expected inline datum"
             },
           ]
-          |> list.and
+          |> list.and_func
         }
     "#
     );

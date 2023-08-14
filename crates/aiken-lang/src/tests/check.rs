@@ -945,12 +945,12 @@ fn trace_non_strings() {
 #[test]
 fn trace_if_false_ok() {
     let source_code = r#"
-        fn or(a: Bool, b: Bool) {
+        fn or_func(a: Bool, b: Bool) {
            (a || b)?
         }
 
         test foo() {
-            or(True, False)?
+            or_func(True, False)?
         }
 
         test bar() {

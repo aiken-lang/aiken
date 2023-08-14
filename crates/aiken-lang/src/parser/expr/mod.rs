@@ -1,6 +1,7 @@
 use chumsky::prelude::*;
 use vec1::Vec1;
 
+mod and_or_chain;
 mod anonymous_binop;
 pub mod anonymous_function;
 pub mod assignment;
@@ -19,6 +20,7 @@ mod tuple;
 mod var;
 pub mod when;
 
+pub use and_or_chain::parser as and_or_chain;
 pub use anonymous_function::parser as anonymous_function;
 pub use block::parser as block;
 pub use bytearray::parser as bytearray;
