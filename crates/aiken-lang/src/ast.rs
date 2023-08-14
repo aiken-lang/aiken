@@ -6,7 +6,11 @@ use crate::{
 };
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
-use std::{fmt, ops::Range, sync::Arc};
+use std::{
+    fmt::{self, Display},
+    ops::Range,
+    sync::Arc,
+};
 use vec1::Vec1;
 
 pub const ASSERT_VARIABLE: &str = "_try";

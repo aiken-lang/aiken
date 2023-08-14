@@ -4,10 +4,10 @@ use vec1::Vec1;
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        ClauseGuard, Constant, IfBranch, RecordUpdateSpread, Span, TraceKind, Tracing, TypedArg,
-        TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
-        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
-        UntypedPattern, UntypedRecordUpdateArg,
+        ClauseGuard, Constant, IfBranch, LogicalOpChainKind, RecordUpdateSpread, Span, TraceKind,
+        Tracing, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch,
+        TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard,
+        UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, int, list, string, tuple},
     expr::{FnStyle, TypedExpr, UntypedExpr},
@@ -212,6 +212,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UntypedExpr::String {
                 location, value, ..
             } => Ok(self.infer_string(value, location)),
+
+            UntypedExpr::LogicalOpChain {
+                kind,
+                expressions,
+                location,
+            } => self.infer_logical_op_chain(kind, expressions, location),
 
             UntypedExpr::PipeLine { expressions, .. } => self.infer_pipeline(expressions),
 
@@ -1571,6 +1577,52 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
+    fn infer_logical_op_chain(
+        &mut self,
+        kind: LogicalOpChainKind,
+        expressions: Vec<UntypedExpr>,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let mut typed_expressions = vec![];
+
+        for expression in expressions {
+            let typed_expression = self.infer(expression)?;
+
+            self.unify(
+                bool(),
+                typed_expression.tipo(),
+                typed_expression.location(),
+                false,
+            )?;
+
+            typed_expressions.push(typed_expression);
+        }
+
+        if typed_expressions.len() < 2 {
+            return Err(Error::LogicalOpChainMissingExpr {
+                op: kind,
+                location,
+                missing: 2 - typed_expressions.len() as u8,
+            });
+        }
+
+        let name: BinOp = kind.into();
+
+        let chain = typed_expressions
+            .into_iter()
+            .rev()
+            .reduce(|acc, typed_expression| TypedExpr::BinOp {
+                location: Span::empty(),
+                tipo: bool(),
+                name,
+                left: typed_expression.into(),
+                right: acc.into(),
+            })
+            .expect("should have at least two");
+
+        Ok(chain)
+    }
+
     fn infer_pipeline(&mut self, expressions: Vec1<UntypedExpr>) -> Result<TypedExpr, Error> {
         PipeTyper::infer(self, expressions)
     }
@@ -1927,6 +1979,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::TupleIndex { .. }
         | UntypedExpr::UnOp { .. }
         | UntypedExpr::Var { .. }
+        | UntypedExpr::LogicalOpChain { .. }
         | UntypedExpr::TraceIfFalse { .. }
         | UntypedExpr::When { .. } => Ok(()),
     }
