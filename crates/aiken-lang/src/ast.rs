@@ -103,7 +103,6 @@ impl TypedModule {
 fn str_to_keyword(word: &str) -> Option<Token> {
     // Alphabetical keywords:
     match word {
-        "assert" => Some(Token::Expect),
         "expect" => Some(Token::Expect),
         "else" => Some(Token::Else),
         "is" => Some(Token::Is),
