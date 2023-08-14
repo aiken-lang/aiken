@@ -5,8 +5,9 @@ use vec1::Vec1;
 use crate::{
     ast::{
         self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        DefinitionLocation, IfBranch, ParsedCallArg, Pattern, RecordUpdateSpread, Span, TraceKind,
-        TypedClause, TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
+        DefinitionLocation, IfBranch, LogicalOpChainKind, ParsedCallArg, Pattern,
+        RecordUpdateSpread, Span, TraceKind, TypedClause, TypedRecordUpdateArg, UnOp,
+        UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
