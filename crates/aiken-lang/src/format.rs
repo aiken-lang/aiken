@@ -1,11 +1,11 @@
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        ClauseGuard, Constant, DataType, Definition, Function, IfBranch, ModuleConstant, Pattern,
-        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
-        TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
-        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
-        Use, Validator, CAPTURE_VARIABLE,
+        ClauseGuard, Constant, DataType, Definition, Function, IfBranch, LogicalOpChainKind,
+        ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span,
+        TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedClause,
+        UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern,
+        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -773,6 +773,10 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => self.if_expr(branches, final_else),
 
+            UntypedExpr::LogicalOpChain {
+                kind, expressions, ..
+            } => self.logical_op_chain(kind, expressions),
+
             UntypedExpr::PipeLine {
                 expressions,
                 one_liner,
@@ -1108,6 +1112,27 @@ impl<'comments> Formatter<'comments> {
         } else {
             doc
         }
+    }
+
+    fn logical_op_chain<'a>(
+        &mut self,
+        kind: &'a LogicalOpChainKind,
+        expressions: &'a [UntypedExpr],
+    ) -> Document<'a> {
+        kind.to_doc()
+            .append(" {")
+            .append(
+                line()
+                    .append(join(
+                        expressions.iter().map(|expression| self.expr(expression)),
+                        ",".to_doc().append(line()),
+                    ))
+                    .nest(INDENT)
+                    .group(),
+            )
+            .append(",")
+            .append(line())
+            .append("}")
     }
 
     fn pipeline<'a>(
@@ -1743,6 +1768,16 @@ impl<'a> Documentable<'a> for &'a UnqualifiedImport {
             None => nil(),
             Some(s) => " as ".to_doc().append(s.as_str()),
         })
+    }
+}
+
+impl<'a> Documentable<'a> for &'a LogicalOpChainKind {
+    fn to_doc(self) -> Document<'a> {
+        match self {
+            LogicalOpChainKind::And => "and",
+            LogicalOpChainKind::Or => "or",
+        }
+        .to_doc()
     }
 }
 
