@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.0.14-alpha - 2023-MM-DD
+
+### Changed
+
+- **aiken-lang**: Now code gen uses a tree abstraction to build the Aiken
+  Intermediary Representation. This now fixes quite a number of minor issues
+  while making the code more maintainable. This is a large leap towards a stable
+  version and future updates will be on further simplifying and stabilizing the
+  tree abstraction.
+- **aiken-lang**: Zero argument anonymous functions now are implemted as a
+  delayed function body and calling them simply does force
+- **aiken-lang**: Matching on int in expect and when cases is now implemented
+- **aiken-lang**: Using assign in nested pattern matches is now implemented
+- **aiken-lang**: Using List<Data> as a validator params only checks the type is
+  a list and does not attempt to check each item
+
+### Optimization
+
+- **aiken-lang**: Recursion optimization to prevent static parameters from being
+  passed through every recursion
+
 ## v1.0.13-alpha - 2023-07-15
 
 ### Added
@@ -8,24 +29,28 @@
 
 ### Fixed
 
-- **aiken-lang**: fail, todo, and trace had issues with sequences and expressions
+- **aiken-lang**: fail, todo, and trace had issues with sequences and
+  expressions
 
 ## v1.0.12-alpha - 2023-07-14
 
 ### Added
 
-- **aiken**: added a `blueprint policy` command to compute the policy ID of a minting script
+- **aiken**: added a `blueprint policy` command to compute the policy ID of a
+  minting script
 - **uplc**: parsing and pretty printing for PlutusData
 
 ### Fixed
 
-- **aiken-lang**: Prevent mutual recursion caused by conflicting function names for generic expect type
+- **aiken-lang**: Prevent mutual recursion caused by conflicting function names
+  for generic expect type
 - **aiken-lang**: UPLC evaluation of large integers literals (> max u64)
 - **aiken-lang**: Parsing of error / todo keywords in when cases
 - **aiken-lang**: Parsing of negative integer patterns and constants
 - **aiken-lang**: automatically infer unused validator args as `Data`
 - **aiken-lang**: test crashing when referencing validators
-- **aiken**: mem and cpu values were not showing in white terminals, switched to cyan
+- **aiken**: mem and cpu values were not showing in white terminals, switched to
+  cyan
 
 ### Changed
 
@@ -52,8 +77,10 @@
 
 ### Fixed
 
-- **aiken-lang**: Explain discards and expect a bit better in the unused var warning
-- **aiken-lang**: Fix expect \_ = ... not including the cast from data logic if the type is data and right hand has a type annotation
+- **aiken-lang**: Explain discards and expect a bit better in the unused var
+  warning
+- **aiken-lang**: Fix expect \_ = ... not including the cast from data logic if
+  the type is data and right hand has a type annotation
 - **aiken-lang**: Fix for the final clause of a when expecting another clause
   afterwards in nested list cases.
 - **aiken-lang**: Fix for all elements were being destructured in tuple clauses
@@ -61,7 +88,8 @@
 - **aiken-lang**: Fix for tuple clause not consuming the next case causing
   incomplete contracts. Now tuple clause will always consume the next case
   unless it is the final clause
-- **aiken-lang**: Fix for builtins using the incorrect data to type conversion when used as a function param.
+- **aiken-lang**: Fix for builtins using the incorrect data to type conversion
+  when used as a function param.
 
 ## v1.0.10-alpha - 2023-06-13
 

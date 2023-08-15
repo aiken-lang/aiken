@@ -163,7 +163,21 @@ impl Server {
                 aiken_lang::format::pretty(&mut new_text, module, extra, src);
             }
             None => {
-                let src = fs::read_to_string(path).map_err(ProjectError::from)?;
+                let src = {
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        fs::read_to_string(path).map_err(ProjectError::from)?
+                    }
+                    #[cfg(target_os = "windows")]
+                    {
+                        let temp = match urlencoding::decode(path) {
+                            Ok(decoded) => decoded.to_string(),
+                            Err(_) => path.to_owned(),
+                        };
+                        fs::read_to_string(temp.trim_start_matches("/"))
+                            .map_err(ProjectError::from)?
+                    }
+                };
 
                 let (module, extra) = parser::module(&src, ModuleKind::Lib).map_err(|errs| {
                     aiken_project::error::Error::from_parse_errors(errs, Path::new(path), &src)
@@ -620,6 +634,7 @@ impl Server {
                     data: None,
                 };
 
+                #[cfg(not(target_os = "windows"))]
                 let path = path.canonicalize()?;
 
                 self.push_diagnostic(path.clone(), lsp_diagnostic.clone());

@@ -16,10 +16,10 @@ test tuple_when() {
         when item is {
           (token_policy, _, token_amount) ->
             amount == token_amount && policy == token_policy
-          _ -> False
         }
       },
     )
+
   list.length(filtered) > 0
 }
 

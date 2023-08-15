@@ -27,6 +27,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
     let mut project = TestProject::new();
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
+
     let mut generator = modules.new_generator(
         &project.functions,
         &project.data_types,
@@ -34,9 +35,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
         true,
     );
 
-    let Some(checked_module) = modules.values().next()
-    else {
-      unreachable!("There's got to be one right?")
+    let Some(checked_module) = modules.values().next() else {
+        unreachable!("There's got to be one right?")
     };
 
     let mut scripts = vec![];
@@ -186,30 +186,34 @@ fn acceptance_test_2_repeat() {
                 Term::list_data().apply(
                     Term::var("repeat")
                         .lambda("repeat")
-                        .apply(Term::var("repeat").apply(Term::var("repeat")))
-                        .lambda("repeat")
                         .apply(
-                            Term::less_than_equals_integer()
+                            Term::var("repeat")
+                                .apply(Term::var("repeat"))
                                 .apply(Term::var("n"))
-                                .apply(Term::integer(0.into()))
-                                .delayed_if_else(
-                                    Term::empty_list(),
-                                    Term::mk_cons()
-                                        .apply(Term::b_data().apply(Term::var("x")))
-                                        .apply(
-                                            Term::var("repeat")
-                                                .apply(Term::var("repeat"))
-                                                .apply(Term::var("x"))
+                                .lambda("repeat")
+                                .apply(
+                                    Term::less_than_equals_integer()
+                                        .apply(Term::var("n"))
+                                        .apply(Term::integer(0.into()))
+                                        .delayed_if_else(
+                                            Term::empty_list(),
+                                            Term::mk_cons()
+                                                .apply(Term::b_data().apply(Term::var("x")))
                                                 .apply(
-                                                    Term::sub_integer()
-                                                        .apply(Term::var("n"))
-                                                        .apply(Term::integer(1.into())),
+                                                    Term::var("repeat")
+                                                        .apply(Term::var("repeat"))
+                                                        .apply(
+                                                            Term::sub_integer()
+                                                                .apply(Term::var("n"))
+                                                                .apply(Term::integer(1.into())),
+                                                        ),
                                                 ),
-                                        ),
+                                        )
+                                        .lambda("n")
+                                        .lambda("repeat"),
                                 )
                                 .lambda("n")
-                                .lambda("x")
-                                .lambda("repeat"),
+                                .lambda("x"),
                         )
                         .apply(Term::byte_string("aiken".as_bytes().to_vec()))
                         .apply(Term::integer(2.into())),
@@ -266,33 +270,35 @@ fn acceptance_test_3_concat() {
                                 .lambda("left"),
                         )
                         .lambda("foldr")
-                        .apply(Term::var("foldr").apply(Term::var("foldr")))
-                        .lambda("foldr")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::var("zero"),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("foldr")
-                                                .apply(Term::var("foldr"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f"))
-                                                .apply(Term::var("zero")),
+                            Term::var("foldr")
+                                .apply(Term::var("foldr"))
+                                .apply(Term::var("xs"))
+                                .lambda("foldr")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::var("zero"),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .apply(
+                                                    Term::var("foldr")
+                                                        .apply(Term::var("foldr"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("foldr"),
                                 )
                                 .lambda("zero")
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("foldr"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -367,33 +373,35 @@ fn acceptance_test_4_concat_no_anon_func() {
                                 .lambda("x"),
                         )
                         .lambda("foldr")
-                        .apply(Term::var("foldr").apply(Term::var("foldr")))
-                        .lambda("foldr")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::var("zero"),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("foldr")
-                                                .apply(Term::var("foldr"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f"))
-                                                .apply(Term::var("zero")),
+                            Term::var("foldr")
+                                .apply(Term::var("foldr"))
+                                .apply(Term::var("xs"))
+                                .lambda("foldr")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::var("zero"),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .apply(
+                                                    Term::var("foldr")
+                                                        .apply(Term::var("foldr"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("foldr"),
                                 )
                                 .lambda("zero")
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("foldr"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -415,6 +423,157 @@ fn acceptance_test_4_concat_no_anon_func() {
                 Constant::Data(Data::integer(5.into())),
                 Constant::Data(Data::integer(6.into())),
             ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_5_direct_head() {
+    let src = r#"
+        use aiken/builtin.{head_list}
+        
+        test head_1() {
+          let head = fn(xs){
+              when xs is {
+                [] -> None
+                _ -> Some(head_list(xs))
+              }
+            }
+        
+          head([1, 2, 3]) == Some(1)
+        }     
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("head")
+                    .lambda("head")
+                    .apply(
+                        Term::var("xs")
+                            .delayed_choose_list(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::constr_data().apply(Term::integer(0.into())).apply(
+                                    Term::mk_cons()
+                                        .apply(Term::head_list().apply(Term::var("xs")))
+                                        .apply(Term::empty_list()),
+                                ),
+                            )
+                            .lambda("xs"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
+                    ])),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+            )),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_5_direct_2_heads() {
+    let src = r#"
+        use aiken/builtin.{head_list}
+        
+        test head_2() {
+          let head = fn(xs: List<Int>){
+              when xs is {
+                [] -> None
+                [a] -> Some(xs)
+                [a, b, ..] -> Some([a,b])
+              }
+            }
+        
+          head([1, 2, 3]) == Some([1, 2])
+        }     
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("head")
+                    .lambda("head")
+                    .apply(
+                        Term::var("xs")
+                            .delayed_choose_list(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::var("tail_1")
+                                    .delayed_choose_list(
+                                        Term::constr_data()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(Term::list_data().apply(Term::var("xs")))
+                                                    .apply(Term::empty_list()),
+                                            )
+                                            .lambda("a")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                ),
+                                            ),
+                                        Term::constr_data()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(
+                                                        Term::list_data().apply(
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("a")),
+                                                                )
+                                                                .apply(
+                                                                    Term::mk_cons()
+                                                                        .apply(
+                                                                            Term::i_data().apply(
+                                                                                Term::var("b"),
+                                                                            ),
+                                                                        )
+                                                                        .apply(Term::empty_list()),
+                                                                ),
+                                                        ),
+                                                    )
+                                                    .apply(Term::empty_list()),
+                                            )
+                                            .lambda("b")
+                                            .apply(Term::un_i_data().apply(
+                                                Term::head_list().apply(Term::var("tail_1")),
+                                            ))
+                                            .lambda("a")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("tail_1")
+                                    .apply(Term::tail_list().apply(Term::var("xs"))),
+                            )
+                            .lambda("xs"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
+                    ])),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::list(vec![
+                        Data::integer(1.into()),
+                        Data::integer(2.into()),
+                    ])],
+                ))
+                .into(),
+            )),
         false,
     );
 }
@@ -652,13 +811,13 @@ fn acceptance_test_7_unzip() {
                                                         .apply(Term::var("unzip"))
                                                         .apply(Term::var("rest")),
                                                 )
-                                                .lambda("a")
-                                                .apply(Term::un_i_data().apply(
-                                                    Term::fst_pair().apply(Term::var("head_pair")),
-                                                ))
                                                 .lambda("b")
                                                 .apply(Term::un_b_data().apply(
                                                     Term::snd_pair().apply(Term::var("head_pair")),
+                                                ))
+                                                .lambda("a")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::fst_pair().apply(Term::var("head_pair")),
                                                 ))
                                                 .lambda("rest")
                                                 .apply(Term::tail_list().apply(Term::var("xs")))
@@ -997,34 +1156,38 @@ fn acceptance_test_11_map_empty() {
                 Term::list_data().apply(
                     Term::var("map")
                         .lambda("map")
-                        .apply(Term::var("map").apply(Term::var("map")))
-                        .lambda("map")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::mk_cons()
-                                        .apply(
-                                            Term::i_data()
-                                                .apply(Term::var("f").apply(Term::var("x"))),
+                            Term::var("map")
+                                .apply(Term::var("map"))
+                                .apply(Term::var("xs"))
+                                .lambda("map")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::i_data().apply(
+                                                        Term::var("f").apply(Term::var("x")),
+                                                    ),
+                                                )
+                                                .apply(
+                                                    Term::var("map")
+                                                        .apply(Term::var("map"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .apply(
-                                            Term::var("map")
-                                                .apply(Term::var("map"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f")),
-                                        )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("map"),
                                 )
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("map"),
+                                .lambda("xs"),
                         )
                         .apply(Term::empty_list())
                         .apply(
@@ -1064,34 +1227,38 @@ fn acceptance_test_11_map_filled() {
                 Term::list_data().apply(
                     Term::var("map")
                         .lambda("map")
-                        .apply(Term::var("map").apply(Term::var("map")))
-                        .lambda("map")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::mk_cons()
-                                        .apply(
-                                            Term::i_data()
-                                                .apply(Term::var("f").apply(Term::var("x"))),
+                            Term::var("map")
+                                .apply(Term::var("map"))
+                                .apply(Term::var("xs"))
+                                .lambda("map")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::i_data().apply(
+                                                        Term::var("f").apply(Term::var("x")),
+                                                    ),
+                                                )
+                                                .apply(
+                                                    Term::var("map")
+                                                        .apply(Term::var("map"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .apply(
-                                            Term::var("map")
-                                                .apply(Term::var("map"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f")),
-                                        )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("map"),
                                 )
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("map"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(6.into())),
@@ -1145,39 +1312,41 @@ fn acceptance_test_12_filter_even() {
                 Term::list_data().apply(
                     Term::var("filter")
                         .lambda("filter")
-                        .apply(Term::var("filter").apply(Term::var("filter")))
-                        .lambda("filter")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .delayed_if_else(
-                                            Term::mk_cons()
-                                                .apply(Term::i_data().apply(Term::var("x")))
-                                                .apply(
+                            Term::var("filter")
+                                .apply(Term::var("filter"))
+                                .apply(Term::var("xs"))
+                                .lambda("filter")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .delayed_if_else(
+                                                    Term::mk_cons()
+                                                        .apply(Term::i_data().apply(Term::var("x")))
+                                                        .apply(
+                                                            Term::var("filter")
+                                                                .apply(Term::var("filter"))
+                                                                .apply(Term::var("rest")),
+                                                        ),
                                                     Term::var("filter")
                                                         .apply(Term::var("filter"))
-                                                        .apply(Term::var("rest"))
-                                                        .apply(Term::var("f")),
-                                                ),
-                                            Term::var("filter")
-                                                .apply(Term::var("filter"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f")),
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("filter"),
                                 )
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("filter"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -1240,7 +1409,9 @@ fn acceptance_test_14_list_creation() {
                                 )
                                 .apply(
                                     Term::mk_cons()
-                                        .apply(Term::i_data().apply(Term::integer(0.into())))
+                                        .apply(Term::Constant(
+                                            Constant::Data(Data::integer(0.into())).into(),
+                                        ))
                                         .apply(Term::empty_list()),
                                 ),
                         ),
@@ -1854,30 +2025,33 @@ fn acceptance_test_22_filter_map() {
                                 .lambda("xs"),
                         )
                         .lambda("foldr")
-                        .apply(Term::var("foldr").apply(Term::var("foldr")))
-                        .lambda("foldr")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::var("zero"),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("foldr")
-                                                .apply(Term::var("foldr"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f"))
-                                                .apply(Term::var("zero")),
+                            Term::var("foldr")
+                                .apply(Term::var("foldr"))
+                                .apply(Term::var("xs"))
+                                .lambda("foldr")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::var("zero"),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .apply(
+                                                    Term::var("foldr")
+                                                        .apply(Term::var("foldr"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(Term::head_list().apply(Term::var("xs"))),
+                                        .lambda("xs")
+                                        .lambda("foldr"),
                                 )
                                 .lambda("zero")
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("foldr"),
+                                .lambda("xs"),
                         )
                         .apply(Term::empty_list())
                         .apply(
@@ -2171,31 +2345,34 @@ fn acceptance_test_26_foldr() {
                 Term::list_data().apply(
                     Term::var("flat_map")
                         .lambda("flat_map")
-                        .apply(Term::var("flat_map").apply(Term::var("flat_map")))
-                        .lambda("flat_map")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::var("concat")
-                                        .apply(Term::var("f").apply(Term::var("x")))
-                                        .apply(
-                                            Term::var("flat_map")
-                                                .apply(Term::var("flat_map"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f")),
+                            Term::var("flat_map")
+                                .apply(Term::var("flat_map"))
+                                .apply(Term::var("xs"))
+                                .lambda("flat_map")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::var("concat")
+                                                .apply(Term::var("f").apply(Term::var("x")))
+                                                .apply(
+                                                    Term::var("flat_map")
+                                                        .apply(Term::var("flat_map"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("flat_map"),
                                 )
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("flat_map"),
+                                .lambda("xs"),
                         )
                         .lambda("concat")
                         .apply(
@@ -2213,33 +2390,35 @@ fn acceptance_test_26_foldr() {
                                 .lambda("left"),
                         )
                         .lambda("foldr")
-                        .apply(Term::var("foldr").apply(Term::var("foldr")))
-                        .lambda("foldr")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::var("zero"),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("foldr")
-                                                .apply(Term::var("foldr"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f"))
-                                                .apply(Term::var("zero")),
+                            Term::var("foldr")
+                                .apply(Term::var("foldr"))
+                                .apply(Term::var("xs"))
+                                .lambda("foldr")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::var("zero"),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .apply(
+                                                    Term::var("foldr")
+                                                        .apply(Term::var("foldr"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("foldr"),
                                 )
                                 .lambda("zero")
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("foldr"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -2307,31 +2486,34 @@ fn acceptance_test_27() {
                 Term::list_data().apply(
                     Term::var("flat_map")
                         .lambda("flat_map")
-                        .apply(Term::var("flat_map").apply(Term::var("flat_map")))
-                        .lambda("flat_map")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::var("concat")
-                                        .apply(Term::var("f").apply(Term::var("x")))
-                                        .apply(
-                                            Term::var("flat_map")
-                                                .apply(Term::var("flat_map"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f")),
+                            Term::var("flat_map")
+                                .apply(Term::var("flat_map"))
+                                .apply(Term::var("xs"))
+                                .lambda("flat_map")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::var("concat")
+                                                .apply(Term::var("f").apply(Term::var("x")))
+                                                .apply(
+                                                    Term::var("flat_map")
+                                                        .apply(Term::var("flat_map"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("flat_map"),
                                 )
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("flat_map"),
+                                .lambda("xs"),
                         )
                         .lambda("concat")
                         .apply(
@@ -2349,33 +2531,35 @@ fn acceptance_test_27() {
                                 .lambda("left"),
                         )
                         .lambda("foldr")
-                        .apply(Term::var("foldr").apply(Term::var("foldr")))
-                        .lambda("foldr")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::var("zero"),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("foldr")
-                                                .apply(Term::var("foldr"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f"))
-                                                .apply(Term::var("zero")),
+                            Term::var("foldr")
+                                .apply(Term::var("foldr"))
+                                .apply(Term::var("xs"))
+                                .lambda("foldr")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::var("zero"),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .apply(
+                                                    Term::var("foldr")
+                                                        .apply(Term::var("foldr"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("foldr"),
                                 )
                                 .lambda("zero")
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("foldr"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -2443,31 +2627,34 @@ fn acceptance_test_30() {
                 Term::list_data().apply(
                     Term::var("flat_map")
                         .lambda("flat_map")
-                        .apply(Term::var("flat_map").apply(Term::var("flat_map")))
-                        .lambda("flat_map")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::var("concat")
-                                        .apply(Term::var("f").apply(Term::var("x")))
-                                        .apply(
-                                            Term::var("flat_map")
-                                                .apply(Term::var("flat_map"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f")),
+                            Term::var("flat_map")
+                                .apply(Term::var("flat_map"))
+                                .apply(Term::var("xs"))
+                                .lambda("flat_map")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::var("concat")
+                                                .apply(Term::var("f").apply(Term::var("x")))
+                                                .apply(
+                                                    Term::var("flat_map")
+                                                        .apply(Term::var("flat_map"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("flat_map"),
                                 )
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("flat_map"),
+                                .lambda("xs"),
                         )
                         .lambda("concat")
                         .apply(
@@ -2485,33 +2672,35 @@ fn acceptance_test_30() {
                                 .lambda("left"),
                         )
                         .lambda("foldr")
-                        .apply(Term::var("foldr").apply(Term::var("foldr")))
-                        .lambda("foldr")
                         .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::var("zero"),
-                                    Term::var("f")
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("foldr")
-                                                .apply(Term::var("foldr"))
-                                                .apply(Term::var("rest"))
-                                                .apply(Term::var("f"))
-                                                .apply(Term::var("zero")),
+                            Term::var("foldr")
+                                .apply(Term::var("foldr"))
+                                .apply(Term::var("xs"))
+                                .lambda("foldr")
+                                .apply(
+                                    Term::var("xs")
+                                        .delayed_choose_list(
+                                            Term::var("zero"),
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .apply(
+                                                    Term::var("foldr")
+                                                        .apply(Term::var("foldr"))
+                                                        .apply(Term::var("rest")),
+                                                )
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("xs")))
+                                                .lambda("x")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("xs")),
+                                                )),
                                         )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        ),
+                                        .lambda("xs")
+                                        .lambda("foldr"),
                                 )
                                 .lambda("zero")
                                 .lambda("f")
-                                .lambda("xs")
-                                .lambda("foldr"),
+                                .lambda("xs"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -2706,13 +2895,16 @@ fn when_tuple_deconstruction() {
                                 Term::un_i_data().apply(
                                     Term::var(CONSTR_GET_FIELD)
                                         .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("a")),
+                                            Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("a")),
                                         )
                                         .apply(Term::integer(0.into())),
                                 ),
                             )
                             .apply(Term::var("x"))
+                            .delayed_if_else(
+                                Term::bool(true),
+                                Term::bool(false).trace(Term::string("a.idx == x ? False")),
+                            )
                             .lambda("x")
                             .apply(
                                 Term::un_i_data()
@@ -2745,135 +2937,137 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("red")),
             )
             .delayed_if_else(Term::unit(), Term::Error)
-            .lambda("dat")
+            .lambda("_")
             .apply(
-                Term::var("dat").lambda("_").apply(
-                    Term::var("expect_Datum")
-                        .lambda("expect_Datum")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("dat_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit().lambda("_").apply(
-                                                Term::var("expect_Thing")
-                                                    .apply(Term::var("field_1")),
+                Term::var("expect_RedSpend")
+                    .lambda("expect_RedSpend")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("red_constr_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(
+                                            "List/Tuple/Constr contains more items than expected",
+                                        )),
+                                    )
+                                    .lambda("field_1")
+                                    .apply(Term::un_i_data().apply(
+                                        Term::head_list().apply(Term::var("red_constr_fields")),
+                                    ))
+                                    .lambda("red_constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("red")),
+                                    ),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject"))
+                                    .delayed_if_else(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("red"))
+                                            .delayed_choose_list(
+                                                Term::unit(),
+                                                Term::Error.trace(Term::string(
+                                                    "Expected no fields for Constr",
+                                                )),
                                             ),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("field_1")
-                                        .apply(
-                                            Term::head_list().apply(Term::var("dat_constr_fields")),
-                                        )
-                                        .lambda("dat_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("dat")),
-                                        ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("dat"))
-                                                .delayed_choose_list(
-                                                    Term::unit(),
-                                                    Term::Error
-                                                        .trace(Term::string("Expected no fields for Constr"))
-                                                ),
-                                            Term::Error.trace(Term::string("Constr index did not match any type variant")),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
-                                .lambda("dat"),
-                        )
-                        .lambda("expect_Thing")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("field_1_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("idx")
-                                        .apply(
-                                            Term::un_i_data().apply(
-                                                Term::head_list()
-                                                    .apply(Term::var("field_1_constr_fields")),
-                                            ),
-                                        )
-                                        .lambda("field_1_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("field_1")),
-                                        ),
-                                    Term::Error.trace(Term::string(
-                                        "Constr index did not match any type variant",
-                                    )),
-                                )
-                                .lambda("subject")
-                                .apply(
-                                    Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")),
-                                )
-                                .lambda("field_1"),
-                        )
-                        .apply(Term::var("dat")),
-                ),
+                                        Term::Error.trace(Term::string(
+                                            "Constr index did not match any type variant",
+                                        )),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
+                            .lambda("red"),
+                    )
+                    .apply(Term::var("red")),
             )
             .lambda("red")
+            .apply(Term::var("red"))
+            .lambda("_")
             .apply(
-                Term::var("red").lambda("_").apply(
-                    Term::var("expect_RedSpend")
-                        .lambda("expect_RedSpend")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("red_constr_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                        )
-                                        .lambda("field_1")
-                                        .apply(Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("red_constr_fields")),
-                                        ))
-                                        .lambda("red_constr_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("red")),
+                Term::var("expect_Datum")
+                    .lambda("expect_Datum")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("dat_constr_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit().lambda("_").apply(
+                                            Term::var("expect_Thing").apply(Term::var("field_1")),
                                         ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("red"))
-                                                .delayed_choose_list(
-                                                    Term::unit(),
-                                                    Term::Error
-                                                        .trace(Term::string("Expected no fields for Constr"))
-                                                ),
-                                            Term::Error.trace(Term::string("Constr index did not match any type variant")),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
-                                .lambda("red"),
-                        )
-                        .apply(Term::var("red")),
-                ),
+                                        Term::Error.trace(Term::string(
+                                            "List/Tuple/Constr contains more items than expected",
+                                        )),
+                                    )
+                                    .lambda("field_1")
+                                    .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
+                                    .lambda("dat_constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")),
+                                    ),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject"))
+                                    .delayed_if_else(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("dat"))
+                                            .delayed_choose_list(
+                                                Term::unit(),
+                                                Term::Error.trace(Term::string(
+                                                    "Expected no fields for Constr",
+                                                )),
+                                            ),
+                                        Term::Error.trace(Term::string(
+                                            "Constr index did not match any type variant",
+                                        )),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
+                            .lambda("dat"),
+                    )
+                    .lambda("expect_Thing")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("field_1_constr_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(
+                                            "List/Tuple/Constr contains more items than expected",
+                                        )),
+                                    )
+                                    .lambda("idx")
+                                    .apply(Term::un_i_data().apply(
+                                        Term::head_list().apply(Term::var("field_1_constr_fields")),
+                                    ))
+                                    .lambda("field_1_constr_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("field_1")),
+                                    ),
+                                Term::Error.trace(Term::string(
+                                    "Constr index did not match any type variant",
+                                )),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")))
+                            .lambda("field_1"),
+                    )
+                    .apply(Term::var("dat")),
             )
+            .lambda("dat")
+            .apply(Term::var("dat"))
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
@@ -3059,114 +3253,115 @@ fn generic_validator_type_test() {
             .lambda("subject")
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
             .delayed_if_else(Term::unit(), Term::Error)
-            .lambda("r")
-            .apply(
-                Term::var("r").lambda("_").apply(
-                    Term::var("__expect_A")
-                        .lambda("__expect_A")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::var(CONSTR_FIELDS_EXPOSER)
-                                        .apply(Term::var("r"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string(
-                                                "Expected no fields for Constr",
-                                            )),
-                                        ),
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject"))
-                                        .delayed_if_else(
-                                            Term::tail_list()
-                                                .apply(Term::var("tail_1"))
-                                                .delayed_choose_list(
-                                                    Term::unit().lambda("_").apply(
-                                                        Term::var("__expect_B")
-                                                            .apply(Term::var("field_B")),
-                                                    ),
-                                                    Term::Error
-                                                        .trace(Term::string("List/Tuple/Constr contains more items than expected")),
-                                                )
-                                                .lambda("field_B")
-                                                .apply(Term::head_list().apply(Term::var("tail_1")))
-                                                .lambda("tail_1")
-                                                .apply(
-                                                    Term::tail_list().apply(Term::var("r_fields")),
-                                                )
-                                                .lambda("field_0")
-                                                .apply(
-                                                    Term::equals_integer()
-                                                        .apply(Term::integer(0.into()))
-                                                        .apply(
-                                                            Term::fst_pair().apply(
-                                                                Term::unconstr_data().apply(
-                                                                    Term::head_list().apply(
-                                                                        Term::var("r_fields"),
-                                                                    ),
+            .lambda("_").apply(
+                Term::var("__expect_A")
+                    .lambda("__expect_A")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                    .apply(Term::var("r"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(
+                                            "Expected no fields for Constr",
+                                        )),
+                                    ),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject"))
+                                    .delayed_if_else(
+                                        Term::tail_list()
+                                            .apply(Term::var("tail_1"))
+                                            .delayed_choose_list(
+                                                Term::unit().lambda("_").apply(
+                                                    Term::var("__expect_B")
+                                                        .apply(Term::var("field_B")),
+                                                ),
+                                                Term::Error
+                                                    .trace(Term::string("List/Tuple/Constr contains more items than expected")),
+                                            )
+                                            .lambda("field_B")
+                                            .apply(Term::head_list().apply(Term::var("tail_1")))
+                                            .lambda("tail_1")
+                                            .apply(
+                                                Term::tail_list().apply(Term::var("r_fields")),
+                                            )
+                                            .lambda("field_0")
+                                            .apply(
+                                                Term::equals_integer()
+                                                    .apply(Term::integer(0.into()))
+                                                    .apply(
+                                                        Term::fst_pair().apply(
+                                                            Term::unconstr_data().apply(
+                                                                Term::head_list().apply(
+                                                                    Term::var("r_fields"),
                                                                 ),
                                                             ),
-                                                        )
-                                                        .delayed_if_else(Term::unit(), Term::Error),
-                                                )
-                                                .lambda("r_fields")
-                                                .apply(
-                                                    Term::var(CONSTR_FIELDS_EXPOSER)
-                                                        .apply(Term::var("r")),
-                                                ),
-                                            Term::Error.trace(Term::string(
-                                                "Constr index did not match any type variant",
-                                            )),
-                                        ),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
-                                .lambda("r"),
-                        )
-                        .lambda("__expect_B")
-                        .apply(
-                            Term::equals_integer()
-                                .apply(Term::integer(0.into()))
-                                .apply(Term::var("subject"))
-                                .delayed_if_else(
-                                    Term::tail_list()
-                                        .apply(Term::var("B_fields"))
-                                        .delayed_choose_list(
-                                            Term::unit(),
-                                            Term::Error.trace(Term::string(error_string)),
-                                        )
-                                        .lambda("something")
-                                        .apply(
-                                            Term::equals_integer()
-                                                .apply(Term::integer(0.into()))
-                                                .apply(
-                                                    Term::fst_pair().apply(
-                                                        Term::unconstr_data().apply(
-                                                            Term::head_list()
-                                                                .apply(Term::var("B_fields")),
                                                         ),
+                                                    )
+                                                    .delayed_if_else(Term::unit(), Term::Error),
+                                            )
+                                            .lambda("r_fields")
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("r")),
+                                            ),
+                                        Term::Error.trace(Term::string(
+                                            "Constr index did not match any type variant",
+                                        )),
+                                    ),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
+                            .lambda("r"),
+                    )
+                    .lambda("__expect_B")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::var("subject"))
+                            .delayed_if_else(
+                                Term::tail_list()
+                                    .apply(Term::var("B_fields"))
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::Error.trace(Term::string(error_string)),
+                                    )
+                                    .lambda("something")
+                                    .apply(
+                                        Term::equals_integer()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::fst_pair().apply(
+                                                    Term::unconstr_data().apply(
+                                                        Term::head_list()
+                                                            .apply(Term::var("B_fields")),
                                                     ),
-                                                )
-                                                .delayed_if_else(Term::unit(), Term::Error),
-                                        )
-                                        .lambda("B_fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER)
-                                                .apply(Term::var("field_B")),
-                                        ),
-                                    Term::Error.trace(Term::string(
-                                        "Constr index did not match any type variant",
-                                    )),
-                                )
-                                .lambda("subject")
-                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
-                                .lambda("field_B"),
-                        )
-                        .apply(Term::var("r")),
-                ),
+                                                ),
+                                            )
+                                            .delayed_if_else(Term::unit(), Term::Error),
+                                    )
+                                    .lambda("B_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("field_B")),
+                                    ),
+                                Term::Error.trace(Term::string(
+                                    "Constr index did not match any type variant",
+                                )),
+                            )
+                            .lambda("subject")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
+                            .lambda("field_B"),
+                    )
+                    .apply(Term::var("r")),
+            )
+            .lambda("r")
+            .apply(
+                Term::var("r"),
             )
             .lambda("_ctx")
             .lambda("r")
@@ -3617,11 +3812,7 @@ fn list_fields_unwrap() {
                     .lambda("item_1_fields")
                     .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("item_1")))
                     .lambda("item_1")
-                    .apply(Term::head_list().apply(Term::var("field_list")))
-                    .lambda("clauses_delayed")
-                    .apply(Term::bool(false).delay())
-                    .lambda("tail_1")
-                    .apply(Term::tail_list().apply(Term::var("field_list"))),
+                    .apply(Term::head_list().apply(Term::var("field_list"))),
             )
             .lambda("field_list")
             .apply(Term::list_values(vec![
@@ -3706,30 +3897,36 @@ fn foldl_type_mismatch() {
             .apply(
                 Term::var("foldl")
                     .lambda("foldl")
-                    .apply(Term::var("foldl").apply(Term::var("foldl")))
-                    .lambda("foldl")
                     .apply(
-                        Term::var("self")
-                            .delayed_choose_list(
-                                Term::var("zero"),
-                                Term::var("foldl")
-                                    .apply(Term::var("foldl"))
-                                    .apply(Term::var("xs"))
-                                    .apply(Term::var("with"))
-                                    .apply(
-                                        Term::var("with")
-                                            .apply(Term::var("x"))
-                                            .apply(Term::var("zero")),
+                        Term::var("foldl")
+                            .apply(Term::var("foldl"))
+                            .apply(Term::var("self"))
+                            .apply(Term::var("zero"))
+                            .lambda("foldl")
+                            .apply(
+                                Term::var("self")
+                                    .delayed_choose_list(
+                                        Term::var("zero"),
+                                        Term::var("foldl")
+                                            .apply(Term::var("foldl"))
+                                            .apply(Term::var("xs"))
+                                            .apply(
+                                                Term::var("with")
+                                                    .apply(Term::var("x"))
+                                                    .apply(Term::var("zero")),
+                                            )
+                                            .lambda("xs")
+                                            .apply(Term::tail_list().apply(Term::var("self")))
+                                            .lambda("x")
+                                            .apply(Term::head_list().apply(Term::var("self"))),
                                     )
-                                    .lambda("xs")
-                                    .apply(Term::tail_list().apply(Term::var("self")))
-                                    .lambda("x")
-                                    .apply(Term::head_list().apply(Term::var("self"))),
+                                    .lambda("zero")
+                                    .lambda("self")
+                                    .lambda("foldl"),
                             )
                             .lambda("zero")
                             .lambda("with")
-                            .lambda("self")
-                            .lambda("foldl"),
+                            .lambda("self"),
                     )
                     .apply(Term::var("outputs"))
                     .apply(
@@ -3969,17 +4166,19 @@ fn expect_head3_cast_data_no_tail() {
             .lambda("i")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_1"))))
             .lambda("tail_1")
-            .apply(Term::tail_list().apply(Term::var("unwrap_a")))
-            .lambda("h")
-            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
-            .lambda("unwrap_a")
-            .apply(Term::unlist_data().apply(Term::var("a")))
-            .lambda("a")
-            .apply(Term::list_data().apply(Term::list_values(vec![
+            .apply(Term::tail_list().apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
+            ])))
+            .lambda("h")
+            .apply(
+                Term::un_i_data().apply(Term::head_list().apply(Term::list_values(vec![
+                    Constant::Data(Data::integer(1.into())),
+                    Constant::Data(Data::integer(2.into())),
+                    Constant::Data(Data::integer(3.into())),
+                ]))),
+            ),
         false,
     );
 }
@@ -4009,13 +4208,11 @@ fn expect_head_cast_data_no_tail() {
             .lambda("h")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
             .lambda("unwrap_a")
-            .apply(Term::unlist_data().apply(Term::var("a")))
-            .lambda("a")
-            .apply(Term::list_data().apply(Term::list_values(vec![
+            .apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
+            ])),
         true,
     );
 }
@@ -4039,30 +4236,35 @@ fn expect_head_cast_data_with_tail() {
             .apply(
                 Term::var("expect_on_list")
                     .lambda("expect_on_list")
-                    .apply(Term::var("expect_on_list").apply(Term::var("expect_on_list")))
-                    .lambda("expect_on_list")
                     .apply(
-                        Term::var("list_to_check")
-                            .delayed_choose_list(
-                                Term::unit(),
-                                Term::var("expect_on_list")
-                                    .apply(Term::var("expect_on_list"))
-                                    .apply(Term::tail_list().apply(Term::var("list_to_check")))
-                                    .apply(Term::var("check_with"))
-                                    .lambda("_")
-                                    .apply(Term::var("check_with").apply(
-                                        Term::head_list().apply(Term::var("list_to_check")),
-                                    )),
+                        Term::var("expect_on_list")
+                            .apply(Term::var("expect_on_list"))
+                            .apply(Term::var("list_to_check"))
+                            .lambda("expect_on_list")
+                            .apply(
+                                Term::var("list_to_check")
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::var("expect_on_list")
+                                            .apply(Term::var("expect_on_list"))
+                                            .apply(
+                                                Term::tail_list().apply(Term::var("list_to_check")),
+                                            )
+                                            .lambda("_")
+                                            .apply(Term::var("check_with").apply(
+                                                Term::head_list().apply(Term::var("list_to_check")),
+                                            )),
+                                    )
+                                    .lambda("list_to_check")
+                                    .lambda("expect_on_list"),
                             )
                             .lambda("check_with")
-                            .lambda("list_to_check")
-                            .lambda("expect_on_list"),
+                            .lambda("list_to_check"),
                     )
                     .apply(Term::var("tail_2"))
                     .apply(
-                        Term::unit()
-                            .lambda("_")
-                            .apply(Term::un_i_data().apply(Term::var("list_item")))
+                        Term::un_i_data()
+                            .apply(Term::var("list_item"))
                             .lambda("list_item"),
                     ),
             )
@@ -4075,13 +4277,249 @@ fn expect_head_cast_data_with_tail() {
             .lambda("h")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
             .lambda("unwrap_a")
-            .apply(Term::unlist_data().apply(Term::var("a")))
-            .lambda("a")
-            .apply(Term::list_data().apply(Term::list_values(vec![
+            .apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
+            ])),
+        false,
+    );
+}
+
+#[test]
+fn test_init_3() {
+    let src = r#"
+      
+      pub fn init(self: List<a>) -> Option<List<a>> {
+        when self is {
+          [] -> None
+          _ -> Some(do_init(self))
+        }
+      }
+      
+      fn do_init(self: List<a>) -> List<a> {
+        when self is {
+          [] -> fail @"unreachable"
+          [_] ->
+            []
+          [x, ..xs] ->
+            [x, ..do_init(xs)]
+        }
+      }
+      
+      test init_3() {
+        init([1, 2, 3, 4]) == Some([1, 2, 3])
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("init")
+                    .lambda("init")
+                    .apply(
+                        Term::var("self")
+                            .delayed_choose_list(
+                                Term::data(Data::constr(1, vec![])),
+                                Term::constr_data().apply(Term::integer(0.into())).apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::list_data().apply(
+                                                Term::var("do_init").apply(Term::var("self")),
+                                            ),
+                                        )
+                                        .apply(Term::empty_list()),
+                                ),
+                            )
+                            .lambda("self"),
+                    )
+                    .lambda("do_init")
+                    .apply(Term::var("do_init").apply(Term::var("do_init")))
+                    .lambda("do_init")
+                    .apply(
+                        Term::var("self")
+                            .delayed_choose_list(
+                                Term::Error.trace(Term::string("unreachable")),
+                                Term::var("tail_1")
+                                    .delayed_choose_list(
+                                        Term::empty_list(),
+                                        Term::mk_cons()
+                                            .apply(Term::i_data().apply(Term::var("x")))
+                                            .apply(
+                                                Term::var("do_init")
+                                                    .apply(Term::var("do_init"))
+                                                    .apply(Term::var("xs")),
+                                            )
+                                            .lambda("xs")
+                                            .apply(Term::tail_list().apply(Term::var("self")))
+                                            .lambda("x")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list().apply(Term::var("self")),
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("tail_1")
+                                    .apply(Term::tail_list().apply(Term::var("self"))),
+                            )
+                            .lambda("self")
+                            .lambda("do_init"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::integer(2.into())),
+                        Constant::Data(Data::integer(3.into())),
+                        Constant::Data(Data::integer(4.into())),
+                    ])),
+            )
+            .apply(Term::data(Data::constr(
+                0,
+                vec![Data::list(vec![
+                    Data::integer(1.into()),
+                    Data::integer(2.into()),
+                    Data::integer(3.into()),
+                ])],
+            ))),
+        false,
+    );
+}
+
+#[test]
+fn list_clause_with_guard() {
+    let src = r#"
+      fn do_init(self: List<Int>) -> List<Int> {
+        when self is {
+          [] -> fail @"unreachable"
+          [_] ->
+            []
+          [a, x] if x > 2 -> {
+            [a]
+          }
+          [a, b] -> []
+          [a, b, ..c] -> {
+            c
+          }
+        }
+      }
+      
+      test init_3() {
+        do_init([1, 3]) == [1]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("do_init")
+                        .lambda("do_init")
+                        .apply(
+                            Term::var("self")
+                                .delayed_choose_list(
+                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::var("tail_1")
+                                        .delayed_choose_list(
+                                            Term::empty_list(),
+                                            Term::var("tail_2")
+                                                .choose_list(
+                                                    Term::var("clause_guard")
+                                                        .if_else(
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("a")),
+                                                                )
+                                                                .apply(Term::empty_list())
+                                                                .delay(),
+                                                            Term::var("clauses_delayed"),
+                                                        )
+                                                        .force()
+                                                        .lambda("clause_guard")
+                                                        .apply(
+                                                            Term::less_than_integer()
+                                                                .apply(Term::integer(2.into()))
+                                                                .apply(Term::var("x")),
+                                                        )
+                                                        .lambda("x")
+                                                        .apply(
+                                                            Term::un_i_data().apply(
+                                                                Term::head_list()
+                                                                    .apply(Term::var("tail_1")),
+                                                            ),
+                                                        )
+                                                        .lambda("a")
+                                                        .apply(
+                                                            Term::un_i_data().apply(
+                                                                Term::head_list()
+                                                                    .apply(Term::var("self")),
+                                                            ),
+                                                        )
+                                                        .delay(),
+                                                    Term::var("clauses_delayed"),
+                                                )
+                                                .force()
+                                                .lambda("clauses_delayed")
+                                                .apply(
+                                                    Term::var("tail_2")
+                                                        .delayed_choose_list(
+                                                            Term::empty_list()
+                                                                .lambda("b")
+                                                                .apply(
+                                                                    Term::un_i_data().apply(
+                                                                        Term::head_list().apply(
+                                                                            Term::var("tail_1"),
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                                .lambda("a")
+                                                                .apply(
+                                                                    Term::un_i_data().apply(
+                                                                        Term::head_list().apply(
+                                                                            Term::var("self"),
+                                                                        ),
+                                                                    ),
+                                                                ),
+                                                            Term::var("c").lambda("c").apply(
+                                                                Term::tail_list()
+                                                                    .apply(Term::var("tail_1"))
+                                                                    .lambda("b")
+                                                                    .apply(Term::un_i_data().apply(
+                                                                        Term::head_list().apply(
+                                                                            Term::var("tail_1"),
+                                                                        ),
+                                                                    ))
+                                                                    .lambda("a")
+                                                                    .apply(
+                                                                        Term::un_i_data().apply(
+                                                                            Term::head_list()
+                                                                                .apply(Term::var(
+                                                                                    "self",
+                                                                                )),
+                                                                        ),
+                                                                    ),
+                                                            ),
+                                                        )
+                                                        .delay(),
+                                                )
+                                                .lambda("tail_2")
+                                                .apply(
+                                                    Term::tail_list().apply(Term::var("tail_1")),
+                                                ),
+                                        )
+                                        .lambda("tail_1")
+                                        .apply(Term::tail_list().apply(Term::var("self"))),
+                                )
+                                .lambda("self"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(3.into())),
+                        ])),
+                ),
+            )
+            .apply(Term::data(Data::list(vec![Data::integer(1.into())]))),
         false,
     );
 }

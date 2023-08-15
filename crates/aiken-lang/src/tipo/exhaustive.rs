@@ -342,21 +342,8 @@ impl Matrix {
                 }
             }
 
-            // (:)
-            //     <$> Maybe.mapMaybe (isMissing alts ctors) altList
-            //     <*> isExhaustive (Maybe.mapMaybe specializeRowByAnything matrix) (n - 1)
             return m;
         }
-
-        // let
-        //   isAltExhaustive (Can.Ctor name _ arity _) =
-        //     recoverCtor alts name arity <$>
-        //     isExhaustive
-        //       (Maybe.mapMaybe (specializeRowByCtor name arity) matrix)
-        //       (arity + n - 1)
-        // in
-        // concatMap isAltExhaustive altList
-        //
 
         alts.iter()
             .map(|ctor| {
@@ -418,11 +405,16 @@ impl Pattern {
                 let args = args
                     .into_iter()
                     .enumerate()
-                    .map(|(index, p)| {
+                    .filter_map(|(index, p)| {
                         if index == 1 {
-                            pretty_tail(p)
+                            let tail = pretty_tail(p);
+                            if tail == "[]" {
+                                None
+                            } else {
+                                Some(tail)
+                            }
                         } else {
-                            p.pretty()
+                            Some(p.pretty())
                         }
                     })
                     .join(", ");
@@ -564,15 +556,14 @@ pub(super) fn simplify(
             Ok(p)
         }
         ast::Pattern::Constructor {
-            name,
             arguments,
             location,
             tipo,
             with_spread,
-            module,
+            constructor: super::PatternConstructor::Record { name, .. },
             ..
         } => {
-            let (type_module, type_name, arity) = match tipo.deref() {
+            let (module, type_name, arity) = match tipo.deref() {
                 tipo::Type::App {
                     name: type_name,
                     module,
@@ -591,25 +582,7 @@ pub(super) fn simplify(
                 _ => unreachable!("tipo should be a Type::App"),
             };
 
-            let module_opt = if type_module.is_empty() || environment.current_module == type_module
-            {
-                None
-            } else {
-                Some(type_module.clone())
-            };
-
-            let constructors = environment
-                .get_constructors_for_type(&module_opt, type_name, *location)?
-                .clone();
-
-            let mut alts = Vec::new();
-
-            for constructor in constructors {
-                let value_constructor =
-                    environment.get_value_constructor(module.as_ref(), &constructor, *location)?;
-
-                alts.push(value_constructor.clone());
-            }
+            let alts = environment.get_constructors_for_type(module, type_name, *location)?;
 
             let mut args = Vec::new();
 

@@ -269,7 +269,6 @@ fn infer_definition(
                     .get_variable(&fun.name)
                     .expect("Could not find preregistered type for function");
 
-
                 let preregistered_type = preregistered_fn.tipo.clone();
 
                 let (args_types, _return_type) = preregistered_type
@@ -308,8 +307,11 @@ fn infer_definition(
                     environment,
                     tracing,
                     kind,
-                )? else {
-                    unreachable!("validator definition inferred as something other than a function?")
+                )?
+                else {
+                    unreachable!(
+                        "validator definition inferred as something other than a function?"
+                    )
                 };
 
                 if !typed_fun.return_type.is_bool() {
@@ -319,7 +321,8 @@ fn infer_definition(
                     });
                 }
 
-                let typed_params = typed_fun.arguments
+                let typed_params = typed_fun
+                    .arguments
                     .drain(0..params_length)
                     .map(|mut arg| {
                         if arg.tipo.is_unbound() {
@@ -329,7 +332,6 @@ fn infer_definition(
                         arg
                     })
                     .collect();
-
 
                 if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
                     return Err(Error::IncorrectValidatorArity {
@@ -356,7 +358,8 @@ fn infer_definition(
                             environment,
                             tracing,
                             kind,
-                        )? else {
+                        )?
+                        else {
                             unreachable!(
                                 "validator definition inferred as something other than a function?"
                             )
@@ -397,8 +400,6 @@ fn infer_definition(
                         Ok(other_typed_fun)
                     })
                     .transpose();
-
-
 
                 Ok(Definition::Validator(Validator {
                     doc,

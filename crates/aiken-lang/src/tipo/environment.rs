@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     ast::{
-        Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind, Pattern,
+        Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedPattern,
         UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
@@ -19,8 +19,8 @@ use super::{
     error::{Error, Snippet, Warning},
     exhaustive::{simplify, Matrix, PatternStack},
     hydrator::Hydrator,
-    AccessorsMap, PatternConstructor, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar,
-    ValueConstructor, ValueConstructorVariant,
+    AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
+    ValueConstructorVariant,
 };
 
 #[derive(Debug)]
@@ -1484,109 +1484,56 @@ impl<'a> Environment<'a> {
         Ok(())
     }
 
-    pub fn check_list_pattern_exhaustiveness(
-        &mut self,
-        patterns: Vec<Pattern<PatternConstructor, Arc<Type>>>,
-    ) -> Result<(), Vec<String>> {
-        let mut cover_empty = false;
-        let mut cover_tail = false;
-
-        let patterns = patterns.iter().map(|p| match p {
-            Pattern::Assign { pattern, .. } => pattern,
-            _ => p,
-        });
-
-        // TODO: We could also warn on redundant patterns. As soon as we've matched the entire
-        // list, any new pattern is redundant. For example:
-        //
-        // when xs is {
-        //   [] => ...
-        //   [x, ..] => ...
-        //   [y] => ...
-        // }
-        //
-        // That last pattern is actually redundant / unreachable.
-        for p in patterns {
-            match p {
-                Pattern::Var { .. } => {
-                    cover_empty = true;
-                    cover_tail = true;
-                }
-                Pattern::Discard { .. } => {
-                    cover_empty = true;
-                    cover_tail = true;
-                }
-                Pattern::List { elements, tail, .. } => {
-                    if elements.is_empty() {
-                        cover_empty = true;
-                    }
-                    match tail {
-                        None => {}
-                        Some(p) => match **p {
-                            Pattern::Discard { .. } => {
-                                cover_tail = true;
-                            }
-                            Pattern::Var { .. } => {
-                                cover_tail = true;
-                            }
-                            _ => {
-                                unreachable!()
-                            }
-                        },
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        if cover_empty && cover_tail {
-            Ok(())
-        } else {
-            let mut missing = vec![];
-            if !cover_empty {
-                missing.push("[]".to_owned());
-            }
-            if !cover_tail {
-                missing.push("[_, ..]".to_owned());
-            }
-            Err(missing)
-        }
-    }
-
     /// Lookup constructors for type in the current scope.
     ///
     pub fn get_constructors_for_type(
         &mut self,
-        full_module_name: &Option<String>,
+        full_module_name: &String,
         name: &str,
         location: Span,
-    ) -> Result<&Vec<String>, Error> {
-        match full_module_name {
-            None => self
-                .module_types_constructors
+    ) -> Result<Vec<ValueConstructor>, Error> {
+        if full_module_name.is_empty() || full_module_name == self.current_module {
+            self.module_types_constructors
                 .get(name)
                 .ok_or_else(|| Error::UnknownType {
                     name: name.to_string(),
                     types: self.module_types.keys().map(|t| t.to_string()).collect(),
                     location,
-                }),
-
-            Some(m) => {
-                let module =
-                    self.importable_modules
-                        .get(m)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location,
+                })?
+                .iter()
+                .map(|constructor| {
+                    self.scope
+                        .get(constructor)
+                        .cloned()
+                        .ok_or_else(|| Error::UnknownModuleValue {
                             name: name.to_string(),
-                            imported_modules: self
-                                .importable_modules
+                            module_name: self.current_module.clone(),
+                            value_constructors: self
+                                .module_values
                                 .keys()
                                 .map(|t| t.to_string())
                                 .collect(),
-                        })?;
+                            location,
+                        })
+                })
+                .collect()
+        } else {
+            let module = self
+                .importable_modules
+                .get(full_module_name)
+                .ok_or_else(|| Error::UnknownModule {
+                    location,
+                    name: name.to_string(),
+                    imported_modules: self
+                        .importable_modules
+                        .keys()
+                        .map(|t| t.to_string())
+                        .collect(),
+                })?;
 
-                self.unused_modules.remove(m);
+            self.unused_modules.remove(full_module_name);
 
+            let constructors =
                 module
                     .types_constructors
                     .get(name)
@@ -1595,8 +1542,25 @@ impl<'a> Environment<'a> {
                         name: name.to_string(),
                         module_name: module.name.clone(),
                         type_constructors: module.types.keys().map(|t| t.to_string()).collect(),
+                    })?;
+
+            constructors
+                .iter()
+                .map(|constructor| {
+                    module.values.get(constructor).cloned().ok_or_else(|| {
+                        Error::UnknownModuleValue {
+                            name: name.to_string(),
+                            module_name: module.name.clone(),
+                            value_constructors: module
+                                .values
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                            location,
+                        }
                     })
-            }
+                })
+                .collect()
         }
     }
 }

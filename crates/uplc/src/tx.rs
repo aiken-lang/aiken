@@ -5,9 +5,8 @@ use pallas_primitives::{
 use pallas_traverse::{Era, MultiEraTx};
 
 use error::Error;
-pub use eval::get_script_and_datum_lookup_table;
 pub use phase_one::eval_phase_one;
-use script_context::{ResolvedInput, SlotConfig};
+pub use script_context::{ResolvedInput, SlotConfig};
 
 use crate::{
     ast::{DeBruijn, Program},
@@ -15,8 +14,10 @@ use crate::{
     PlutusData,
 };
 
+use eval::get_script_and_datum_lookup_table;
+
 pub mod error;
-mod eval;
+pub mod eval;
 mod phase_one;
 pub mod script_context;
 #[cfg(test)]

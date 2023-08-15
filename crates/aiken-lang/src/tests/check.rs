@@ -186,7 +186,7 @@ fn exhaustiveness_simple() {
 fn exhaustiveness_missing_empty_list() {
     let source_code = r#"
         fn foo() {
-          let thing = [1, 2] 
+          let thing = [1, 2]
           when thing is {
             [a, ..] -> True
           }
@@ -209,7 +209,7 @@ fn exhaustiveness_missing_empty_list() {
 fn exhaustiveness_missing_list_wildcards() {
     let source_code = r#"
         fn foo() {
-          let thing = [1, 2] 
+          let thing = [1, 2]
           when thing is {
             [] -> True
           }
@@ -232,7 +232,7 @@ fn exhaustiveness_missing_list_wildcards() {
 fn exhaustiveness_missing_list_wildcards_2() {
     let source_code = r#"
         fn foo() {
-          let thing = [1, 2] 
+          let thing = [1, 2]
           when thing is {
             [] -> True
             [a] -> True
@@ -256,7 +256,7 @@ fn exhaustiveness_missing_list_wildcards_2() {
 fn exhaustiveness_int() {
     let source_code = r#"
         fn foo() {
-          let thing = 1 
+          let thing = 1
           when thing is {
             1 -> True
           }
@@ -279,7 +279,7 @@ fn exhaustiveness_int() {
 fn exhaustiveness_int_redundant() {
     let source_code = r#"
         fn foo() {
-          let thing = 1 
+          let thing = 1
           when thing is {
             1 -> True
             1 -> True
@@ -304,7 +304,7 @@ fn exhaustiveness_int_redundant() {
 fn exhaustiveness_let_binding() {
     let source_code = r#"
         fn foo() {
-          let Some(x) = None 
+          let Some(x) = None
           True
         }
     "#;
@@ -326,7 +326,7 @@ fn exhaustiveness_let_binding() {
 fn exhaustiveness_expect() {
     let source_code = r#"
         fn foo() {
-          expect Some(x) = None 
+          expect Some(x) = None
           True
         }
     "#;
@@ -476,7 +476,7 @@ fn exhaustiveness_complex() {
         }
 
         fn foo() {
-          let thing = ((Yes, 1), (Yes, [1, 2])) 
+          let thing = ((Yes, 1), (Yes, [1, 2]))
           when thing is {
             ((Yes, _), (Yes, [])) -> True
             ((Yes, _), (No { .. }, _)) -> True
@@ -493,8 +493,145 @@ fn exhaustiveness_complex() {
                 unmatched,
                 ..
             }
-        )) if  unmatched[0] == "((Yes, _), (Yes, [_, ..]))" && unmatched[1] == "((No { idk, thing }, _), (Yes, _))"
+        )) if unmatched[0] == "((Yes, _), (Yes, [_, ..]))" && unmatched[1] == "((No { idk, thing }, _), (Yes, _))"
     ))
+}
+
+#[test]
+fn exhaustiveness_tuple() {
+    let source_code = r#"
+        fn foo() {
+            when (14, True) is {
+                (14, True) -> Void
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "(_, _)"
+    ))
+}
+
+#[test]
+fn exhaustiveness_nested_list_and_tuples() {
+    fn assert_step(step: &str, expected: &str) {
+        let result = check(parse(step));
+        assert!(matches!(
+            result,
+            Err((
+                _,
+                Error::NotExhaustivePatternMatch {
+                    unmatched,
+                    ..
+                }
+            )) if unmatched[0] == expected
+        ));
+    }
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                      ] -> Void
+                [([(14, True)], 42), ..] -> Void
+            }
+        }
+        "#,
+        "[([], _), ..]",
+    );
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                     ] -> Void
+                [([(_, True)], 42), ..] -> Void
+                [([         ],  _), ..] -> Void
+            }
+        }
+        "#,
+        "[([(_, False), ..], _), ..]",
+    );
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                          ] -> Void
+                [([(_, True )    ], 42), ..] -> Void
+                [([              ],  _), ..] -> Void
+                [([(_, False), ..],  _), ..] -> Void
+            }
+        }
+        "#,
+        "[([(_, True), _, ..], _), ..]",
+    );
+
+    assert_step(
+        r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                             ] -> Void
+                [([(_, True )       ], 42), ..] -> Void
+                [([                 ],  _), ..] -> Void
+                [([(_, False)   , ..],  _), ..] -> Void
+                [([(_, True ), _, ..],  _), ..] -> Void
+            }
+        }
+        "#,
+        "[([(_, True)], _), ..]",
+    );
+
+    let source_code = r#"
+        fn foo() {
+            let xs : List<(List<(Int, Bool)>, Int)> = [([(14, True)], 42)]
+            when xs is {
+                [                             ] -> Void
+                [([(_, True )       ], 42), ..] -> Void
+                [([                 ],  _), ..] -> Void
+                [([(_, False)   , ..],  _), ..] -> Void
+                [([(_, True ), _, ..],  _), ..] -> Void
+                [([(_, True )       ],  _), ..] -> Void
+            }
+        }
+    "#;
+
+    assert!(matches!(check(parse(source_code)), Ok(_)))
+}
+
+#[test]
+fn exhaustiveness_guard() {
+    let source_code = r#"
+        fn foo() {
+            when [(True, 42)] is {
+                [(True,  x), ..] if x == 42 -> Void
+                [(False, x), ..] -> Void
+                [] -> Void
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::NotExhaustivePatternMatch {
+                unmatched,
+                ..
+            }
+        )) if unmatched[0] == "[(True, _), ..]"
+    ));
 }
 
 #[test]

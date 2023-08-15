@@ -81,7 +81,7 @@ impl TestProject {
                 module.kind,
                 &self.package.to_string(),
                 &self.module_types,
-                Tracing::NoTraces,
+                Tracing::KeepTraces,
                 &mut warnings,
             )
             .expect("Failed to type-check module");

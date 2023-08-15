@@ -89,6 +89,15 @@ impl Type {
         }
     }
 
+    pub fn is_primitive(&self) -> bool {
+        self.is_bool()
+            || self.is_bytearray()
+            || self.is_int()
+            || self.is_string()
+            || self.is_void()
+            || self.is_data()
+    }
+
     pub fn is_void(&self) -> bool {
         match self {
             Self::App { module, name, .. } if "Void" == name && module.is_empty() => true,
@@ -167,6 +176,14 @@ impl Type {
         match self {
             Type::Var { tipo } => tipo.borrow().is_tuple(),
             Type::Tuple { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_2_tuple(&self) -> bool {
+        match self {
+            Type::Var { tipo } => tipo.borrow().is_2_tuple(),
+            Type::Tuple { elems } => elems.len() == 2,
             _ => false,
         }
     }
@@ -470,6 +487,13 @@ impl TypeVar {
     pub fn is_tuple(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_tuple(),
+            _ => false,
+        }
+    }
+
+    pub fn is_2_tuple(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_2_tuple(),
             _ => false,
         }
     }

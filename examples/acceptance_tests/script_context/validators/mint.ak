@@ -17,8 +17,10 @@ validator {
 fn assert_purpose(ctx) {
   expect [my_policy_id] =
     ctx.transaction.mint
+      |> value.from_minted_value
       |> value.without_lovelace
       |> value.policies
+
   expect Mint(policy_id) = ctx.purpose
 
   my_policy_id == policy_id
@@ -26,7 +28,8 @@ fn assert_purpose(ctx) {
 
 fn assert_mint(purpose, transaction) {
   expect Mint(policy_id) = purpose
-  let tokens = value.tokens(transaction.mint, policy_id)
+  let tokens =
+    value.tokens(transaction.mint |> value.from_minted_value, policy_id)
 
   when dict.get(tokens, #"666f6f") is {
     None -> fail @"token not found"

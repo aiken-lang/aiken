@@ -2,9 +2,10 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
+use pallas_primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
-    ast::{Name, Program, Term},
+    ast::{Constant, Data, Name, Program, Term, Type},
     builtins::DefaultFunction,
 };
 
@@ -180,13 +181,15 @@ fn inline_direct_reduce(term: &mut Term<Name>) {
             inline_direct_reduce(func);
             inline_direct_reduce(arg);
 
-            let Term::Lambda { parameter_name, body } = func
-            else{
+            let Term::Lambda {
+                parameter_name,
+                body,
+            } = func
+            else {
                 return;
             };
 
-            let Term::Var(name) = body.as_ref()
-            else {
+            let Term::Var(name) = body.as_ref() else {
                 return;
             };
 
@@ -219,18 +222,23 @@ fn inline_identity_reduce(term: &mut Term<Name>) {
             inline_identity_reduce(func);
             inline_identity_reduce(arg);
 
-            let Term::Lambda { parameter_name, body } = func
+            let Term::Lambda {
+                parameter_name,
+                body,
+            } = func
             else {
                 return;
             };
 
-            let Term::Lambda { parameter_name: identity_name, body: identity_body } = arg
+            let Term::Lambda {
+                parameter_name: identity_name,
+                body: identity_body,
+            } = arg
             else {
                 return;
             };
 
-            let Term::Var(identity_var) = Rc::make_mut(identity_body)
-            else {
+            let Term::Var(identity_var) = Rc::make_mut(identity_body) else {
                 return;
             };
 
@@ -286,6 +294,15 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
                         *term =
                             substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
                     }
+                } else if occurrences == 0 {
+                    if let Term::Var(_)
+                    | Term::Constant(_)
+                    | Term::Delay(_)
+                    | Term::Lambda { .. }
+                    | Term::Builtin(_) = arg
+                    {
+                        *term = body.as_ref().clone();
+                    }
                 }
             }
         }
@@ -306,43 +323,110 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
             wrap_data_reduce(Rc::make_mut(body));
         }
         Term::Apply { function, argument } => {
-            let Term::Builtin(
-                first_action
-            ) = function.as_ref()
-            else {
+            let Term::Builtin(first_action) = function.as_ref() else {
                 wrap_data_reduce(Rc::make_mut(function));
                 wrap_data_reduce(Rc::make_mut(argument));
                 return;
             };
 
-            let Term::Apply { function: inner_func, argument: inner_arg } = Rc::make_mut(argument)
-            else {
-                wrap_data_reduce(Rc::make_mut(argument));
-                return;
-            };
-
-            let Term::Builtin(second_action) = inner_func.as_ref()
-            else {
-                wrap_data_reduce(Rc::make_mut(argument));
-                return;
-            };
-
-            match (first_action, second_action) {
-                (DefaultFunction::UnIData, DefaultFunction::IData)
-                | (DefaultFunction::IData, DefaultFunction::UnIData)
-                | (DefaultFunction::BData, DefaultFunction::UnBData)
-                | (DefaultFunction::UnBData, DefaultFunction::BData)
-                | (DefaultFunction::ListData, DefaultFunction::UnListData)
-                | (DefaultFunction::UnListData, DefaultFunction::ListData)
-                | (DefaultFunction::MapData, DefaultFunction::UnMapData)
-                | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
-                    wrap_data_reduce(Rc::make_mut(inner_arg));
-                    *term = inner_arg.as_ref().clone();
-                }
-                _ => {
+            if let Term::Apply {
+                function: inner_func,
+                argument: inner_arg,
+            } = Rc::make_mut(argument)
+            {
+                let Term::Builtin(second_action) = inner_func.as_ref() else {
                     wrap_data_reduce(Rc::make_mut(argument));
+                    return;
+                };
+
+                match (first_action, second_action) {
+                    (DefaultFunction::UnIData, DefaultFunction::IData)
+                    | (DefaultFunction::IData, DefaultFunction::UnIData)
+                    | (DefaultFunction::BData, DefaultFunction::UnBData)
+                    | (DefaultFunction::UnBData, DefaultFunction::BData)
+                    | (DefaultFunction::ListData, DefaultFunction::UnListData)
+                    | (DefaultFunction::UnListData, DefaultFunction::ListData)
+                    | (DefaultFunction::MapData, DefaultFunction::UnMapData)
+                    | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
+                        wrap_data_reduce(Rc::make_mut(inner_arg));
+                        *term = inner_arg.as_ref().clone();
+                    }
+                    _ => {
+                        wrap_data_reduce(Rc::make_mut(argument));
+                    }
                 }
-            }
+            } else if let Term::Constant(c) = Rc::make_mut(argument) {
+                match (first_action, Rc::make_mut(c)) {
+                    (
+                        DefaultFunction::UnIData,
+                        Constant::Data(PlutusData::BigInt(BigInt::Int(i))),
+                    ) => {
+                        *term = Term::integer(i128::from(*i).into());
+                    }
+                    (DefaultFunction::IData, Constant::Integer(i)) => {
+                        *term = Term::data(Data::integer(i.clone()));
+                    }
+                    (DefaultFunction::UnBData, Constant::Data(PlutusData::BoundedBytes(b))) => {
+                        *term = Term::byte_string(b.clone().into());
+                    }
+                    (DefaultFunction::BData, Constant::ByteString(b)) => {
+                        *term = Term::data(Data::bytestring(b.clone()));
+                    }
+                    (DefaultFunction::UnListData, Constant::Data(PlutusData::Array(l))) => {
+                        *term = Term::list_values(
+                            l.iter()
+                                .map(|item| Constant::Data(item.clone()))
+                                .collect_vec(),
+                        );
+                    }
+                    (DefaultFunction::ListData, Constant::ProtoList(_, l)) => {
+                        *term = Term::data(Data::list(
+                            l.iter()
+                                .map(|item| match item {
+                                    Constant::Data(d) => d.clone(),
+                                    _ => unreachable!(),
+                                })
+                                .collect_vec(),
+                        ));
+                    }
+                    (DefaultFunction::MapData, Constant::ProtoList(_, m)) => {
+                        *term = Term::data(Data::map(
+                            m.iter()
+                                .map(|m| match m {
+                                    Constant::ProtoPair(_, _, f, s) => {
+                                        match (f.as_ref(), s.as_ref()) {
+                                            (Constant::Data(d), Constant::Data(d2)) => {
+                                                (d.clone(), d2.clone())
+                                            }
+                                            _ => unreachable!(),
+                                        }
+                                    }
+                                    _ => unreachable!(),
+                                })
+                                .collect_vec(),
+                        ));
+                    }
+                    (DefaultFunction::UnMapData, Constant::Data(PlutusData::Map(m))) => {
+                        *term = Term::map_values(
+                            m.iter()
+                                .map(|item| {
+                                    Constant::ProtoPair(
+                                        Type::Data,
+                                        Type::Data,
+                                        Constant::Data(item.0.clone()).into(),
+                                        Constant::Data(item.1.clone()).into(),
+                                    )
+                                })
+                                .collect_vec(),
+                        );
+                    }
+                    _ => {
+                        wrap_data_reduce(Rc::make_mut(argument));
+                    }
+                }
+            } else {
+                wrap_data_reduce(Rc::make_mut(argument));
+            };
         }
         Term::Force(f) => {
             wrap_data_reduce(Rc::make_mut(f));
@@ -483,9 +567,11 @@ fn replace_identity_usage(term: &Term<Name>, original: Rc<Name>) -> Term<Name> {
             let func = replace_identity_usage(func, original.clone());
             let arg = replace_identity_usage(arg, original.clone());
 
-            let Term::Var(f) = function.as_ref()
-            else {
-                return Term::Apply { function: func.into(), argument: arg.into() }
+            let Term::Var(f) = function.as_ref() else {
+                return Term::Apply {
+                    function: func.into(),
+                    argument: arg.into(),
+                };
             };
 
             if f.as_ref() == original.as_ref() {
@@ -509,7 +595,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        ast::{Constant, Name, NamedDeBruijn, Program, Term},
+        ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
         parser::interner::Interner,
     };
@@ -686,7 +772,7 @@ mod tests {
                 .apply(Term::Constant(
                     Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
                 ))
-                .apply(Term::i_data().apply(Term::integer(1.into())))
+                .apply(Term::data(Data::integer(1.into())))
                 .lambda("x"),
         };
 
@@ -723,9 +809,7 @@ mod tests {
             version: (1, 0, 0),
             term: Term::equals_integer()
                 .apply(Term::integer(1.into()))
-                .apply(Term::un_i_data().apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
-                )))
+                .apply(Term::integer(5.into()))
                 .lambda("x"),
         };
 

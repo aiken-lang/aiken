@@ -553,14 +553,15 @@ impl UntypedExpr {
     }
 
     pub fn fail(reason: Option<Self>, location: Span) -> Self {
-        UntypedExpr::Trace {
-            location,
-            kind: TraceKind::Error,
-            then: Box::new(UntypedExpr::ErrorTerm { location }),
-            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+        if let Some(reason) = reason {
+            UntypedExpr::Trace {
                 location,
-                value: DEFAULT_ERROR_STR.to_string(),
-            })),
+                kind: TraceKind::Error,
+                then: Box::new(UntypedExpr::ErrorTerm { location }),
+                text: Box::new(reason),
+            }
+        } else {
+            UntypedExpr::ErrorTerm { location }
         }
     }
 
