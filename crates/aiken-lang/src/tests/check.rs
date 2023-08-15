@@ -662,6 +662,27 @@ fn expect_sugar_incorrect_type() {
 }
 
 #[test]
+fn logical_op_chain_expressions_should_be_bool() {
+    let source_code = r#"
+        fn foo() {
+          and {
+            1 == 1,
+            False,
+            or {
+              2 == 3,
+              1
+            }
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
 fn anonymous_function_scoping() {
     let source_code = r#"
         fn reduce(list, f, i) {
