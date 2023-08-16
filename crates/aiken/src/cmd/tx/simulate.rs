@@ -120,7 +120,7 @@ pub fn exec(
                 redeemer.index
             )
         };
-
+        
         let result = tx::eval_phase_two(
             tx_babbage,
             &resolved_inputs,
@@ -133,13 +133,15 @@ pub fn exec(
 
         match result {
             Ok(redeemers) => {
-                let total_budget_used =
+                // this should allow N scripts to be
+                let total_budget_used: Vec<ExBudget> =
                     redeemers
                         .iter()
-                        .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                            mem: accum.mem + curr.ex_units.mem as i64,
-                            cpu: accum.cpu + curr.ex_units.steps as i64,
-                        });
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
                 eprintln!("\n");
                 println!(

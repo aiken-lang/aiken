@@ -10,7 +10,7 @@ use crate::machine::cost_model::ExBudget;
 use super::{eval_phase_two, ResolvedInput, SlotConfig};
 
 #[test]
-fn test_eval() {
+fn test_eval_0() {
     /*
 
     PlutusV2
@@ -251,24 +251,26 @@ fn test_eval() {
             .unwrap();
 
             assert_eq!(redeemers.len(), 1);
-
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 747528, cpu: 217294271 },
+            ];
 
             assert_eq!(
                 total_budget_used,
-                // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 217294271,
-                    mem: 747528
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -523,23 +525,26 @@ fn test_eval_1() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 738928, cpu: 215316271 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 215316271,
-                    mem: 738928
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -629,23 +634,26 @@ fn test_eval_2() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 655782, cpu: 188449458 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 188449458,
-                    mem: 655782
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -894,23 +902,26 @@ fn test_eval_3() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 583272, cpu: 182855351 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 182855351,
-                    mem: 583272
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -1080,23 +1091,26 @@ fn test_eval_5() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 114126, cpu: 40098159 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 40098159,
-                    mem: 114126
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -1185,23 +1199,26 @@ fn test_eval_6() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 4002, cpu: 6231248 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 6231248,
-                    mem: 4002
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -1290,23 +1307,26 @@ fn test_eval_7() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 2954794, cpu: 1221507148 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 1221507148,
-                    mem: 2954794
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),
@@ -1546,23 +1566,26 @@ fn test_eval_8() {
 
             assert_eq!(redeemers.len(), 1);
 
-            let total_budget_used =
-                redeemers
-                    .iter()
-                    .fold(ExBudget { mem: 0, cpu: 0 }, |accum, curr| ExBudget {
-                        mem: accum.mem + curr.ex_units.mem as i64,
-                        cpu: accum.cpu + curr.ex_units.steps as i64,
-                    });
+            let total_budget_used: Vec<ExBudget> =
+                    redeemers
+                        .iter()
+                        .map(|curr| ExBudget {
+                            mem: curr.ex_units.mem as i64,
+                            cpu: curr.ex_units.steps as i64,
+                        })
+                        .collect();
 
             println!("{total_budget_used:?}");
+            
+            // N scripts return an N length vector of ExBudgets
+            let expected_budgets: Vec<ExBudget> = vec![
+                ExBudget { mem: 2691678, cpu: 711173018 },
+            ];
 
             assert_eq!(
                 total_budget_used,
                 // Numbers came uplc evaluate
-                ExBudget {
-                    cpu: 711173018,
-                    mem: 2691678
-                }
+                expected_budgets
             );
         }
         _ => unreachable!(),

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **aiken-lang**: Tx Simulate now returns a list of execution budgets for each
+redeemer instead of calculating the total units required to run all the scripts.
 - **aiken-lang**: Now code gen uses a tree abstraction to build the Aiken
   Intermediary Representation. This now fixes quite a number of minor issues
   while making the code more maintainable. This is a large leap towards a stable
