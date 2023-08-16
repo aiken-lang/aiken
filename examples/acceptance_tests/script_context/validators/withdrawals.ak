@@ -1,5 +1,4 @@
 use aiken/dict
-use aiken/list
 use aiken/transaction.{ScriptContext}
 use aiken/transaction/credential.{
   Inline, ScriptCredential, VerificationKeyCredential,
@@ -21,7 +20,7 @@ validator {
         ),
       )
 
-    [
+    and {
       when dict.get(ctx.transaction.withdrawals, alice) is {
         None -> fail @"alice's withdrawal not found"
         Some(value) -> value == 42
@@ -31,7 +30,6 @@ validator {
         Some(value) -> value == 14
       },
       dict.keys(ctx.transaction.withdrawals) == [alice, bob],
-    ]
-      |> list.and
+    }
   }
 }

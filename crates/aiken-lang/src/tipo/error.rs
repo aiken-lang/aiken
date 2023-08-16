@@ -1,6 +1,6 @@
 use super::Type;
 use crate::{
-    ast::{Annotation, BinOp, CallArg, Span, UntypedPattern},
+    ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedPattern},
     expr::{self, UntypedExpr},
     format::Formatter,
     levenshtein,
@@ -55,7 +55,22 @@ impl Diagnostic for UnknownLabels {
 
 #[derive(Debug, thiserror::Error, Diagnostic, Clone)]
 pub enum Error {
-    #[error("I discovered a type cast from Data without an annotation")]
+    #[error("I discovered an {} chain with less than 2 expressions.", op.if_supports_color(Stdout, |s| s.purple()))]
+    #[diagnostic(code("illegal::logical_op_chain"))]
+    #[diagnostic(help(
+        "Logical {}/{} chains require at least 2 expressions. You are missing {}.",
+        "and".if_supports_color(Stdout, |s| s.purple()),
+        "or".if_supports_color(Stdout, |s| s.purple()),
+        missing
+    ))]
+    LogicalOpChainMissingExpr {
+        op: LogicalOpChainKind,
+        #[label]
+        location: Span,
+        missing: u8,
+    },
+
+    #[error("I discovered a type cast from Data without an annotation.")]
     #[diagnostic(code("illegal::type_cast"))]
     #[diagnostic(help("Try adding an annotation...\n\n{}", format_suggestion(value)))]
     CastDataNoAnn {

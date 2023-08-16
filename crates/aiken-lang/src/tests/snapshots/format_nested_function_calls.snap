@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-lang/src/tests/format.rs
-description: "Code:\n\nfn foo(output) {\n  [\n    output.address.stake_credential == Some(\n    Inline(\n    VerificationKeyCredential(\n      #\"66666666666666666666666666666666666666666666666666666666\",\n    ))\n    )\n    ,\n    when output.datum is {\n      InlineDatum(_) -> True\n      _ -> fail \"expected inline datum\"\n    },\n  ]\n  |> list.and\n}\n"
+description: "Code:\n\nfn foo(output) {\n  [\n    output.address.stake_credential == Some(\n    Inline(\n    VerificationKeyCredential(\n      #\"66666666666666666666666666666666666666666666666666666666\",\n    ))\n    )\n    ,\n    when output.datum is {\n      InlineDatum(_) -> True\n      _ -> fail \"expected inline datum\"\n    },\n  ]\n  |> list.and_func\n}\n"
 ---
 fn foo(output) {
   [
@@ -16,6 +16,6 @@ fn foo(output) {
       _ -> fail @"expected inline datum"
     },
   ]
-    |> list.and
+    |> list.and_func
 }
 

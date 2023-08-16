@@ -6,7 +6,11 @@ use crate::{
 };
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
-use std::{fmt, ops::Range, sync::Arc};
+use std::{
+    fmt::{self, Display},
+    ops::Range,
+    sync::Arc,
+};
 use vec1::Vec1;
 
 pub const ASSERT_VARIABLE: &str = "_try";
@@ -99,7 +103,6 @@ impl TypedModule {
 fn str_to_keyword(word: &str) -> Option<Token> {
     // Alphabetical keywords:
     match word {
-        "assert" => Some(Token::Expect),
         "expect" => Some(Token::Expect),
         "else" => Some(Token::Else),
         "is" => Some(Token::Is),
@@ -116,7 +119,11 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "type" => Some(Token::Type),
         "trace" => Some(Token::Trace),
         "test" => Some(Token::Test),
+        // TODO: remove this in a future release
         "error" => Some(Token::Fail),
+        "fail" => Some(Token::Fail),
+        "and" => Some(Token::And),
+        "or" => Some(Token::Or),
         "validator" => Some(Token::Validator),
         _ => None,
     }
@@ -779,6 +786,15 @@ pub enum BinOp {
     ModInt,
 }
 
+impl From<LogicalOpChainKind> for BinOp {
+    fn from(value: LogicalOpChainKind) -> Self {
+        match value {
+            LogicalOpChainKind::And => BinOp::And,
+            LogicalOpChainKind::Or => BinOp::Or,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp {
     // !
@@ -1222,6 +1238,21 @@ impl chumsky::Span for Span {
 
     fn end(&self) -> Self::Offset {
         self.end
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogicalOpChainKind {
+    And,
+    Or,
+}
+
+impl Display for LogicalOpChainKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogicalOpChainKind::And => write!(f, "and"),
+            LogicalOpChainKind::Or => write!(f, "or"),
+        }
     }
 }
 

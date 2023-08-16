@@ -1,7 +1,7 @@
 use aiken/bytearray
 use aiken/dict
 use aiken/hash.{Hash, Sha2_256, sha2_256}
-use aiken/interval.{between, intersection, is_empty, strictly_between}
+use aiken/interval.{between, intersection, is_empty, entirely_between}
 use aiken/list
 use aiken/transaction.{InlineDatum}
 
@@ -87,7 +87,7 @@ test intersection_3() {
   let iv1 =
     between(0, 1)
   let iv2 =
-    strictly_between(1, 2)
+    entirely_between(1, 2)
   intersection(iv1, iv2)
     |> is_empty
 }

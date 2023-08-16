@@ -5,8 +5,9 @@ use vec1::Vec1;
 use crate::{
     ast::{
         self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        DefinitionLocation, IfBranch, ParsedCallArg, Pattern, RecordUpdateSpread, Span, TraceKind,
-        TypedClause, TypedRecordUpdateArg, UnOp, UntypedClause, UntypedRecordUpdateArg,
+        DefinitionLocation, IfBranch, LogicalOpChainKind, ParsedCallArg, Pattern,
+        RecordUpdateSpread, Span, TraceKind, TypedClause, TypedRecordUpdateArg, UnOp,
+        UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -533,6 +534,12 @@ pub enum UntypedExpr {
         location: Span,
         value: Box<Self>,
     },
+
+    LogicalOpChain {
+        kind: LogicalOpChainKind,
+        expressions: Vec<Self>,
+        location: Span,
+    },
 }
 
 pub const DEFAULT_TODO_STR: &str = "aiken::todo";
@@ -716,6 +723,7 @@ impl UntypedExpr {
             | Self::FieldAccess { location, .. }
             | Self::RecordUpdate { location, .. }
             | Self::UnOp { location, .. }
+            | Self::LogicalOpChain { location, .. }
             | Self::If { location, .. } => *location,
             Self::Sequence {
                 location,

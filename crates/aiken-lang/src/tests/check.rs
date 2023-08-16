@@ -662,6 +662,27 @@ fn expect_sugar_incorrect_type() {
 }
 
 #[test]
+fn logical_op_chain_expressions_should_be_bool() {
+    let source_code = r#"
+        fn foo() {
+          and {
+            1 == 1,
+            False,
+            or {
+              2 == 3,
+              1
+            }
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
 fn anonymous_function_scoping() {
     let source_code = r#"
         fn reduce(list, f, i) {
@@ -945,12 +966,12 @@ fn trace_non_strings() {
 #[test]
 fn trace_if_false_ok() {
     let source_code = r#"
-        fn or(a: Bool, b: Bool) {
+        fn or_func(a: Bool, b: Bool) {
            (a || b)?
         }
 
         test foo() {
-            or(True, False)?
+            or_func(True, False)?
         }
 
         test bar() {

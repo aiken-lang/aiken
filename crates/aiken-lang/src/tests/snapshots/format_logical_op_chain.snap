@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn smth() { and { foo, bar, or { bar, foo }} }\n"
+---
+fn smth() {
+  and {
+    foo,
+    bar,
+    or {
+      bar,
+      foo,
+    },
+  }
+}
+

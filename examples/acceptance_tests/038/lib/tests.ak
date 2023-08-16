@@ -1,25 +1,25 @@
-pub fn and(self: List<Bool>) -> Bool {
+pub fn and_f(self: List<Bool>) -> Bool {
   when self is {
     [] ->
       True
     [x, ..xs] ->
-      x && and(xs)
+      x && and_f(xs)
   }
 }
 
-test and_1() {
-  and([True, True])
+test and_f_1() {
+  and_f([True, True])
 }
 
-pub fn or(self: List<Bool>) -> Bool {
+pub fn or_f(self: List<Bool>) -> Bool {
   when self is {
     [] ->
       False
     [x, ..xs] ->
-      x || or(xs)
+      x || or_f(xs)
   }
 }
 
-test or_1() {
-  or([True, True])
+test or_f_1() {
+  or_f([True, True])
 }

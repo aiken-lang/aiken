@@ -1,16 +1,14 @@
 use aiken/dict
-use aiken/list
 use aiken/transaction.{Mint, ScriptContext}
 use aiken/transaction/value
 
 validator {
   fn mint(redeemer: Data, ctx: ScriptContext) {
-    [
+    and {
       assert_purpose(ctx),
       assert_mint(ctx.purpose, ctx.transaction),
       assert_redeemers(ctx, redeemer),
-    ]
-      |> list.and
+    }
   }
 }
 

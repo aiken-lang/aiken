@@ -67,7 +67,7 @@ impl Config {
                 },
                 version: match LatestRelease::of("aiken-lang/stdlib") {
                     Ok(stdlib) => stdlib.tag_name,
-                    _ => "1.3.0".to_string(),
+                    _ => "1.5.0".to_string(),
                 },
                 source: Platform::Github,
             }],

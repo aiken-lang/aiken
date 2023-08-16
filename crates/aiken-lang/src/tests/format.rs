@@ -21,6 +21,15 @@ fn format_simple_module() {
 }
 
 #[test]
+fn format_logical_op_chain() {
+    assert_format!(
+        r#"
+      fn smth() { and { foo, bar, or { bar, foo }} }
+    "#
+    );
+}
+
+#[test]
 fn format_if() {
     assert_format!(
         r#"
@@ -250,7 +259,7 @@ fn format_nested_function_calls() {
               _ -> fail "expected inline datum"
             },
           ]
-          |> list.and
+          |> list.and_func
         }
     "#
     );
