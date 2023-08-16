@@ -1,4 +1,4 @@
-use crate::{package_name::PackageName, paths, Error};
+use crate::{github::repo::LatestRelease, package_name::PackageName, paths, Error};
 use aiken_lang::ast::Span;
 use miette::NamedSource;
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,10 @@ impl Config {
                     owner: "aiken-lang".to_string(),
                     repo: "stdlib".to_string(),
                 },
-                version: "1.3.0".to_string(),
+                version: match LatestRelease::of("aiken-lang/stdlib") {
+                    Ok(stdlib) => stdlib.tag_name,
+                    _ => "1.3.0".to_string(),
+                },
                 source: Platform::Github,
             }],
         }
