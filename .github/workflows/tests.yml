@@ -18,6 +18,10 @@ jobs:
         run: cargo build --verbose --workspace
       - name: Run unit tests
         run: cargo test --verbose --workspace
+      - name: Run examples
+        run: |
+          cargo run -- check examples/hello_world
+          cargo run -- check examples/gift_card
       - name: Run acceptance tests
         working-directory: examples/acceptance_tests
         run: |
