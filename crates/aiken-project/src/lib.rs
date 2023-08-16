@@ -4,6 +4,7 @@ pub mod deps;
 pub mod docs;
 pub mod error;
 pub mod format;
+pub mod github;
 pub mod module;
 pub mod options;
 pub mod package_name;
