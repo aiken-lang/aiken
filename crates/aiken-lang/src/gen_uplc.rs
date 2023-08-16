@@ -1673,7 +1673,7 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
                     ));
 
-                    let Pattern::List { elements, tail, .. } = &clause.pattern else {
+                    let Pattern::List { elements, tail, .. } = clause_pattern else {
                         let mut next_clause_props = ClauseProperties {
                             clause_var_name: props.clause_var_name.clone(),
                             complex_clause: false,
