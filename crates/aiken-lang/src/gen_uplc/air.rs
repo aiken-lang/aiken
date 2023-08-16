@@ -97,7 +97,7 @@ pub enum Air {
     ListClause {
         subject_tipo: Arc<Type>,
         tail_name: String,
-        next_tail_name: Option<String>,
+        next_tail_name: Option<(String, String)>,
         complex_clause: bool,
     },
     WrapClause,

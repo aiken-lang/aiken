@@ -810,7 +810,18 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
         .into_iter()
         .enumerate()
         .sorted_by(|(index1, clause1), (index2, clause2)| {
-            let clause1_len = match &clause1.pattern {
+            let mut clause_pattern1 = &clause1.pattern;
+            let mut clause_pattern2 = &clause2.pattern;
+
+            if let Pattern::Assign { pattern, .. } = clause_pattern1 {
+                clause_pattern1 = pattern;
+            }
+
+            if let Pattern::Assign { pattern, .. } = clause_pattern2 {
+                clause_pattern2 = pattern;
+            }
+
+            let clause1_len = match clause_pattern1 {
                 Pattern::List { elements, tail, .. } => {
                     Some(elements.len() + usize::from(tail.is_some() && clause1.guard.is_none()))
                 }
@@ -818,7 +829,7 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
                 _ => None,
             };
 
-            let clause2_len = match &clause2.pattern {
+            let clause2_len = match clause_pattern2 {
                 Pattern::List { elements, tail, .. } => {
                     Some(elements.len() + usize::from(tail.is_some() && clause2.guard.is_none()))
                 }
@@ -1011,6 +1022,19 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
     assert!(final_clauses.len() > 1);
 
     final_clauses
+}
+
+pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClause {
+    assert!(!clauses.is_empty());
+
+    clauses
+        .iter()
+        .find(|clause| match &clause.pattern {
+            Pattern::List { .. } => true,
+            Pattern::Assign { pattern, .. } if matches!(&**pattern, Pattern::List { .. }) => true,
+            _ => false,
+        })
+        .unwrap_or(&clauses[0])
 }
 
 pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
