@@ -260,9 +260,9 @@
     <script src="{{ breadcrumbs }}/js/highlightjs-aiken.js?v={{ aiken_version }}"></script>
     <script>
       document.querySelectorAll("pre code").forEach((elem) => {
-        if (elem.className === "") {
+        // if (elem.className === "") {
           elem.classList.add("aiken");
-        }
+        // }
       });
       hljs.highlightAll();
       document.querySelectorAll(".member-name > h2 > pre").forEach((el) => {
