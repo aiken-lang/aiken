@@ -282,7 +282,7 @@ pub enum AirExpression {
     ListClause {
         subject_tipo: Arc<Type>,
         tail_name: String,
-        next_tail_name: Option<String>,
+        next_tail_name: Option<(String, String)>,
         complex_clause: bool,
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
@@ -546,7 +546,7 @@ impl AirTree {
         subject_tipo: Arc<Type>,
         then: AirTree,
         otherwise: AirTree,
-        next_tail_name: Option<String>,
+        next_tail_name: Option<(String, String)>,
         complex_clause: bool,
     ) -> AirTree {
         AirTree::Expression(AirExpression::ListClause {

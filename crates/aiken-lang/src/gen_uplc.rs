@@ -24,9 +24,9 @@ use crate::{
     expr::TypedExpr,
     gen_uplc::builder::{
         convert_opaque_type, erase_opaque_type_operations, find_and_replace_generics,
-        get_arg_type_name, get_generic_id_and_type, get_variant_name, monomorphize,
-        pattern_has_conditions, wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction,
-        SpecificClause,
+        find_list_clause_or_default_first, get_arg_type_name, get_generic_id_and_type,
+        get_variant_name, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
+        wrap_validator_condition, CodeGenFunction, SpecificClause,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -1703,8 +1703,12 @@ impl<'a> CodeGenerator<'a> {
                         );
                     };
 
+                    assert!(!elements.is_empty() || tail.is_none());
+                    let elements_len = elements.len() + usize::from(tail.is_none()) - 1;
+                    let current_checked_index = *checked_index;
+
                     let tail_name = defined_tails
-                        .last()
+                        .get(elements_len)
                         .cloned()
                         .unwrap_or(props.original_subject_name.clone());
 
@@ -1712,8 +1716,8 @@ impl<'a> CodeGenerator<'a> {
                         if rest_clauses.is_empty() {
                             None
                         } else {
-                            let next_clause = &rest_clauses[0];
-                            let mut next_clause_pattern = &rest_clauses[0].pattern;
+                            let next_clause = find_list_clause_or_default_first(rest_clauses);
+                            let mut next_clause_pattern = &next_clause.pattern;
 
                             if let Pattern::Assign { pattern, .. } = next_clause_pattern {
                                 next_clause_pattern = pattern;
@@ -1729,6 +1733,7 @@ impl<'a> CodeGenerator<'a> {
 
                             if (*defined_tails_index as usize) < next_elements_len {
                                 *defined_tails_index += 1;
+                                let current_defined_tail = defined_tails.last().unwrap().clone();
 
                                 defined_tails.push(format!(
                                     "tail_index_{}_span_{}_{}",
@@ -1737,11 +1742,14 @@ impl<'a> CodeGenerator<'a> {
                                     next_clause.pattern.location().end
                                 ));
 
-                                Some(format!(
-                                    "tail_index_{}_span_{}_{}",
-                                    *defined_tails_index,
-                                    next_clause.pattern.location().start,
-                                    next_clause.pattern.location().end
+                                Some((
+                                    current_defined_tail,
+                                    format!(
+                                        "tail_index_{}_span_{}_{}",
+                                        *defined_tails_index,
+                                        next_clause.pattern.location().start,
+                                        next_clause.pattern.location().end
+                                    ),
                                 ))
                             } else {
                                 None
@@ -1754,9 +1762,6 @@ impl<'a> CodeGenerator<'a> {
                         is_wild_card_elems_clause =
                             is_wild_card_elems_clause && !pattern_has_conditions(element);
                     }
-                    assert!(!elements.is_empty() || tail.is_none());
-                    let elements_len = elements.len() + usize::from(tail.is_none()) - 1;
-                    let current_checked_index = *checked_index;
 
                     if *checked_index < elements_len.try_into().unwrap()
                         && is_wild_card_elems_clause
@@ -1784,7 +1789,9 @@ impl<'a> CodeGenerator<'a> {
 
                     let complex_clause = props.complex_clause;
 
-                    if current_checked_index < elements_len.try_into().unwrap() {
+                    if current_checked_index < elements_len.try_into().unwrap()
+                        || next_tail_name.is_some()
+                    {
                         AirTree::list_clause(
                             tail_name,
                             subject_tipo.clone(),
@@ -3996,9 +4003,9 @@ impl<'a> CodeGenerator<'a> {
                 let body = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                let arg = if let Some(next_tail_name) = next_tail_name {
+                let arg = if let Some((current_tail, next_tail_name)) = next_tail_name {
                     term.lambda(next_tail_name)
-                        .apply(Term::tail_list().apply(Term::var(tail_name.clone())))
+                        .apply(Term::tail_list().apply(Term::var(current_tail.clone())))
                 } else {
                     term
                 };
