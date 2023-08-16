@@ -65,7 +65,7 @@ impl Config {
                     owner: "aiken-lang".to_string(),
                     repo: "stdlib".to_string(),
                 },
-                version: "1.3.0".to_string(),
+                version: "1.5.0".to_string(),
                 source: Platform::Github,
             }],
         }
