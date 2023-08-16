@@ -62,7 +62,7 @@ pub fn tx_1() -> Transaction {
         },
       ],
       fee: value.zero(),
-      mint: value.from_asset(#"000000", #"00", -1),
+      mint: value.from_asset(#"000000", #"00", -1) |> value.to_minted_value,
       certificates: [],
       withdrawals: dict.new(),
       validity_range: Interval {

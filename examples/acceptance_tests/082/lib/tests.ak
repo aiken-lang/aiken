@@ -148,8 +148,7 @@ test satisfying() {
     fn(n: NativeScript, s: List<ByteArray>, v: ValidityRange) {
       !satisfied(n, s, v)
     }
-  list.and(
-    [
+  and {
       satisfied(sig1, [keyHash1], validRange(0, 1))?,
       satisfied(sig2, [keyHash1, keyHash2], validRange(0, 1))?,
       satisfied(allOf, [keyHash1, keyHash2], validRange(0, 1))?,
@@ -181,6 +180,5 @@ test satisfying() {
       unsatisfied(vesting, [keyHash3], validRange(10, 10))?,
       unsatisfied(vesting, [keyHash3], validRange(0, 5))?,
       unsatisfied(vesting, [keyHash3], validRange(15, 20))?,
-    ],
-  )
+  }
 }

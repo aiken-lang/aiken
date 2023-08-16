@@ -69,11 +69,13 @@ pub fn flatten_with(
   self: Value,
   transform: fn(PolicyId, AssetName, Int) -> Option<result>,
 ) -> List<result> {
-  dict.fold(
+  dict.foldr(
     self.inner,
+    [],
     fn(policy_id, asset, assets) {
-      dict.fold(
+      dict.foldr(
         asset,
+        assets,
         fn(asset_name, quantity, xs) {
           when transform(policy_id, asset_name, quantity) is {
             None ->
@@ -82,10 +84,8 @@ pub fn flatten_with(
               [x, ..xs]
           }
         },
-        assets,
       )
     },
-    [],
   )
 }
 

@@ -1,18 +1,16 @@
 use aiken/builtin
 use aiken/dict
 use aiken/hash.{blake2b_256}
-use aiken/list
 use aiken/transaction.{DatumHash, InlineDatum, ScriptContext}
 use aiken/transaction/credential.{Inline, VerificationKeyCredential}
 
 validator {
   fn spend(datum: Data, _redeemer: Data, ctx: ScriptContext) {
-    [
+    and {
       assert_datum(datum),
       assert_datums(ctx.transaction.datums),
       assert_outputs(ctx.transaction.outputs),
-    ]
-      |> list.and
+    }
   }
 }
 
@@ -45,19 +43,18 @@ fn assert_outputs(outputs) {
 }
 
 fn assert_first_output(output) {
-  [
+  and {
     output.datum == DatumHash(
       #"fcaa61fb85676101d9e3398a484674e71c45c3fd41b492682f3b0054f4cf3273",
     ),
     output.reference_script == Some(
       #"e37db487fbd58c45d059bcbf5cd6b1604d3bec16cf888f1395a4ebc4",
     ),
-  ]
-    |> list.and
+  }
 }
 
 fn assert_second_output(output) {
-  [
+  and {
     output.address.stake_credential == Some(
       Inline(
         VerificationKeyCredential(
@@ -69,6 +66,5 @@ fn assert_second_output(output) {
       InlineDatum(_) -> True
       _ -> fail @"expected inline datum"
     },
-  ]
-    |> list.and
+  }
 }
