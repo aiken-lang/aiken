@@ -377,7 +377,8 @@ fn get_tx_info_v2(
         .map(|output| TxOut::V2(sort_tx_out_value(&output.into())))
         .collect();
 
-    let fee = Value::Coin(body.fee);
+    // let fee = Value::Coin(body.fee);
+    let fee = Value::Coin(0);
 
     let mint = sort_mint(&body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![])));
 
