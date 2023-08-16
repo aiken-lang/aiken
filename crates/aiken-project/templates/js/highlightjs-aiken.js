@@ -1,4 +1,9 @@
-hljs.registerLanguage("aiken", function (hljs) {
+// The order matters:
+hljs.registerLanguage("gleam", highlightJS);
+hljs.registerLanguage("aiken", highlightJS);
+// put `aiken` at the last - it's the top of the stack
+
+function highlightJS(hljs) {
   const KEYWORDS =
     "as when is const validator fn if else let use opaque pub expect trace todo error type";
   const COMMAS = {
@@ -130,4 +135,4 @@ hljs.registerLanguage("aiken", function (hljs) {
       NUMBER,
     ],
   };
-});
+}
