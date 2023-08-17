@@ -120,7 +120,7 @@ pub fn exec(
                 redeemer.index
             )
         };
-        
+
         let result = tx::eval_phase_two(
             tx_babbage,
             &resolved_inputs,
@@ -134,14 +134,13 @@ pub fn exec(
         match result {
             Ok(redeemers) => {
                 // this should allow N scripts to be
-                let total_budget_used: Vec<ExBudget> =
-                    redeemers
-                        .iter()
-                        .map(|curr| ExBudget {
-                            mem: curr.ex_units.mem as i64,
-                            cpu: curr.ex_units.steps as i64,
-                        })
-                        .collect();
+                let total_budget_used: Vec<ExBudget> = redeemers
+                    .iter()
+                    .map(|curr| ExBudget {
+                        mem: curr.ex_units.mem as i64,
+                        cpu: curr.ex_units.steps as i64,
+                    })
+                    .collect();
 
                 eprintln!("\n");
                 println!(
