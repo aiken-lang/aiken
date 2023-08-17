@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- **aiken-lang**: aliased import of single type throws compiler error
 - **aiken-lsp**: fix diagnostics and formatting on windows vscode
 - **aiken**: decode should always print to textual
 - **uplc**: pair type formatting
