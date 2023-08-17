@@ -4938,3 +4938,142 @@ fn list_clause_with_assign() {
         false,
     );
 }
+
+#[test]
+fn list_clause_with_assign2() {
+    let src = r#"
+      fn do_init(self: List<Option<Int>>) -> List<Option<Int>> {
+        when self is {
+          [] -> fail @"unreachable"
+          [_] as a ->
+            a
+          [Some(_) as n, x] -> {
+            [n]
+          }
+          [a, x] -> {
+            [x]
+          }
+          [a, b, ..c] -> {
+            c
+          }
+        }
+      }
+      
+      test init_3() {
+        do_init([Some(1), None]) == [Some(1)]
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("do_init")
+                        .lambda("do_init")
+                        .apply(
+                            Term::var("self")
+                                .delayed_choose_list(
+                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::var("tail_1")
+                                        .delayed_choose_list(
+                                            Term::var("self"),
+                                            Term::var("tail_2")
+                                                .choose_list(
+                                                    Term::equals_integer()
+                                                        .apply(Term::integer(0.into()))
+                                                        .apply(
+                                                            Term::var(CONSTR_INDEX_EXPOSER)
+                                                                .apply(Term::var("n")),
+                                                        )
+                                                        .if_else(
+                                                            Term::mk_cons()
+                                                                .apply(Term::var("n"))
+                                                                .apply(Term::empty_list())
+                                                                .lambda("_")
+                                                                .apply(
+                                                                    Term::var(
+                                                                        CONSTR_FIELDS_EXPOSER,
+                                                                    )
+                                                                    .apply(Term::var("n")),
+                                                                )
+                                                                .delay(),
+                                                            Term::var("clauses_delayed"),
+                                                        )
+                                                        .force()
+                                                        .lambda("x")
+                                                        .apply(
+                                                            Term::head_list()
+                                                                .apply(Term::var("tail_1")),
+                                                        )
+                                                        .lambda("n")
+                                                        .apply(
+                                                            Term::head_list()
+                                                                .apply(Term::var("self")),
+                                                        )
+                                                        .delay(),
+                                                    Term::var("clauses_delayed"),
+                                                )
+                                                .force()
+                                                .lambda("clauses_delayed")
+                                                .apply(
+                                                    Term::var("tail_2")
+                                                        .delayed_choose_list(
+                                                            Term::mk_cons()
+                                                                .apply(Term::var("x"))
+                                                                .apply(Term::empty_list())
+                                                                .lambda("x")
+                                                                .apply(
+                                                                    Term::head_list()
+                                                                        .apply(Term::var("tail_1")),
+                                                                )
+                                                                .lambda("a")
+                                                                .apply(
+                                                                    Term::head_list()
+                                                                        .apply(Term::var("self")),
+                                                                ),
+                                                            Term::var("c").lambda("c").apply(
+                                                                Term::tail_list()
+                                                                    .apply(Term::var("tail_1"))
+                                                                    .lambda("b")
+                                                                    .apply(
+                                                                        Term::head_list().apply(
+                                                                            Term::var("tail_1"),
+                                                                        ),
+                                                                    )
+                                                                    .lambda("a")
+                                                                    .apply(
+                                                                        Term::head_list().apply(
+                                                                            Term::var("self"),
+                                                                        ),
+                                                                    ),
+                                                            ),
+                                                        )
+                                                        .delay(),
+                                                )
+                                                .lambda("tail_2")
+                                                .apply(
+                                                    Term::tail_list().apply(Term::var("tail_1")),
+                                                ),
+                                        )
+                                        .lambda("tail_1")
+                                        .apply(Term::tail_list().apply(Term::var("self"))),
+                                )
+                                .lambda("self"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::constr(0, vec![Data::integer(1.into())])),
+                            Constant::Data(Data::constr(1, vec![])),
+                        ])),
+                ),
+            )
+            .apply(Term::data(Data::list(vec![Data::constr(
+                0,
+                vec![Data::integer(1.into())],
+            )])))
+            .constr_fields_exposer()
+            .constr_get_field()
+            .constr_index_exposer(),
+        false,
+    );
+}
