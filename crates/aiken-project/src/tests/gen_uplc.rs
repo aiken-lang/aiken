@@ -4805,7 +4805,7 @@ fn list_clause_with_assign() {
             [a]
           }
           [a, x] -> {
-            [a]
+            [x]
           }
           [a, b, ..c] -> {
             c
@@ -4831,7 +4831,7 @@ fn list_clause_with_assign() {
                                     Term::Error.trace(Term::string("unreachable")),
                                     Term::var("tail_1")
                                         .delayed_choose_list(
-                                            Term::empty_list(),
+                                            Term::var("self"),
                                             Term::var("tail_2")
                                                 .choose_list(
                                                     Term::var("clause_guard")
@@ -4874,8 +4874,13 @@ fn list_clause_with_assign() {
                                                 .apply(
                                                     Term::var("tail_2")
                                                         .delayed_choose_list(
-                                                            Term::empty_list()
-                                                                .lambda("b")
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("x")),
+                                                                )
+                                                                .apply(Term::empty_list())
+                                                                .lambda("x")
                                                                 .apply(
                                                                     Term::un_i_data().apply(
                                                                         Term::head_list().apply(
