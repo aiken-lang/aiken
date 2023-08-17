@@ -877,8 +877,7 @@ impl<'a> CodeGenerator<'a> {
             }
             Pattern::Constructor {
                 arguments,
-                constructor,
-                name,
+                constructor: PatternConstructor::Record { name, field_map },
                 tipo: constr_tipo,
                 ..
             } => {
@@ -931,9 +930,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
 
-                    let field_map = match constructor {
-                        PatternConstructor::Record { field_map, .. } => field_map.clone(),
-                    };
+                    let field_map = field_map.clone();
 
                     let mut type_map: IndexMap<usize, Arc<Type>> = IndexMap::new();
 
