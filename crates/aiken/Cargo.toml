@@ -32,6 +32,9 @@ aiken-lsp = { path = "../aiken-lsp", version = "1.0.14-alpha" }
 aiken-project = { path = '../aiken-project', version = "1.0.14-alpha" }
 uplc = { path = '../uplc', version = "1.0.14-alpha" }
 clap_complete = "4.3.2"
+inquire = "0.6.2"
+num-bigint = "0.4.3"
+ordinal = "0.3.2"
 
 [build-dependencies]
 built = { version = "0.6.0", features = ["git2"] }
