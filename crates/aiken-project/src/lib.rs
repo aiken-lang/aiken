@@ -15,7 +15,11 @@ pub mod telemetry;
 #[cfg(test)]
 mod tests;
 
-use crate::blueprint::Blueprint;
+use crate::blueprint::{
+    definitions::Definitions,
+    schema::{Annotated, Schema},
+    Blueprint,
+};
 use aiken_lang::{
     ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction, Validator},
     builtins,
@@ -44,6 +48,7 @@ use telemetry::EventListener;
 use uplc::{
     ast::{DeBruijn, Name, Program, Term},
     machine::cost_model::ExBudget,
+    PlutusData,
 };
 
 use crate::{
@@ -414,6 +419,36 @@ where
                 Ok(validator_hash)
             }
         })
+    }
+
+    pub fn construct_parameter_incrementally<F>(
+        &self,
+        title: Option<&String>,
+        ask: F,
+    ) -> Result<Term<DeBruijn>, Error>
+    where
+        F: Fn(
+            &Annotated<Schema>,
+            &Definitions<Annotated<Schema>>,
+        ) -> Result<PlutusData, blueprint::error::Error>,
+    {
+        // Read blueprint
+        let blueprint = File::open(self.blueprint_path())
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
+
+        // Construct parameter
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+
+        let term = blueprint.with_validator(title, when_too_many, when_missing, |validator| {
+            validator
+                .ask_next_parameter(&blueprint.definitions, &ask)
+                .map_err(|e| e.into())
+        })?;
+
+        Ok(term)
     }
 
     pub fn apply_parameter(

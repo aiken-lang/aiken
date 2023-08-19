@@ -5,6 +5,7 @@ use super::{
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
+use std::rc::Rc;
 
 use aiken_lang::{
     ast::{TypedArg, TypedFunction, TypedValidator},
@@ -12,7 +13,10 @@ use aiken_lang::{
 };
 use miette::NamedSource;
 use serde;
-use uplc::ast::{DeBruijn, Program, Term};
+use uplc::{
+    ast::{Constant, DeBruijn, Program, Term},
+    PlutusData,
+};
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Validator {
@@ -171,6 +175,39 @@ impl Validator {
                     parameters: tail.to_vec(),
                     ..self
                 })
+            }
+        }
+    }
+
+    pub fn ask_next_parameter<F>(
+        &self,
+        definitions: &Definitions<Annotated<Schema>>,
+        ask: F,
+    ) -> Result<Term<DeBruijn>, Error>
+    where
+        F: Fn(&Annotated<Schema>, &Definitions<Annotated<Schema>>) -> Result<PlutusData, Error>,
+    {
+        match self.parameters.split_first() {
+            None => Err(Error::NoParametersToApply),
+            Some((head, _)) => {
+                let schema = definitions
+                    .lookup(&head.schema)
+                    .map(|s| {
+                        Ok(Annotated {
+                            title: s.title.clone().or_else(|| head.title.clone()),
+                            description: s.description.clone(),
+                            annotated: s.annotated.clone(),
+                        })
+                    })
+                    .unwrap_or_else(|| {
+                        Err(Error::UnresolvedSchemaReference {
+                            reference: head.schema.clone(),
+                        })
+                    })?;
+
+                let data = ask(&schema, definitions)?;
+
+                Ok(Term::Constant(Rc::new(Constant::Data(data.clone()))))
             }
         }
     }
