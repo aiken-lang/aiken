@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.15-alpha - unreleased
+
+### Changed
+
+- **aiken**: `blueprint apply` now expects only one OPTIONAL argument. When not provided, the parameter will be prompted interactively.
+
+### Removed
+
+- **aiken**: `blueprint apply` no longer accept a target directory. The command has to be executed within the same directory as the `aiken.toml`.
+
 ## v1.0.14-alpha - 2023-08-16
 
 ### Added
