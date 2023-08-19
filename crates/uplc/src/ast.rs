@@ -208,6 +208,20 @@ impl<T> Term<T> {
     }
 }
 
+impl<T> TryInto<PlutusData> for Term<T> {
+    type Error = String;
+
+    fn try_into(self) -> Result<PlutusData, String> {
+        match self {
+            Term::Constant(rc) => match &*rc {
+                Constant::Data(data) => Ok(data.to_owned()),
+                _ => Err("not a data".to_string()),
+            },
+            _ => Err("not a data".to_string()),
+        }
+    }
+}
+
 impl<'a, T> Display for Term<T>
 where
     T: Binder<'a>,
@@ -245,6 +259,13 @@ pub struct Data {}
 
 // TODO: See about moving these builders upstream to Pallas?
 impl Data {
+    pub fn to_hex(data: PlutusData) -> String {
+        let mut bytes = Vec::new();
+        pallas_codec::minicbor::Encoder::new(&mut bytes)
+            .encode(data)
+            .expect("failed to encode Plutus Data as cbor?");
+        hex::encode(bytes)
+    }
     pub fn integer(i: BigInt) -> PlutusData {
         match i.to_i64() {
             Some(i) => PlutusData::BigInt(pallas::BigInt::Int(i.into())),
