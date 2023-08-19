@@ -1,6 +1,7 @@
 use super::add;
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag = true)]
 /// Change the version of an installed dependency
 pub struct Args {
     /// Package name, in the form of {owner}/{repository}.
@@ -12,7 +13,7 @@ pub struct Args {
     package: String,
     /// The package version, as a git commit hash, a tag or a branch name.
     #[clap(long)]
-    version: String,
+    version: Option<String>,
 }
 
 pub fn exec(args: Args) -> miette::Result<()> {
