@@ -1,3 +1,5 @@
+use std::cmp;
+
 pub fn ansi_len(s: &str) -> usize {
     String::from_utf8(strip_ansi_escapes::strip(s).unwrap())
         .unwrap()
@@ -119,4 +121,23 @@ pub fn style_if(styled: bool, s: String, apply_style: fn(String) -> String) -> S
     } else {
         s
     }
+}
+
+pub fn multiline(max_len: usize, s: String) -> Vec<String> {
+    let mut xs = Vec::new();
+    let mut i = 0;
+    let len = s.len();
+    loop {
+        let lo = i * max_len;
+        let hi = cmp::min(len - 1, lo + max_len - 1);
+
+        if lo >= len {
+            break;
+        }
+
+        let chunk = &s[lo..hi];
+        xs.push(chunk.to_string());
+        i += 1;
+    }
+    xs
 }
