@@ -1,14 +1,24 @@
 # Changelog
 
-## v1.0.15-alpha - unreleased
+## v1.0.15-alpha - 2023-08-19
+
+### Fixed
+
+- **aiken-lang**: Opaque types are now properly handled in code gen (i.e. in
+  code gen functions, in datums/redeemers, in from data casts)
 
 ### Changed
 
-- **aiken**: `blueprint apply` now expects only one OPTIONAL argument. When not provided, the parameter will be prompted interactively.
+- **aiken**: `blueprint apply` now expects only one OPTIONAL argument. When not
+  provided, the parameter will be prompted interactively.
+- **aiken-lang**: New tests for code gen around opaque types
+- **aiken-lang**: `traverse_with_tree` now has a boolean parameter to determine
+  when `with` is called
 
 ### Removed
 
-- **aiken**: `blueprint apply` no longer accept a target directory. The command has to be executed within the same directory as the `aiken.toml`.
+- **aiken**: `blueprint apply` no longer accept a target directory. The command
+  has to be executed within the same directory as the `aiken.toml`.
 
 ## v1.0.14-alpha - 2023-08-16
 
@@ -29,9 +39,11 @@
 
 ### Changed
 
-- **aiken-lang**: significantly improved pattern matching exhuastiveness checking
+- **aiken-lang**: significantly improved pattern matching exhuastiveness
+  checking
 - **aiken-lang**: Tx Simulate now returns a list of execution budgets for each
-  redeemer instead of calculating the total units required to run all the scripts.
+  redeemer instead of calculating the total units required to run all the
+  scripts.
 - **aiken-lang**: Now code gen uses a tree abstraction to build the Aiken
   Intermediary Representation. This now fixes quite a number of minor issues
   while making the code more maintainable. This is a large leap towards a stable
