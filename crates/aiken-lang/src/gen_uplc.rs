@@ -23,10 +23,10 @@ use crate::{
     builtins::{bool, data, int, void},
     expr::TypedExpr,
     gen_uplc::builder::{
-        convert_opaque_type, erase_opaque_type_operations, find_and_replace_generics,
-        find_list_clause_or_default_first, get_arg_type_name, get_generic_id_and_type,
-        get_variant_name, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
-        wrap_validator_condition, CodeGenFunction, SpecificClause,
+        check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
+        find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
+        get_generic_id_and_type, get_variant_name, monomorphize, pattern_has_conditions,
+        wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction, SpecificClause,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -539,7 +539,13 @@ impl<'a> CodeGenerator<'a> {
                 index,
                 record,
                 ..
-            } => AirTree::record_access(*index, tipo.clone(), self.build(record)),
+            } => {
+                if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
+                    self.build(record)
+                } else {
+                    AirTree::record_access(*index, tipo.clone(), self.build(record))
+                }
+            }
 
             TypedExpr::ModuleSelect {
                 tipo,
@@ -1013,7 +1019,11 @@ impl<'a> CodeGenerator<'a> {
 
                     // This `value` is either value param that was passed in or
                     // local var
-                    sequence.push(AirTree::fields_expose(indices, props.full_check, value));
+                    if check_replaceable_opaque_type(tipo, &self.data_types) {
+                        sequence.push(AirTree::let_assignment(&indices[0].1, value));
+                    } else {
+                        sequence.push(AirTree::fields_expose(indices, props.full_check, value));
+                    }
 
                     sequence.append(
                         &mut fields
@@ -1116,6 +1126,7 @@ impl<'a> CodeGenerator<'a> {
         location: Span,
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
+        let tipo = &convert_opaque_type(tipo, &self.data_types);
 
         if tipo.is_primitive() {
             // Since we would return void anyway and ignore then we can just return value here and ignore
@@ -2158,11 +2169,25 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut air_fields = fields.into_iter().map(|(_, _, _, val)| val).collect_vec();
 
-                    let field_assign = AirTree::fields_expose(
-                        indices,
-                        false,
-                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
-                    );
+                    let field_assign =
+                        if check_replaceable_opaque_type(subject_tipo, &self.data_types) {
+                            AirTree::let_assignment(
+                                &indices[0].1,
+                                AirTree::local_var(
+                                    props.clause_var_name.clone(),
+                                    subject_tipo.clone(),
+                                ),
+                            )
+                        } else {
+                            AirTree::fields_expose(
+                                indices,
+                                false,
+                                AirTree::local_var(
+                                    props.clause_var_name.clone(),
+                                    subject_tipo.clone(),
+                                ),
+                            )
+                        };
 
                     let mut sequence = vec![field_assign];
 
@@ -2530,9 +2555,12 @@ impl<'a> CodeGenerator<'a> {
         let mut validator_hoistable;
 
         // TODO change subsequent tree traversals to be more like a stream.
-        air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
-            erase_opaque_type_operations(air_tree, &self.data_types);
-        });
+        air_tree.traverse_tree_with(
+            &mut |air_tree: &mut AirTree, _| {
+                erase_opaque_type_operations(air_tree, &self.data_types);
+            },
+            true,
+        );
 
         self.find_function_vars_and_depth(
             &mut air_tree,
@@ -2964,7 +2992,8 @@ impl<'a> CodeGenerator<'a> {
 
                     let function_def = self.functions.get(&generic_function_key);
 
-                    let Some(function_def) = function_def else {
+                    let Some(function_def) = function_def
+                    else {
                         let code_gen_func = self
                             .code_gen_functions
                             .get(&generic_function_key.function_name)
@@ -2988,12 +3017,21 @@ impl<'a> CodeGenerator<'a> {
 
                             let mut function_variant_path = IndexMap::new();
 
+                            let mut body = body.clone();
+
+                            body.traverse_tree_with(
+                                &mut |air_tree, _| {
+                                    erase_opaque_type_operations(air_tree, &self.data_types);
+                                },
+                                true,
+                            );
+
                             function_variant_path.insert(
                                 "".to_string(),
                                 (
                                     tree_path.clone(),
                                     UserFunction::Function {
-                                        body: body.clone(),
+                                        body,
                                         deps: vec![],
                                         params: params.clone(),
                                     },
@@ -3067,10 +3105,13 @@ impl<'a> CodeGenerator<'a> {
 
                             let mut function_air_tree_body = self.build(&function_def.body);
 
-                            function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
-                                erase_opaque_type_operations(air_tree, &self.data_types);
-                                monomorphize(air_tree, &mono_types);
-                            });
+                            function_air_tree_body.traverse_tree_with(
+                                &mut |air_tree, _| {
+                                    erase_opaque_type_operations(air_tree, &self.data_types);
+                                    monomorphize(air_tree, &mono_types);
+                                },
+                                true,
+                            );
 
                             func_variants.insert(
                                 variant,
@@ -3093,10 +3134,13 @@ impl<'a> CodeGenerator<'a> {
 
                         let mut function_air_tree_body = self.build(&function_def.body);
 
-                        function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
-                            erase_opaque_type_operations(air_tree, &self.data_types);
-                            monomorphize(air_tree, &mono_types);
-                        });
+                        function_air_tree_body.traverse_tree_with(
+                            &mut |air_tree, _| {
+                                erase_opaque_type_operations(air_tree, &self.data_types);
+                                monomorphize(air_tree, &mono_types);
+                            },
+                            true,
+                        );
 
                         let mut function_variant_path = IndexMap::new();
 
@@ -3116,6 +3160,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             },
+            true,
         );
     }
 

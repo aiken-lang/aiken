@@ -542,37 +542,14 @@ pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) {
-    if let AirTree::Expression(e) = air_tree {
-        match e {
-            AirExpression::Constr { tipo, args, .. } => {
-                if check_replaceable_opaque_type(tipo, data_types) {
-                    let arg = args.pop().unwrap();
-                    if let AirTree::Expression(AirExpression::CastToData { value, .. }) = arg {
-                        *air_tree = *value;
-                    } else {
-                        *air_tree = arg;
-                    }
-                }
+    if let AirTree::Expression(AirExpression::Constr { tipo, args, .. }) = air_tree {
+        if check_replaceable_opaque_type(tipo, data_types) {
+            let arg = args.pop().unwrap();
+            if let AirTree::Expression(AirExpression::CastToData { value, .. }) = arg {
+                *air_tree = *value;
+            } else {
+                *air_tree = arg;
             }
-            AirExpression::RecordAccess { record, .. } => {
-                if check_replaceable_opaque_type(&record.return_type(), data_types) {
-                    *air_tree = (**record).clone();
-                }
-            }
-
-            _ => {}
-        }
-    } else if let AirTree::Statement {
-        statement: AirStatement::FieldsExpose {
-            record, indices, ..
-        },
-        hoisted_over: Some(hoisted_over),
-    } = air_tree
-    {
-        if check_replaceable_opaque_type(&record.return_type(), data_types) {
-            let name = indices[0].1.clone();
-            *air_tree = AirTree::let_assignment(name, (**record).clone())
-                .hoist_over((**hoisted_over).clone())
         }
     }
 
@@ -720,17 +697,20 @@ pub fn modify_self_calls(
     // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
     // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
     let mut shadowed_parameters: HashMap<String, TreePath> = HashMap::new();
-    body.traverse_tree_with(&mut |air_tree: &mut AirTree, tree_path| {
-        identify_recursive_static_params(
-            air_tree,
-            tree_path,
-            func_params,
-            func_key,
-            variant,
-            &mut shadowed_parameters,
-            &mut potential_recursive_statics,
-        );
-    });
+    body.traverse_tree_with(
+        &mut |air_tree: &mut AirTree, tree_path| {
+            identify_recursive_static_params(
+                air_tree,
+                tree_path,
+                func_params,
+                func_key,
+                variant,
+                &mut shadowed_parameters,
+                &mut potential_recursive_statics,
+            );
+        },
+        false,
+    );
 
     // Find the index of any recursively static parameters,
     // so we can remove them from the call-site of each recursive call
@@ -742,35 +722,38 @@ pub fn modify_self_calls(
         .collect();
 
     // Modify any self calls to remove recursive static parameters and append `self` as a parameter for the recursion
-    body.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
-        if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
-            if let AirTree::Expression(AirExpression::Var {
-                constructor:
-                    ValueConstructor {
-                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
-                        ..
-                    },
-                variant_name,
-                ..
-            }) = func.as_ref()
-            {
-                if name == &func_key.function_name
-                    && module == &func_key.module_name
-                    && variant == variant_name
+    body.traverse_tree_with(
+        &mut |air_tree: &mut AirTree, _| {
+            if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
+                if let AirTree::Expression(AirExpression::Var {
+                    constructor:
+                        ValueConstructor {
+                            variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                            ..
+                        },
+                    variant_name,
+                    ..
+                }) = func.as_ref()
                 {
-                    // Remove any static-recursive-parameters, because they'll be bound statically
-                    // above the recursive part of the function
-                    // note: assumes that static_recursive_params is sorted
-                    for arg in recursive_static_indexes.iter().rev() {
-                        args.remove(*arg);
+                    if name == &func_key.function_name
+                        && module == &func_key.module_name
+                        && variant == variant_name
+                    {
+                        // Remove any static-recursive-parameters, because they'll be bound statically
+                        // above the recursive part of the function
+                        // note: assumes that static_recursive_params is sorted
+                        for arg in recursive_static_indexes.iter().rev() {
+                            args.remove(*arg);
+                        }
+                        let mut new_args = vec![func.as_ref().clone()];
+                        new_args.append(args);
+                        *args = new_args;
                     }
-                    let mut new_args = vec![func.as_ref().clone()];
-                    new_args.append(args);
-                    *args = new_args;
                 }
             }
-        }
-    });
+        },
+        true,
+    );
     let recursive_nonstatics = func_params
         .iter()
         .filter(|p| !potential_recursive_statics.contains(p))

@@ -5077,3 +5077,268 @@ fn list_clause_with_assign2() {
         false,
     );
 }
+
+#[test]
+fn opaque_value_in_datum() {
+    let src = r#"
+      opaque type Value {
+        inner: Dict<Dict<Int>>
+      }
+
+      opaque type Dict<v> {
+        inner: List<(ByteArray, v)>
+      }
+
+      type Dat {
+          c: Int,
+          a: Value
+      }
+
+      
+      validator {
+        fn spend(dat: Dat, red: Data, ctx: Data) {
+          let val = dat.a 
+
+          expect [(_, amount)] = val.inner.inner
+
+          let final_amount = [(#"AA", 4)] |> Dict
+
+          final_amount == amount
+
+        }
+      }
+  "#;
+
+    assert_uplc(
+        src,
+        Term::tail_list()
+            .apply(Term::var("val"))
+            .delayed_choose_list(
+                Term::equals_data()
+                    .apply(Term::map_data().apply(Term::var("final_amount")))
+                    .apply(Term::map_data().apply(Term::var("amount")))
+                    .lambda("final_amount")
+                    .apply(Term::map_values(vec![Constant::ProtoPair(
+                        Type::Data,
+                        Type::Data,
+                        Constant::Data(Data::bytestring(vec![170])).into(),
+                        Constant::Data(Data::integer(4.into())).into(),
+                    )]))
+                    .lambda("amount")
+                    .apply(
+                        Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
+                    ),
+                Term::Error.trace(Term::string(
+                    "List/Tuple/Constr contains more items than expected",
+                )),
+            )
+            .lambda("tuple_item_0")
+            .apply(Term::head_list().apply(Term::var("val")))
+            .lambda("val")
+            .apply(
+                Term::unmap_data().apply(
+                    Term::var(CONSTR_GET_FIELD)
+                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")))
+                        .apply(Term::integer(1.into())),
+                ),
+            )
+            .delayed_if_else(Term::unit(), Term::Error)
+            .lambda("_")
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::var("subject"))
+                    .delayed_if_else(
+                        Term::tail_list()
+                            .apply(Term::var("tail_1"))
+                            .delayed_choose_list(
+                                Term::unit().lambda("_").apply(
+                                    Term::var("expect_on_list").apply(Term::var("a")).apply(
+                                        Term::var("expect_on_list")
+                                            .apply(Term::var("pair_snd_outer"))
+                                            .apply(
+                                                Term::un_i_data()
+                                                    .apply(
+                                                        Term::snd_pair().apply(Term::var("pair")),
+                                                    )
+                                                    .lambda("pair_fst")
+                                                    .apply(Term::un_b_data().apply(
+                                                        Term::fst_pair().apply(Term::var("pair")),
+                                                    ))
+                                                    .lambda("pair"),
+                                            )
+                                            .lambda("pair_snd_outer")
+                                            .apply(Term::unmap_data().apply(
+                                                Term::snd_pair().apply(Term::var("pair_outer")),
+                                            ))
+                                            .lambda("pair_fst_outer")
+                                            .apply(Term::un_b_data().apply(
+                                                Term::fst_pair().apply(Term::var("pair_outer")),
+                                            ))
+                                            .lambda("pair_outer"),
+                                    ),
+                                ),
+                                Term::Error.trace(Term::string(
+                                    "List/Tuple/Constr contains more items than expected",
+                                )),
+                            )
+                            .lambda("a")
+                            .apply(
+                                Term::unmap_data()
+                                    .apply(Term::head_list().apply(Term::var("tail_1"))),
+                            )
+                            .lambda("tail_1")
+                            .apply(Term::tail_list().apply(Term::var("dat_fields")))
+                            .lambda("c")
+                            .apply(
+                                Term::un_i_data()
+                                    .apply(Term::head_list().apply(Term::var("dat_fields"))),
+                            )
+                            .lambda("dat_fields")
+                            .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("param_0"))),
+                        Term::Error
+                            .trace(Term::string("Constr index did not match any type variant")),
+                    )
+                    .lambda("subject")
+                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("param_0")))
+                    .lambda("param_0")
+                    .lambda("expect_on_list")
+                    .apply(
+                        Term::var("expect_on_list")
+                            .apply(Term::var("expect_on_list"))
+                            .apply(Term::var("list_to_check"))
+                            .lambda("expect_on_list")
+                            .apply(
+                                Term::var("list_to_check")
+                                    .delayed_choose_list(
+                                        Term::unit(),
+                                        Term::var("expect_on_list")
+                                            .apply(Term::var("expect_on_list"))
+                                            .apply(
+                                                Term::tail_list().apply(Term::var("list_to_check")),
+                                            )
+                                            .lambda("_")
+                                            .apply(Term::var("check_with").apply(
+                                                Term::head_list().apply(Term::var("list_to_check")),
+                                            )),
+                                    )
+                                    .lambda("list_to_check")
+                                    .lambda("expect_on_list"),
+                            )
+                            .lambda("check_with")
+                            .lambda("list_to_check"),
+                    )
+                    .apply(Term::var("dat")),
+            )
+            .lambda("ctx")
+            .lambda("red")
+            .lambda("dat")
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn opaque_value_in_test() {
+    let src = r#"
+        pub opaque type Value {
+          inner: Dict<Dict<Int>>
+        }
+
+        pub opaque type Dict<v> {
+          inner: List<(ByteArray, v)>
+        }
+
+        pub type Dat {
+          c: Int,
+          a: Value
+        }
+
+        pub fn dat_new() -> Dat {
+          let v = Value { inner: Dict { inner: [("", [(#"aa", 4)] |> Dict)] } }
+          Dat {
+            c: 0, 
+            a: v
+          }
+        }
+
+        
+        test spend() {
+          let dat = dat_new()
+
+          let val = dat.a 
+
+          expect [(_, amount)] = val.inner.inner
+
+          let final_amount = [(#"AA", 4)] |> Dict
+
+          final_amount == amount  
+        }
+  "#;
+
+    assert_uplc(
+        src,
+        Term::tail_list()
+            .apply(Term::var("val"))
+            .delayed_choose_list(
+                Term::equals_data()
+                    .apply(Term::map_data().apply(Term::var("final_amount")))
+                    .apply(Term::map_data().apply(Term::var("amount")))
+                    .lambda("final_amount")
+                    .apply(Term::map_values(vec![Constant::ProtoPair(
+                        Type::Data,
+                        Type::Data,
+                        Constant::Data(Data::bytestring(vec![170])).into(),
+                        Constant::Data(Data::integer(4.into())).into(),
+                    )]))
+                    .lambda("amount")
+                    .apply(
+                        Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
+                    ),
+                Term::Error.trace(Term::string(
+                    "List/Tuple/Constr contains more items than expected",
+                )),
+            )
+            .lambda("tuple_item_0")
+            .apply(Term::head_list().apply(Term::var("val")))
+            .lambda("val")
+            .apply(
+                Term::unmap_data().apply(
+                    Term::var(CONSTR_GET_FIELD)
+                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")))
+                        .apply(Term::integer(1.into())),
+                ),
+            )
+            .lambda("dat")
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(
+                    0,
+                    vec![
+                        Data::integer(0.into()),
+                        Data::map(vec![(
+                            Data::bytestring(vec![]),
+                            Data::map(vec![(Data::bytestring(vec![170]), Data::integer(4.into()))]),
+                        )]),
+                    ],
+                ))
+                .into(),
+            ))
+            .lambda("v")
+            .apply(Term::map_values(vec![Constant::ProtoPair(
+                Type::Data,
+                Type::Data,
+                Constant::Data(Data::bytestring(vec![])).into(),
+                Constant::Data(Data::map(vec![(
+                    Data::bytestring(vec![170]),
+                    Data::integer(4.into()),
+                )]))
+                .into(),
+            )]))
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
