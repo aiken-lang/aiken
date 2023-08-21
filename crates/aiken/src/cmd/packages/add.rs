@@ -1,7 +1,7 @@
 use aiken_project::{
     config::{Config, Dependency, Platform},
     error::Warning,
-    github,
+    github::repo::Info,
     package_name::PackageName,
     pretty,
 };
@@ -31,13 +31,12 @@ pub struct Args {
 pub fn exec(args: Args) -> miette::Result<()> {
     let root = PathBuf::from(".");
 
-    let default_branch = "main".into();
-    let default_version =
-        || github::repo::default_version_of(&args.package).unwrap_or(default_branch);
-
     let dependency = Dependency {
         name: PackageName::from_str(&args.package)?,
-        version: args.version.unwrap_or_else(default_version),
+        version: args.version.unwrap_or(match Info::of(&args.package) {
+            Ok(repo) => repo.default_branch,
+            _ => "main".to_string(),
+        }),
         source: Platform::Github,
     };
 

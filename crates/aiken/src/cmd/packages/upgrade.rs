@@ -6,7 +6,7 @@ use super::add;
 pub struct Args {
     /// Package name, in the form of {owner}/{repository}.
     ///
-    /// For example → 'add aiken-lang/stdlib'
+    /// For example → 'packages upgrade aiken-lang/stdlib'
     ///
     /// Note that by default, this assumes the package is located
     /// on Github.
