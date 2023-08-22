@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.16-alpha - unreleased
+
+### Removed
+
+- **aiken**: `aiken new` no longer accept an `--empty` flag. Projects are
+  generated empty by default.
+
 ## v1.0.15-alpha - 2023-08-19
 
 ### Fixed

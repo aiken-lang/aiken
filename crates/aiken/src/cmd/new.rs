@@ -21,9 +21,6 @@ pub struct Args {
     /// Library only
     #[clap(long, short)]
     lib: bool,
-    /// Empty project
-    #[clap(long, short)]
-    empty: bool,
 }
 
 pub fn exec(args: Args) -> miette::Result<()> {
@@ -42,10 +39,10 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
         })?;
     }
 
-    create_lib(&root, package_name, args.empty)?;
+    create_lib(&root, package_name)?;
 
     if !args.lib {
-        create_validators(&root, package_name, args.empty)?;
+        create_validators(&root)?;
     }
 
     readme(&root, &package_name.repo)?;
@@ -72,7 +69,7 @@ fn print_success_message(package_name: &PackageName) {
                    {aiken} check
                    {aiken} build
 
-               {hint} You may want to update the {stdlib} version in {toml}. 
+               {hint} You may want to update the {stdlib} version in {toml}.
             "#,
             s = "successfully"
                 .if_supports_color(Stderr, |s| s.bright_green())
@@ -99,60 +96,14 @@ fn print_success_message(package_name: &PackageName) {
     )
 }
 
-fn create_lib(root: &Path, package_name: &PackageName, empty: bool) -> miette::Result<()> {
+fn create_lib(root: &Path, package_name: &PackageName) -> miette::Result<()> {
     let lib = root.join("lib").join(&package_name.repo);
-
-    fs::create_dir_all(&lib).into_diagnostic()?;
-
-    if empty {
-        return Ok(());
-    }
-
-    fs::write(
-        lib.join("types.ak"),
-        formatdoc! {
-            r#"
-            /// Custom type
-            pub type Datum {{
-              /// A utf8 encoded message
-              message: ByteArray,
-            }}
-
-            test sum() {{
-              1 + 1 == 2
-            }}
-            "#,
-        },
-    )
-    .into_diagnostic()
+    fs::create_dir_all(&lib).into_diagnostic()
 }
 
-fn create_validators(root: &Path, package_name: &PackageName, empty: bool) -> miette::Result<()> {
+fn create_validators(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
-
-    fs::create_dir_all(&validators).into_diagnostic()?;
-
-    if empty {
-        return Ok(());
-    }
-
-    fs::write(
-        validators.join("hello.ak"),
-        formatdoc! {
-            r#"
-            use aiken/transaction.{{ScriptContext}}
-            use {name}/types
-
-            validator {{
-              fn spend(datum: types.Datum, _redeemer: Data, _ctx: ScriptContext) -> Bool {{
-                datum.message == "Hello World!"
-              }}
-            }}
-            "#,
-            name = package_name.repo
-        },
-    )
-    .into_diagnostic()
+    fs::create_dir_all(&validators).into_diagnostic()
 }
 
 fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
