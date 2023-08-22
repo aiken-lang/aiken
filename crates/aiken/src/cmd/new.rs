@@ -98,12 +98,12 @@ fn print_success_message(package_name: &PackageName) {
 
 fn create_lib(root: &Path, package_name: &PackageName) -> miette::Result<()> {
     let lib = root.join("lib").join(&package_name.repo);
-    fs::create_dir_all(&lib).into_diagnostic()
+    fs::create_dir_all(lib).into_diagnostic()
 }
 
 fn create_validators(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
-    fs::create_dir_all(&validators).into_diagnostic()
+    fs::create_dir_all(validators).into_diagnostic()
 }
 
 fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
