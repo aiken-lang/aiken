@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.16-alpha - unreleased
+## v1.0.16-alpha - 2023-08-22
 
 ### Removed
 
@@ -9,18 +9,19 @@
 
 ## v1.0.15-alpha - 2023-08-19
 
-### Fixed
+### Added
 
-- **aiken-lang**: Opaque types are now properly handled in code gen (i.e. in
-  code gen functions, in datums/redeemers, in from data casts)
+- **aiken**: Parameters for `blueprint apply` can now be built interactively.
 
 ### Changed
 
+- **aiken-lang**: Opaque types are now properly handled in code gen (i.e. in
+  code gen functions, in datums/redeemers, in from data casts).
 - **aiken**: `blueprint apply` now expects only one OPTIONAL argument. When not
   provided, the parameter will be prompted interactively.
-- **aiken-lang**: New tests for code gen around opaque types
+- **aiken-lang**: New tests for code gen around opaque types.
 - **aiken-lang**: `traverse_with_tree` now has a boolean parameter to determine
-  when `with` is called
+  when `with` is called.
 
 ### Removed
 
@@ -62,14 +63,8 @@
 - **aiken-lang**: Using assign in nested pattern matches is now implemented
 - **aiken-lang**: Using List<Data> as a validator params only checks the type is
   a list and does not attempt to check each item
-
-### Optimization
-
 - **aiken-lang**: Recursion optimization to prevent static parameters from being
   passed through every recursion
-
-### Fixed
-
 - **aiken-lang**: aliased import of single type throws compiler error
 - **aiken-lsp**: fix diagnostics and formatting on windows vscode
 - **aiken**: decode should always print to textual
