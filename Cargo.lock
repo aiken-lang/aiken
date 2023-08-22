@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "aiken"
-version = "1.0.15-alpha"
+version = "1.0.16-alpha"
 dependencies = [
  "aiken-lang",
  "aiken-lsp",
