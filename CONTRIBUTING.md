@@ -71,13 +71,35 @@
 
    Want to give some financial support? Have a look at the ways to sponsor below for more details.
 
-   - [rvcas](https://github.com/sponsors/rvcas/)
-   - [microproofs](https://github.com/sponsors/microproofs/)
+   - [rvcas](https://github.com/sponsors/rvcas)
+   - [microproofs](https://github.com/sponsors/microproofs)
+   - [ktorz](https://github.com/sponsors/KtorZ)
 
    Want to support with crypto?
 
    - Our Ada address is `addr1q83nlzwu4zjeu927m8t24xa68upgmwgt5w29ww5ka695hc5rez2r4q7gcvj7z0ma6d88w3j220szsqk05sn43ghcsn4szvuklq`
    - Our Ada handle is `$aiken_lang`
+
+## Releasing
+
+To be able to create a release you need to be on the [maintainers](https://github.com/orgs/aiken-lang/teams/maintainers) team.
+This means that only core team members can create releases. We have a
+[github action](https://github.com/aiken-lang/aiken/blob/main/.github/workflows/release.yml) for creating the binaries and a github release.
+The process follows these steps:
+
+1. `cargo release --execute`
+2. After a release is created by the github action fill in the release notes. Try to tag contributors so that they show up in the release.
+3. Screenshot the result of `aikup` and post on twitter saying "We've just released vx.x.x". [example](https://twitter.com/aiken_eng/status/1693084816931987930?s=20)
+
+> `cargo release` takes arguments and flags to tell it how to bump the version number. Examples include `cargo release 1.0.16-alpha` and `cargo release major`.
+>
+> The root `Cargo.toml` in the repo contains this configuration for `cargo release`:
+>
+> ```toml
+> [workspace.metadata.release]
+> shared-version = true
+> tag-name = "v{{version}}"
+> ```
 
 ## About Issues
 
