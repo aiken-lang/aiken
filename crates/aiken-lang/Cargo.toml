@@ -24,7 +24,7 @@ owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 strum = "0.24.1"
 thiserror = "1.0.39"
 vec1 = "1.10.1"
-uplc = { path = '../uplc', version = "1.0.16-alpha" }
+uplc = { path = '../uplc', version = "1.0.15-alpha" }
 num-bigint = "0.4.3"
 
 [target.'cfg(not(target_family="wasm"))'.dependencies]
