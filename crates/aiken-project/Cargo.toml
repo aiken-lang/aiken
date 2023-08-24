@@ -1,15 +1,15 @@
 [package]
 name = "aiken-project"
 description = "Aiken project utilities"
-version = "1.0.16-alpha"
+version = "1.0.15-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken/crates/project"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = [
-    "Lucas Rosa <x@rvcas.dev>",
-    "Kasey White <kwhitemsg@gmail.com>",
-    "KtorZ <matthias.benkort@gmail.com>",
+  "Lucas Rosa <x@rvcas.dev>",
+  "Kasey White <kwhitemsg@gmail.com>",
+  "KtorZ <matthias.benkort@gmail.com>",
 ]
 rust-version = "1.66.1"
 

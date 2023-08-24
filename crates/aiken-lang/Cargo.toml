@@ -1,7 +1,7 @@
 [package]
 name = "aiken-lang"
 description = "The Aiken compiler"
-version = "1.0.16-alpha"
+version = "1.0.15-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
