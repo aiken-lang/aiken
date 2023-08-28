@@ -379,7 +379,7 @@ impl Term<Name> {
             )
     }
 
-    pub fn assert_on_list(self) -> Self {
+    pub fn expect_on_list(self) -> Self {
         self.lambda(EXPECT_ON_LIST)
             .apply(Term::var(EXPECT_ON_LIST).apply(Term::var(EXPECT_ON_LIST)))
             .lambda(EXPECT_ON_LIST)
