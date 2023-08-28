@@ -378,27 +378,4 @@ impl Term<Name> {
                     .lambda(CONSTR_GET_FIELD),
             )
     }
-
-    pub fn expect_on_list(self) -> Self {
-        self.lambda(EXPECT_ON_LIST)
-            .apply(Term::var(EXPECT_ON_LIST).apply(Term::var(EXPECT_ON_LIST)))
-            .lambda(EXPECT_ON_LIST)
-            .apply(
-                Term::var("__list_to_check")
-                    .delayed_choose_list(
-                        Term::unit(),
-                        Term::var("__check_with")
-                            .apply(Term::head_list().apply(Term::var("__list_to_check")))
-                            .choose_unit(
-                                Term::var(EXPECT_ON_LIST)
-                                    .apply(Term::var(EXPECT_ON_LIST))
-                                    .apply(Term::tail_list().apply(Term::var("__list_to_check")))
-                                    .apply(Term::var("__check_with")),
-                            ),
-                    )
-                    .lambda("__check_with")
-                    .lambda("__list_to_check")
-                    .lambda(EXPECT_ON_LIST),
-            )
-    }
 }
