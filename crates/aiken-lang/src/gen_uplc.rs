@@ -1903,7 +1903,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn clause_pattern(
-        &mut self,
+        &self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
         subject_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
@@ -2329,7 +2329,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn nested_clause_condition(
-        &mut self,
+        &self,
         pattern: &Pattern<PatternConstructor, Arc<Type>>,
         subject_tipo: &Arc<Type>,
         props: &mut ClauseProperties,
