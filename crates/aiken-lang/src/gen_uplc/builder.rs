@@ -343,6 +343,7 @@ pub fn check_replaceable_opaque_type(
     let data_type = lookup_data_type_by_tipo(data_types, t);
 
     if let Some(data_type) = data_type {
+        assert!(!data_type.constructors.is_empty());
         let data_type_args = &data_type.constructors[0].arguments;
         data_type_args.len() == 1 && data_type.opaque && data_type.constructors.len() == 1
     } else {
