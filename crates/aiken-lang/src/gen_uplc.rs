@@ -951,7 +951,7 @@ impl<'a> CodeGenerator<'a> {
                         type_map.insert(index, field_type);
                     }
 
-                    assert!(type_map.len() == arguments.len());
+                    assert!(type_map.len() >= arguments.len());
 
                     let fields = arguments
                         .iter()

@@ -5342,3 +5342,34 @@ fn opaque_value_in_test() {
         false,
     );
 }
+
+#[test]
+fn expect_none() {
+    let src = r#"
+        test exp_none() {
+          let x = None
+          expect None = x
+          True
+
+        }
+  "#;
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(Term::integer(1.into()))
+            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("x")))
+            .delayed_if_else(
+                Term::bool(true),
+                Term::Error.trace(Term::string("Expected on incorrect constructor variant.")),
+            )
+            .lambda("x")
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(1, vec![])).into(),
+            ))
+            .constr_get_field()
+            .constr_index_exposer()
+            .constr_fields_exposer(),
+        false,
+    );
+}
