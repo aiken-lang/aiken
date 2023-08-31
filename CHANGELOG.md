@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.17-alpha - unreleased
+
+### Fixed
+
+- **uplc**: uplc `Constant::Data` formatting
+- **aiken-lang**: empty records properly parse as record sugar
+
 ## v1.0.16-alpha - 2023-08-24
 
 ### Removed
