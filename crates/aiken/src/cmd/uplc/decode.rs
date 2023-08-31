@@ -34,7 +34,7 @@ pub fn exec(
     let bytes = if hex {
         let hex_bytes = std::fs::read_to_string(&input).into_diagnostic()?;
 
-        hex::decode(hex_bytes).into_diagnostic()?
+        hex::decode(hex_bytes.trim()).into_diagnostic()?
     } else {
         std::fs::read(&input).into_diagnostic()?
     };

@@ -33,7 +33,7 @@ pub fn exec(
     let mut program = if cbor {
         let cbor_hex = std::fs::read_to_string(&script).into_diagnostic()?;
 
-        let raw_cbor = hex::decode(cbor_hex).into_diagnostic()?;
+        let raw_cbor = hex::decode(cbor_hex.trim()).into_diagnostic()?;
 
         let prog = Program::<FakeNamedDeBruijn>::from_cbor(&raw_cbor, &mut Vec::new())
             .into_diagnostic()?;
