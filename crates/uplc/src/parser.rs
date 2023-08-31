@@ -158,7 +158,7 @@ peg::parser! {
           = "unit" _+ "()" { Constant::Unit }
 
         rule constant_data() -> Constant
-          = "data" _+ "(" d:data() ")" { Constant::Data(d) }
+          = "data" _+ "(" _* d:data() _* ")" { Constant::Data(d) }
 
         rule constant_list() -> Constant
           = "(" _* "list" _* t:type_info() _* ")" _+ ls:list(Some(&t)) {

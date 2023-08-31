@@ -226,7 +226,10 @@ impl Constant {
                 .append(RcDoc::text(", "))
                 .append(right.to_doc_list())
                 .append(RcDoc::text(")")),
-            d @ Constant::Data(_) => RcDoc::text("data ").append(d.to_doc_list()),
+            Constant::Data(d) => RcDoc::text("data ")
+                .append(RcDoc::text("("))
+                .append(Self::to_doc_list_plutus_data(d))
+                .append(RcDoc::text(")")),
         }
     }
 
@@ -251,9 +254,7 @@ impl Constant {
                 .append((*right).to_doc_list())
                 .append(RcDoc::text(")")),
 
-            Constant::Data(data) => RcDoc::text("(")
-                .append(Self::to_doc_list_plutus_data(data))
-                .append(RcDoc::text(")")),
+            Constant::Data(data) => Self::to_doc_list_plutus_data(data),
         }
     }
 
