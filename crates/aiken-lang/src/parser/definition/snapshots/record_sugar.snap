@@ -1,0 +1,39 @@
+---
+source: crates/aiken-lang/src/parser/definition/data_type.rs
+description: "Code:\n\npub type Foo {\n  wow: Int,\n}\n"
+---
+DataType(
+    DataType {
+        constructors: [
+            RecordConstructor {
+                location: 13..28,
+                name: "Foo",
+                arguments: [
+                    RecordConstructorArg {
+                        label: Some(
+                            "wow",
+                        ),
+                        annotation: Constructor {
+                            location: 22..25,
+                            module: None,
+                            name: "Int",
+                            arguments: [],
+                        },
+                        location: 17..25,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: true,
+            },
+        ],
+        doc: None,
+        location: 0..28,
+        name: "Foo",
+        opaque: false,
+        parameters: [],
+        public: true,
+        typed_parameters: [],
+    },
+)

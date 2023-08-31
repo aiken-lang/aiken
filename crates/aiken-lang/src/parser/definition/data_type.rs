@@ -54,16 +54,26 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
             |(((public, opaque), (name, parameters)), constructors), span| {
                 ast::UntypedDefinition::DataType(ast::DataType {
                     location: span,
-                    constructors: constructors
-                        .into_iter()
-                        .map(|mut constructor| {
-                            if constructor.sugar {
-                                constructor.name = name.clone();
-                            }
+                    constructors: if constructors.is_empty() {
+                        vec![ast::RecordConstructor {
+                            location: span,
+                            arguments: vec![],
+                            doc: None,
+                            name: name.clone(),
+                            sugar: true,
+                        }]
+                    } else {
+                        constructors
+                            .into_iter()
+                            .map(|mut constructor| {
+                                if constructor.sugar {
+                                    constructor.name = name.clone();
+                                }
 
-                            constructor
-                        })
-                        .collect(),
+                                constructor
+                            })
+                            .collect()
+                    },
                     doc: None,
                     name,
                     opaque,
@@ -115,6 +125,27 @@ mod tests {
             r#"
             pub opaque type User {
               name: _w
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn record_sugar() {
+        assert_definition!(
+            r#"
+            pub type Foo {
+              wow: Int,
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn empty_record_sugar() {
+        assert_definition!(
+            r#"
+            pub type Foo {
             }
             "#
         );
