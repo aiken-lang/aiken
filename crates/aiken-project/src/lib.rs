@@ -916,7 +916,7 @@ where
             .to_string();
 
         // normalise windows paths
-        name.replace('\\', "/")
+        name.replace('\\', "/").replace('-', "_")
     }
 }
 
@@ -925,7 +925,7 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
 
     let re = Regex::new(&format!(
         "^({module}{slash})*{module}\\.ak$",
-        module = "[a-z][_a-z0-9]*",
+        module = "[a-z][-_a-z0-9]*",
         slash = "(/|\\\\)",
     ))
     .expect("is_aiken_path() RE regex");
