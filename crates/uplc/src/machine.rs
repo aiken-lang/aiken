@@ -480,4 +480,67 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn case_constr_case_0() {
+        let make_program =
+            |fun: DefaultFunction, tag: usize, n: i32, m: i32| Program::<NamedDeBruijn> {
+                version: (0, 0, 0),
+                term: Term::Case {
+                    constr: Term::Constr {
+                        tag,
+                        fields: vec![
+                            Term::Constant(Constant::Integer(n.into()).into()),
+                            Term::Constant(Constant::Integer(m.into()).into()),
+                        ],
+                    }
+                    .into(),
+                    branches: vec![Term::Builtin(fun), Term::sub_integer()],
+                },
+            };
+
+        let test_data = vec![
+            (DefaultFunction::AddInteger, 0, 8, 3, 11),
+            (DefaultFunction::AddInteger, 1, 8, 3, 5),
+        ];
+
+        for (fun, tag, n, m, result) in test_data {
+            let eval_result = make_program(fun, tag, n, m).eval(ExBudget::default());
+
+            assert_eq!(
+                eval_result.result().unwrap(),
+                Term::Constant(Constant::Integer(result.into()).into())
+            );
+        }
+    }
+
+    #[test]
+    fn case_constr_case_1() {
+        let make_program = |tag: usize| Program::<NamedDeBruijn> {
+            version: (0, 0, 0),
+            term: Term::Case {
+                constr: Term::Constr {
+                    tag,
+                    fields: vec![],
+                }
+                .into(),
+                branches: vec![
+                    Term::integer(5.into()),
+                    Term::integer(10.into()),
+                    Term::integer(15.into()),
+                ],
+            },
+        };
+
+        let test_data = vec![(0, 5), (1, 10), (2, 15)];
+
+        for (tag, result) in test_data {
+            let eval_result = make_program(tag).eval(ExBudget::default());
+
+            assert_eq!(
+                eval_result.result().unwrap(),
+                Term::Constant(Constant::Integer(result.into()).into())
+            );
+        }
+    }
 }
