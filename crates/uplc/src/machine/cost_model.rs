@@ -39,7 +39,7 @@ impl ExBudget {
 
     pub fn max() -> Self {
         ExBudget {
-            mem: 14000000000,
+            mem: 14000000000000,
             cpu: 10000000000000,
         }
     }
@@ -147,12 +147,12 @@ impl MachineCosts {
             },
             // Placeholder values
             constr: ExBudget {
-                mem: 100,
-                cpu: 23000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
             case: ExBudget {
-                mem: 100,
-                cpu: 23000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
         }
     }
@@ -193,12 +193,12 @@ impl Default for MachineCosts {
             },
             // Placeholder values
             constr: ExBudget {
-                mem: 100,
-                cpu: 23000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
             case: ExBudget {
-                mem: 100,
-                cpu: 23000,
+                mem: 30000000000,
+                cpu: 30000000000,
             },
         }
     }
