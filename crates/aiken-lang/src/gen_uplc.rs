@@ -3927,6 +3927,13 @@ impl<'a> CodeGenerator<'a> {
                         function = function.lambda(param);
                     }
 
+                    // We basically Scott encode our function bodies and use the chooser function
+                    // to determine which function body and params is run
+                    // For example say there is a cycle of 3 function bodies
+                    // Our choose function can look like this:
+                    // \func1 -> \func2 -> \func3 -> func1
+                    // In this case our chooser is a function that takes in 3 functions
+                    // and returns the first one to run
                     cyclic_body = cyclic_body.apply(function)
                 }
 
