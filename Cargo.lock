@@ -93,6 +93,7 @@ dependencies = [
  "num-bigint",
  "ordinal",
  "owo-colors",
+ "petgraph",
  "pretty_assertions",
  "strum",
  "thiserror",
