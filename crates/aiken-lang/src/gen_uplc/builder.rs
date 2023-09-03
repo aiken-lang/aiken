@@ -40,13 +40,14 @@ pub enum CodeGenFunction {
 }
 
 #[derive(Clone, Debug)]
-pub enum UserFunction {
+pub enum HoistableFunction {
     Function {
         body: AirTree,
         deps: Vec<(FunctionAccessKey, String)>,
         params: Vec<String>,
     },
-    Link(String),
+    Link((FunctionAccessKey, String)),
+    CyclicLink((FunctionAccessKey, String)),
 }
 
 #[derive(Clone, Debug)]

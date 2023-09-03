@@ -42,7 +42,7 @@ use self::{
     builder::{
         cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
         lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
-        ClauseProperties, DataTypeKey, FunctionAccessKey, UserFunction,
+        ClauseProperties, DataTypeKey, FunctionAccessKey, HoistableFunction,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -2587,41 +2587,42 @@ impl<'a> CodeGenerator<'a> {
                 .get(&variant_name)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
-            if let UserFunction::Function { body, deps, params } = function {
-                let mut hoist_body = body.clone();
-                let mut hoist_deps = deps.clone();
-                let params = params.clone();
+            match function {
+                HoistableFunction::Function { body, deps, params } => {
+                    let mut hoist_body = body.clone();
+                    let mut hoist_deps = deps.clone();
+                    let params = params.clone();
+                    let tree_path = tree_path.clone();
 
-                let mut tree_path = tree_path.clone();
+                    self.define_dependent_functions(
+                        &mut hoist_body,
+                        &mut functions_to_hoist,
+                        &mut used_functions,
+                        &defined_functions,
+                        &mut hoist_deps,
+                        tree_path,
+                    );
 
-                self.define_dependent_functions(
-                    &mut hoist_body,
-                    &mut functions_to_hoist,
-                    &mut used_functions,
-                    &defined_functions,
-                    &mut hoist_deps,
-                    &mut tree_path,
-                );
+                    let function_variants = functions_to_hoist
+                        .get_mut(&key)
+                        .unwrap_or_else(|| panic!("Missing Function Definition"));
 
-                let function_variants = functions_to_hoist
-                    .get_mut(&key)
-                    .unwrap_or_else(|| panic!("Missing Function Definition"));
+                    let (_, function) = function_variants
+                        .get_mut(&variant_name)
+                        .expect("Missing Function Variant Definition");
 
-                let (_, function) = function_variants
-                    .get_mut(&variant_name)
-                    .expect("Missing Function Variant Definition");
+                    if params.is_empty() {
+                        validator_hoistable.push((key, variant_name));
+                    }
 
-                if params.is_empty() {
-                    validator_hoistable.push((key, variant_name));
+                    *function = HoistableFunction::Function {
+                        body: hoist_body,
+                        deps: hoist_deps,
+                        params,
+                    };
                 }
-
-                *function = UserFunction::Function {
-                    body: hoist_body,
-                    deps: hoist_deps,
-                    params,
-                };
-            } else {
-                todo!("Deal with Link later")
+                HoistableFunction::Link(_) => todo!("Deal with Link later"),
+                HoistableFunction::CyclicLink(_) => unreachable!(),
             }
         }
         validator_hoistable.dedup();
@@ -2635,7 +2636,7 @@ impl<'a> CodeGenerator<'a> {
             .flat_map(|(function_name, val)| {
                 val.into_iter()
                     .map(|(variant, (_, function))| {
-                        if let UserFunction::Function { deps, .. } = function {
+                        if let HoistableFunction::Function { deps, .. } = function {
                             ((function_name.clone(), variant.clone()), deps)
                         } else {
                             todo!("Deal with Link later")
@@ -2698,8 +2699,7 @@ impl<'a> CodeGenerator<'a> {
                 .get(&variant)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
-            // TODO: change this part to handle mutual recursion
-            if let UserFunction::Function { deps, params, .. } = function {
+            if let HoistableFunction::Function { deps, params, .. } = function {
                 if !params.is_empty() {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &generic_func && dep_variant == &variant) {
@@ -2772,15 +2772,15 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         air_tree: &mut AirTree,
         tree_path: &TreePath,
-        function: &UserFunction,
+        function: &HoistableFunction,
         key_var: (&FunctionAccessKey, &String),
         functions_to_hoist: &IndexMap<
             FunctionAccessKey,
-            IndexMap<String, (TreePath, UserFunction)>,
+            IndexMap<String, (TreePath, HoistableFunction)>,
         >,
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
     ) {
-        if let UserFunction::Function {
+        if let HoistableFunction::Function {
             body,
             deps: func_deps,
             params,
@@ -2862,7 +2862,7 @@ impl<'a> CodeGenerator<'a> {
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
         functions_to_hoist: &IndexMap<
             FunctionAccessKey,
-            IndexMap<String, (TreePath, UserFunction)>,
+            IndexMap<String, (TreePath, HoistableFunction)>,
         >,
     ) -> AirTree {
         let (func_path, func_deps) = deps;
@@ -2881,7 +2881,7 @@ impl<'a> CodeGenerator<'a> {
                 .get(&dep.1)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
-            if let UserFunction::Function { deps, params, .. } = function {
+            if let HoistableFunction::Function { deps, params, .. } = function {
                 if !params.is_empty() {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
@@ -2925,7 +2925,7 @@ impl<'a> CodeGenerator<'a> {
 
             // In the case of zero args, we need to hoist the dependency function to the top of the zero arg function
             if &dep_path.common_ancestor(func_path) == func_path || params_empty {
-                let UserFunction::Function {
+                let HoistableFunction::Function {
                     body: mut dep_air_tree,
                     deps: dependency_deps,
                     params: dependent_params,
@@ -2975,24 +2975,24 @@ impl<'a> CodeGenerator<'a> {
         air_tree: &mut AirTree,
         function_usage: &mut IndexMap<
             FunctionAccessKey,
-            IndexMap<String, (TreePath, UserFunction)>,
+            IndexMap<String, (TreePath, HoistableFunction)>,
         >,
         used_functions: &mut Vec<(FunctionAccessKey, String)>,
         defined_functions: &[(FunctionAccessKey, String)],
         current_function_deps: &mut Vec<(FunctionAccessKey, String)>,
-        validator_tree_path: &mut TreePath,
+        mut function_tree_path: TreePath,
     ) {
-        let Some((depth, index)) = validator_tree_path.pop() else {
+        let Some((depth, index)) = function_tree_path.pop() else {
             return;
         };
 
-        validator_tree_path.push(depth, index);
+        function_tree_path.push(depth, index);
 
         self.find_function_vars_and_depth(
             air_tree,
             function_usage,
             current_function_deps,
-            validator_tree_path,
+            &mut function_tree_path,
             depth + 1,
             0,
         );
@@ -3015,7 +3015,7 @@ impl<'a> CodeGenerator<'a> {
         air_tree: &mut AirTree,
         function_usage: &mut IndexMap<
             FunctionAccessKey,
-            IndexMap<String, (TreePath, UserFunction)>,
+            IndexMap<String, (TreePath, HoistableFunction)>,
         >,
         dependency_functions: &mut Vec<(FunctionAccessKey, String)>,
         path: &mut TreePath,
@@ -3089,7 +3089,7 @@ impl<'a> CodeGenerator<'a> {
                                 "".to_string(),
                                 (
                                     tree_path.clone(),
-                                    UserFunction::Function {
+                                    HoistableFunction::Function {
                                         body,
                                         deps: vec![],
                                         params: params.clone(),
@@ -3176,7 +3176,7 @@ impl<'a> CodeGenerator<'a> {
                                 variant,
                                 (
                                     tree_path.clone(),
-                                    UserFunction::Function {
+                                    HoistableFunction::Function {
                                         body: function_air_tree_body,
                                         deps: vec![],
                                         params,
@@ -3207,7 +3207,7 @@ impl<'a> CodeGenerator<'a> {
                             variant,
                             (
                                 tree_path.clone(),
-                                UserFunction::Function {
+                                HoistableFunction::Function {
                                     body: function_air_tree_body,
                                     deps: vec![],
                                     params,
@@ -3593,7 +3593,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let zero_arg_functions = self.zero_arg_functions.clone();
 
-                    // How we handle empty anon functions has changed
+                    // How we handle zero arg anon functions has changed
                     // We now delay zero arg anon functions and force them on a call operation
                     if let Term::Var(name) = &term {
                         let text = &name.text;
