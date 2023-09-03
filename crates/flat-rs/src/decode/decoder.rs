@@ -182,6 +182,21 @@ impl<'b> Decoder<'b> {
         Ok(vec_array)
     }
 
+    pub fn decode_list_with_debug<T, F>(
+        &mut self,
+        decoder_func: F,
+        state_log: &mut Vec<String>,
+    ) -> Result<Vec<T>, Error>
+    where
+        F: Copy + FnOnce(&mut Decoder, &mut Vec<String>) -> Result<T, Error>,
+    {
+        let mut vec_array: Vec<T> = Vec::new();
+        while self.bit()? {
+            vec_array.push(decoder_func(self, state_log)?)
+        }
+        Ok(vec_array)
+    }
+
     /// Decode the next bit in the buffer.
     /// If the bit was 0 then return true.
     /// Otherwise return false.

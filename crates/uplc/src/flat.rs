@@ -207,22 +207,17 @@ where
             6 => Ok(Term::Error),
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
             8 => {
+                let tag = usize::decode(d)?;
                 let fields = d.decode_list_with(|d| Term::<T>::decode(d))?;
 
-                Ok(Term::Constr {
-                    tag: usize::decode(d)?,
-                    fields,
-                })
+                Ok(Term::Constr { tag, fields })
             }
             9 => {
-                let constr = Term::<T>::decode(d)?;
+                let constr = (Term::<T>::decode(d)?).into();
 
                 let branches = d.decode_list_with(|d| Term::<T>::decode(d))?;
 
-                Ok(Term::Case {
-                    constr: Rc::new(constr),
-                    branches,
-                })
+                Ok(Term::Case { constr, branches })
             }
             x => {
                 let buffer_slice: Vec<u8> = d
@@ -385,6 +380,29 @@ where
                         Err(error)
                     }
                 }
+            }
+            8 => {
+                state_log.push("(constr ".to_string());
+
+                let tag = usize::decode(d)?;
+
+                let fields = d.decode_list_with_debug(
+                    |d, state_log| Term::<T>::decode_debug(d, state_log),
+                    state_log,
+                )?;
+
+                Ok(Term::Constr { tag, fields })
+            }
+            9 => {
+                state_log.push("(case ".to_string());
+                let constr = Term::<T>::decode_debug(d, state_log)?.into();
+
+                let branches = d.decode_list_with_debug(
+                    |d, state_log| Term::<T>::decode_debug(d, state_log),
+                    state_log,
+                )?;
+
+                Ok(Term::Case { constr, branches })
             }
             x => {
                 state_log.push("parse error".to_string());

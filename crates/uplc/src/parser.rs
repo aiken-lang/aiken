@@ -145,13 +145,13 @@ peg::parser! {
           = "(" _* "error" _* ")" { Term::Error }
 
         rule constr() -> Term<Name>
-          = "(" _* "constr" _+ tag:decimal() _+ fields:(t:term() _* { t })+ ")" {
+          = "(" _* "constr" _+ tag:decimal() _* fields:(t:term() _* { t })* _* ")" {
             Term::Constr { tag, fields }
           }
 
         #[cache_left_rec]
         rule case() -> Term<Name>
-          = "(" _* "case" _+ constr:term() _* branches:(t:term() _* { t })+ ")" {
+          = "(" _* "case" _+ constr:term() _* branches:(t:term() _* { t })+ _* ")" {
             Term::Case { constr: constr.into(), branches }
           }
 

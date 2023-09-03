@@ -505,7 +505,7 @@ mod tests {
         ];
 
         for (fun, tag, n, m, result) in test_data {
-            let eval_result = make_program(fun, tag, n, m).eval(ExBudget::default());
+            let eval_result = make_program(fun, tag, n, m).eval(ExBudget::max());
 
             assert_eq!(
                 eval_result.result().unwrap(),
@@ -535,7 +535,7 @@ mod tests {
         let test_data = vec![(0, 5), (1, 10), (2, 15)];
 
         for (tag, result) in test_data {
-            let eval_result = make_program(tag).eval(ExBudget::default());
+            let eval_result = make_program(tag).eval(ExBudget::max());
 
             assert_eq!(
                 eval_result.result().unwrap(),
