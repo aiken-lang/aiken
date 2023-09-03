@@ -2,6 +2,8 @@ pub mod air;
 pub mod builder;
 pub mod tree;
 
+use petgraph::{algo, Graph};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
@@ -2626,6 +2628,63 @@ impl<'a> CodeGenerator<'a> {
 
         // First we need to sort functions by dependencies
         // here's also where we deal with mutual recursion
+
+        // Mutual Recursion
+        let inputs = functions_to_hoist
+            .iter()
+            .flat_map(|(function_name, val)| {
+                val.into_iter()
+                    .map(|(variant, (_, function))| {
+                        if let UserFunction::Function { deps, .. } = function {
+                            ((function_name.clone(), variant.clone()), deps)
+                        } else {
+                            todo!("Deal with Link later")
+                        }
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        let capacity = inputs.len();
+
+        let mut graph = Graph::<(), ()>::with_capacity(capacity, capacity * 5);
+
+        let mut indices = HashMap::with_capacity(capacity);
+        let mut values = HashMap::with_capacity(capacity);
+
+        for (value, _) in &inputs {
+            let index = graph.add_node(());
+
+            indices.insert(value.clone(), index);
+
+            values.insert(index, value.clone());
+        }
+
+        for (value, deps) in inputs {
+            if let Some(from_index) = indices.get(&value) {
+                let deps = deps.iter().filter_map(|dep| indices.get(dep));
+
+                for to_index in deps {
+                    graph.add_edge(*from_index, *to_index, ());
+                }
+            }
+        }
+
+        let strong_connections = algo::tarjan_scc(&graph);
+
+        for connections in strong_connections {
+            // If there's only one function, then it's only self recursive
+            if connections.len() < 2 {
+                continue;
+            }
+
+            let function_names = connections
+                .iter()
+                .map(|index| values.get(index).unwrap())
+                .collect_vec();
+        }
+
+        // Rest of code is for hoisting functions
         let mut sorted_function_vec = vec![];
 
         let functions_to_hoist_cloned = functions_to_hoist.clone();
@@ -3839,6 +3898,45 @@ impl<'a> CodeGenerator<'a> {
 
                     arg_stack.push(term);
                 }
+            }
+            Air::DefineCyclicFuncs {
+                func_name,
+                module_name,
+                variant_name,
+                contained_functions,
+            } => {
+                let func_name = if module_name.is_empty() {
+                    format!("{func_name}{variant_name}")
+                } else {
+                    format!("{module_name}_{func_name}{variant_name}")
+                };
+                let mut cyclic_functions = vec![];
+
+                for params in contained_functions {
+                    let func_body = arg_stack.pop().unwrap();
+
+                    cyclic_functions.push((params, func_body));
+                }
+                let mut term = arg_stack.pop().unwrap();
+
+                let mut cyclic_body = Term::var("__chooser");
+
+                for (params, func_body) in cyclic_functions.into_iter() {
+                    let mut function = func_body;
+                    for param in params.iter().rev() {
+                        function = function.lambda(param);
+                    }
+
+                    cyclic_body = cyclic_body.apply(function)
+                }
+
+                term = term
+                    .lambda(&func_name)
+                    .apply(Term::var(&func_name).apply(Term::var(&func_name)))
+                    .lambda(&func_name)
+                    .apply(cyclic_body.lambda("__chooser").lambda(func_name));
+
+                arg_stack.push(term);
             }
             Air::Let { name } => {
                 let arg = arg_stack.pop().unwrap();

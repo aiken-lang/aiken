@@ -50,6 +50,13 @@ pub enum Air {
         recursive_nonstatic_params: Vec<String>,
         variant_name: String,
     },
+    DefineCyclicFuncs {
+        func_name: String,
+        module_name: String,
+        variant_name: String,
+        // just the params
+        contained_functions: Vec<Vec<String>>,
+    },
     Fn {
         params: Vec<String>,
     },

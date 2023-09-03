@@ -54,27 +54,6 @@ impl TreePath {
 
         common_ancestor
     }
-
-    pub fn diff_ancestor(&self, ancestor: &Self) -> Self {
-        let mut self_iter = self.path.iter();
-        let ancestor_iter = ancestor.path.iter();
-
-        for ancestor in ancestor_iter {
-            if let Some(self_path) = self_iter.next() {
-                if self_path == ancestor {
-                    continue;
-                } else {
-                    unreachable!("Other path is not a common ancestor self path.")
-                }
-            } else {
-                unreachable!("Other path is longer than self path.")
-            }
-        }
-
-        TreePath {
-            path: self_iter.cloned().collect_vec(),
-        }
-    }
 }
 
 impl Default for TreePath {
@@ -132,6 +111,13 @@ pub enum AirStatement {
         recursive_nonstatic_params: Vec<String>,
         variant_name: String,
         func_body: Box<AirTree>,
+    },
+    DefineCyclicFuncs {
+        func_name: String,
+        module_name: String,
+        variant_name: String,
+        // params and body
+        contained_functions: Vec<(Vec<String>, AirTree)>,
     },
     // Assertions
     AssertConstr {
@@ -892,6 +878,26 @@ impl AirTree {
                         });
                         func_body.create_air_vec(air_vec);
                     }
+                    AirStatement::DefineCyclicFuncs {
+                        func_name,
+                        module_name,
+                        variant_name,
+                        contained_functions,
+                    } => {
+                        air_vec.push(Air::DefineCyclicFuncs {
+                            func_name: func_name.clone(),
+                            module_name: module_name.clone(),
+                            variant_name: variant_name.clone(),
+                            contained_functions: contained_functions
+                                .into_iter()
+                                .map(|(params, _)| params.clone())
+                                .collect_vec(),
+                        });
+
+                        for (_, func_body) in contained_functions {
+                            func_body.create_air_vec(air_vec);
+                        }
+                    }
                     AirStatement::AssertConstr {
                         constr,
                         constr_index,
@@ -1413,6 +1419,21 @@ impl AirTree {
                         apply_with_last,
                     );
                 }
+                AirStatement::DefineCyclicFuncs {
+                    contained_functions,
+                    ..
+                } => {
+                    for (_, func_body) in contained_functions {
+                        func_body.do_traverse_tree_with(
+                            tree_path,
+                            current_depth + 1,
+                            index_count.next_number(),
+                            with,
+                            apply_with_last,
+                        );
+                    }
+                }
+
                 AirStatement::AssertConstr { constr, .. } => {
                     constr.do_traverse_tree_with(
                         tree_path,
@@ -1852,9 +1873,9 @@ impl AirTree {
         &'a mut self,
         tree_path_iter: &mut Iter<(usize, usize)>,
     ) -> &'a mut AirTree {
-        // For Finding the air node we skip over the define func ops since those are added later on.
+        // For finding the air node we skip over the define func ops since those are added later on.
         if let AirTree::Statement {
-            statement: AirStatement::DefineFunc { .. },
+            statement: AirStatement::DefineFunc { .. } | AirStatement::DefineCyclicFuncs { .. },
             hoisted_over: Some(hoisted_over),
         } = self
         {
@@ -1958,6 +1979,7 @@ impl AirTree {
                         }
                     }
                     AirStatement::DefineFunc { .. } => unreachable!(),
+                    AirStatement::DefineCyclicFuncs { .. } => unreachable!(),
                     AirStatement::FieldsEmpty { constr } => {
                         if *index == 0 {
                             constr.as_mut().do_find_air_tree_node(tree_path_iter)
