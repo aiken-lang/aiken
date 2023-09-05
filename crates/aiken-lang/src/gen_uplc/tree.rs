@@ -889,7 +889,7 @@ impl AirTree {
                             module_name: module_name.clone(),
                             variant_name: variant_name.clone(),
                             contained_functions: contained_functions
-                                .into_iter()
+                                .iter()
                                 .map(|(params, _)| params.clone())
                                 .collect_vec(),
                         });
