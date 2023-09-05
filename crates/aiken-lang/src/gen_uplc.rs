@@ -2673,7 +2673,7 @@ impl<'a> CodeGenerator<'a> {
 
         let strong_connections = algo::tarjan_scc(&graph);
 
-        for connections in strong_connections {
+        for (index, connections) in strong_connections.into_iter().enumerate() {
             // If there's only one function, then it's only self recursive
             if connections.len() < 2 {
                 continue;
@@ -2683,6 +2683,11 @@ impl<'a> CodeGenerator<'a> {
                 .iter()
                 .map(|index| values.get(index).unwrap())
                 .collect_vec();
+
+            let function_key = FunctionAccessKey {
+                function_name: format!("__cyclic_function_{}", index),
+                module_name: "".to_string(),
+            };
         }
 
         // Rest of code is for hoisting functions
@@ -2699,39 +2704,41 @@ impl<'a> CodeGenerator<'a> {
                 .get(&variant)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
-            if let HoistableFunction::Function { deps, params, .. } = function {
-                if !params.is_empty() {
-                    for (dep_generic_func, dep_variant) in deps.iter() {
-                        if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                            validator_hoistable
-                                .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
+            match function {
+                HoistableFunction::Function { deps, params, .. } => {
+                    if !params.is_empty() {
+                        for (dep_generic_func, dep_variant) in deps.iter() {
+                            if !(dep_generic_func == &generic_func && dep_variant == &variant) {
+                                validator_hoistable
+                                    .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
 
-                            sorted_function_vec.retain(|(generic_func, variant)| {
-                                !(generic_func == dep_generic_func && variant == dep_variant)
-                            });
+                                sorted_function_vec.retain(|(generic_func, variant)| {
+                                    !(generic_func == dep_generic_func && variant == dep_variant)
+                                });
+                            }
                         }
                     }
+
+                    // Fix dependencies path to be updated to common ancestor
+                    for (dep_key, dep_variant) in deps {
+                        let (func_tree_path, _) = functions_to_hoist
+                            .get(&generic_func)
+                            .unwrap()
+                            .get(&variant)
+                            .unwrap()
+                            .clone();
+
+                        let (dep_path, _) = functions_to_hoist
+                            .get_mut(dep_key)
+                            .unwrap()
+                            .get_mut(dep_variant)
+                            .unwrap();
+
+                        *dep_path = func_tree_path.common_ancestor(dep_path);
+                    }
                 }
-
-                // Fix dependencies path to be updated to common ancestor
-                for (dep_key, dep_variant) in deps {
-                    let (func_tree_path, _) = functions_to_hoist
-                        .get(&generic_func)
-                        .unwrap()
-                        .get(&variant)
-                        .unwrap()
-                        .clone();
-
-                    let (dep_path, _) = functions_to_hoist
-                        .get_mut(dep_key)
-                        .unwrap()
-                        .get_mut(dep_variant)
-                        .unwrap();
-
-                    *dep_path = func_tree_path.common_ancestor(dep_path);
-                }
-            } else {
-                todo!("Deal with Link later")
+                HoistableFunction::Link(_) => todo!("Deal with Link later"),
+                HoistableFunction::CyclicLink(_) => {}
             }
 
             sorted_function_vec.push((generic_func, variant));
