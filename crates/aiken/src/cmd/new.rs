@@ -199,7 +199,7 @@ fn create_github_action(root: &Path) -> miette::Result<()> {
                       version: v{version}
 
                   - run: aiken fmt --check
-                  - run: aiken check
+                  - run: aiken check -D
                   - run: aiken build
             "#,
             version = built_info::PKG_VERSION,

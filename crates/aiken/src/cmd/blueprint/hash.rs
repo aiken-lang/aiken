@@ -29,7 +29,7 @@ pub fn exec(
         rebuild,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory, |p| {
+    with_project(directory, false, |p| {
         if rebuild {
             p.build(false, Tracing::NoTraces)?;
         }

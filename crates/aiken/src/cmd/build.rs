@@ -6,6 +6,10 @@ pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
+    /// Deny warnings; warnings will be treated as errors
+    #[clap(short = 'D', long)]
+    deny: bool,
+
     /// Also dump textual uplc
     #[clap(short, long)]
     uplc: bool,
@@ -18,9 +22,10 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
+        deny,
         uplc,
         keep_traces,
     }: Args,
 ) -> miette::Result<()> {
-    crate::with_project(directory, |p| p.build(uplc, keep_traces.into()))
+    crate::with_project(directory, deny, |p| p.build(uplc, keep_traces.into()))
 }

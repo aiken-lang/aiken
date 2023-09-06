@@ -6,6 +6,10 @@ pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
+    /// Deny warnings; warnings will be treated as errors
+    #[clap(short = 'D', long)]
+    deny: bool,
+
     /// Output directory for the documentation
     #[clap(short = 'o', long)]
     destination: Option<PathBuf>,
@@ -14,8 +18,9 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
+        deny,
         destination,
     }: Args,
 ) -> miette::Result<()> {
-    crate::with_project(directory, |p| p.docs(destination.clone()))
+    crate::with_project(directory, deny, |p| p.docs(destination.clone()))
 }

@@ -2,6 +2,10 @@
 
 ## v1.0.17-alpha - unreleased
 
+### Added
+
+- **aiken**: add ability to force warnings to cause a failing exit code on check, build, and docs
+
 ### Fixed
 
 - **uplc**: trim whitespace when loading files with hex strings to avoid confusing errors #720

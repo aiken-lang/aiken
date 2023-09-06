@@ -6,6 +6,10 @@ pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
+    /// Deny warnings; warnings will be treated as errors
+    #[clap(short = 'D', long)]
+    deny: bool,
+
     /// Skip tests; run only the type-checker
     #[clap(short, long)]
     skip_tests: bool,
@@ -33,6 +37,7 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
+        deny,
         skip_tests,
         debug,
         match_tests,
@@ -40,7 +45,7 @@ pub fn exec(
         no_traces,
     }: Args,
 ) -> miette::Result<()> {
-    crate::with_project(directory, |p| {
+    crate::with_project(directory, deny, |p| {
         p.check(
             skip_tests,
             match_tests.clone(),

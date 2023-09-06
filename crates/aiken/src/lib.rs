@@ -13,7 +13,7 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-pub fn with_project<A>(directory: Option<PathBuf>, mut action: A) -> miette::Result<()>
+pub fn with_project<A>(directory: Option<PathBuf>, deny: bool, mut action: A) -> miette::Result<()>
 where
     A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<aiken_project::error::Error>>,
 {
@@ -37,7 +37,7 @@ where
 
     let warning_count = warnings.len();
 
-    for warning in warnings {
+    for warning in &warnings {
         warning.report()
     }
 
@@ -85,6 +85,11 @@ where
             warning_text.if_supports_color(Stderr, |s| s.yellow()),
         );
     }
+
+    if warning_count > 0 && deny {
+        process::exit(1);
+    }
+
     Ok(())
 }
 
