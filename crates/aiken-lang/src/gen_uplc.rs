@@ -2622,7 +2622,7 @@ impl<'a> CodeGenerator<'a> {
                     };
                 }
                 HoistableFunction::Link(_) => todo!("Deal with Link later"),
-                HoistableFunction::CyclicLink(_) => unreachable!(),
+                _ => unreachable!(),
             }
         }
         validator_hoistable.dedup();
@@ -2688,7 +2688,39 @@ impl<'a> CodeGenerator<'a> {
                 function_name: format!("__cyclic_function_{}", index),
                 module_name: "".to_string(),
             };
+
+            let (functions, mut deps) = function_names
+                .into_iter()
+                .map(|(func_key, variant)| {
+                    let (_, func) = functions_to_hoist
+                        .get(func_key)
+                        .expect("Missing Function Definition")
+                        .get(variant)
+                        .expect("Missing Function Variant Definition");
+
+                    match func {
+                        HoistableFunction::Function { body, deps, params } => {
+                            (params.clone(), body.clone(), deps.clone())
+                        }
+
+                        _ => unreachable!(),
+                    }
+                })
+                .fold((vec![], vec![]), |mut acc, f| {
+                    acc.0.push((f.0, f.1));
+
+                    acc.1.push(f.2);
+
+                    acc
+                });
+
+            let cyclic_function = HoistableFunction::CyclicFunction {
+                functions,
+                deps: deps.into_iter().flatten().dedup().collect_vec(),
+            };
         }
+
+        todo!();
 
         // Rest of code is for hoisting functions
         let mut sorted_function_vec = vec![];
@@ -2739,6 +2771,7 @@ impl<'a> CodeGenerator<'a> {
                 }
                 HoistableFunction::Link(_) => todo!("Deal with Link later"),
                 HoistableFunction::CyclicLink(_) => {}
+                HoistableFunction::CyclicFunction { functions, deps } => todo!(),
             }
 
             sorted_function_vec.push((generic_func, variant));
