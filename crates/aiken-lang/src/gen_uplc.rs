@@ -2992,8 +2992,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let function_def = self.functions.get(&generic_function_key);
 
-                    let Some(function_def) = function_def
-                    else {
+                    let Some(function_def) = function_def else {
                         let code_gen_func = self
                             .code_gen_functions
                             .get(&generic_function_key.function_name)
