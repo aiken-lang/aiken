@@ -46,6 +46,10 @@ pub enum HoistableFunction {
         deps: Vec<(FunctionAccessKey, String)>,
         params: Vec<String>,
     },
+    CyclicFunction {
+        functions: Vec<(Vec<String>, AirTree)>,
+        deps: Vec<(FunctionAccessKey, String)>,
+    },
     Link((FunctionAccessKey, String)),
     CyclicLink((FunctionAccessKey, String)),
 }
