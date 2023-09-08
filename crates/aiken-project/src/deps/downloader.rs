@@ -92,8 +92,6 @@ impl<'a> Downloader<'a> {
 
         let bytes = response.bytes().await?;
 
-        // let PackageSource::Github { url } = &package.source;
-
         tokio::fs::write(&zipball_path, bytes).await?;
 
         Ok(true)
