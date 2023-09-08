@@ -107,6 +107,13 @@ pub enum Error {
     )]
     UnknownPackageVersion { package: Package },
 
+    #[error(
+        "I need to resolve a package {}/{}, but couldn't find it.",
+        package.name.owner,
+        package.name.repo,
+    )]
+    UnableToResolvePackage { package: Package },
+
     #[error("I couldn't parse the provided stake address.")]
     MalformedStakeAddress {
         error: Option<pallas::ledger::addresses::Error>,
@@ -188,6 +195,7 @@ impl GetSource for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
@@ -213,6 +221,7 @@ impl GetSource for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
@@ -247,6 +256,7 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::packages::resolve")),
+            Error::UnableToResolvePackage { .. } => Some(Box::new("aiken::package::download")),
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
@@ -306,6 +316,7 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion{..} => Some(Box::new("Perhaps, double-check the package repository and version?")),
+            Error::UnableToResolvePackage{..} => Some(Box::new("The network is unavailable and the package isn't in the local cache either. Try connecting to the Internet so I can look it up?")),
             Error::Json(error) => Some(Box::new(format!("{error}"))),
             Error::MalformedStakeAddress { error } => Some(Box::new(format!("A stake address must be provided either as a base16-encoded string, or as a bech32-encoded string with the 'stake' or 'stake_test' prefix.{hint}", hint = match error {
                 Some(error) => format!("\n\nHere's the error I encountered: {error}"),
@@ -366,6 +377,7 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
@@ -391,6 +403,7 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
@@ -416,6 +429,7 @@ impl Diagnostic for Error {
             Error::ZipExtract { .. } => None,
             Error::JoinError { .. } => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
@@ -441,6 +455,7 @@ impl Diagnostic for Error {
             Error::ZipExtract { .. } => None,
             Error::JoinError { .. } => None,
             Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,

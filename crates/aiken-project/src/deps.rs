@@ -10,7 +10,7 @@ use crate::{
     error::Error,
     package_name::PackageName,
     paths,
-    telemetry::{Event, EventListener},
+    telemetry::{DownloadSource, Event, EventListener},
 };
 
 use self::{
