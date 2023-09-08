@@ -28,31 +28,40 @@ impl<'a> Downloader<'a> {
         }
     }
 
-    pub async fn download_packages<T>(
+    pub async fn download_packages<I, T>(
         &self,
-        packages: T,
+        event_listener: &T,
+        packages: I,
         project_name: &PackageName,
-    ) -> Result<(), Error>
+    ) -> Result<Vec<(PackageName, bool)>, Error>
     where
-        T: Iterator<Item = &'a Package>,
+        T: EventListener,
+        I: Iterator<Item = &'a Package>,
     {
-        let tasks = packages
-            .filter(|package| project_name != &package.name)
-            .map(|package| self.ensure_package_in_build_directory(package));
-
-        let _results = future::try_join_all(tasks).await?;
-
-        Ok(())
+        future::try_join_all(
+            packages
+                .filter(|package| project_name != &package.name)
+                .map(|package| self.ensure_package_in_build_directory(event_listener, package)),
+        )
+        .await
     }
 
-    pub async fn ensure_package_in_build_directory(
+    pub async fn ensure_package_in_build_directory<T>(
         &self,
+        event_listener: &T,
         package: &Package,
-    ) -> Result<bool, Error> {
-        let cache_key = paths::CacheKey::new(&self.http, package).await?;
-        self.ensure_package_downloaded(package, &cache_key).await?;
-        self.extract_package_from_cache(&package.name, &cache_key)
+    ) -> Result<(PackageName, bool), Error>
+    where
+        T: EventListener,
+    {
+        let cache_key = paths::CacheKey::new(&self.http, event_listener, package).await?;
+        let downloaded = self
+            .ensure_package_downloaded(package, &cache_key)
             .await
+            .map(|downloaded| (package.name.clone(), downloaded))?;
+        self.extract_package_from_cache(&package.name, &cache_key)
+            .await?;
+        Ok(downloaded)
     }
 
     pub async fn ensure_package_downloaded(
@@ -101,13 +110,8 @@ impl<'a> Downloader<'a> {
         &self,
         name: &PackageName,
         cache_key: &CacheKey,
-    ) -> Result<bool, Error> {
+    ) -> Result<(), Error> {
         let destination = self.root_path.join(paths::build_deps_package(name));
-
-        // If the directory already exists then there's nothing for us to do
-        if destination.is_dir() {
-            return Ok(false);
-        }
 
         tokio::fs::create_dir_all(&destination).await?;
 
@@ -133,7 +137,7 @@ impl<'a> Downloader<'a> {
 
         result?;
 
-        Ok(true)
+        Ok(())
     }
 }
 

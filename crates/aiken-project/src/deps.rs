@@ -110,7 +110,7 @@ impl LocalPackages {
                 &p.name != root
                     && !matches!(
                         self.packages.iter().find(|p2| p2.name == p.name),
-                        Some(Dependency { version, .. }) if &p.version == version,
+                        Some(Dependency { version, .. }) if paths::is_git_sha_or_tag(version) && &p.version == version,
                     )
             })
             .collect()
@@ -203,29 +203,47 @@ async fn fetch_missing_packages<T>(
 where
     T: EventListener,
 {
-    let mut count = 0;
-
     let mut missing = local
         .missing_local_packages(manifest, &project_name)
         .into_iter()
-        .map(|package| {
-            count += 1;
-            package
-        })
         .peekable();
 
     if missing.peek().is_some() {
         let start = Instant::now();
 
-        event_listener.handle_event(Event::DownloadingPackage {
-            name: "packages".to_string(),
+        event_listener.handle_event(Event::ResolvingPackages {
+            name: format!("{project_name}"),
         });
 
         let downloader = Downloader::new(root_path);
 
-        downloader.download_packages(missing, &project_name).await?;
+        let statuses = downloader
+            .download_packages(event_listener, missing, &project_name)
+            .await?;
 
-        event_listener.handle_event(Event::PackagesDownloaded { start, count });
+        let downloaded_from_network = statuses
+            .iter()
+            .filter(|(_, downloaded)| *downloaded)
+            .count();
+        if downloaded_from_network > 0 {
+            event_listener.handle_event(Event::PackagesDownloaded {
+                start,
+                count: downloaded_from_network,
+                source: DownloadSource::Network,
+            });
+        }
+
+        let downloaded_from_cache = statuses
+            .iter()
+            .filter(|(_, downloaded)| !downloaded)
+            .count();
+        if downloaded_from_cache > 0 {
+            event_listener.handle_event(Event::PackagesDownloaded {
+                start,
+                count: downloaded_from_cache,
+                source: DownloadSource::Cache,
+            });
+        }
     }
 
     Ok(())
