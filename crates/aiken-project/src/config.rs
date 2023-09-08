@@ -16,14 +16,14 @@ pub struct Config {
     pub dependencies: Vec<Dependency>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Repository {
     pub user: String,
     pub project: String,
     pub platform: Platform,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
     Github,
@@ -31,7 +31,7 @@ pub enum Platform {
     Bitbucket,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct Dependency {
     pub name: PackageName,
     pub version: String,

@@ -26,7 +26,7 @@ pub enum UseManifest {
     No,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct LocalPackages {
     packages: Vec<Dependency>,
 }
