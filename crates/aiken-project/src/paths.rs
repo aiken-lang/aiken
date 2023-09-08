@@ -84,3 +84,38 @@ impl CacheKey {
         self.key.as_ref()
     }
 }
+
+// Best-effort to assert whether a version refers is a git sha digest or a tag. When it is, we
+// avoid re-downloading it if it's already fetched. But when it isn't, and thus refer to a branch,
+// we always re-download it. Note however that the download might be short-circuited by the
+// system-wide package cache, so a download doesn't actually mean a network request.
+//
+// The package cache is however smart-enough to assert whether a package in the cache must be
+// re-downloaded (using HTTP ETag). So this is mostly about delegating the re-downloading logic to
+// the global packages cache.
+pub fn is_git_sha_or_tag(version: &str) -> bool {
+    let r_sha = Regex::new("^[0-9a-f]{7,10}$|^[0-9a-f]{40}$").unwrap();
+    let r_version = Regex::new("^v?[0-9]+\\.[0-9]+(\\.[0-9]+)?([-+].+)?$").unwrap();
+    r_sha.is_match(version) || r_version.is_match(version)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_git_sha_or_tag() {
+        assert!(
+            is_git_sha_or_tag("8ba5946c32a7dc99ae199e0e7b9948f9f361aaee"),
+            "sha full"
+        );
+        assert!(is_git_sha_or_tag("8ba5946"), "sha short");
+        assert!(is_git_sha_or_tag("1.1.0"), "semver");
+        assert!(is_git_sha_or_tag("1.1.0-rc1"), "semver rc");
+        assert!(is_git_sha_or_tag("1.1.0+foo"), "semver patch");
+        assert!(is_git_sha_or_tag("v1.6"), "major/minor + prefix");
+        assert!(!is_git_sha_or_tag("release/2.0.0"), "release branch");
+        assert!(!is_git_sha_or_tag("main"), "main branch");
+        assert!(!is_git_sha_or_tag("8ba594659468ba"), "not sha");
+    }
+}
