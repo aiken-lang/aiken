@@ -1,8 +1,12 @@
-use std::{fs, path::Path};
-
 use aiken_lang::ast::Span;
 use miette::NamedSource;
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::Path,
+    time::{Duration, SystemTime},
+};
 
 use crate::{
     config::{Config, Dependency, Platform},
@@ -16,6 +20,8 @@ use crate::{
 pub struct Manifest {
     pub requirements: Vec<Dependency>,
     pub packages: Vec<Package>,
+    #[serde(default)]
+    pub etags: BTreeMap<String, (SystemTime, String)>,
 }
 
 impl Manifest {
@@ -76,6 +82,34 @@ impl Manifest {
 
         Ok(())
     }
+
+    pub fn lookup_etag(&self, package: &Package) -> Option<String> {
+        match self.etags.get(&etag_key(package)) {
+            None => None,
+            Some((last_fetched, etag)) => {
+                let elapsed = SystemTime::now().duration_since(*last_fetched).unwrap();
+                // Discard any etag older than an hour. So that we throttle call to the package
+                // registry but we ensure a relatively good synchonization of local packages.
+                if elapsed > Duration::from_secs(3600) {
+                    None
+                } else {
+                    Some(etag.clone())
+                }
+            }
+        }
+    }
+
+    pub fn insert_etag(&mut self, package: &Package, etag: String) {
+        self.etags
+            .insert(etag_key(package), (SystemTime::now(), etag));
+    }
+}
+
+fn etag_key(package: &Package) -> String {
+    format!(
+        "{}/{}@{}",
+        package.name.owner, package.name.repo, package.version
+    )
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -104,6 +138,7 @@ where
             })
             .collect(),
         requirements: config.dependencies.clone(),
+        etags: BTreeMap::new(),
     };
 
     Ok(manifest)

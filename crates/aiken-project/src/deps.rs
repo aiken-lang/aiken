@@ -100,11 +100,10 @@ impl LocalPackages {
 
     pub fn missing_local_packages<'a>(
         &self,
-        manifest: &'a Manifest,
+        packages: &'a [Package],
         root: &PackageName,
     ) -> Vec<&'a Package> {
-        manifest
-            .packages
+        packages
             .iter()
             .filter(|p| {
                 &p.name != root
@@ -159,14 +158,14 @@ where
 
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio");
 
-    let (manifest, changed) = Manifest::load(event_listener, config, root_path)?;
+    let (mut manifest, changed) = Manifest::load(event_listener, config, root_path)?;
 
     let local = LocalPackages::load(root_path)?;
 
     local.remove_extra_packages(&manifest, root_path)?;
 
     runtime.block_on(fetch_missing_packages(
-        &manifest,
+        &mut manifest,
         &local,
         project_name,
         root_path,
@@ -183,7 +182,7 @@ where
 }
 
 async fn fetch_missing_packages<T>(
-    manifest: &Manifest,
+    manifest: &mut Manifest,
     local: &LocalPackages,
     project_name: PackageName,
     root_path: &Path,
@@ -192,8 +191,10 @@ async fn fetch_missing_packages<T>(
 where
     T: EventListener,
 {
+    let packages = manifest.packages.to_owned();
+
     let mut missing = local
-        .missing_local_packages(manifest, &project_name)
+        .missing_local_packages(&packages, &project_name)
         .into_iter()
         .peekable();
 
@@ -207,7 +208,7 @@ where
         let downloader = Downloader::new(root_path);
 
         let statuses = downloader
-            .download_packages(event_listener, missing, &project_name)
+            .download_packages(event_listener, missing, &project_name, manifest)
             .await?;
 
         let downloaded_from_network = statuses
@@ -235,5 +236,5 @@ where
         }
     }
 
-    Ok(())
+    manifest.save(root_path)
 }

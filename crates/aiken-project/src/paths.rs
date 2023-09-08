@@ -1,5 +1,6 @@
 use crate::deps::manifest::Package;
 use crate::{
+    deps::manifest::Manifest,
     error::Error,
     package_name::PackageName,
     telemetry::{Event, EventListener},
@@ -56,6 +57,7 @@ impl CacheKey {
         http: &Client,
         event_listener: &T,
         package: &Package,
+        manifest: &mut Manifest,
     ) -> Result<CacheKey, Error>
     where
         T: EventListener,
@@ -65,14 +67,26 @@ impl CacheKey {
             if is_git_sha_or_tag(&package.version) {
                 Ok(package.version.to_string())
             } else {
-                match new_cache_key_from_network(http, package).await {
-                    Err(_) => {
-                        event_listener.handle_event(Event::PackageResolveFallback {
-                            name: format!("{}", package.name),
-                        });
-                        new_cache_key_from_cache(package)
-                    }
-                    Ok(cache_key) => Ok(cache_key),
+                match manifest.lookup_etag(package) {
+                    None => match new_etag_from_network(http, package).await {
+                        Err(_) => {
+                            event_listener.handle_event(Event::PackageResolveFallback {
+                                name: format!("{}", package.name),
+                            });
+                            new_cache_key_from_cache(package)
+                        }
+                        Ok(etag) => {
+                            manifest.insert_etag(package, etag.clone());
+                            Ok(format!(
+                                "{version}@{etag}",
+                                version = package.version.replace('/', "_")
+                            ))
+                        }
+                    },
+                    Some(etag) => Ok(format!(
+                        "{version}@{etag}",
+                        version = package.version.replace('/', "_")
+                    )),
                 }
             }?,
         ))
@@ -89,7 +103,7 @@ impl CacheKey {
     }
 }
 
-async fn new_cache_key_from_network(http: &Client, package: &Package) -> Result<String, Error> {
+async fn new_etag_from_network(http: &Client, package: &Package) -> Result<String, Error> {
     let url = format!(
         "https://api.github.com/repos/{}/{}/zipball/{}",
         package.name.owner, package.name.repo, package.version
@@ -104,14 +118,8 @@ async fn new_cache_key_from_network(http: &Client, package: &Package) -> Result<
         .get("etag")
         .ok_or(Error::UnknownPackageVersion {
             package: package.clone(),
-        })?
-        .to_str()
-        .unwrap()
-        .replace('"', "");
-    Ok(format!(
-        "{version}@{etag}",
-        version = package.version.replace('/', "_")
-    ))
+        })?;
+    Ok(etag.to_str().unwrap().replace('"', ""))
 }
 
 fn new_cache_key_from_cache(target: &Package) -> Result<String, Error> {
