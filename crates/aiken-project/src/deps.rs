@@ -133,12 +133,7 @@ impl From<&Manifest> for LocalPackages {
     }
 }
 
-pub fn download<T>(
-    event_listener: &T,
-    use_manifest: UseManifest,
-    root_path: &Path,
-    config: &Config,
-) -> Result<Manifest, Error>
+pub fn download<T>(event_listener: &T, root_path: &Path, config: &Config) -> Result<Manifest, Error>
 where
     T: EventListener,
 {
@@ -164,13 +159,7 @@ where
 
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio");
 
-    let (manifest, changed) = Manifest::load(
-        runtime.handle().clone(),
-        event_listener,
-        config,
-        use_manifest,
-        root_path,
-    )?;
+    let (manifest, changed) = Manifest::load(event_listener, config, root_path)?;
 
     let local = LocalPackages::load(root_path)?;
 
