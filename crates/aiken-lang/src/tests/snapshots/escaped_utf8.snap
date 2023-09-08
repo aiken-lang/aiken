@@ -1,0 +1,16 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nconst escaped_1 = \"\\\"my_string\\\"\"\nconst escaped_2 = \"foo\\nbar\"\nconst escaped_3 = \"foo\\rbar\"\nconst escaped_4 = \"foo\\tbar\"\nconst escaped_5 = \"1/2\"\nconst escaped_6 = \"1//2\"\n"
+---
+const escaped_1 = "\"my_string\""
+
+const escaped_2 = "foo\nbar"
+
+const escaped_3 = "foo\rbar"
+
+const escaped_4 = "foo\tbar"
+
+const escaped_5 = "1/2"
+
+const escaped_6 = "1//2"
+

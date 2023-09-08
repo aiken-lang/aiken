@@ -196,10 +196,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
 
     let escape = just('\\').ignore_then(
         just('\\')
-            .or(just('/'))
             .or(just('"'))
-            .or(just('b').to('\x08'))
-            .or(just('f').to('\x0C'))
             .or(just('n').to('\n'))
             .or(just('r').to('\r'))
             .or(just('t').to('\t')),

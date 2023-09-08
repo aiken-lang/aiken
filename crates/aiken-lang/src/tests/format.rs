@@ -394,6 +394,20 @@ fn format_bytearray_literals() {
 }
 
 #[test]
+fn escaped_utf8() {
+    assert_format!(
+        r#"
+        const escaped_1 = "\"my_string\""
+        const escaped_2 = "foo\nbar"
+        const escaped_3 = "foo\rbar"
+        const escaped_4 = "foo\tbar"
+        const escaped_5 = "1/2"
+        const escaped_6 = "1//2"
+        "#
+    );
+}
+
+#[test]
 fn format_string_literal() {
     assert_format!(
         r#"

@@ -28,4 +28,9 @@ mod tests {
     fn bytearray_utf8_encoded() {
         assert_expr!("\"aiken\"");
     }
+
+    #[test]
+    fn bytearray_utf8_escaped() {
+        assert_expr!("\"\\\"aiken\\\"\"");
+    }
 }

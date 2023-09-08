@@ -11,6 +11,7 @@
 - **uplc**: trim whitespace when loading files with hex strings to avoid confusing errors #720
 - **uplc**: uplc `Constant::Data` formatting
 - **aiken-lang**: empty records properly parse as record sugar
+- **aiken-lang**: escape sequences are now properly preserved after formatting
 - **aiken-project**: when a module name has a hyphen we should behave like rust and force an underscore
 
 ## v1.0.16-alpha - 2023-08-24

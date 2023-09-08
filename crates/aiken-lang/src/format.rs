@@ -712,7 +712,9 @@ impl<'comments> Formatter<'comments> {
                 .group(),
             ByteArrayFormatPreference::Utf8String => nil()
                 .append("\"")
-                .append(Document::String(String::from_utf8(bytes.to_vec()).unwrap()))
+                .append(Document::String(escape(
+                    &String::from_utf8(bytes.to_vec()).unwrap(),
+                )))
                 .append("\""),
         }
     }
@@ -872,8 +874,10 @@ impl<'comments> Formatter<'comments> {
         commented(document, comments)
     }
 
-    fn string<'a>(&self, string: &'a String) -> Document<'a> {
-        let doc = "@".to_doc().append(string.to_doc().surround("\"", "\""));
+    fn string<'a>(&self, string: &'a str) -> Document<'a> {
+        let doc = "@"
+            .to_doc()
+            .append(Document::String(escape(string)).surround("\"", "\""));
         if string.contains('\n') {
             doc.force_break()
         } else {
@@ -2042,4 +2046,18 @@ fn is_breakable_expr(expr: &UntypedExpr) -> bool {
             | UntypedExpr::List { .. }
             | UntypedExpr::If { .. }
     )
+}
+
+fn escape(string: &str) -> String {
+    string
+        .chars()
+        .flat_map(|c| match c {
+            '\n' => vec!['\\', 'n'],
+            '\r' => vec!['\\', 'r'],
+            '\t' => vec!['\\', 't'],
+            '"' => vec!['\\', c],
+            '\\' => vec!['\\', c],
+            _ => vec![c],
+        })
+        .collect::<String>()
 }
