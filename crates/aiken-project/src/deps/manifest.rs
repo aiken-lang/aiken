@@ -12,8 +12,6 @@ use crate::{
     telemetry::{Event, EventListener},
 };
 
-use super::UseManifest;
-
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Manifest {
     pub requirements: Vec<Dependency>,
@@ -22,10 +20,8 @@ pub struct Manifest {
 
 impl Manifest {
     pub fn load<T>(
-        runtime: tokio::runtime::Handle,
         event_listener: &T,
         config: &Config,
-        use_manifest: UseManifest,
         root_path: &Path,
     ) -> Result<(Self, bool), Error>
     where
@@ -35,15 +31,10 @@ impl Manifest {
 
         // If there's no manifest (or we have been asked not to use it) then resolve
         // the versions anew
-        let should_resolve = match use_manifest {
-            _ if !manifest_path.exists() => true,
-            UseManifest::No => true,
-            UseManifest::Yes => false,
-        };
+        let should_resolve = !manifest_path.exists();
 
         if should_resolve {
-            let manifest = resolve_versions(runtime, config, None, event_listener)?;
-
+            let manifest = resolve_versions(config, event_listener)?;
             return Ok((manifest, true));
         }
 
@@ -61,13 +52,12 @@ impl Manifest {
             help: e.to_string(),
         })?;
 
-        // If the config has unchanged since the manifest was written then it is up
+        // If the config is unchanged since the manifest was written then it is up
         // to date so we can return it unmodified.
         if manifest.requirements == config.dependencies {
             Ok((manifest, false))
         } else {
-            let manifest = resolve_versions(runtime, config, Some(&manifest), event_listener)?;
-
+            let manifest = resolve_versions(config, event_listener)?;
             Ok((manifest, true))
         }
     }
@@ -96,12 +86,7 @@ pub struct Package {
     pub source: Platform,
 }
 
-fn resolve_versions<T>(
-    _runtime: tokio::runtime::Handle,
-    config: &Config,
-    _manifest: Option<&Manifest>,
-    event_listener: &T,
-) -> Result<Manifest, Error>
+fn resolve_versions<T>(config: &Config, event_listener: &T) -> Result<Manifest, Error>
 where
     T: EventListener,
 {

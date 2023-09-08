@@ -27,7 +27,6 @@ use aiken_lang::{
     tipo::TypeInfo,
     IdGenerator,
 };
-use deps::UseManifest;
 use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
@@ -491,12 +490,7 @@ where
     }
 
     fn compile_deps(&mut self) -> Result<(), Vec<Error>> {
-        let manifest = deps::download(
-            &self.event_listener,
-            UseManifest::Yes,
-            &self.root,
-            &self.config,
-        )?;
+        let manifest = deps::download(&self.event_listener, &self.root, &self.config)?;
 
         for package in manifest.packages {
             let lib = self.root.join(paths::build_deps_package(&package.name));
