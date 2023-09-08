@@ -1,4 +1,9 @@
-use aiken_project::{pretty, script::EvalInfo, telemetry, Project};
+use aiken_project::{
+    pretty,
+    script::EvalInfo,
+    telemetry::{self, DownloadSource},
+    Project,
+};
 use miette::IntoDiagnostic;
 use owo_colors::{
     OwoColorize,
@@ -237,16 +242,30 @@ impl telemetry::EventListener for Terminal {
                     );
                 }
             }
-            telemetry::Event::DownloadingPackage { name } => {
+            telemetry::Event::ResolvingPackages { name } => {
                 eprintln!(
                     "{} {}",
-                    "  Downloading"
+                    "    Resolving"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     name.if_supports_color(Stderr, |s| s.bold())
                 )
             }
-            telemetry::Event::PackagesDownloaded { start, count } => {
+            telemetry::Event::PackageResolveFallback { name } => {
+                eprintln!(
+                    "{} {}\n        ↳ You're seeing this message because the package version is unpinned and the network is not accessible.",
+                    "        Using"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.yellow()),
+                    format!("uncertain local version for {name}")
+                        .if_supports_color(Stderr, |s| s.yellow())
+                )
+            }
+            telemetry::Event::PackagesDownloaded {
+                start,
+                count,
+                source,
+            } => {
                 let elapsed = format!("{:.2}s", start.elapsed().as_millis() as f32 / 1000.);
 
                 let msg = match count {
@@ -255,17 +274,20 @@ impl telemetry::EventListener for Terminal {
                 };
 
                 eprintln!(
-                    "{} {}",
-                    "   Downloaded"
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.purple()),
+                    "{} {} from {source}",
+                    match source {
+                        DownloadSource::Network => "   Downloaded",
+                        DownloadSource::Cache => "      Fetched",
+                    }
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.purple()),
                     msg.if_supports_color(Stderr, |s| s.bold())
                 )
             }
             telemetry::Event::ResolvingVersions => {
                 eprintln!(
                     "{}",
-                    "    Resolving versions"
+                    "    Resolving dependencies"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                 )
