@@ -11,6 +11,7 @@ use crate::{
     error::Error,
     package_name::PackageName,
     paths::{self, CacheKey},
+    telemetry::EventListener,
 };
 
 use super::manifest::Package;

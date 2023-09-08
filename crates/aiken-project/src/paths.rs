@@ -1,7 +1,12 @@
 use crate::deps::manifest::Package;
-use crate::{error::Error, package_name::PackageName};
+use crate::{
+    error::Error,
+    package_name::PackageName,
+    telemetry::{Event, EventListener},
+};
+use regex::Regex;
 use reqwest::Client;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 pub fn project_config() -> PathBuf {
     PathBuf::from("aiken.toml")
@@ -28,7 +33,7 @@ pub fn build_deps_package(package_name: &PackageName) -> PathBuf {
 }
 
 pub fn package_cache_zipball(cache_key: &CacheKey) -> PathBuf {
-    packages_cache().join(cache_key.get_key())
+    packages_cache().join(format!("{}.zip", cache_key.get_key()))
 }
 
 pub fn packages_cache() -> PathBuf {
@@ -47,41 +52,107 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
-    pub async fn new(http: &Client, package: &Package) -> Result<CacheKey, Error> {
-        let version = match hex::decode(&package.version) {
-            Ok(..) => Ok(package.version.to_string()),
-            Err(..) => {
-                let url = format!(
-                    "https://api.github.com/repos/{}/{}/zipball/{}",
-                    package.name.owner, package.name.repo, package.version
-                );
-                let response = http
-                    .head(url)
-                    .header("User-Agent", "aiken-lang")
-                    .send()
-                    .await?;
-                let etag = response
-                    .headers()
-                    .get("etag")
-                    .ok_or(Error::UnknownPackageVersion {
-                        package: package.clone(),
-                    })?
-                    .to_str()
-                    .unwrap()
-                    .replace('"', "");
-                Ok(format!("main@{etag}"))
-            }
-        };
-        version.map(|version| CacheKey {
-            key: format!(
-                "{}-{}-{}.zip",
-                package.name.owner, package.name.repo, version
-            ),
-        })
+    pub async fn new<T>(
+        http: &Client,
+        event_listener: &T,
+        package: &Package,
+    ) -> Result<CacheKey, Error>
+    where
+        T: EventListener,
+    {
+        Ok(CacheKey::from_package(
+            package,
+            if is_git_sha_or_tag(&package.version) {
+                Ok(package.version.to_string())
+            } else {
+                match new_cache_key_from_network(http, package).await {
+                    Err(_) => {
+                        event_listener.handle_event(Event::PackageResolveFallback {
+                            name: format!("{}", package.name),
+                        });
+                        new_cache_key_from_cache(package)
+                    }
+                    Ok(cache_key) => Ok(cache_key),
+                }
+            }?,
+        ))
+    }
+
+    fn from_package(package: &Package, version: String) -> CacheKey {
+        CacheKey {
+            key: format!("{}-{}-{}", package.name.owner, package.name.repo, version),
+        }
     }
 
     pub fn get_key(&self) -> &str {
         self.key.as_ref()
+    }
+}
+
+async fn new_cache_key_from_network(http: &Client, package: &Package) -> Result<String, Error> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/zipball/{}",
+        package.name.owner, package.name.repo, package.version
+    );
+    let response = http
+        .head(url)
+        .header("User-Agent", "aiken-lang")
+        .send()
+        .await?;
+    let etag = response
+        .headers()
+        .get("etag")
+        .ok_or(Error::UnknownPackageVersion {
+            package: package.clone(),
+        })?
+        .to_str()
+        .unwrap()
+        .replace('"', "");
+    Ok(format!(
+        "{version}@{etag}",
+        version = package.version.replace('/', "_")
+    ))
+}
+
+fn new_cache_key_from_cache(target: &Package) -> Result<String, Error> {
+    let packages = fs::read_dir(packages_cache())?;
+
+    let prefix = CacheKey::from_package(target, target.version.replace('/', "_"))
+        .get_key()
+        .to_string();
+    let mut most_recently_modified_date = None;
+    let mut most_recently_modified = None;
+
+    for pkg in packages {
+        let entry = pkg.unwrap();
+
+        let filename = entry
+            .file_name()
+            .into_string()
+            .expect("cache filename are valid utf8 strings");
+
+        if filename.starts_with(&prefix) {
+            let last_modified = entry.metadata()?.modified()?;
+            if Some(last_modified) > most_recently_modified_date {
+                most_recently_modified_date = Some(last_modified);
+                most_recently_modified = Some(filename);
+            }
+        }
+    }
+
+    match most_recently_modified {
+        None => Err(Error::UnableToResolvePackage {
+            package: target.clone(),
+        }),
+        Some(pkg) => Ok(format!(
+            "{version}{etag}",
+            version = target.version,
+            etag = pkg
+                .strip_prefix(&prefix)
+                .expect("cache filename starts with a valid version prefix")
+                .strip_suffix(".zip")
+                .expect("cache files are all zip archives")
+        )),
     }
 }
 
