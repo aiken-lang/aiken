@@ -107,19 +107,6 @@ where
 {
     event_listener.handle_event(Event::ResolvingVersions);
 
-    // let resolved = hex::resolve_versions(
-    //     PackageFetcher::boxed(runtime.clone()),
-    //     mode,
-    //     config,
-    //     manifest,
-    // )?;
-
-    // let packages = runtime.block_on(future::try_join_all(
-    //     resolved
-    //         .into_iter()
-    //         .map(|(name, version)| lookup_package(name, version)),
-    // ))?;
-
     let manifest = Manifest {
         packages: config
             .dependencies
