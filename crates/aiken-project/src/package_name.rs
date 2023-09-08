@@ -6,7 +6,7 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct PackageName {
     pub owner: String,
     pub repo: String,

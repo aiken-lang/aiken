@@ -14,7 +14,7 @@ use crate::{
 
 use super::UseManifest;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Manifest {
     pub requirements: Vec<Dependency>,
     pub packages: Vec<Package>,
@@ -88,7 +88,7 @@ impl Manifest {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Package {
     pub name: PackageName,
     pub version: String,
