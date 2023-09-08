@@ -5,6 +5,7 @@
 ### Added
 
 - **aiken**: add ability to force warnings to cause a failing exit code on check, build, and docs
+- **aiken-lang**: automatically resolve and fetch latest revision of a package on build when a branch is specified as version
 
 ### Fixed
 
