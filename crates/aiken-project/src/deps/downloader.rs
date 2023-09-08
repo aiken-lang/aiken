@@ -8,6 +8,7 @@ use reqwest::Client;
 use zip::result::ZipError;
 
 use crate::{
+    deps::manifest::Manifest,
     error::Error,
     package_name::PackageName,
     paths::{self, CacheKey},
@@ -34,28 +35,29 @@ impl<'a> Downloader<'a> {
         event_listener: &T,
         packages: I,
         project_name: &PackageName,
+        manifest: &mut Manifest,
     ) -> Result<Vec<(PackageName, bool)>, Error>
     where
         T: EventListener,
         I: Iterator<Item = &'a Package>,
     {
-        future::try_join_all(
-            packages
-                .filter(|package| project_name != &package.name)
-                .map(|package| self.ensure_package_in_build_directory(event_listener, package)),
-        )
-        .await
+        let mut tasks = vec![];
+
+        for package in packages.filter(|package| project_name != &package.name) {
+            let cache_key =
+                paths::CacheKey::new(&self.http, event_listener, package, manifest).await?;
+            let task = self.ensure_package_in_build_directory(package, cache_key);
+            tasks.push(task);
+        }
+
+        future::try_join_all(tasks).await
     }
 
-    pub async fn ensure_package_in_build_directory<T>(
+    pub async fn ensure_package_in_build_directory(
         &self,
-        event_listener: &T,
         package: &Package,
-    ) -> Result<(PackageName, bool), Error>
-    where
-        T: EventListener,
-    {
-        let cache_key = paths::CacheKey::new(&self.http, event_listener, package).await?;
+        cache_key: CacheKey,
+    ) -> Result<(PackageName, bool), Error> {
         let downloaded = self
             .ensure_package_downloaded(package, &cache_key)
             .await

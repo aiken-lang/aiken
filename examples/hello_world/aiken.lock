@@ -11,3 +11,6 @@ name = "aiken-lang/stdlib"
 version = "main"
 requirements = []
 source = "github"
+
+[etags]
+"aiken-lang/stdlib@main" = [{ secs_since_epoch = 1694181032, nanos_since_epoch = 345700000 }, "e9abc03ee3dbf98637e8e2d8b115e1c95573a4168dbbbe517e8499208b67b020"]
