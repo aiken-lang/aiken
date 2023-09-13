@@ -3,3 +3,5 @@
 
 requirements = []
 packages = []
+
+[etags]
