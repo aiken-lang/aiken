@@ -2052,7 +2052,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::list_expose(
                         defined_heads
                             .into_iter()
-                            .zip(defined_tails.into_iter())
+                            .zip(defined_tails)
                             .filter(|(head, _)| head != "_")
                             .map(|(head, tail)| (tail, head))
                             .collect_vec(),
@@ -3066,7 +3066,7 @@ impl<'a> CodeGenerator<'a> {
                     let mono_types: IndexMap<u64, Arc<Type>> = if !function_def_types.is_empty() {
                         function_def_types
                             .into_iter()
-                            .zip(function_var_types.into_iter())
+                            .zip(function_var_types)
                             .flat_map(|(func_tipo, var_tipo)| {
                                 get_generic_id_and_type(&func_tipo, &var_tipo)
                             })
@@ -3372,7 +3372,7 @@ impl<'a> CodeGenerator<'a> {
                                 UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
                                 convert_keys
                                     .into_iter()
-                                    .zip(convert_values.into_iter())
+                                    .zip(convert_values)
                                     .map(|(key, value)| {
                                         UplcConstant::ProtoPair(
                                             UplcType::Data,
