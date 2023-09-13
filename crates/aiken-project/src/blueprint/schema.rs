@@ -1336,6 +1336,7 @@ pub mod tests {
         )
     }
 
+    #[allow(clippy::arc_with_non_send_sync)]
     fn arbitrary_data() -> impl Strategy<Value = Data> {
         let leaf = prop_oneof![Just(Data::Opaque), Just(Data::Bytes), Just(Data::Integer)];
 
@@ -1362,6 +1363,7 @@ pub mod tests {
         })
     }
 
+    #[allow(clippy::arc_with_non_send_sync)]
     fn arbitrary_schema() -> impl Strategy<Value = Schema> {
         prop_compose! {
             fn data_strategy()(data in arbitrary_data()) -> Schema {
