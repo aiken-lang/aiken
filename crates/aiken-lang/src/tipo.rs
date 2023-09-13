@@ -3,7 +3,7 @@ use crate::{
     ast::{Constant, DefinitionLocation, ModuleKind, Span},
     tipo::fields::FieldMap,
 };
-use std::{cell::RefCell, collections::HashMap, ops::Deref, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
 mod environment;
@@ -31,27 +31,27 @@ pub enum Type {
         public: bool,
         module: String,
         name: String,
-        args: Vec<Arc<Type>>,
+        args: Vec<Rc<Type>>,
     },
 
     /// The type of a function. It takes arguments and returns a value.
     ///
     Fn {
-        args: Vec<Arc<Type>>,
-        ret: Arc<Type>,
+        args: Vec<Rc<Type>>,
+        ret: Rc<Type>,
     },
 
     /// A type variable. See the contained `TypeVar` enum for more information.
     ///
     Var {
-        tipo: Arc<RefCell<TypeVar>>,
+        tipo: Rc<RefCell<TypeVar>>,
     },
     // /// A tuple is an ordered collection of 0 or more values, each of which
     // /// can have a different type, so the `tuple` type is the sum of all the
     // /// contained types.
     // ///
     Tuple {
-        elems: Vec<Arc<Type>>,
+        elems: Vec<Rc<Type>>,
     },
 }
 
@@ -75,14 +75,14 @@ impl Type {
         matches!(self, Self::Fn { .. })
     }
 
-    pub fn return_type(&self) -> Option<Arc<Self>> {
+    pub fn return_type(&self) -> Option<Rc<Self>> {
         match self {
             Self::Fn { ret, .. } => Some(ret.clone()),
             _ => None,
         }
     }
 
-    pub fn function_types(&self) -> Option<(Vec<Arc<Self>>, Arc<Self>)> {
+    pub fn function_types(&self) -> Option<(Vec<Rc<Self>>, Rc<Self>)> {
         match self {
             Self::Fn { args, ret, .. } => Some((args.clone(), ret.clone())),
             _ => None,
@@ -224,7 +224,7 @@ impl Type {
         }
     }
 
-    pub fn arg_types(&self) -> Option<Vec<Arc<Self>>> {
+    pub fn arg_types(&self) -> Option<Vec<Rc<Self>>> {
         match self {
             Self::Fn { args, .. } => Some(args.clone()),
             Self::App { args, .. } => Some(args.clone()),
@@ -240,7 +240,7 @@ impl Type {
         }
     }
 
-    pub fn get_inner_types(&self) -> Vec<Arc<Type>> {
+    pub fn get_inner_types(&self) -> Vec<Rc<Type>> {
         if self.is_list() {
             match self {
                 Self::App { args, .. } => args.clone(),
@@ -310,7 +310,7 @@ impl Type {
         name: &str,
         arity: usize,
         environment: &mut Environment<'_>,
-    ) -> Option<Vec<Arc<Self>>> {
+    ) -> Option<Vec<Rc<Self>>> {
         match self {
             Self::App {
                 module: m,
@@ -341,7 +341,7 @@ impl Type {
                 // We are an unbound type variable! So convert us to a type link
                 // to the desired type.
                 *tipo.borrow_mut() = TypeVar::Link {
-                    tipo: Arc::new(Self::App {
+                    tipo: Rc::new(Self::App {
                         name: name.to_string(),
                         module: module.to_owned(),
                         args: args.clone(),
@@ -407,7 +407,7 @@ pub enum TypeVar {
     /// Link is type variable where it was an unbound variable but we worked out
     /// that it is some other type and now we point to that one.
     ///
-    Link { tipo: Arc<Type> },
+    Link { tipo: Rc<Type> },
     /// A Generic variable stands in for any possible type and cannot be
     /// specialised to any one type
     ///
@@ -521,14 +521,14 @@ impl TypeVar {
         }
     }
 
-    pub fn arg_types(&self) -> Option<Vec<Arc<Type>>> {
+    pub fn arg_types(&self) -> Option<Vec<Rc<Type>>> {
         match self {
             Self::Link { tipo } => tipo.arg_types(),
             _ => None,
         }
     }
 
-    pub fn get_inner_types(&self) -> Vec<Arc<Type>> {
+    pub fn get_inner_types(&self) -> Vec<Rc<Type>> {
         match self {
             Self::Link { tipo } => tipo.get_inner_types(),
             var => {
@@ -552,11 +552,11 @@ impl TypeVar {
 pub struct ValueConstructor {
     pub public: bool,
     pub variant: ValueConstructorVariant,
-    pub tipo: Arc<Type>,
+    pub tipo: Rc<Type>,
 }
 
 impl ValueConstructor {
-    pub fn public(tipo: Arc<Type>, variant: ValueConstructorVariant) -> ValueConstructor {
+    pub fn public(tipo: Rc<Type>, variant: ValueConstructorVariant) -> ValueConstructor {
         ValueConstructor {
             public: true,
             variant,
@@ -633,7 +633,7 @@ pub enum ValueConstructorVariant {
 impl ValueConstructorVariant {
     fn to_module_value_constructor(
         &self,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         module_name: &str,
         function_name: &str,
     ) -> ModuleValueConstructor {
@@ -710,14 +710,14 @@ pub struct TypeConstructor {
     pub public: bool,
     pub location: Span,
     pub module: String,
-    pub parameters: Vec<Arc<Type>>,
-    pub tipo: Arc<Type>,
+    pub parameters: Vec<Rc<Type>>,
+    pub tipo: Rc<Type>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AccessorsMap {
     pub public: bool,
-    pub tipo: Arc<Type>,
+    pub tipo: Rc<Type>,
     pub accessors: HashMap<String, RecordAccessor>,
 }
 
@@ -726,7 +726,7 @@ pub struct RecordAccessor {
     // TODO: smaller int. Doesn't need to be this big
     pub index: u64,
     pub label: String,
-    pub tipo: Arc<Type>,
+    pub tipo: Rc<Type>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -742,7 +742,7 @@ pub enum ModuleValueConstructor {
     Record {
         name: String,
         arity: usize,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         field_map: Option<FieldMap>,
         location: Span,
     },

@@ -1,6 +1,6 @@
 use indexmap::IndexSet;
 use itertools::Itertools;
-use std::{borrow::BorrowMut, slice::Iter, sync::Arc};
+use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
@@ -145,43 +145,43 @@ pub enum AirStatement {
     // Clause Guards
     ClauseGuard {
         subject_name: String,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         pattern: Box<AirTree>,
     },
     ListClauseGuard {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
     },
     TupleGuard {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
     },
     // Field Access
     FieldsExpose {
-        indices: Vec<(usize, String, Arc<Type>)>,
+        indices: Vec<(usize, String, Rc<Type>)>,
         check_last_item: bool,
         record: Box<AirTree>,
     },
     // List Access
     ListAccessor {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         names: Vec<String>,
         tail: bool,
         check_last_item: bool,
         list: Box<AirTree>,
     },
     ListExpose {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
     },
     // Tuple Access
     TupleAccessor {
         names: Vec<String>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         check_last_item: bool,
         tuple: Box<AirTree>,
     },
@@ -211,12 +211,12 @@ pub enum AirExpression {
         value: bool,
     },
     List {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tail: bool,
         items: Vec<AirTree>,
     },
     Tuple {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         items: Vec<AirTree>,
     },
     Void,
@@ -227,7 +227,7 @@ pub enum AirExpression {
     },
     // Functions
     Call {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         func: Box<AirTree>,
         args: Vec<AirTree>,
     },
@@ -238,16 +238,16 @@ pub enum AirExpression {
     },
     Builtin {
         func: DefaultFunction,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         args: Vec<AirTree>,
     },
     // Operators
     BinOp {
         name: BinOp,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         left: Box<AirTree>,
         right: Box<AirTree>,
-        argument_tipo: Arc<Type>,
+        argument_tipo: Rc<Type>,
     },
     UnOp {
         op: UnOp,
@@ -255,24 +255,24 @@ pub enum AirExpression {
     },
 
     CastFromData {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         value: Box<AirTree>,
     },
     CastToData {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         value: Box<AirTree>,
     },
 
     // When
     When {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         subject_name: String,
         subject: Box<AirTree>,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         clauses: Box<AirTree>,
     },
     Clause {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         subject_name: String,
         complex_clause: bool,
         pattern: Box<AirTree>,
@@ -280,7 +280,7 @@ pub enum AirExpression {
         otherwise: Box<AirTree>,
     },
     ListClause {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<(String, String)>,
         complex_clause: bool,
@@ -292,7 +292,7 @@ pub enum AirExpression {
         otherwise: Box<AirTree>,
     },
     TupleClause {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
@@ -307,7 +307,7 @@ pub enum AirExpression {
     },
     // If
     If {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         pattern: Box<AirTree>,
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
@@ -315,34 +315,34 @@ pub enum AirExpression {
     // Record Creation
     Constr {
         tag: usize,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         args: Vec<AirTree>,
     },
     RecordUpdate {
         highest_index: usize,
-        indices: Vec<(usize, Arc<Type>)>,
-        tipo: Arc<Type>,
+        indices: Vec<(usize, Rc<Type>)>,
+        tipo: Rc<Type>,
         record: Box<AirTree>,
         args: Vec<AirTree>,
     },
     // Field Access
     RecordAccess {
         field_index: u64,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         record: Box<AirTree>,
     },
     // Tuple Access
     TupleIndex {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tuple_index: usize,
         tuple: Box<AirTree>,
     },
     // Misc.
     ErrorTerm {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     Trace {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
@@ -365,7 +365,7 @@ impl AirTree {
     pub fn bool(value: bool) -> AirTree {
         AirTree::Expression(AirExpression::Bool { value })
     }
-    pub fn list(mut items: Vec<AirTree>, tipo: Arc<Type>, tail: Option<AirTree>) -> AirTree {
+    pub fn list(mut items: Vec<AirTree>, tipo: Rc<Type>, tail: Option<AirTree>) -> AirTree {
         if let Some(tail) = tail {
             items.push(tail);
 
@@ -382,7 +382,7 @@ impl AirTree {
             })
         }
     }
-    pub fn tuple(items: Vec<AirTree>, tipo: Arc<Type>) -> AirTree {
+    pub fn tuple(items: Vec<AirTree>, tipo: Rc<Type>) -> AirTree {
         AirTree::Expression(AirExpression::Tuple { tipo, items })
     }
     pub fn void() -> AirTree {
@@ -399,7 +399,7 @@ impl AirTree {
             variant_name: variant_name.to_string(),
         })
     }
-    pub fn local_var(name: impl ToString, tipo: Arc<Type>) -> AirTree {
+    pub fn local_var(name: impl ToString, tipo: Rc<Type>) -> AirTree {
         AirTree::Expression(AirExpression::Var {
             constructor: ValueConstructor::public(
                 tipo,
@@ -411,7 +411,7 @@ impl AirTree {
             variant_name: "".to_string(),
         })
     }
-    pub fn call(func: AirTree, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
+    pub fn call(func: AirTree, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Expression(AirExpression::Call {
             tipo,
             func: func.into(),
@@ -446,15 +446,15 @@ impl AirTree {
             func_body: func_body.into(),
         })
     }
-    pub fn builtin(func: DefaultFunction, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
+    pub fn builtin(func: DefaultFunction, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Expression(AirExpression::Builtin { func, tipo, args })
     }
     pub fn binop(
         op: BinOp,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         left: AirTree,
         right: AirTree,
-        argument_tipo: Arc<Type>,
+        argument_tipo: Rc<Type>,
     ) -> AirTree {
         AirTree::Expression(AirExpression::BinOp {
             name: op,
@@ -479,13 +479,13 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn cast_from_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
+    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>) -> AirTree {
         AirTree::Expression(AirExpression::CastFromData {
             tipo,
             value: value.into(),
         })
     }
-    pub fn cast_to_data(value: AirTree, tipo: Arc<Type>) -> AirTree {
+    pub fn cast_to_data(value: AirTree, tipo: Rc<Type>) -> AirTree {
         AirTree::Expression(AirExpression::CastToData {
             tipo,
             value: value.into(),
@@ -511,8 +511,8 @@ impl AirTree {
     }
     pub fn when(
         subject_name: impl ToString,
-        tipo: Arc<Type>,
-        subject_tipo: Arc<Type>,
+        tipo: Rc<Type>,
+        subject_tipo: Rc<Type>,
         subject: AirTree,
         clauses: AirTree,
     ) -> AirTree {
@@ -527,7 +527,7 @@ impl AirTree {
     pub fn clause(
         subject_name: impl ToString,
         pattern: AirTree,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         then: AirTree,
         otherwise: AirTree,
         complex_clause: bool,
@@ -543,7 +543,7 @@ impl AirTree {
     }
     pub fn list_clause(
         tail_name: impl ToString,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         then: AirTree,
         otherwise: AirTree,
         next_tail_name: Option<(String, String)>,
@@ -560,7 +560,7 @@ impl AirTree {
     }
     pub fn tuple_clause(
         subject_name: impl ToString,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         then: AirTree,
@@ -586,7 +586,7 @@ impl AirTree {
     pub fn clause_guard(
         subject_name: impl ToString,
         pattern: AirTree,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ClauseGuard {
@@ -599,7 +599,7 @@ impl AirTree {
     }
     pub fn list_clause_guard(
         tail_name: impl ToString,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         inverse: bool,
         next_tail_name: Option<String>,
     ) -> AirTree {
@@ -615,7 +615,7 @@ impl AirTree {
     }
     pub fn tuple_clause_guard(
         subject_name: impl ToString,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
     ) -> AirTree {
         AirTree::Statement {
@@ -635,7 +635,7 @@ impl AirTree {
     }
     pub fn if_branches(
         mut branches: Vec<(AirTree, AirTree)>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         otherwise: AirTree,
     ) -> AirTree {
         assert!(!branches.is_empty());
@@ -659,14 +659,14 @@ impl AirTree {
 
         final_if
     }
-    pub fn create_constr(tag: usize, tipo: Arc<Type>, args: Vec<AirTree>) -> AirTree {
+    pub fn create_constr(tag: usize, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Expression(AirExpression::Constr { tag, tipo, args })
     }
 
     pub fn record_update(
-        indices: Vec<(usize, Arc<Type>)>,
+        indices: Vec<(usize, Rc<Type>)>,
         highest_index: usize,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         record: AirTree,
         args: Vec<AirTree>,
     ) -> AirTree {
@@ -678,7 +678,7 @@ impl AirTree {
             args,
         })
     }
-    pub fn record_access(field_index: u64, tipo: Arc<Type>, record: AirTree) -> AirTree {
+    pub fn record_access(field_index: u64, tipo: Rc<Type>, record: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::RecordAccess {
             field_index,
             tipo,
@@ -687,7 +687,7 @@ impl AirTree {
     }
 
     pub fn fields_expose(
-        indices: Vec<(usize, String, Arc<Type>)>,
+        indices: Vec<(usize, String, Rc<Type>)>,
         check_last_item: bool,
         record: AirTree,
     ) -> AirTree {
@@ -702,7 +702,7 @@ impl AirTree {
     }
     pub fn list_access(
         names: Vec<String>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tail: bool,
         check_last_item: bool,
         list: AirTree,
@@ -721,7 +721,7 @@ impl AirTree {
     pub fn list_expose(
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListExpose {
@@ -734,7 +734,7 @@ impl AirTree {
     }
     pub fn tuple_access(
         names: Vec<String>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         check_last_item: bool,
         tuple: AirTree,
     ) -> AirTree {
@@ -748,17 +748,17 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn tuple_index(tuple_index: usize, tipo: Arc<Type>, tuple: AirTree) -> AirTree {
+    pub fn tuple_index(tuple_index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::TupleIndex {
             tipo,
             tuple_index,
             tuple: tuple.into(),
         })
     }
-    pub fn error(tipo: Arc<Type>) -> AirTree {
+    pub fn error(tipo: Rc<Type>) -> AirTree {
         AirTree::Expression(AirExpression::ErrorTerm { tipo })
     }
-    pub fn trace(msg: AirTree, tipo: Arc<Type>, then: AirTree) -> AirTree {
+    pub fn trace(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::Trace {
             tipo,
             msg: msg.into(),
@@ -1253,7 +1253,7 @@ impl AirTree {
         }
     }
 
-    pub fn return_type(&self) -> Arc<Type> {
+    pub fn return_type(&self) -> Rc<Type> {
         match self {
             AirTree::Statement {
                 hoisted_over: Some(hoisted_over),
@@ -1296,7 +1296,7 @@ impl AirTree {
         }
     }
 
-    pub fn mut_held_types(&mut self) -> Vec<&mut Arc<Type>> {
+    pub fn mut_held_types(&mut self) -> Vec<&mut Rc<Type>> {
         match self {
             AirTree::Statement {
                 statement,

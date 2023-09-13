@@ -1,5 +1,5 @@
 use indexmap::IndexSet;
-use std::sync::Arc;
+use std::rc::Rc;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
@@ -24,11 +24,11 @@ pub enum Air {
     },
     List {
         count: usize,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tail: bool,
     },
     Tuple {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         count: usize,
     },
     Void,
@@ -40,7 +40,7 @@ pub enum Air {
     // Functions
     Call {
         count: usize,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     DefineFunc {
         func_name: String,
@@ -56,13 +56,13 @@ pub enum Air {
     Builtin {
         count: usize,
         func: DefaultFunction,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     // Operators
     BinOp {
         name: BinOp,
-        tipo: Arc<Type>,
-        argument_tipo: Arc<Type>,
+        tipo: Rc<Type>,
+        argument_tipo: Rc<Type>,
     },
     UnOp {
         op: UnOp,
@@ -72,10 +72,10 @@ pub enum Air {
         name: String,
     },
     CastFromData {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     CastToData {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     AssertConstr {
         constr_index: usize,
@@ -85,24 +85,24 @@ pub enum Air {
     },
     // When
     When {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         subject_name: String,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
     },
     Clause {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         subject_name: String,
         complex_clause: bool,
     },
     ListClause {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<(String, String)>,
         complex_clause: bool,
     },
     WrapClause,
     TupleClause {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         predefined_indices: IndexSet<(usize, String)>,
         subject_name: String,
@@ -110,72 +110,72 @@ pub enum Air {
     },
     ClauseGuard {
         subject_name: String,
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
     },
     ListClauseGuard {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
     },
     TupleGuard {
-        subject_tipo: Arc<Type>,
+        subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
     },
     Finally,
     // If
     If {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     // Record Creation
     Constr {
         tag: usize,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         count: usize,
     },
     RecordUpdate {
         highest_index: usize,
-        indices: Vec<(usize, Arc<Type>)>,
-        tipo: Arc<Type>,
+        indices: Vec<(usize, Rc<Type>)>,
+        tipo: Rc<Type>,
     },
     // Field Access
     RecordAccess {
         record_index: u64,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     FieldsExpose {
-        indices: Vec<(usize, String, Arc<Type>)>,
+        indices: Vec<(usize, String, Rc<Type>)>,
         check_last_item: bool,
     },
     // ListAccess
     ListAccessor {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         names: Vec<String>,
         tail: bool,
         check_last_item: bool,
     },
     ListExpose {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
     },
     // Tuple Access
     TupleAccessor {
         names: Vec<String>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         check_last_item: bool,
     },
     TupleIndex {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         tuple_index: usize,
     },
     // Misc.
     ErrorTerm {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     Trace {
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
     NoOp,
     FieldsEmpty,

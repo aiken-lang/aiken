@@ -8,7 +8,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     fmt::{self, Display},
     ops::Deref,
-    sync::Arc,
+    rc::Rc,
 };
 
 // ---------- Definitions
@@ -68,7 +68,7 @@ impl<T> Definitions<T> {
     pub fn register<F, E>(
         &mut self,
         type_info: &Type,
-        type_parameters: &HashMap<u64, Arc<Type>>,
+        type_parameters: &HashMap<u64, Rc<Type>>,
         build_schema: F,
     ) -> Result<Reference, E>
     where
@@ -124,7 +124,7 @@ impl Display for Reference {
 }
 
 impl Reference {
-    pub fn from_type(type_info: &Type, type_parameters: &HashMap<u64, Arc<Type>>) -> Self {
+    pub fn from_type(type_info: &Type, type_parameters: &HashMap<u64, Rc<Type>>) -> Self {
         match type_info {
             Type::App {
                 module, name, args, ..
@@ -168,7 +168,7 @@ impl Reference {
         }
     }
 
-    fn from_types(args: &Vec<Arc<Type>>, type_parameters: &HashMap<u64, Arc<Type>>) -> Self {
+    fn from_types(args: &Vec<Rc<Type>>, type_parameters: &HashMap<u64, Rc<Type>>) -> Self {
         if args.is_empty() {
             Reference::new("")
         } else {

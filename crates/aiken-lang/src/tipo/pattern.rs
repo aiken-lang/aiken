@@ -3,7 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     ops::Deref,
-    sync::Arc,
+    rc::Rc,
 };
 
 use itertools::Itertools;
@@ -44,7 +44,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
     fn insert_variable(
         &mut self,
         name: &str,
-        typ: Arc<Type>,
+        typ: Rc<Type>,
         location: Span,
         err_location: Span,
     ) -> Result<(), Error> {
@@ -132,7 +132,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         pattern: UntypedPattern,
         subject: &Type,
     ) -> Result<TypedPattern, Error> {
-        self.unify(pattern, Arc::new(subject.clone()), None, false)
+        self.unify(pattern, Rc::new(subject.clone()), None, false)
     }
 
     /// When we have an assignment or a case expression we unify the pattern with the
@@ -141,8 +141,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
     pub fn unify(
         &mut self,
         pattern: UntypedPattern,
-        tipo: Arc<Type>,
-        ann_type: Option<Arc<Type>>,
+        tipo: Rc<Type>,
+        ann_type: Option<Rc<Type>>,
         is_assignment: bool,
     ) -> Result<TypedPattern, Error> {
         match pattern {

@@ -9,7 +9,7 @@ use owo_colors::{OwoColorize, Stream::Stdout};
 use std::{
     fmt::{self, Display},
     ops::Range,
-    sync::Arc,
+    rc::Rc,
 };
 use vec1::Vec1;
 
@@ -129,7 +129,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
     }
 }
 
-pub type TypedFunction = Function<Arc<Type>, TypedExpr>;
+pub type TypedFunction = Function<Rc<Type>, TypedExpr>;
 pub type UntypedFunction = Function<(), UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,7 +146,7 @@ pub struct Function<T, Expr> {
     pub can_error: bool,
 }
 
-pub type TypedTypeAlias = TypeAlias<Arc<Type>>;
+pub type TypedTypeAlias = TypeAlias<Rc<Type>>;
 pub type UntypedTypeAlias = TypeAlias<()>;
 
 impl TypedFunction {
@@ -206,7 +206,7 @@ pub struct TypeAlias<T> {
     pub tipo: T,
 }
 
-pub type TypedDataType = DataType<Arc<Type>>;
+pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
     pub fn ordering() -> Self {
@@ -244,7 +244,7 @@ impl TypedDataType {
         }
     }
 
-    pub fn option(tipo: Arc<Type>) -> Self {
+    pub fn option(tipo: Rc<Type>) -> Self {
         DataType {
             constructors: vec![
                 RecordConstructor {
@@ -308,7 +308,7 @@ pub struct Use<PackageName> {
     pub unqualified: Vec<UnqualifiedImport>,
 }
 
-pub type TypedModuleConstant = ModuleConstant<Arc<Type>>;
+pub type TypedModuleConstant = ModuleConstant<Rc<Type>>;
 pub type UntypedModuleConstant = ModuleConstant<()>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -322,7 +322,7 @@ pub struct ModuleConstant<T> {
     pub tipo: T,
 }
 
-pub type TypedValidator = Validator<Arc<Type>, TypedExpr>;
+pub type TypedValidator = Validator<Rc<Type>, TypedExpr>;
 pub type UntypedValidator = Validator<(), UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -335,7 +335,7 @@ pub struct Validator<T, Expr> {
     pub params: Vec<Arg<T>>,
 }
 
-pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, String>;
+pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -464,7 +464,7 @@ pub enum Constant {
 }
 
 impl Constant {
-    pub fn tipo(&self) -> Arc<Type> {
+    pub fn tipo(&self) -> Rc<Type> {
         match self {
             Constant::Int { .. } => builtins::int(),
             Constant::String { .. } => builtins::string(),
@@ -537,7 +537,7 @@ impl<T: PartialEq> RecordConstructorArg<T> {
     }
 }
 
-pub type TypedArg = Arg<Arc<Type>>;
+pub type TypedArg = Arg<Rc<Type>>;
 pub type UntypedArg = Arg<()>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -824,7 +824,7 @@ impl BinOp {
 }
 
 pub type UntypedPattern = Pattern<(), ()>;
-pub type TypedPattern = Pattern<PatternConstructor, Arc<Type>>;
+pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern<Constructor, Type> {
@@ -947,7 +947,7 @@ impl AssignmentKind {
 pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor, Type>>;
 
 pub type UntypedMultiPattern = MultiPattern<(), ()>;
-pub type TypedMultiPattern = MultiPattern<PatternConstructor, Arc<Type>>;
+pub type TypedMultiPattern = MultiPattern<PatternConstructor, Rc<Type>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UntypedClause {
@@ -960,8 +960,8 @@ pub struct UntypedClause {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedClause {
     pub location: Span,
-    pub pattern: Pattern<PatternConstructor, Arc<Type>>,
-    pub guard: Option<ClauseGuard<Arc<Type>>>,
+    pub pattern: Pattern<PatternConstructor, Rc<Type>>,
+    pub guard: Option<ClauseGuard<Rc<Type>>>,
     pub then: TypedExpr,
 }
 
@@ -979,7 +979,7 @@ impl TypedClause {
 }
 
 pub type UntypedClauseGuard = ClauseGuard<()>;
-pub type TypedClauseGuard = ClauseGuard<Arc<Type>>;
+pub type TypedClauseGuard = ClauseGuard<Rc<Type>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClauseGuard<Type> {
@@ -1079,7 +1079,7 @@ impl<A> ClauseGuard<A> {
 }
 
 impl TypedClauseGuard {
-    pub fn tipo(&self) -> Arc<Type> {
+    pub fn tipo(&self) -> Rc<Type> {
         match self {
             ClauseGuard::Var { tipo, .. } => tipo.clone(),
             ClauseGuard::Constant(constant) => constant.tipo(),

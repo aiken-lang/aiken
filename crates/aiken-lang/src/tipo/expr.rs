@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, rc::Rc};
 use vec1::Vec1;
 
 use crate::{
@@ -73,7 +73,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         fun: UntypedExpr,
         args: Vec<CallArg<UntypedExpr>>,
         location: Span,
-    ) -> Result<(TypedExpr, Vec<TypedCallArg>, Arc<Type>), Error> {
+    ) -> Result<(TypedExpr, Vec<TypedCallArg>, Rc<Type>), Error> {
         let fun = self.infer(fun)?;
 
         let (fun, args, typ) = self.do_infer_call_with_known_fun(fun, args, location)?;
@@ -86,7 +86,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         fun: TypedExpr,
         mut args: Vec<CallArg<UntypedExpr>>,
         location: Span,
-    ) -> Result<(TypedExpr, Vec<TypedCallArg>, Arc<Type>), Error> {
+    ) -> Result<(TypedExpr, Vec<TypedCallArg>, Rc<Type>), Error> {
         // Check to see if the function accepts labelled arguments
         match self.get_field_map(&fun, location)? {
             // The fun has a field map so labelled arguments may be present and need to be reordered.
@@ -127,7 +127,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     pub fn do_infer_fn(
         &mut self,
         args: Vec<UntypedArg>,
-        expected_args: &[Arc<Type>],
+        expected_args: &[Rc<Type>],
         body: UntypedExpr,
         return_annotation: &Option<Annotation>,
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
@@ -712,19 +712,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let constructor = match &constructor.variant {
             variant @ ValueConstructorVariant::ModuleFn { name, module, .. } => {
-                variant.to_module_value_constructor(Arc::clone(&tipo), module, name)
+                variant.to_module_value_constructor(Rc::clone(&tipo), module, name)
             }
 
             variant @ (ValueConstructorVariant::LocalVariable { .. }
             | ValueConstructorVariant::ModuleConstant { .. }
             | ValueConstructorVariant::Record { .. }) => {
-                variant.to_module_value_constructor(Arc::clone(&tipo), &module_name, &label)
+                variant.to_module_value_constructor(Rc::clone(&tipo), &module_name, &label)
             }
         };
 
         Ok(TypedExpr::ModuleSelect {
             label,
-            tipo: Arc::clone(&tipo),
+            tipo: Rc::clone(&tipo),
             location: select_location,
             module_name,
             module_alias: module_alias.to_string(),
@@ -825,7 +825,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     fn infer_param(
         &mut self,
         arg: UntypedArg,
-        expected: Option<Arc<Type>>,
+        expected: Option<Rc<Type>>,
     ) -> Result<TypedArg, Error> {
         let Arg {
             arg_name,
@@ -984,7 +984,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     fn infer_call_argument(
         &mut self,
         value: UntypedExpr,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     ) -> Result<TypedExpr, Error> {
         let tipo = collapse_links(tipo);
 
@@ -1419,7 +1419,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     fn infer_fn(
         &mut self,
         args: Vec<UntypedArg>,
-        expected_args: &[Arc<Type>],
+        expected_args: &[Rc<Type>],
         body: UntypedExpr,
         is_capture: bool,
         return_annotation: Option<Annotation>,
@@ -1445,7 +1445,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         args: Vec<TypedArg>,
         body: UntypedExpr,
-        return_type: Option<Arc<Type>>,
+        return_type: Option<Rc<Type>>,
     ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
         assert_no_assignment(&body)?;
 
@@ -1922,7 +1922,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn instantiate(&mut self, t: Arc<Type>, ids: &mut HashMap<u64, Arc<Type>>) -> Arc<Type> {
+    fn instantiate(&mut self, t: Rc<Type>, ids: &mut HashMap<u64, Rc<Type>>) -> Rc<Type> {
         self.environment.instantiate(t, ids, &self.hydrator)
     }
 
@@ -1935,19 +1935,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
-    pub fn new_unbound_var(&mut self) -> Arc<Type> {
+    pub fn new_unbound_var(&mut self) -> Rc<Type> {
         self.environment.new_unbound_var()
     }
 
-    pub fn type_from_annotation(&mut self, annotation: &Annotation) -> Result<Arc<Type>, Error> {
+    pub fn type_from_annotation(&mut self, annotation: &Annotation) -> Result<Rc<Type>, Error> {
         self.hydrator
             .type_from_annotation(annotation, self.environment)
     }
 
     fn unify(
         &mut self,
-        t1: Arc<Type>,
-        t2: Arc<Type>,
+        t1: Rc<Type>,
+        t2: Rc<Type>,
         location: Span,
         allow_cast: bool,
     ) -> Result<(), Error> {

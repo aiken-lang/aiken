@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ast::Annotation,
@@ -26,7 +26,7 @@ use super::{
 ///
 #[derive(Debug)]
 pub struct Hydrator {
-    created_type_variables: HashMap<String, Arc<Type>>,
+    created_type_variables: HashMap<String, Rc<Type>>,
     /// A rigid type is a generic type that was specified as being generic in
     /// an annotation. As such it should never be instantiated into an unbound
     /// variable. This type_id => name map is used for reporting the original
@@ -37,7 +37,7 @@ pub struct Hydrator {
 
 #[derive(Debug)]
 pub struct ScopeResetData {
-    created_type_variables: HashMap<String, Arc<Type>>,
+    created_type_variables: HashMap<String, Rc<Type>>,
     rigid_type_names: HashMap<u64, String>,
 }
 
@@ -90,7 +90,7 @@ impl Hydrator {
         &mut self,
         ast: &Option<Annotation>,
         environment: &mut Environment,
-    ) -> Result<Arc<Type>, Error> {
+    ) -> Result<Rc<Type>, Error> {
         match ast {
             Some(ast) => self.type_from_annotation(ast, environment),
             None => Ok(environment.new_unbound_var()),
@@ -101,7 +101,7 @@ impl Hydrator {
         &mut self,
         annotation: &Annotation,
         environment: &mut Environment,
-    ) -> Result<Arc<Type>, Error> {
+    ) -> Result<Rc<Type>, Error> {
         let mut unbounds = vec![];
         let tipo = self.do_type_from_annotation(annotation, environment, &mut unbounds)?;
 
@@ -122,7 +122,7 @@ impl Hydrator {
         annotation: &'a Annotation,
         environment: &mut Environment,
         unbounds: &mut Vec<&'a Span>,
-    ) -> Result<Arc<Type>, Error> {
+    ) -> Result<Rc<Type>, Error> {
         match annotation {
             Annotation::Constructor {
                 location,

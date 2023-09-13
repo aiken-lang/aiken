@@ -46,5 +46,5 @@ aiken-lang = { path = "../aiken-lang", version = "1.0.16-alpha" }
 uplc = { path = '../uplc', version = "1.0.16-alpha" }
 
 [dev-dependencies]
-proptest = "1.1.0"
+proptest = "1.2.0"
 pretty_assertions = "1.3.0"

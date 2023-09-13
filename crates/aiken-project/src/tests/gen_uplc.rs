@@ -1,12 +1,6 @@
-use std::sync::Arc;
-
 use pretty_assertions::assert_eq;
 
-use aiken_lang::{
-    ast::{Definition, Function, Validator},
-    expr::TypedExpr,
-    tipo::Type as AikenType,
-};
+use aiken_lang::ast::{Definition, Function, TypedFunction, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
@@ -19,8 +13,8 @@ use crate::module::CheckedModules;
 use super::TestProject;
 
 enum TestType {
-    Func(Function<Arc<AikenType>, TypedExpr>),
-    Validator(Validator<Arc<AikenType>, TypedExpr>),
+    Func(TypedFunction),
+    Validator(TypedValidator),
 }
 
 fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {

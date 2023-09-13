@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -15,7 +15,8 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedDataType, TypedPattern,
+        AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedClauseGuard,
+        TypedDataType, TypedPattern,
     },
     builtins::{bool, void},
     expr::TypedExpr,
@@ -80,7 +81,7 @@ pub struct FunctionAccessKey {
 
 #[derive(Clone, Debug)]
 pub struct AssignmentProperties {
-    pub value_type: Arc<Type>,
+    pub value_type: Rc<Type>,
     pub kind: AssignmentKind,
     pub remove_unused: bool,
     pub full_check: bool,
@@ -110,7 +111,7 @@ pub enum SpecificClause {
 }
 
 impl ClauseProperties {
-    pub fn init(t: &Arc<Type>, constr_var: String, subject_name: String) -> Self {
+    pub fn init(t: &Rc<Type>, constr_var: String, subject_name: String) -> Self {
         if t.is_list() {
             ClauseProperties {
                 clause_var_name: constr_var,
@@ -148,7 +149,7 @@ impl ClauseProperties {
     }
 
     pub fn init_inner(
-        t: &Arc<Type>,
+        t: &Rc<Type>,
         constr_var: String,
         subject_name: String,
         final_clause: bool,
@@ -190,7 +191,7 @@ impl ClauseProperties {
     }
 }
 
-pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>)> {
+pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Rc<Type>)> {
     let mut generics_ids = vec![];
 
     if let Some(id) = tipo.get_generic() {
@@ -211,7 +212,7 @@ pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Arc<Type>
 pub fn lookup_data_type_by_tipo(
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
     tipo: &Type,
-) -> Option<DataType<Arc<Type>>> {
+) -> Option<DataType<Rc<Type>>> {
     match tipo {
         Type::Fn { ret, .. } => match ret.as_ref() {
             Type::App { module, name, .. } => {
@@ -261,20 +262,19 @@ pub fn get_arg_type_name(tipo: &Type) -> String {
 }
 
 pub fn convert_opaque_type(
-    t: &Arc<Type>,
+    t: &Rc<Type>,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
-) -> Arc<Type> {
+) -> Rc<Type> {
     if check_replaceable_opaque_type(t, data_types) && matches!(t.as_ref(), Type::App { .. }) {
         let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
         let new_type_fields = data_type.typed_parameters;
 
-        let mono_types: IndexMap<u64, Arc<Type>>;
         let mut mono_type_vec = vec![];
 
         for (tipo, param) in new_type_fields.iter().zip(t.arg_types().unwrap()) {
             mono_type_vec.append(&mut get_generic_id_and_type(tipo, &param));
         }
-        mono_types = mono_type_vec.into_iter().collect();
+        let mono_types = mono_type_vec.into_iter().collect();
 
         let generic_type = &data_type.constructors[0].arguments[0].tipo;
 
@@ -337,7 +337,7 @@ pub fn convert_opaque_type(
 }
 
 pub fn check_replaceable_opaque_type(
-    t: &Arc<Type>,
+    t: &Rc<Type>,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types, t);
@@ -352,9 +352,9 @@ pub fn check_replaceable_opaque_type(
 }
 
 pub fn find_and_replace_generics(
-    tipo: &Arc<Type>,
-    mono_types: &IndexMap<u64, Arc<Type>>,
-) -> Arc<Type> {
+    tipo: &Rc<Type>,
+    mono_types: &IndexMap<u64, Rc<Type>>,
+) -> Rc<Type> {
     if let Some(id) = tipo.get_generic() {
         // If a generic does not have a type we know of
         // like a None in option then just use same type
@@ -427,7 +427,7 @@ pub fn constants_ir(literal: &Constant) -> AirTree {
     }
 }
 
-pub fn handle_clause_guard(clause_guard: &ClauseGuard<Arc<Type>>) -> AirTree {
+pub fn handle_clause_guard(clause_guard: &TypedClauseGuard) -> AirTree {
     match clause_guard {
         ClauseGuard::Not { value, .. } => {
             let val = handle_clause_guard(value);
@@ -487,7 +487,7 @@ pub fn handle_clause_guard(clause_guard: &ClauseGuard<Arc<Type>>) -> AirTree {
     }
 }
 
-pub fn get_variant_name(t: &Arc<Type>) -> String {
+pub fn get_variant_name(t: &Rc<Type>) -> String {
     if t.is_string() {
         "_string".to_string()
     } else if t.is_int() {
@@ -531,7 +531,7 @@ pub fn get_variant_name(t: &Arc<Type>) -> String {
     }
 }
 
-pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Arc<Type>>) {
+pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Rc<Type>>) {
     let mut held_types = air_tree.mut_held_types();
 
     while let Some(tipo) = held_types.pop() {
@@ -1029,7 +1029,7 @@ pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClaus
         .unwrap_or(&clauses[0])
 }
 
-pub fn convert_data_to_type(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
+pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Name> {
     if field_type.is_int() {
         Term::un_i_data().apply(term)
     } else if field_type.is_bytearray() {
@@ -1142,7 +1142,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
     new_constants
 }
 
-pub fn convert_type_to_data(term: Term<Name>, field_type: &Arc<Type>) -> Term<Name> {
+pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Name> {
     if field_type.is_bytearray() {
         Term::b_data().apply(term)
     } else if field_type.is_int() {
@@ -1206,7 +1206,7 @@ pub fn list_access_to_uplc(
     tail: bool,
     current_index: usize,
     term: Term<Name>,
-    tipos: Vec<Arc<Type>>,
+    tipos: Vec<Rc<Type>>,
     check_last_item: bool,
     is_list_accessor: bool,
     tracing: bool,
@@ -1409,7 +1409,7 @@ pub fn apply_builtin_forces(mut term: Term<Name>, force_count: u32) -> Term<Name
 pub fn undata_builtin(
     func: &DefaultFunction,
     count: usize,
-    tipo: &Arc<Type>,
+    tipo: &Rc<Type>,
     args: Vec<Term<Name>>,
 ) -> Term<Name> {
     let mut term: Term<Name> = (*func).into();
@@ -1437,7 +1437,7 @@ pub fn undata_builtin(
 pub fn to_data_builtin(
     func: &DefaultFunction,
     count: usize,
-    tipo: &Arc<Type>,
+    tipo: &Rc<Type>,
     mut args: Vec<Term<Name>>,
 ) -> Term<Name> {
     let mut term: Term<Name> = (*func).into();
@@ -1575,7 +1575,7 @@ pub fn wrap_as_multi_validator(spend: Term<Name>, mint: Term<Name>) -> Term<Name
 /// If the pattern is a list the return the number of elements and if it has a tail
 /// Otherwise return None
 pub fn get_list_elements_len_and_tail(
-    pattern: &Pattern<PatternConstructor, Arc<Type>>,
+    pattern: &Pattern<PatternConstructor, Rc<Type>>,
 ) -> Option<(usize, bool)> {
     if let Pattern::List { elements, tail, .. } = &pattern {
         Some((elements.len(), tail.is_some()))

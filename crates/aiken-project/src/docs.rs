@@ -14,7 +14,7 @@ use serde::Serialize;
 use serde_json as json;
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    rc::Rc,
     time::{Duration, SystemTime},
 };
 
@@ -524,7 +524,7 @@ struct DocTypeConstructor {
 }
 
 impl DocTypeConstructor {
-    fn from_record_constructor(constructor: &RecordConstructor<Arc<Type>>) -> Self {
+    fn from_record_constructor(constructor: &RecordConstructor<Rc<Type>>) -> Self {
         DocTypeConstructor {
             definition: format::Formatter::new()
                 .docs_record_constructor(constructor)

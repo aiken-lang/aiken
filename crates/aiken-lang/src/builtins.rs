@@ -9,7 +9,7 @@ use crate::{
     IdGenerator,
 };
 use indexmap::IndexMap;
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use strum::IntoEnumIterator;
 use uplc::builtins::DefaultFunction;
 
@@ -959,8 +959,8 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
     data_types
 }
 
-pub fn int() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn int() -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         name: INT.to_string(),
         module: "".to_string(),
@@ -968,8 +968,8 @@ pub fn int() -> Arc<Type> {
     })
 }
 
-pub fn data() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn data() -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         name: DATA.to_string(),
         module: "".to_string(),
@@ -977,8 +977,8 @@ pub fn data() -> Arc<Type> {
     })
 }
 
-pub fn byte_array() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn byte_array() -> Rc<Type> {
+    Rc::new(Type::App {
         args: vec![],
         public: true,
         name: BYTE_ARRAY.to_string(),
@@ -986,12 +986,12 @@ pub fn byte_array() -> Arc<Type> {
     })
 }
 
-pub fn tuple(elems: Vec<Arc<Type>>) -> Arc<Type> {
-    Arc::new(Type::Tuple { elems })
+pub fn tuple(elems: Vec<Rc<Type>>) -> Rc<Type> {
+    Rc::new(Type::Tuple { elems })
 }
 
-pub fn bool() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn bool() -> Rc<Type> {
+    Rc::new(Type::App {
         args: vec![],
         public: true,
         name: BOOL.to_string(),
@@ -999,8 +999,8 @@ pub fn bool() -> Arc<Type> {
     })
 }
 
-pub fn list(t: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn list(t: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         name: LIST.to_string(),
         module: "".to_string(),
@@ -1008,8 +1008,8 @@ pub fn list(t: Arc<Type>) -> Arc<Type> {
     })
 }
 
-pub fn string() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn string() -> Rc<Type> {
+    Rc::new(Type::App {
         args: vec![],
         public: true,
         name: STRING.to_string(),
@@ -1017,8 +1017,8 @@ pub fn string() -> Arc<Type> {
     })
 }
 
-pub fn void() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn void() -> Rc<Type> {
+    Rc::new(Type::App {
         args: vec![],
         public: true,
         name: VOID.to_string(),
@@ -1026,8 +1026,8 @@ pub fn void() -> Arc<Type> {
     })
 }
 
-pub fn result(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn result(a: Rc<Type>, e: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         name: RESULT.to_string(),
         module: "".to_string(),
@@ -1035,8 +1035,8 @@ pub fn result(a: Arc<Type>, e: Arc<Type>) -> Arc<Type> {
     })
 }
 
-pub fn option(a: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn option(a: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         name: OPTION.to_string(),
         module: "".to_string(),
@@ -1044,8 +1044,8 @@ pub fn option(a: Arc<Type>) -> Arc<Type> {
     })
 }
 
-pub fn ordering() -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn ordering() -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         name: ORDERING.to_string(),
         module: "".to_string(),
@@ -1053,24 +1053,24 @@ pub fn ordering() -> Arc<Type> {
     })
 }
 
-pub fn function(args: Vec<Arc<Type>>, ret: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::Fn { ret, args })
+pub fn function(args: Vec<Rc<Type>>, ret: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::Fn { ret, args })
 }
 
-pub fn generic_var(id: u64) -> Arc<Type> {
-    let tipo = Arc::new(RefCell::new(TypeVar::Generic { id }));
+pub fn generic_var(id: u64) -> Rc<Type> {
+    let tipo = Rc::new(RefCell::new(TypeVar::Generic { id }));
 
-    Arc::new(Type::Var { tipo })
+    Rc::new(Type::Var { tipo })
 }
 
-pub fn unbound_var(id: u64) -> Arc<Type> {
-    let tipo = Arc::new(RefCell::new(TypeVar::Unbound { id }));
+pub fn unbound_var(id: u64) -> Rc<Type> {
+    let tipo = Rc::new(RefCell::new(TypeVar::Unbound { id }));
 
-    Arc::new(Type::Var { tipo })
+    Rc::new(Type::Var { tipo })
 }
 
-pub fn wrapped_redeemer(redeemer: Arc<Type>) -> Arc<Type> {
-    Arc::new(Type::App {
+pub fn wrapped_redeemer(redeemer: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::App {
         public: true,
         module: "".to_string(),
         name: REDEEMER_WRAPPER.to_string(),

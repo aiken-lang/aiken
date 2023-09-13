@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, rc::Rc};
 
 use itertools::Itertools;
 
@@ -45,7 +45,7 @@ impl Printer {
     }
 
     // TODO: have this function return a Document that borrows from the Type.
-    // Is this possible? The lifetime would have to go through the Arc<Refcell<Type>>
+    // Is this possible? The lifetime would have to go through the Rc<Refcell<Type>>
     // for TypeVar::Link'd types.
     pub fn print<'a>(&mut self, typ: &Type) -> Document<'a> {
         match typ {
@@ -141,7 +141,7 @@ impl Printer {
         chars.into_iter().rev().collect()
     }
 
-    fn args_to_aiken_doc<'a>(&mut self, args: &[Arc<Type>]) -> Document<'a> {
+    fn args_to_aiken_doc<'a>(&mut self, args: &[Rc<Type>]) -> Document<'a> {
         if args.is_empty() {
             return nil();
         }
@@ -284,13 +284,13 @@ mod tests {
                 name: "Pair".to_string(),
                 public: true,
                 args: vec![
-                    Arc::new(Type::App {
+                    Rc::new(Type::App {
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
                         args: vec![],
                     }),
-                    Arc::new(Type::App {
+                    Rc::new(Type::App {
                         module: "whatever".to_string(),
                         name: "Bool".to_string(),
                         public: true,
@@ -303,20 +303,20 @@ mod tests {
         assert_string!(
             Type::Fn {
                 args: vec![
-                    Arc::new(Type::App {
+                    Rc::new(Type::App {
                         args: vec![],
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
                     }),
-                    Arc::new(Type::App {
+                    Rc::new(Type::App {
                         args: vec![],
                         module: "whatever".to_string(),
                         name: "Bool".to_string(),
                         public: true,
                     }),
                 ],
-                ret: Arc::new(Type::App {
+                ret: Rc::new(Type::App {
                     args: vec![],
                     module: "whatever".to_string(),
                     name: "Bool".to_string(),
@@ -327,8 +327,8 @@ mod tests {
         );
         assert_string!(
             Type::Var {
-                tipo: Arc::new(RefCell::new(TypeVar::Link {
-                    tipo: Arc::new(Type::App {
+                tipo: Rc::new(RefCell::new(TypeVar::Link {
+                    tipo: Rc::new(Type::App {
                         args: vec![],
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
@@ -340,28 +340,28 @@ mod tests {
         );
         assert_string!(
             Type::Var {
-                tipo: Arc::new(RefCell::new(TypeVar::Unbound { id: 2231 })),
+                tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2231 })),
             },
             "a",
         );
         assert_string!(
             function(
-                vec![Arc::new(Type::Var {
-                    tipo: Arc::new(RefCell::new(TypeVar::Unbound { id: 78 })),
+                vec![Rc::new(Type::Var {
+                    tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 78 })),
                 })],
-                Arc::new(Type::Var {
-                    tipo: Arc::new(RefCell::new(TypeVar::Unbound { id: 2 })),
+                Rc::new(Type::Var {
+                    tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2 })),
                 }),
             ),
             "fn(a) -> b",
         );
         assert_string!(
             function(
-                vec![Arc::new(Type::Var {
-                    tipo: Arc::new(RefCell::new(TypeVar::Generic { id: 78 })),
+                vec![Rc::new(Type::Var {
+                    tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 78 })),
                 })],
-                Arc::new(Type::Var {
-                    tipo: Arc::new(RefCell::new(TypeVar::Generic { id: 2 })),
+                Rc::new(Type::Var {
+                    tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 2 })),
                 }),
             ),
             "fn(a) -> b",
@@ -378,7 +378,7 @@ mod tests {
         );
     }
 
-    fn pretty_print(typ: Arc<Type>) -> String {
+    fn pretty_print(typ: Rc<Type>) -> String {
         Printer::new().pretty_print(&typ, 0)
     }
 }

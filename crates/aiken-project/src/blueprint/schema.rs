@@ -1,7 +1,7 @@
 use crate::blueprint::definitions::{Definitions, Reference};
 use crate::CheckedModule;
 use aiken_lang::{
-    ast::{DataType, Definition, TypedDefinition},
+    ast::{Definition, TypedDataType, TypedDefinition},
     builtins::wrapped_redeemer,
     tipo::{pretty, Type, TypeVar},
 };
@@ -12,7 +12,8 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use serde_json as json;
-use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
+use std::rc::Rc;
+use std::{collections::HashMap, fmt, ops::Deref};
 
 // NOTE: Can be anything BUT 0
 pub const REDEEMER_DISCRIMINANT: usize = 1;
@@ -124,7 +125,7 @@ impl Annotated<Schema> {
     pub fn as_wrapped_redeemer(
         definitions: &mut Definitions<Annotated<Schema>>,
         schema: Reference,
-        type_info: Arc<Type>,
+        type_info: Rc<Type>,
     ) -> Reference {
         definitions
             .register(
@@ -156,7 +157,7 @@ impl Annotated<Schema> {
     fn do_from_type(
         type_info: &Type,
         modules: &HashMap<String, CheckedModule>,
-        type_parameters: &mut HashMap<u64, Arc<Type>>,
+        type_parameters: &mut HashMap<u64, Rc<Type>>,
         definitions: &mut Definitions<Self>,
     ) -> Result<Reference, Error> {
         match type_info {
@@ -403,9 +404,9 @@ impl Annotated<Schema> {
 
 impl Data {
     fn from_data_type(
-        data_type: &DataType<Arc<Type>>,
+        data_type: &TypedDataType,
         modules: &HashMap<String, CheckedModule>,
-        type_parameters: &mut HashMap<u64, Arc<Type>>,
+        type_parameters: &mut HashMap<u64, Rc<Type>>,
         definitions: &mut Definitions<Annotated<Schema>>,
     ) -> Result<Self, Error> {
         let mut variants = vec![];
@@ -451,9 +452,9 @@ impl Data {
 }
 
 fn collect_type_parameters<'a>(
-    type_parameters: &'a mut HashMap<u64, Arc<Type>>,
-    generics: &'a [Arc<Type>],
-    applications: &'a [Arc<Type>],
+    type_parameters: &'a mut HashMap<u64, Rc<Type>>,
+    generics: &'a [Rc<Type>],
+    applications: &'a [Rc<Type>],
 ) {
     for (index, generic) in generics.iter().enumerate() {
         match &**generic {
@@ -474,7 +475,7 @@ fn collect_type_parameters<'a>(
     }
 }
 
-fn find_data_type(name: &str, definitions: &[TypedDefinition]) -> Option<DataType<Arc<Type>>> {
+fn find_data_type(name: &str, definitions: &[TypedDefinition]) -> Option<TypedDataType> {
     for def in definitions {
         match def {
             Definition::DataType(data_type) if name == data_type.name => {

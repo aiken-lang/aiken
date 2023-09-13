@@ -13,7 +13,7 @@ use owo_colors::{
     OwoColorize,
     Stream::{Stderr, Stdout},
 };
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 #[derive(Debug, thiserror::Error, Diagnostic, Clone)]
 #[error("Something is possibly wrong here...")]
@@ -89,8 +89,8 @@ pub enum Error {
             expected.to_pretty_with_names(rigid_type_names.clone(), 0),
         )]
         location: Span,
-        expected: Arc<Type>,
-        given: Arc<Type>,
+        expected: Rc<Type>,
+        given: Rc<Type>,
         situation: Option<UnifyErrorSituation>,
         rigid_type_names: HashMap<u64, String>,
     },
@@ -474,7 +474,7 @@ If you really meant to return that last expression, try to replace it with the f
     NotATuple {
         #[label]
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
 
     #[error("{}\n", if *is_let {
@@ -521,7 +521,7 @@ In this particular instance, the following cases are unmatched:
     NotFn {
         #[label]
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
 
     #[error("I discovered a positional argument after a label argument.\n")]
@@ -769,7 +769,7 @@ Perhaps, try the following:
     UnknownRecordField {
         #[label]
         location: Span,
-        typ: Arc<Type>,
+        typ: Rc<Type>,
         label: String,
         fields: Vec<String>,
         situation: Option<UnknownRecordFieldSituation>,
@@ -880,7 +880,7 @@ The best thing to do from here is to remove it."#))]
     ValidatorMustReturnBool {
         #[label("invalid return type")]
         location: Span,
-        return_type: Arc<Type>,
+        return_type: Rc<Type>,
     },
 
     #[error("Validators require at least 2 arguments and at most 3 arguments.\n")]
@@ -1072,8 +1072,8 @@ fn suggest_constructor_pattern(
 }
 
 fn suggest_unify(
-    expected: &Arc<Type>,
-    given: &Arc<Type>,
+    expected: &Rc<Type>,
+    given: &Rc<Type>,
     situation: &Option<UnifyErrorSituation>,
     rigid_type_names: &HashMap<u64, String>,
 ) -> String {
@@ -1356,7 +1356,7 @@ pub enum Warning {
     Todo {
         #[label("An expression of type {} is expected here.", tipo.to_pretty(0))]
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
 
     #[error("I found a type hole in an annotation.\n")]
@@ -1364,7 +1364,7 @@ pub enum Warning {
     UnexpectedTypeHole {
         #[label("{}", tipo.to_pretty(0))]
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
 
     #[error(

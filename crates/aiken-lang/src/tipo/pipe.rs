@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{ops::Deref, rc::Rc};
 
 use vec1::Vec1;
 
@@ -17,7 +17,7 @@ use super::{
 #[derive(Debug)]
 pub(crate) struct PipeTyper<'a, 'b, 'c> {
     size: usize,
-    argument_type: Arc<Type>,
+    argument_type: Rc<Type>,
     argument_location: Span,
     location: Span,
     expressions: Vec<TypedExpr>,

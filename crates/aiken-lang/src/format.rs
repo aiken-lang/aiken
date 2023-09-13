@@ -21,7 +21,7 @@ use crate::{
 use itertools::Itertools;
 use num_bigint::BigInt;
 use ordinal::Ordinal;
-use std::sync::Arc;
+use std::rc::Rc;
 use vec1::Vec1;
 
 const INDENT: isize = 2;
@@ -1460,7 +1460,7 @@ impl<'comments> Formatter<'comments> {
         name: &'a str,
         args: &'a [TypedArg],
         return_annotation: &'a Option<Annotation>,
-        return_type: Arc<Type>,
+        return_type: Rc<Type>,
     ) -> Document<'a> {
         let head = name.to_doc().append(self.docs_fn_args(args)).append(" -> ");
 
@@ -1489,7 +1489,7 @@ impl<'comments> Formatter<'comments> {
         wrap_args(args.iter().map(|e| (self.docs_fn_arg(e), false)))
     }
 
-    fn docs_fn_arg<'a>(&mut self, arg: &'a Arg<Arc<Type>>) -> Document<'a> {
+    fn docs_fn_arg<'a>(&mut self, arg: &'a TypedArg) -> Document<'a> {
         self.docs_fn_arg_name(&arg.arg_name)
             .append(self.type_or_annotation(&arg.annotation, &arg.tipo))
             .group()
@@ -1506,7 +1506,7 @@ impl<'comments> Formatter<'comments> {
     fn type_or_annotation<'a>(
         &mut self,
         annotation: &'a Option<Annotation>,
-        type_info: &Arc<Type>,
+        type_info: &Rc<Type>,
     ) -> Document<'a> {
         match annotation {
             Some(a) => self.annotation(a),

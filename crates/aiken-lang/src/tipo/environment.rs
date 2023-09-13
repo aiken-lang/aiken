@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     ops::Deref,
-    sync::Arc,
+    rc::Rc,
 };
 
 use crate::{
@@ -104,11 +104,11 @@ impl<'a> Environment<'a> {
 
     pub fn match_fun_type(
         &mut self,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         arity: usize,
         fn_location: Span,
         call_location: Span,
-    ) -> Result<(Vec<Arc<Type>>, Arc<Type>), Error> {
+    ) -> Result<(Vec<Rc<Type>>, Rc<Type>), Error> {
         if let Type::Var { tipo } = tipo.deref() {
             let new_value = match tipo.borrow().deref() {
                 TypeVar::Link { tipo, .. } => {
@@ -492,7 +492,7 @@ impl<'a> Environment<'a> {
         &mut self,
         name: String,
         variant: ValueConstructorVariant,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     ) {
         self.scope.insert(
             name,
@@ -507,10 +507,10 @@ impl<'a> Environment<'a> {
     /// Instantiate converts generic variables into unbound ones.
     pub fn instantiate(
         &mut self,
-        t: Arc<Type>,
-        ids: &mut HashMap<u64, Arc<Type>>,
+        t: Rc<Type>,
+        ids: &mut HashMap<u64, Rc<Type>>,
         hydrator: &Hydrator,
-    ) -> Arc<Type> {
+    ) -> Rc<Type> {
         match t.deref() {
             Type::App {
                 public,
@@ -522,7 +522,7 @@ impl<'a> Environment<'a> {
                     .iter()
                     .map(|t| self.instantiate(t.clone(), ids, hydrator))
                     .collect();
-                Arc::new(Type::App {
+                Rc::new(Type::App {
                     public: *public,
                     name: name.clone(),
                     module: module.clone(),
@@ -534,7 +534,7 @@ impl<'a> Environment<'a> {
                 match tipo.borrow().deref() {
                     TypeVar::Link { tipo } => return self.instantiate(tipo.clone(), ids, hydrator),
 
-                    TypeVar::Unbound { .. } => return Arc::new(Type::Var { tipo: tipo.clone() }),
+                    TypeVar::Unbound { .. } => return Rc::new(Type::Var { tipo: tipo.clone() }),
 
                     TypeVar::Generic { id } => match ids.get(id) {
                         Some(t) => return t.clone(),
@@ -550,7 +550,7 @@ impl<'a> Environment<'a> {
                         }
                     },
                 }
-                Arc::new(Type::Var { tipo: tipo.clone() })
+                Rc::new(Type::Var { tipo: tipo.clone() })
             }
 
             Type::Fn { args, ret, .. } => function(
@@ -582,7 +582,7 @@ impl<'a> Environment<'a> {
         args: &[String],
         location: &Span,
         hydrator: &mut Hydrator,
-    ) -> Result<Vec<Arc<Type>>, Error> {
+    ) -> Result<Vec<Rc<Type>>, Error> {
         let mut type_vars = Vec::new();
 
         for arg in args {
@@ -630,13 +630,13 @@ impl<'a> Environment<'a> {
     }
 
     /// Create a new generic type that can stand in for any type.
-    pub fn new_generic_var(&mut self) -> Arc<Type> {
+    pub fn new_generic_var(&mut self) -> Rc<Type> {
         generic_var(self.next_uid())
     }
 
     /// Create a new unbound type that is a specific type, we just don't
     /// know which one yet.
-    pub fn new_unbound_var(&mut self) -> Arc<Type> {
+    pub fn new_unbound_var(&mut self) -> Rc<Type> {
         unbound_var(self.next_uid())
     }
 
@@ -931,7 +931,7 @@ impl<'a> Environment<'a> {
 
                 let parameters = self.make_type_vars(parameters, location, &mut hydrator)?;
 
-                let tipo = Arc::new(Type::App {
+                let tipo = Rc::new(Type::App {
                     public: *public,
                     module: module.to_owned(),
                     name: name.clone(),
@@ -1276,8 +1276,8 @@ impl<'a> Environment<'a> {
     #[allow(clippy::only_used_in_recursion)]
     pub fn unify(
         &mut self,
-        t1: Arc<Type>,
-        t2: Arc<Type>,
+        t1: Rc<Type>,
+        t2: Rc<Type>,
         location: Span,
         allow_cast: bool,
     ) -> Result<(), Error> {
@@ -1305,7 +1305,7 @@ impl<'a> Environment<'a> {
 
         if let Type::Var { tipo } = t1.deref() {
             enum Action {
-                Unify(Arc<Type>),
+                Unify(Rc<Type>),
                 CouldNotUnify,
                 Link,
             }
@@ -1585,7 +1585,7 @@ pub enum EntityKind {
 /// prevents the algorithm from inferring recursive types, which
 /// could cause naively-implemented type checking to diverge.
 /// While traversing the type tree.
-fn unify_unbound_type(tipo: Arc<Type>, own_id: u64, location: Span) -> Result<(), Error> {
+fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(), Error> {
     if let Type::Var { tipo } = tipo.deref() {
         let new_value = match tipo.borrow().deref() {
             TypeVar::Link { tipo, .. } => {
@@ -1638,11 +1638,7 @@ fn unify_unbound_type(tipo: Arc<Type>, own_id: u64, location: Span) -> Result<()
     }
 }
 
-fn unify_enclosed_type(
-    e1: Arc<Type>,
-    e2: Arc<Type>,
-    result: Result<(), Error>,
-) -> Result<(), Error> {
+fn unify_enclosed_type(e1: Rc<Type>, e2: Rc<Type>, result: Result<(), Error>) -> Result<(), Error> {
     // If types cannot unify, show the type error with the enclosing types, e1 and e2.
     match result {
         Err(Error::CouldNotUnify {
@@ -1716,7 +1712,7 @@ pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Spa
     None
 }
 
-pub(super) fn collapse_links(t: Arc<Type>) -> Arc<Type> {
+pub(super) fn collapse_links(t: Rc<Type>) -> Rc<Type> {
     if let Type::Var { tipo } = t.deref() {
         if let TypeVar::Link { tipo } = tipo.borrow().deref() {
             return tipo.clone();
@@ -1757,12 +1753,12 @@ fn get_compatible_record_fields<A>(
 /// Takes a level and a type and turns all type variables within the type that have
 /// level higher than the input level into generalized (polymorphic) type variables.
 #[allow(clippy::only_used_in_recursion)]
-pub(crate) fn generalise(t: Arc<Type>, ctx_level: usize) -> Arc<Type> {
+pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
     match t.deref() {
         Type::Var { tipo } => match tipo.borrow().deref() {
             TypeVar::Unbound { id } => generic_var(*id),
             TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
-            TypeVar::Generic { .. } => Arc::new(Type::Var { tipo: tipo.clone() }),
+            TypeVar::Generic { .. } => Rc::new(Type::Var { tipo: tipo.clone() }),
         },
 
         Type::App {
@@ -1776,7 +1772,7 @@ pub(crate) fn generalise(t: Arc<Type>, ctx_level: usize) -> Arc<Type> {
                 .map(|t| generalise(t.clone(), ctx_level))
                 .collect();
 
-            Arc::new(Type::App {
+            Rc::new(Type::App {
                 public: *public,
                 module: module.clone(),
                 name: name.clone(),

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use vec1::Vec1;
 
@@ -18,19 +18,19 @@ use crate::{
 pub enum TypedExpr {
     UInt {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         value: String,
     },
 
     String {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         value: String,
     },
 
     ByteArray {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         bytes: Vec<u8>,
     },
 
@@ -57,30 +57,30 @@ pub enum TypedExpr {
 
     Fn {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         is_capture: bool,
-        args: Vec<Arg<Arc<Type>>>,
+        args: Vec<Arg<Rc<Type>>>,
         body: Box<Self>,
         return_annotation: Option<Annotation>,
     },
 
     List {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         elements: Vec<Self>,
         tail: Option<Box<Self>>,
     },
 
     Call {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         fun: Box<Self>,
         args: Vec<CallArg<Self>>,
     },
 
     BinOp {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         name: BinOp,
         left: Box<Self>,
         right: Box<Self>,
@@ -88,22 +88,22 @@ pub enum TypedExpr {
 
     Assignment {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         value: Box<Self>,
-        pattern: Pattern<PatternConstructor, Arc<Type>>,
+        pattern: Pattern<PatternConstructor, Rc<Type>>,
         kind: AssignmentKind,
     },
 
     Trace {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         then: Box<Self>,
         text: Box<Self>,
     },
 
     When {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         subject: Box<Self>,
         clauses: Vec<TypedClause>,
     },
@@ -112,12 +112,12 @@ pub enum TypedExpr {
         location: Span,
         branches: Vec1<IfBranch<Self>>,
         final_else: Box<Self>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
 
     RecordAccess {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         label: String,
         index: u64,
         record: Box<Self>,
@@ -125,7 +125,7 @@ pub enum TypedExpr {
 
     ModuleSelect {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         label: String,
         module_name: String,
         module_alias: String,
@@ -134,25 +134,25 @@ pub enum TypedExpr {
 
     Tuple {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         elems: Vec<Self>,
     },
 
     TupleIndex {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         index: usize,
         tuple: Box<Self>,
     },
 
     ErrorTerm {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
     },
 
     RecordUpdate {
         location: Span,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         spread: Box<Self>,
         args: Vec<TypedRecordUpdateArg>,
     },
@@ -160,13 +160,13 @@ pub enum TypedExpr {
     UnOp {
         location: Span,
         value: Box<Self>,
-        tipo: Arc<Type>,
+        tipo: Rc<Type>,
         op: UnOp,
     },
 }
 
 impl TypedExpr {
-    pub fn tipo(&self) -> Arc<Type> {
+    pub fn tipo(&self) -> Rc<Type> {
         match self {
             Self::Var { constructor, .. } => constructor.tipo.clone(),
             Self::Trace { then, .. } => then.tipo(),

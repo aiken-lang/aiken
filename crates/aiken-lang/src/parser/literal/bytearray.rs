@@ -39,9 +39,9 @@ pub fn array_of_bytes(
                 .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
         )
         .validate(|bytes, span, emit| {
-            let base = bytes.iter().fold(Ok(None), |acc, (_, base)| match acc {
-                Ok(None) => Ok(Some(base)),
-                Ok(Some(previous_base)) if previous_base == base => Ok(Some(base)),
+            let base = bytes.iter().try_fold(None, |acc, (_, base)| match acc {
+                None => Ok(Some(base)),
+                Some(previous_base) if previous_base == base => Ok(Some(base)),
                 _ => Err(()),
             });
 
