@@ -331,7 +331,7 @@ fn exhaustiveness_expect() {
         }
     "#;
 
-    assert!(matches!(check(parse(source_code)), Ok(_)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
@@ -607,7 +607,7 @@ fn exhaustiveness_nested_list_and_tuples() {
         }
     "#;
 
-    assert!(matches!(check(parse(source_code)), Ok(_)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]
@@ -643,7 +643,7 @@ fn expect_sugar_correct_type() {
         }
     "#;
 
-    assert!(matches!(check(parse(source_code)), Ok(_)))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]

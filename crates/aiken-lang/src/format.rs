@@ -171,7 +171,7 @@ impl<'comments> Formatter<'comments> {
             line(),
         );
 
-        let declarations = join(declarations.into_iter(), lines(2));
+        let declarations = join(declarations, lines(2));
 
         let sep = if has_imports && has_declarations {
             lines(2)
