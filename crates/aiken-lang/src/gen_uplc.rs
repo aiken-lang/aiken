@@ -476,7 +476,7 @@ impl<'a> CodeGenerator<'a> {
                     assignment.hoist_over(clause_then)
                 } else {
                     clauses = if subject.tipo().is_list() {
-                        rearrange_list_clauses(clauses)
+                        rearrange_list_clauses(clauses, &self.data_types)
                     } else {
                         clauses
                     };
@@ -1767,8 +1767,8 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut is_wild_card_elems_clause = clause.guard.is_none();
                     for element in elements.iter() {
-                        is_wild_card_elems_clause =
-                            is_wild_card_elems_clause && !pattern_has_conditions(element);
+                        is_wild_card_elems_clause = is_wild_card_elems_clause
+                            && !pattern_has_conditions(element, &self.data_types);
                     }
 
                     if *checked_index < elements_len.try_into().unwrap()
@@ -2447,9 +2447,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 Pattern::Constructor {
-                    name: constr_name,
-                    is_record,
-                    ..
+                    name: constr_name, ..
                 } => {
                     if subject_tipo.is_bool() {
                         props.complex_clause = true;
@@ -2461,7 +2459,10 @@ impl<'a> CodeGenerator<'a> {
                     } else {
                         let (cond, assign) = self.clause_pattern(pattern, subject_tipo, props);
 
-                        if *is_record {
+                        let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo)
+                            .expect("Missing data type");
+
+                        if data_type.constructors.len() == 1 {
                             assign
                         } else {
                             props.complex_clause = true;

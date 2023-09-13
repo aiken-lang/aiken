@@ -763,28 +763,36 @@ pub fn modify_self_calls(
     recursive_nonstatics
 }
 
-pub fn pattern_has_conditions(pattern: &TypedPattern) -> bool {
+pub fn pattern_has_conditions(
+    pattern: &TypedPattern,
+    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+) -> bool {
     match pattern {
-        Pattern::Constructor {
-            is_record: false, ..
-        }
-        | Pattern::List { .. }
-        | Pattern::Int { .. } => true,
-        Pattern::Tuple { elems, .. } => elems.iter().any(pattern_has_conditions),
-        Pattern::Constructor {
-            is_record: true,
-            arguments,
-            ..
-        } => arguments
+        Pattern::List { .. } | Pattern::Int { .. } => true,
+        Pattern::Tuple { elems, .. } => elems
             .iter()
-            .any(|arg| pattern_has_conditions(&arg.value)),
-        Pattern::Assign { pattern, .. } => pattern_has_conditions(pattern),
+            .any(|elem| pattern_has_conditions(elem, data_types)),
+        Pattern::Constructor {
+            arguments, tipo, ..
+        } => {
+            let data_type =
+                lookup_data_type_by_tipo(data_types, tipo).expect("Data type not found");
+
+            data_type.constructors.len() > 1
+                || arguments
+                    .iter()
+                    .any(|arg| pattern_has_conditions(&arg.value, data_types))
+        }
+        Pattern::Assign { pattern, .. } => pattern_has_conditions(pattern, data_types),
         Pattern::Var { .. } | Pattern::Discard { .. } => false,
     }
 }
 
 // TODO: write some tests
-pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
+pub fn rearrange_list_clauses(
+    clauses: Vec<TypedClause>,
+    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+) -> Vec<TypedClause> {
     let mut sorted_clauses = clauses;
 
     // if we have a list sort clauses so we can plug holes for cases not covered by clauses
@@ -954,7 +962,7 @@ pub fn rearrange_list_clauses(clauses: Vec<TypedClause>) -> Vec<TypedClause> {
 
             for element in elements.iter() {
                 is_wild_card_elems_clause =
-                    is_wild_card_elems_clause && !pattern_has_conditions(element);
+                    is_wild_card_elems_clause && !pattern_has_conditions(element, data_types);
             }
 
             if is_wild_card_elems_clause {
