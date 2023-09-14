@@ -18,7 +18,7 @@ pub struct Args {
     #[clap(short, long)]
     cbor: bool,
 
-    /// Arguments to pass to the uplc program
+    /// Arguments to pass to the UPLC program
     args: Vec<String>,
 }
 
@@ -54,10 +54,9 @@ pub fn exec(
     };
 
     for arg in args {
-        let term: Term<NamedDeBruijn> = parser::term(&arg)
-            .into_diagnostic()?
-            .try_into()
-            .into_diagnostic()?;
+        let term = parser::term(&arg).into_diagnostic()?;
+
+        let term = Term::<NamedDeBruijn>::try_from(term).into_diagnostic()?;
 
         program = program.apply_term(&term);
     }
@@ -71,7 +70,7 @@ pub fn exec(
 
     match eval_result.result() {
         Ok(term) => {
-            let term: Term<Name> = term.try_into().into_diagnostic()?;
+            let term = Term::<Name>::try_from(term).into_diagnostic()?;
 
             let output = json!({
                 "result": term.to_pretty(),
