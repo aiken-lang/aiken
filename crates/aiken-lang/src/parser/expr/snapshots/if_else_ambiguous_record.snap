@@ -1,0 +1,66 @@
+---
+source: crates/aiken-lang/src/parser/expr/if_else.rs
+description: "Code:\n\nif ec1 == Infinity {\n  ec2\n} else if ec1 == Foo { foo } {\n  ec1\n} else {\n  Infinity\n}\n"
+---
+If {
+    location: 0..85,
+    branches: [
+        IfBranch {
+            condition: BinOp {
+                location: 3..18,
+                name: Eq,
+                left: Var {
+                    location: 3..6,
+                    name: "ec1",
+                },
+                right: Var {
+                    location: 10..18,
+                    name: "Infinity",
+                },
+            },
+            body: Var {
+                location: 23..26,
+                name: "ec2",
+            },
+            location: 3..28,
+        },
+        IfBranch {
+            condition: BinOp {
+                location: 37..55,
+                name: Eq,
+                left: Var {
+                    location: 37..40,
+                    name: "ec1",
+                },
+                right: Call {
+                    arguments: [
+                        CallArg {
+                            label: Some(
+                                "foo",
+                            ),
+                            location: 50..53,
+                            value: Var {
+                                location: 50..53,
+                                name: "foo",
+                            },
+                        },
+                    ],
+                    fun: Var {
+                        location: 44..47,
+                        name: "Foo",
+                    },
+                    location: 44..55,
+                },
+            },
+            body: Var {
+                location: 60..63,
+                name: "ec1",
+            },
+            location: 37..65,
+        },
+    ],
+    final_else: Var {
+        location: 75..83,
+        name: "Infinity",
+    },
+}

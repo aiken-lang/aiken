@@ -13,6 +13,7 @@
 - **uplc**: uplc `Constant::Data` formatting
 - **aiken-lang**: empty records properly parse as record sugar
 - **aiken-lang**: escape sequences are now properly preserved after formatting
+- **aiken-lang**: fixed parser ambiguity when using record constructor in if conditions followed by single-line var expressions #735
 - **aiken-project**: when a module name has a hyphen we should behave like rust and force an underscore
 
 ## v1.0.16-alpha - 2023-08-24

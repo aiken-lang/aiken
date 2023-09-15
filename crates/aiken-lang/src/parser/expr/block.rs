@@ -24,13 +24,22 @@ mod tests {
     use crate::assert_expr;
 
     #[test]
-    fn block_basic() {
+    fn block_let() {
         assert_expr!(
             r#"
             let b = {
               let x = 4
-
               x + 5
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn block_single() {
+        assert_expr!(
+            r#"{
+            foo
             }
             "#
         );

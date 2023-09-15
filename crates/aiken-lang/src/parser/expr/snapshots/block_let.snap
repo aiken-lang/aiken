@@ -1,0 +1,49 @@
+---
+source: crates/aiken-lang/src/parser/expr/block.rs
+description: "Code:\n\nlet b = {\n  let x = 4\n  x + 5\n}\n"
+---
+Assignment {
+    location: 0..31,
+    value: Sequence {
+        location: 12..29,
+        expressions: [
+            Assignment {
+                location: 12..21,
+                value: UInt {
+                    location: 20..21,
+                    value: "4",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                pattern: Var {
+                    location: 16..17,
+                    name: "x",
+                },
+                kind: Let,
+                annotation: None,
+            },
+            BinOp {
+                location: 24..29,
+                name: AddInt,
+                left: Var {
+                    location: 24..25,
+                    name: "x",
+                },
+                right: UInt {
+                    location: 28..29,
+                    value: "5",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            },
+        ],
+    },
+    pattern: Var {
+        location: 4..5,
+        name: "b",
+    },
+    kind: Let,
+    annotation: None,
+}

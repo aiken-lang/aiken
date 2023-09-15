@@ -72,6 +72,38 @@ pub fn parser(
                             },
                         ),
                     ))
+                    // NOTE: There's an ambiguity when the record shorthand syntax is used
+                    // from within an if-else statement in the case of single-variable if-branch.
+                    //
+                    // For example, imagine the following:
+                    //
+                    // ```
+                    // if season == Summer {
+                    //   foo
+                    // } else {
+                    //   bar
+                    // }
+                    // ```
+                    //
+                    // Without that next odd parser combinator, the parser would parse:
+                    //
+                    // ```
+                    // if season == Summer { foo }
+                    // else {
+                    //   bar
+                    // }
+                    // ```
+                    //
+                    // And immediately choke on the next `else` because the if-branch body has
+                    // already been consumed and interpreted as a record definition. So the next
+                    // combinator ensures that we give priority back to an if-then statement rather
+                    // than to the record definition.
+                    .then_ignore(
+                        just(Token::RightBrace)
+                            .ignore_then(just(Token::Else))
+                            .not()
+                            .rewind(),
+                    )
                     .map(|(value, name)| ast::CallArg {
                         location: value.location(),
                         value,

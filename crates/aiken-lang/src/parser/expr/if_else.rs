@@ -71,4 +71,19 @@ mod tests {
             "#
         );
     }
+
+    #[test]
+    fn if_else_ambiguous_record() {
+        assert_expr!(
+            r#"
+            if ec1 == Infinity {
+              ec2
+            } else if ec1 == Foo { foo } {
+              ec1
+            } else {
+              Infinity
+            }
+            "#
+        );
+    }
 }
