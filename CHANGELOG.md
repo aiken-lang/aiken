@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.17-alpha - unreleased
+## v1.0.17-alpha - 2023-09-20
 
 ### Added
 
@@ -16,7 +16,6 @@
 - **uplc**: trim whitespace when loading files with hex strings to avoid
   confusing errors #720
 - **uplc**: uplc `Constant::Data` formatting
-
 - **aiken-lang**: code gen fixes including nested constr when matches and expect
   on None
 - **aiken-lang**: empty records properly parse as record sugar
