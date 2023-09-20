@@ -5367,3 +5367,226 @@ fn expect_none() {
         false,
     );
 }
+
+#[test]
+fn tuple_2_match() {
+    let src = r#"
+        type CurveInt {
+            ECI { ec: (Int, Int)}
+            Infinity
+        }
+
+        fn equivalence(ec1: CurveInt, ec2: CurveInt) -> Bool {
+            let input = (ec1, ec2)
+            when input is {
+                (ECI { ec: (x1, y1)}, ECI { ec: (x2, y2)}) -> {
+                    x2 - x1 == 0 && y2 - y1 == 0
+                }
+                (Infinity, Infinity) -> {
+                    True
+                }
+                (Infinity, ECI { ec: _}) -> {
+                    False
+                }
+                (ECI { ec: _}, Infinity) -> {
+                    False
+                }
+            }
+        }
+
+        test equivalence1() {
+            equivalence(Infinity, Infinity) == True
+        }
+  "#;
+
+    assert_uplc(
+        src,
+        Term::var("equivalence")
+            .lambda("equivalence")
+            .apply(
+                Term::equals_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_0")))
+                    .if_else(
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(
+                                Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_1")),
+                            )
+                            .if_else(
+                                Term::equals_integer()
+                                    .apply(
+                                        Term::sub_integer()
+                                            .apply(Term::var("x2"))
+                                            .apply(Term::var("x1")),
+                                    )
+                                    .apply(Term::integer(0.into()))
+                                    .delayed_if_else(
+                                        Term::equals_integer()
+                                            .apply(
+                                                Term::sub_integer()
+                                                    .apply(Term::var("y2"))
+                                                    .apply(Term::var("y1")),
+                                            )
+                                            .apply(Term::integer(0.into())),
+                                        Term::bool(false),
+                                    )
+                                    .lambda("x2")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::fst_pair().apply(Term::var("field_0_pair")),
+                                        ),
+                                    )
+                                    .lambda("y2")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::snd_pair().apply(Term::var("field_0_pair")),
+                                        ),
+                                    )
+                                    .lambda("field_0_pair")
+                                    .apply(
+                                        Term::mk_pair_data()
+                                            .apply(
+                                                Term::head_list().apply(Term::var("__list_data")),
+                                            )
+                                            .apply(Term::head_list().apply(Term::var("__tail")))
+                                            .lambda("__tail")
+                                            .apply(
+                                                Term::tail_list().apply(Term::var("__list_data")),
+                                            )
+                                            .lambda("__list_data")
+                                            .apply(
+                                                Term::unlist_data().apply(
+                                                    Term::head_list()
+                                                        .apply(Term::var("tuple_index_1_fields")),
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("tuple_index_1_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                            .apply(Term::var("tuple_index_1")),
+                                    )
+                                    .delay(),
+                                Term::var("clauses_delayed"),
+                            )
+                            .force()
+                            .lambda("x1")
+                            .apply(
+                                Term::un_i_data()
+                                    .apply(Term::fst_pair().apply(Term::var("field_0_pair"))),
+                            )
+                            .lambda("y1")
+                            .apply(
+                                Term::un_i_data()
+                                    .apply(Term::snd_pair().apply(Term::var("field_0_pair"))),
+                            )
+                            .lambda("field_0_pair")
+                            .apply(
+                                Term::mk_pair_data()
+                                    .apply(Term::head_list().apply(Term::var("__list_data")))
+                                    .apply(Term::head_list().apply(Term::var("__tail")))
+                                    .lambda("__tail")
+                                    .apply(Term::tail_list().apply(Term::var("__list_data")))
+                                    .lambda("__list_data")
+                                    .apply(Term::unlist_data().apply(
+                                        Term::head_list().apply(Term::var("tuple_index_0_fields")),
+                                    )),
+                            )
+                            .lambda("tuple_index_0_fields")
+                            .apply(
+                                Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("tuple_index_0")),
+                            )
+                            .delay(),
+                        Term::var("clauses_delayed"),
+                    )
+                    .force()
+                    .lambda("clauses_delayed")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(
+                                Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_0")),
+                            )
+                            .if_else(
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(
+                                        Term::var(CONSTR_INDEX_EXPOSER)
+                                            .apply(Term::var("tuple_index_1")),
+                                    )
+                                    .if_else(Term::bool(true).delay(), Term::var("clauses_delayed"))
+                                    .force()
+                                    .delay(),
+                                Term::var("clauses_delayed"),
+                            )
+                            .force()
+                            .lambda("clauses_delayed")
+                            .apply(
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(
+                                        Term::var(CONSTR_INDEX_EXPOSER)
+                                            .apply(Term::var("tuple_index_0")),
+                                    )
+                                    .if_else(
+                                        Term::equals_integer()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::var(CONSTR_INDEX_EXPOSER)
+                                                    .apply(Term::var("tuple_index_1")),
+                                            )
+                                            .if_else(
+                                                Term::bool(false)
+                                                    .lambda("_")
+                                                    .apply(
+                                                        Term::var(CONSTR_FIELDS_EXPOSER)
+                                                            .apply(Term::var("tuple_index_1")),
+                                                    )
+                                                    .delay(),
+                                                Term::var("clauses_delayed"),
+                                            )
+                                            .force()
+                                            .delay(),
+                                        Term::var("clauses_delayed"),
+                                    )
+                                    .force()
+                                    .lambda("clauses_delayed")
+                                    .apply(
+                                        Term::bool(false)
+                                            .lambda("_")
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("tuple_index_0")),
+                                            )
+                                            .delay(),
+                                    )
+                                    .delay(),
+                            )
+                            .delay(),
+                    )
+                    .lambda("tuple_index_0")
+                    .apply(Term::fst_pair().apply(Term::var("input")))
+                    .lambda("tuple_index_1")
+                    .apply(Term::snd_pair().apply(Term::var("input")))
+                    .lambda("input")
+                    .apply(
+                        Term::mk_pair_data()
+                            .apply(Term::var("ec1"))
+                            .apply(Term::var("ec2")),
+                    )
+                    .lambda("ec2")
+                    .lambda("ec1"),
+            )
+            .apply(Term::data(Data::constr(1, vec![])))
+            .apply(Term::data(Data::constr(1, vec![])))
+            .delayed_if_else(
+                Term::bool(true),
+                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+            )
+            .constr_get_field()
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
