@@ -4,17 +4,27 @@
 
 ### Added
 
-- **aiken**: add ability to force warnings to cause a failing exit code on check, build, and docs
-- **aiken-lang**: automatically resolve and fetch latest revision of a package on build when a branch is specified as version
+- **aiken**: add ability to force warnings to cause a failing exit code on
+  check, build, and docs
+- **aiken-lang**: automatically resolve and fetch latest revision of a package
+  on build when a branch is specified as version
+- **uplc**: Add Case and Constr Terms; This includes their flat serialization
+  and evaluation
 
 ### Fixed
 
-- **uplc**: trim whitespace when loading files with hex strings to avoid confusing errors #720
+- **uplc**: trim whitespace when loading files with hex strings to avoid
+  confusing errors #720
 - **uplc**: uplc `Constant::Data` formatting
+
+- **aiken-lang**: code gen fixes including nested constr when matches and expect
+  on None
 - **aiken-lang**: empty records properly parse as record sugar
 - **aiken-lang**: escape sequences are now properly preserved after formatting
-- **aiken-lang**: fixed parser ambiguity when using record constructor in if conditions followed by single-line var expressions #735
-- **aiken-project**: when a module name has a hyphen we should behave like rust and force an underscore
+- **aiken-lang**: fixed parser ambiguity when using record constructor in if
+  conditions followed by single-line var expressions #735
+- **aiken-project**: when a module name has a hyphen we should behave like rust
+  and force an underscore
 
 ## v1.0.16-alpha - 2023-08-24
 
