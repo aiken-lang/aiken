@@ -28,46 +28,31 @@ use crate::{
     tipo::Type,
 };
 
-use super::{
-    air::Air,
-    tree::{AirExpression, AirStatement, AirTree, TreePath},
-};
+use super::tree::{AirExpression, AirStatement, AirTree, TreePath};
+
+pub type Variant = String;
+
+pub type Params = Vec<String>;
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
-    Function { body: AirTree, params: Vec<String> },
-    Link(String),
+    Function { body: AirTree, params: Params },
+    Link(Variant),
 }
 
 #[derive(Clone, Debug)]
 pub enum HoistableFunction {
     Function {
         body: AirTree,
-        deps: Vec<(FunctionAccessKey, String)>,
-        params: Vec<String>,
+        deps: Vec<(FunctionAccessKey, Variant)>,
+        params: Params,
     },
     CyclicFunction {
-        functions: Vec<(Vec<String>, AirTree)>,
-        deps: Vec<(FunctionAccessKey, String)>,
+        functions: Vec<(Params, AirTree)>,
+        deps: Vec<(FunctionAccessKey, Variant)>,
     },
-    Link((FunctionAccessKey, String)),
-    CyclicLink((FunctionAccessKey, String)),
-}
-
-#[derive(Clone, Debug)]
-pub struct FuncComponents {
-    pub ir: Vec<Air>,
-    pub dependencies: Vec<FunctionAccessKey>,
-    pub args: Vec<String>,
-    pub recursive: bool,
-    pub defined_by_zero_arg: bool,
-    pub is_code_gen_func: bool,
-}
-
-#[derive(Clone, Eq, Debug, PartialEq, Hash)]
-pub struct ConstrFieldKey {
-    pub local_var: String,
-    pub field_name: String,
+    Link((FunctionAccessKey, Variant)),
+    CyclicLink((FunctionAccessKey, Variant)),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -75,8 +60,6 @@ pub struct DataTypeKey {
     pub module_name: String,
     pub defined_type: String,
 }
-
-pub type ConstrUsageKey = String;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct FunctionAccessKey {
