@@ -52,7 +52,7 @@ pub enum HoistableFunction {
         deps: Vec<(FunctionAccessKey, Variant)>,
     },
     Link((FunctionAccessKey, Variant)),
-    CyclicLink((FunctionAccessKey, Variant)),
+    CyclicLink(FunctionAccessKey),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
