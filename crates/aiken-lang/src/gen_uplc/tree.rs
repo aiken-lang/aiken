@@ -21,6 +21,10 @@ impl TreePath {
         TreePath { path: vec![] }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.path.is_empty()
+    }
+
     pub fn push(&mut self, depth: usize, index: usize) {
         self.path.push((depth, index));
     }
