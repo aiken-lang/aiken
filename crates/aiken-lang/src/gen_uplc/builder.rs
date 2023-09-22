@@ -779,13 +779,35 @@ pub fn modify_cyclic_calls(
                     cyclic_links.get(&(var_key.clone(), variant_name.to_string()))
                 {
                     if *cyclic_name == *func_key {
+                        let cyclic_var_name = if cyclic_name.module_name.is_empty() {
+                            cyclic_name.function_name.to_string()
+                        } else {
+                            format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
+                        };
+
                         let index_name = names[*index].clone();
 
+                        let var = AirTree::var(
+                            ValueConstructor::public(
+                                tipo.clone(),
+                                ValueConstructorVariant::ModuleFn {
+                                    name: cyclic_var_name.clone(),
+                                    field_map: None,
+                                    module: "".to_string(),
+                                    arity: 2,
+                                    location: Span::empty(),
+                                    builtin: None,
+                                },
+                            ),
+                            cyclic_var_name,
+                            "".to_string(),
+                        );
+
                         *air_tree = AirTree::call(
-                            air_tree.clone(),
+                            var.clone(),
                             tipo.clone(),
                             vec![
-                                air_tree.clone(),
+                                var,
                                 AirTree::anon_func(
                                     names.clone(),
                                     AirTree::local_var(index_name, tipo),
