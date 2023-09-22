@@ -2823,6 +2823,7 @@ impl<'a> CodeGenerator<'a> {
 
                         *dep_path = func_tree_path.common_ancestor(dep_path);
                     }
+                    sorted_function_vec.push((generic_func, variant));
                 }
                 HoistableFunction::Link(_) => todo!("Deal with Link later"),
                 HoistableFunction::CyclicLink(cyclic_name) => {
@@ -2876,10 +2877,10 @@ impl<'a> CodeGenerator<'a> {
 
                         *dep_path = func_tree_path.common_ancestor(dep_path);
                     }
+                    sorted_function_vec.push((generic_func, variant));
                 }
             }
 
-            sorted_function_vec.push((generic_func, variant));
             sorting_attempts += 1;
         }
         sorted_function_vec.dedup();
@@ -3083,6 +3084,7 @@ impl<'a> CodeGenerator<'a> {
                             }
                         }
                     }
+                    sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
                 }
                 HoistableFunction::CyclicFunction { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
@@ -3094,6 +3096,7 @@ impl<'a> CodeGenerator<'a> {
                             deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
                         }
                     }
+                    sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
                 }
                 HoistableFunction::Link(_) => todo!("Deal with Link later"),
                 HoistableFunction::CyclicLink(cyclic_func) => {
@@ -3117,8 +3120,6 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             }
-
-            sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
         }
 
         sorted_dep_vec.dedup();
