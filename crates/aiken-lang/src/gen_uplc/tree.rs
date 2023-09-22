@@ -430,6 +430,22 @@ impl AirTree {
             hoisted_over: None,
         }
     }
+    pub fn define_cyclic_func(
+        func_name: impl ToString,
+        module_name: impl ToString,
+        variant_name: impl ToString,
+        contained_functions: Vec<(Vec<String>, AirTree)>,
+    ) -> AirTree {
+        AirTree::Statement {
+            statement: AirStatement::DefineCyclicFuncs {
+                func_name: func_name.to_string(),
+                module_name: module_name.to_string(),
+                variant_name: variant_name.to_string(),
+                contained_functions,
+            },
+            hoisted_over: None,
+        }
+    }
     pub fn anon_func(params: Vec<String>, func_body: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::Fn {
             params,
@@ -1375,10 +1391,10 @@ impl AirTree {
     pub fn traverse_tree_with(
         &mut self,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
-        apply_with_last: bool,
+        apply_with_func_last: bool,
     ) {
         let mut tree_path = TreePath::new();
-        self.do_traverse_tree_with(&mut tree_path, 0, 0, with, apply_with_last);
+        self.do_traverse_tree_with(&mut tree_path, 0, 0, with, apply_with_func_last);
     }
 
     pub fn traverse_tree_with_path(
@@ -1387,9 +1403,9 @@ impl AirTree {
         current_depth: usize,
         depth_index: usize,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
-        apply_with_last: bool,
+        apply_with_func_last: bool,
     ) {
-        self.do_traverse_tree_with(path, current_depth, depth_index, with, apply_with_last);
+        self.do_traverse_tree_with(path, current_depth, depth_index, with, apply_with_func_last);
     }
 
     fn do_traverse_tree_with(
@@ -1398,7 +1414,7 @@ impl AirTree {
         current_depth: usize,
         depth_index: usize,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
-        apply_with_last: bool,
+        apply_with_func_last: bool,
     ) {
         let mut index_count = IndexCounter::new();
         tree_path.push(current_depth, depth_index);
@@ -1411,7 +1427,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::DefineFunc { func_body, .. } => {
@@ -1420,7 +1436,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::DefineCyclicFuncs {
@@ -1433,7 +1449,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1444,7 +1460,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::AssertBool { value, .. } => {
@@ -1453,7 +1469,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::ClauseGuard { pattern, .. } => {
@@ -1462,7 +1478,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::ListClauseGuard { .. } => {}
@@ -1473,7 +1489,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::ListAccessor { list, .. } => {
@@ -1482,7 +1498,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::ListExpose { .. } => {}
@@ -1492,7 +1508,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::NoOp => {}
@@ -1502,7 +1518,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirStatement::ListEmpty { list } => {
@@ -1511,13 +1527,13 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
             };
         }
 
-        if !apply_with_last {
+        if !apply_with_func_last {
             with(self, tree_path);
         }
 
@@ -1531,7 +1547,7 @@ impl AirTree {
                     current_depth + 1,
                     index_count.next_number(),
                     with,
-                    apply_with_last,
+                    apply_with_func_last,
                 );
             }
             AirTree::Expression(e) => match e {
@@ -1542,7 +1558,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1553,7 +1569,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1563,7 +1579,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     for arg in args {
@@ -1572,7 +1588,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1582,7 +1598,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::Builtin { args, .. } => {
@@ -1592,7 +1608,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1602,7 +1618,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     right.do_traverse_tree_with(
@@ -1610,7 +1626,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::UnOp { arg, .. } => {
@@ -1619,7 +1635,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::CastFromData { value, .. } => {
@@ -1628,7 +1644,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::CastToData { value, .. } => {
@@ -1637,7 +1653,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::When {
@@ -1648,7 +1664,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     clauses.do_traverse_tree_with(
@@ -1656,7 +1672,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::Clause {
@@ -1670,7 +1686,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     then.do_traverse_tree_with(
@@ -1678,7 +1694,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     otherwise.do_traverse_tree_with(
@@ -1686,7 +1702,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::ListClause {
@@ -1697,7 +1713,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     otherwise.do_traverse_tree_with(
@@ -1705,7 +1721,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::WrapClause { then, otherwise } => {
@@ -1714,7 +1730,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     otherwise.do_traverse_tree_with(
@@ -1722,7 +1738,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::TupleClause {
@@ -1733,7 +1749,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     otherwise.do_traverse_tree_with(
@@ -1741,7 +1757,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::Finally { pattern, then } => {
@@ -1750,7 +1766,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     then.do_traverse_tree_with(
@@ -1758,7 +1774,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::If {
@@ -1772,7 +1788,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     then.do_traverse_tree_with(
@@ -1780,7 +1796,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     otherwise.do_traverse_tree_with(
@@ -1788,7 +1804,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::Constr { args, .. } => {
@@ -1798,7 +1814,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1808,7 +1824,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                     for arg in args {
                         arg.do_traverse_tree_with(
@@ -1816,7 +1832,7 @@ impl AirTree {
                             current_depth + 1,
                             index_count.next_number(),
                             with,
-                            apply_with_last,
+                            apply_with_func_last,
                         );
                     }
                 }
@@ -1826,7 +1842,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::TupleIndex { tuple, .. } => {
@@ -1835,7 +1851,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 AirExpression::Trace { msg, then, .. } => {
@@ -1844,7 +1860,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
 
                     then.do_traverse_tree_with(
@@ -1852,7 +1868,7 @@ impl AirTree {
                         current_depth + 1,
                         index_count.next_number(),
                         with,
-                        apply_with_last,
+                        apply_with_func_last,
                     );
                 }
                 _ => {}
@@ -1860,7 +1876,7 @@ impl AirTree {
             a => unreachable!("GOT THIS {:#?}", a),
         }
 
-        if apply_with_last {
+        if apply_with_func_last {
             with(self, tree_path);
         }
 
