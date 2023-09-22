@@ -751,6 +751,55 @@ pub fn modify_self_calls(
     recursive_nonstatics
 }
 
+pub fn modify_cyclic_calls(
+    body: &mut AirTree,
+    func_key: &FunctionAccessKey,
+    cyclic_links: &IndexMap<(FunctionAccessKey, Variant), (Vec<String>, usize, FunctionAccessKey)>,
+) {
+    body.traverse_tree_with(
+        &mut |air_tree: &mut AirTree, _| {
+            if let AirTree::Expression(AirExpression::Var {
+                constructor:
+                    ValueConstructor {
+                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                        tipo,
+                        ..
+                    },
+                variant_name,
+                ..
+            }) = air_tree
+            {
+                let tipo = tipo.clone();
+                let var_key = FunctionAccessKey {
+                    module_name: module.clone(),
+                    function_name: name.clone(),
+                };
+
+                if let Some((names, index, cyclic_name)) =
+                    cyclic_links.get(&(var_key.clone(), variant_name.to_string()))
+                {
+                    if *cyclic_name == *func_key {
+                        let index_name = names[*index].clone();
+
+                        *air_tree = AirTree::call(
+                            air_tree.clone(),
+                            tipo.clone(),
+                            vec![
+                                air_tree.clone(),
+                                AirTree::anon_func(
+                                    names.clone(),
+                                    AirTree::local_var(index_name, tipo),
+                                ),
+                            ],
+                        );
+                    }
+                }
+            }
+        },
+        true,
+    );
+}
+
 pub fn pattern_has_conditions(
     pattern: &TypedPattern,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,

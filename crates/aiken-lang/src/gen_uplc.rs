@@ -41,8 +41,9 @@ use self::{
     air::Air,
     builder::{
         cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        lookup_data_type_by_tipo, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
-        ClauseProperties, DataTypeKey, FunctionAccessKey, HoistableFunction, Variant,
+        lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
+        AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey, HoistableFunction,
+        Variant,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -56,7 +57,8 @@ pub struct CodeGenerator<'a> {
     needs_field_access: bool,
     code_gen_functions: IndexMap<String, CodeGenFunction>,
     zero_arg_functions: IndexMap<(FunctionAccessKey, Variant), Vec<Air>>,
-    cyclic_functions: IndexMap<(FunctionAccessKey, Variant), (usize, FunctionAccessKey)>,
+    cyclic_functions:
+        IndexMap<(FunctionAccessKey, Variant), (Vec<String>, usize, FunctionAccessKey)>,
     tracing: bool,
     id_gen: IdGenerator,
 }
@@ -2697,12 +2699,28 @@ impl<'a> CodeGenerator<'a> {
             let mut cycle_of_functions = vec![];
             let mut cycle_deps = vec![];
 
+            let function_list = cyclic_function_names
+                .iter()
+                .map(|(key, variant)| {
+                    format!(
+                        "{}{}{}",
+                        key.module_name,
+                        key.function_name,
+                        if variant.is_empty() {
+                            "".to_string()
+                        } else {
+                            format!("_{}", variant)
+                        }
+                    )
+                })
+                .collect_vec();
+
             // By doing this any vars that "call" into a function in the cycle will be
             // redirected to call the cyclic function instead with the proper index
             for (index, (func_name, variant)) in cyclic_function_names.iter().enumerate() {
                 self.cyclic_functions.insert(
                     (func_name.clone(), variant.clone()),
-                    (index, function_key.clone()),
+                    (function_list.clone(), index, function_key.clone()),
                 );
 
                 let (tree_path, func) = functions_to_hoist
@@ -2753,6 +2771,7 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Rest of code is for hoisting functions
+        // TODO: replace with graph implementation of sorting
         let mut sorted_function_vec: Vec<(FunctionAccessKey, String)> = vec![];
 
         let functions_to_hoist_cloned = functions_to_hoist.clone();
@@ -2865,8 +2884,6 @@ impl<'a> CodeGenerator<'a> {
         }
         sorted_function_vec.dedup();
 
-        todo!();
-
         // Now we need to hoist the functions to the top of the validator
         for (key, variant) in sorted_function_vec {
             if hoisted_functions
@@ -2910,54 +2927,99 @@ impl<'a> CodeGenerator<'a> {
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
     ) {
         match function {
-            HoistableFunction::Function { body, deps, params } => todo!(),
-            HoistableFunction::CyclicFunction { functions, deps } => todo!(),
-            HoistableFunction::Link(_) => todo!(),
-            HoistableFunction::CyclicLink(_) => todo!(),
-        }
+            HoistableFunction::Function {
+                body,
+                deps: func_deps,
+                params,
+            } => {
+                let mut body = body.clone();
 
-        if let HoistableFunction::Function {
-            body,
-            deps: func_deps,
-            params,
-        } = function
-        {
-            let mut body = body.clone();
+                let (key, variant) = key_var;
 
-            let (key, variant) = key_var;
+                // check for recursiveness
+                let is_recursive = func_deps
+                    .iter()
+                    .any(|(dep_key, dep_variant)| dep_key == key && dep_variant == variant);
 
-            // check for recursiveness
-            let is_recursive = func_deps
-                .iter()
-                .any(|(dep_key, dep_variant)| dep_key == key && dep_variant == variant);
+                // first grab dependencies
+                let func_params = params;
 
-            // first grab dependencies
-            let func_params = params;
+                let params_empty = func_params.is_empty();
 
-            let params_empty = func_params.is_empty();
+                let deps = (tree_path, func_deps.clone());
 
-            let deps = (tree_path, func_deps.clone());
+                if !params_empty {
+                    let recursive_nonstatics = if is_recursive {
+                        modify_self_calls(&mut body, key, variant, func_params)
+                    } else {
+                        func_params.clone()
+                    };
 
-            if !params_empty {
-                let recursive_nonstatics = if is_recursive {
-                    modify_self_calls(&mut body, key, variant, func_params)
+                    body = AirTree::define_func(
+                        &key.function_name,
+                        &key.module_name,
+                        variant,
+                        func_params.clone(),
+                        is_recursive,
+                        recursive_nonstatics,
+                        body,
+                    );
+
+                    let function_deps = self.hoist_dependent_functions(
+                        deps,
+                        params_empty,
+                        key,
+                        variant,
+                        hoisted_functions,
+                        functions_to_hoist,
+                    );
+                    let node_to_edit = air_tree.find_air_tree_node(tree_path);
+
+                    // now hoist full function onto validator tree
+                    *node_to_edit = function_deps.hoist_over(body.hoist_over(node_to_edit.clone()));
+
+                    hoisted_functions.push((key.clone(), variant.clone()));
                 } else {
-                    func_params.clone()
-                };
+                    body = self
+                        .hoist_dependent_functions(
+                            deps,
+                            params_empty,
+                            key,
+                            variant,
+                            hoisted_functions,
+                            functions_to_hoist,
+                        )
+                        .hoist_over(body);
 
-                body = AirTree::define_func(
+                    self.zero_arg_functions
+                        .insert((key.clone(), variant.clone()), body.to_vec());
+                }
+            }
+            HoistableFunction::CyclicFunction {
+                functions,
+                deps: func_deps,
+            } => {
+                let (key, variant) = key_var;
+
+                let deps = (tree_path, func_deps.clone());
+
+                let mut functions = functions.clone();
+
+                for (_, body) in functions.iter_mut() {
+                    modify_cyclic_calls(body, key, &self.cyclic_functions);
+                }
+
+                let cyclic_body = AirTree::define_cyclic_func(
                     &key.function_name,
                     &key.module_name,
                     variant,
-                    func_params.clone(),
-                    is_recursive,
-                    recursive_nonstatics,
-                    body,
+                    functions,
                 );
 
                 let function_deps = self.hoist_dependent_functions(
                     deps,
-                    params_empty,
+                    // cyclic functions always have params
+                    false,
                     key,
                     variant,
                     hoisted_functions,
@@ -2966,26 +3028,17 @@ impl<'a> CodeGenerator<'a> {
                 let node_to_edit = air_tree.find_air_tree_node(tree_path);
 
                 // now hoist full function onto validator tree
-                *node_to_edit = function_deps.hoist_over(body.hoist_over(node_to_edit.clone()));
+                *node_to_edit =
+                    function_deps.hoist_over(cyclic_body.hoist_over(node_to_edit.clone()));
 
                 hoisted_functions.push((key.clone(), variant.clone()));
-            } else {
-                body = self
-                    .hoist_dependent_functions(
-                        deps,
-                        params_empty,
-                        key,
-                        variant,
-                        hoisted_functions,
-                        functions_to_hoist,
-                    )
-                    .hoist_over(body);
-
-                self.zero_arg_functions
-                    .insert((key.clone(), variant.clone()), body.to_vec());
             }
-        } else {
-            todo!()
+            HoistableFunction::Link(_) => {
+                todo!("This should probably be unreachable when I get to it")
+            }
+            HoistableFunction::CyclicLink(_) => {
+                unreachable!("Sorted functions should not contain cyclic links")
+            }
         }
     }
 
@@ -3017,8 +3070,21 @@ impl<'a> CodeGenerator<'a> {
                 .get(&dep.1)
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
-            if let HoistableFunction::Function { deps, params, .. } = function {
-                if !params.is_empty() {
+            match function {
+                HoistableFunction::Function { deps, params, .. } => {
+                    if !params.is_empty() {
+                        for (dep_generic_func, dep_variant) in deps.iter() {
+                            if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
+                                sorted_dep_vec.retain(|(generic_func, variant)| {
+                                    !(generic_func == dep_generic_func && variant == dep_variant)
+                                });
+
+                                deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
+                            }
+                        }
+                    }
+                }
+                HoistableFunction::CyclicFunction { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
                             sorted_dep_vec.retain(|(generic_func, variant)| {
@@ -3029,9 +3095,29 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 }
-            } else {
-                todo!("Deal with Link later")
+                HoistableFunction::Link(_) => todo!("Deal with Link later"),
+                HoistableFunction::CyclicLink(cyclic_func) => {
+                    let (_, HoistableFunction::CyclicFunction { deps, .. }) = functions_to_hoist
+                        .get(cyclic_func)
+                        .unwrap()
+                        .get("")
+                        .unwrap()
+                    else {
+                        unreachable!()
+                    };
+
+                    for (dep_generic_func, dep_variant) in deps.iter() {
+                        if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
+                            sorted_dep_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
+
+                            deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
+                        }
+                    }
+                }
             }
+
             sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
         }
 
@@ -3061,42 +3147,66 @@ impl<'a> CodeGenerator<'a> {
 
             // In the case of zero args, we need to hoist the dependency function to the top of the zero arg function
             if &dep_path.common_ancestor(func_path) == func_path || params_empty {
-                let HoistableFunction::Function {
-                    body: mut dep_air_tree,
-                    deps: dependency_deps,
-                    params: dependent_params,
-                } = dep_function.clone()
-                else {
-                    unreachable!()
-                };
+                match dep_function.clone() {
+                    HoistableFunction::Function {
+                        body: mut dep_air_tree,
+                        deps: dependency_deps,
+                        params: dependent_params,
+                    } => {
+                        if dependent_params.is_empty() {
+                            // continue for zero arg functions. They are treated like global hoists.
+                            continue;
+                        }
 
-                if dependent_params.is_empty() {
-                    // continue for zero arg functions. They are treated like global hoists.
-                    continue;
-                }
+                        let is_dependent_recursive = dependency_deps
+                            .iter()
+                            .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
 
-                let is_dependent_recursive = dependency_deps
-                    .iter()
-                    .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
+                        let recursive_nonstatics = if is_dependent_recursive {
+                            modify_self_calls(
+                                &mut dep_air_tree,
+                                &dep_key,
+                                &dep_variant,
+                                &dependent_params,
+                            )
+                        } else {
+                            dependent_params.clone()
+                        };
 
-                let recursive_nonstatics = if is_dependent_recursive {
-                    modify_self_calls(&mut dep_air_tree, &dep_key, &dep_variant, &dependent_params)
-                } else {
-                    dependent_params.clone()
-                };
+                        dep_insertions.push(AirTree::define_func(
+                            &dep_key.function_name,
+                            &dep_key.module_name,
+                            &dep_variant,
+                            dependent_params,
+                            is_dependent_recursive,
+                            recursive_nonstatics,
+                            dep_air_tree,
+                        ));
 
-                dep_insertions.push(AirTree::define_func(
-                    &dep_key.function_name,
-                    &dep_key.module_name,
-                    &dep_variant,
-                    dependent_params,
-                    is_dependent_recursive,
-                    recursive_nonstatics,
-                    dep_air_tree,
-                ));
+                        if !params_empty {
+                            hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+                        }
+                    }
+                    HoistableFunction::CyclicFunction { functions, .. } => {
+                        let mut functions = functions.clone();
 
-                if !params_empty {
-                    hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+                        for (_, body) in functions.iter_mut() {
+                            modify_cyclic_calls(body, key, &self.cyclic_functions);
+                        }
+
+                        dep_insertions.push(AirTree::define_cyclic_func(
+                            &dep_key.function_name,
+                            &dep_key.module_name,
+                            &dep_variant,
+                            functions,
+                        ));
+
+                        if !params_empty {
+                            hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+                        }
+                    }
+                    HoistableFunction::Link(_) => unreachable!(),
+                    HoistableFunction::CyclicLink(_) => unreachable!(),
                 }
             }
         }
@@ -3441,22 +3551,48 @@ impl<'a> CodeGenerator<'a> {
                         module,
                         ..
                     } => {
-                        let name = if (*func_name == name
-                            || name == format!("{module}_{func_name}"))
-                            && !module.is_empty()
-                        {
-                            format!("{module}_{func_name}{variant_name}")
-                        } else {
-                            format!("{func_name}{variant_name}")
-                        };
+                        if let Some((names, index, cyclic_name)) = self.cyclic_functions.get(&(
+                            FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: func_name.clone(),
+                            },
+                            variant_name.clone(),
+                        )) {
+                            let cyclic_var_name = if cyclic_name.module_name.is_empty() {
+                                cyclic_name.function_name.to_string()
+                            } else {
+                                format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
+                            };
 
-                        arg_stack.push(Term::Var(
-                            Name {
-                                text: name,
-                                unique: 0.into(),
+                            let index_name = names[*index].clone();
+
+                            let mut arg_var = Term::var(index_name.clone());
+
+                            for name in names.iter().rev() {
+                                arg_var = arg_var.lambda(name);
                             }
-                            .into(),
-                        ));
+
+                            let term = Term::var(cyclic_var_name).apply(arg_var);
+
+                            arg_stack.push(term);
+                        } else {
+                            let name = if (*func_name == name
+                                || name == format!("{module}_{func_name}"))
+                                && !module.is_empty()
+                            {
+                                format!("{module}_{func_name}{variant_name}")
+                            } else {
+                                format!("{func_name}{variant_name}")
+                            };
+
+                            arg_stack.push(Term::Var(
+                                Name {
+                                    text: name,
+                                    unique: 0.into(),
+                                }
+                                .into(),
+                            ));
+                        }
                     }
                     ValueConstructorVariant::Record {
                         name: constr_name, ..
