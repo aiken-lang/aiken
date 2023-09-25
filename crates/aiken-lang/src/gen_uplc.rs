@@ -42,8 +42,8 @@ use self::{
     builder::{
         cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
         lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
-        AssignmentProperties, ClauseProperties, DataTypeKey, FunctionAccessKey, HoistableFunction,
-        Variant,
+        AssignmentProperties, ClauseProperties, CycleFunctionNames, DataTypeKey, FunctionAccessKey,
+        HoistableFunction, Variant,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -58,7 +58,7 @@ pub struct CodeGenerator<'a> {
     code_gen_functions: IndexMap<String, CodeGenFunction>,
     zero_arg_functions: IndexMap<(FunctionAccessKey, Variant), Vec<Air>>,
     cyclic_functions:
-        IndexMap<(FunctionAccessKey, Variant), (Vec<String>, usize, FunctionAccessKey)>,
+        IndexMap<(FunctionAccessKey, Variant), (CycleFunctionNames, usize, FunctionAccessKey)>,
     tracing: bool,
     id_gen: IdGenerator,
 }

@@ -34,6 +34,8 @@ pub type Variant = String;
 
 pub type Params = Vec<String>;
 
+pub type CycleFunctionNames = Vec<String>;
+
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
     Function { body: AirTree, params: Params },
@@ -754,7 +756,10 @@ pub fn modify_self_calls(
 pub fn modify_cyclic_calls(
     body: &mut AirTree,
     func_key: &FunctionAccessKey,
-    cyclic_links: &IndexMap<(FunctionAccessKey, Variant), (Vec<String>, usize, FunctionAccessKey)>,
+    cyclic_links: &IndexMap<
+        (FunctionAccessKey, Variant),
+        (CycleFunctionNames, usize, FunctionAccessKey),
+    >,
 ) {
     body.traverse_tree_with(
         &mut |air_tree: &mut AirTree, _| {
