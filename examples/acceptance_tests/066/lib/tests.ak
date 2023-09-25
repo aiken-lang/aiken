@@ -18,8 +18,5 @@ fn sum_list(list: List<Schema>) -> Int {
 }
 
 test foo() {
-  // False
-  // Can't enable the "real" test because it puts the UPLC evaluator in an infinite loop.
-  // -
   sum(List([List([Integer(1), Integer(2)]), Integer(3), Integer(4)])) == 10
 }
