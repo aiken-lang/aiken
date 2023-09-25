@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.0.18-alpha - 2023-MM-DD
+
+### Added
+
+- **aiken-lang**: Code gen now allows for mutual recursion
+
+### Fixed
+
+- **aiken-lang**: fixed stack overflow with unbound typing being passed into a
+  function with inferred types
+
+### Changed
+
+- **aiken-lang**: (Code Gen): Rename some of the types to use aliases
+
+### Fixed
+
+- **uplc**: trim whitespace when loading files with hex strings to avoid
+  confusing errors #720
+- **uplc**: uplc `Constant::Data` formatting
+- **aiken-lang**: code gen fixes including nested constr when matches and expect
+  on None
+- **aiken-lang**: empty records properly parse as record sugar
+- **aiken-lang**: escape sequences are now properly preserved after formatting
+- **aiken-lang**: fixed parser ambiguity when using record constructor in if
+  conditions followed by single-line var expressions #735
+- **aiken-project**: when a module name has a hyphen we should behave like rust
+  and force an underscore
+
 ## v1.0.17-alpha - 2023-09-20
 
 ### Added
