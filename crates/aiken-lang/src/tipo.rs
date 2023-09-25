@@ -531,6 +531,7 @@ impl TypeVar {
     pub fn get_inner_types(&self) -> Vec<Rc<Type>> {
         match self {
             Self::Link { tipo } => tipo.get_inner_types(),
+            Self::Unbound { .. } => vec![],
             var => {
                 vec![Type::Var {
                     tipo: RefCell::new(var.clone()).into(),
