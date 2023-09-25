@@ -3100,24 +3100,11 @@ impl<'a> CodeGenerator<'a> {
                 }
                 HoistableFunction::Link(_) => todo!("Deal with Link later"),
                 HoistableFunction::CyclicLink(cyclic_func) => {
-                    let (_, HoistableFunction::CyclicFunction { deps, .. }) = functions_to_hoist
-                        .get(cyclic_func)
-                        .unwrap()
-                        .get("")
-                        .unwrap()
-                    else {
-                        unreachable!()
-                    };
+                    sorted_dep_vec.retain(|(generic_func, variant)| {
+                        !(generic_func == cyclic_func && variant.is_empty())
+                    });
 
-                    for (dep_generic_func, dep_variant) in deps.iter() {
-                        if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
-                            sorted_dep_vec.retain(|(generic_func, variant)| {
-                                !(generic_func == dep_generic_func && variant == dep_variant)
-                            });
-
-                            deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
-                        }
-                    }
+                    deps_vec.insert(0, (cyclic_func.clone(), "".to_string()));
                 }
             }
         }
