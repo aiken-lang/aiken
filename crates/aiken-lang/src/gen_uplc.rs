@@ -675,7 +675,8 @@ impl<'a> CodeGenerator<'a> {
                 name != "_"
             } else {
                 true
-            }
+            },
+            "No discard expressions or let bindings should be in the tree at this point."
         );
         if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
             value = AirTree::cast_from_data(value, tipo.clone());
@@ -689,25 +690,23 @@ impl<'a> CodeGenerator<'a> {
                 location,
                 ..
             } => {
-                if props.kind.is_expect() {
-                    let name = format!(
-                        "__expected_by_{}_span_{}_{}",
-                        expected_int, location.start, location.end
-                    );
+                assert!(props.kind.is_expect());
 
-                    let assignment = AirTree::let_assignment(&name, value);
+                let name = format!(
+                    "__expected_by_{}_span_{}_{}",
+                    expected_int, location.start, location.end
+                );
 
-                    let expect = AirTree::binop(
-                        BinOp::Eq,
-                        bool(),
-                        AirTree::int(expected_int),
-                        AirTree::local_var(name, int()),
-                        int(),
-                    );
-                    AirTree::assert_bool(true, assignment.hoist_over(expect))
-                } else {
-                    unreachable!("Code Gen should never reach here")
-                }
+                let assignment = AirTree::let_assignment(&name, value);
+
+                let expect = AirTree::binop(
+                    BinOp::Eq,
+                    bool(),
+                    AirTree::int(expected_int),
+                    AirTree::local_var(name, int()),
+                    int(),
+                );
+                AirTree::assert_bool(true, assignment.hoist_over(expect))
             }
             Pattern::Var { name, .. } => {
                 if props.full_check {
@@ -1368,7 +1367,7 @@ impl<'a> CodeGenerator<'a> {
             let tuple_access = AirTree::tuple_access(
                 tuple_index_names,
                 tipo.clone(),
-                false,
+                true,
                 AirTree::local_var(tuple_name, tipo.clone()),
             );
 
