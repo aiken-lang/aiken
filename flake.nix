@@ -31,8 +31,11 @@
           src = pkgs.lib.cleanSourceWith { src = self; };
 
           cargoLock.lockFile = ./Cargo.lock;
-
           GIT_COMMIT_HASH_SHORT = self.rev or "dirty"; #  or self.dirtyRev;
+
+          postPatch = ''
+          substituteInPlace crates/aiken/src/cmd/mod.rs --replace  "built_info::GIT_COMMIT_HASH_SHORT" "\"$GIT_COMMIT_HASH_SHORT\""
+          '';
           
           postInstall = ''
             mkdir -p $out/share/zsh/site-functions
