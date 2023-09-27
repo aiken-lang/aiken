@@ -10,10 +10,15 @@
 
 - **aiken-lang**: fixed stack overflow with unbound typing being passed into a
   function with inferred types
+- **aiken-lang**: expect on tuples greater than 2 checks the length to ensure
+  tuple lists are the same length as the type.
 
 ### Changed
 
 - **aiken-lang**: (Code Gen): Rename some of the types to use aliases
+- **aiken-lang**: (Code Gen): Remove the use of Air::RecordAccess and TupleIndex
+  and replace them with functions that directly get the item at the specified
+  index. Also improves performance.
 
 ## v1.0.17-alpha - 2023-09-20
 
